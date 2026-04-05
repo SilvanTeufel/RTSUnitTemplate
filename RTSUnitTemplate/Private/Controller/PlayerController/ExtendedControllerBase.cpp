@@ -129,6 +129,43 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 		Server_ClearAbilityIndicator();
 	}
 
+	// Safety Loop: Verify if units associated with the indicator are still valid and aiming
+	if (CurrentDraggedAbilityIndicator && !CurrentDraggedAbilityIndicator->AssociatedUnits.IsEmpty())
+	{
+		TArray<AGASUnit*> UnitsToCleanup;
+		for (AGASUnit* Unit : CurrentDraggedAbilityIndicator->AssociatedUnits)
+		{
+			bool bValid = IsValid(Unit);
+			bool bStillAiming = false;
+			
+			if (bValid)
+			{
+				// Check if the unit still has an active ability snapshot that matches this indicator class
+				if (Unit->CurrentSnapshot.AbilityClass)
+				{
+					if (UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
+					{
+						if (AbilityCDO->AbilityIndicatorClass == CurrentDraggedAbilityIndicator->GetClass())
+						{
+							bStillAiming = true;
+						}
+					}
+				}
+			}
+
+			if (!bValid || !bStillAiming)
+			{
+				UnitsToCleanup.Add(Unit);
+			}
+		}
+
+		for (AGASUnit* Unit : UnitsToCleanup)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] ExtendedControllerBase::Tick - Safety Cleanup for unit %s"), Unit ? *Unit->GetName() : TEXT("NULL"));
+			HandleAbilityIndicatorEnd(Unit);
+		}
+	}
+
 	if (CurrentDraggedAbilityIndicator || AbilityIndicatorRefCount > 0)
 	{
 		static float LastTickLogTime = 0.f;
@@ -362,7 +399,16 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 			UGameplayAbilityBase* AbilityCDO = AbilityClass.GetDefaultObject();
 			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
 			{
-				HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass);
+				HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
+
+				// On client, manually set the snapshot to prevent safety cleanup from destroying the indicator
+				// before the server replication arrives.
+				if (!HasAuthority())
+				{
+					FQueuedAbility LocalSnapshot;
+					LocalSnapshot.AbilityClass = AbilityClass;
+					UnitBase->CurrentSnapshot = LocalSnapshot;
+				}
 			}
 		}
 	}
@@ -424,6 +470,28 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 {
 	if (UnitBase && Abilities.Num() > 0)
 	{
+		// Indicator management
+		TSubclassOf<UGameplayAbility> AbilityToActivate = UnitBase->GetAbilityForInputID(InputID, Abilities);
+		if (AbilityToActivate)
+		{
+			if (UGameplayAbilityBase* AbilityCDO = Cast<UGameplayAbilityBase>(AbilityToActivate->GetDefaultObject()))
+			{
+				if (AbilityCDO->AbilityIndicatorClass)
+				{
+					HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
+					
+					// On client, manually set the snapshot to prevent safety cleanup from destroying the indicator
+					// before the server replication arrives.
+					if (!HasAuthority())
+					{
+						FQueuedAbility LocalSnapshot;
+						LocalSnapshot.AbilityClass = AbilityToActivate;
+						UnitBase->CurrentSnapshot = LocalSnapshot;
+					}
+				}
+			}
+		}
+
 		UnitBase->ActivateAbilityByInputID(InputID, Abilities, FHitResult(), this);
 	}
 }
@@ -3356,9 +3424,9 @@ void AExtendedControllerBase::Server_ClearAbilityIndicator_Implementation()
 	}
 }
 
-void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIndicator> IndicatorClass)
+void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIndicator> IndicatorClass, AGASUnit* Unit)
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorStart - IndicatorClass: %s, RefCount: %d, NetMode: %d"), IndicatorClass ? *IndicatorClass->GetName() : TEXT("None"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorStart - IndicatorClass: %s, Unit: %s, RefCount: %d, NetMode: %d"), IndicatorClass ? *IndicatorClass->GetName() : TEXT("None"), Unit ? *Unit->GetName() : TEXT("None"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
 	if (!IndicatorClass) return;
 
 	if (AbilityIndicatorRefCount == 0)
@@ -3378,13 +3446,39 @@ void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIn
 			UE_LOG(LogTemp, Error, TEXT("[DEBUG_LOG] FAILED to spawn AbilityIndicator of class %s"), *IndicatorClass->GetName());
 		}
 	}
-	AbilityIndicatorRefCount++;
+
+	if (Unit && CurrentDraggedAbilityIndicator)
+	{
+		if (!CurrentDraggedAbilityIndicator->AssociatedUnits.Contains(Unit))
+		{
+			CurrentDraggedAbilityIndicator->AssociatedUnits.Add(Unit);
+			AbilityIndicatorRefCount++;
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Added unit %s to AssociatedUnits. New RefCount: %d"), *Unit->GetName(), AbilityIndicatorRefCount);
+		}
+	}
+	else if (!Unit)
+	{
+		// Fallback for when no unit is provided (legacy behavior or special cases)
+		AbilityIndicatorRefCount++;
+	}
 }
 
-void AExtendedControllerBase::HandleAbilityIndicatorEnd()
+void AExtendedControllerBase::HandleAbilityIndicatorEnd(AGASUnit* Unit)
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorEnd - RefCount before: %d, NetMode: %d"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
-	AbilityIndicatorRefCount--;
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorEnd - Unit: %s, RefCount before: %d, NetMode: %d"), Unit ? *Unit->GetName() : TEXT("None"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
+	
+	if (CurrentDraggedAbilityIndicator && CurrentDraggedAbilityIndicator->AssociatedUnits.Contains(Unit))
+	{
+		CurrentDraggedAbilityIndicator->AssociatedUnits.Remove(Unit);
+		AbilityIndicatorRefCount--;
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Removed unit %s from AssociatedUnits. New RefCount: %d"), Unit ? *Unit->GetName() : TEXT("NULL"), AbilityIndicatorRefCount);
+	}
+	else
+	{
+		// Fallback for when no unit is provided, unit is not in array, or indicator is null
+		AbilityIndicatorRefCount--;
+	}
+
 	if (AbilityIndicatorRefCount <= 0)
 	{
 		if (CurrentDraggedAbilityIndicator)
@@ -4811,7 +4905,7 @@ void AExtendedControllerBase::CancelAbilitiesIfNoBuilding(AUnitBase* Unit)
 					{
 						if (AbilityCDO->AbilityIndicatorClass)
 						{
-							HandleAbilityIndicatorEnd();
+							HandleAbilityIndicatorEnd(Unit);
 						}
 						CancelCurrentAbility(Unit);
 					}

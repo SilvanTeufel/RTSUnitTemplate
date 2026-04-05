@@ -368,9 +368,8 @@ public:
 	
 	// Local, client-side variant used by Tick; mirrors WorkArea distance/pushback behavior for AbilityIndicator
 	void MoveAbilityIndicator_Local(float DeltaSeconds);
-
-	void HandleAbilityIndicatorStart(TSubclassOf<AAbilityIndicator> IndicatorClass);
-	void HandleAbilityIndicatorEnd();
+	void HandleAbilityIndicatorStart(TSubclassOf<AAbilityIndicator> IndicatorClass, AGASUnit* Unit);
+	void HandleAbilityIndicatorEnd(AGASUnit* Unit = nullptr);
 
 	// Client informs server about indicator overlap state so server can use it for authoritative logic
 	UFUNCTION(Server, Reliable)

@@ -1317,7 +1317,7 @@ void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
                 UGameplayAbilityBase* AbilityCDO = GASUnit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
                 if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
                 {
-                    ExtPC->HandleAbilityIndicatorEnd();
+                    ExtPC->HandleAbilityIndicatorEnd(UnitBase);
                 }
             }
         }

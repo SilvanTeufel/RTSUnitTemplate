@@ -2427,7 +2427,7 @@ void ACustomControllerBase::LeftClickPressedMass()
                     UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
                     if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
                     {
-                        HandleAbilityIndicatorEnd();
+                        HandleAbilityIndicatorEnd(U);
                     }
                 }
             }
@@ -2484,7 +2484,7 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
             UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
             if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
             {
-                HandleAbilityIndicatorEnd();
+                HandleAbilityIndicatorEnd(U);
             }
 
             FireAbilityMouseHit(U, HitPawn);
