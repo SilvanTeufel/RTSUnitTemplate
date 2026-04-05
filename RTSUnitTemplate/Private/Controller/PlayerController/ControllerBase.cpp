@@ -30,6 +30,9 @@
 #include "AI/Navigation/NavQueryFilter.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "GAS/GameplayAbilityBase.h"
+#include "Characters/Unit/GASUnit.h"
 
 
 AControllerBase::AControllerBase() {
@@ -146,7 +149,6 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	DOREPLIFETIME(AControllerBase, MiddleMouseIsPressed);
 	DOREPLIFETIME(AControllerBase, SelectableTeamId);
 	DOREPLIFETIME(AControllerBase, UEPathfindingCornerOffset); // Added for Build
-	DOREPLIFETIME(AControllerBase, CurrentDraggedAbilityIndicator);
 }
 
 void AControllerBase::SetupInputComponent() {
@@ -1305,10 +1307,25 @@ void AControllerBase::DeQueAbility_Implementation(AUnitBase* UnitBase, int Butto
 
 void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
 {
+    // Indicator Cleanup (Server-side)
+    if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(this))
+    {
+        if (AGASUnit* GASUnit = Cast<AGASUnit>(UnitBase))
+        {
+            if (GASUnit->CurrentSnapshot.AbilityClass)
+            {
+                UGameplayAbilityBase* AbilityCDO = GASUnit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+                if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
+                {
+                    ExtPC->HandleAbilityIndicatorEnd();
+                }
+            }
+        }
+    }
+
 	UnitBase->SetUnitState(UnitData::Idle);
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->CancelCurrentAbility();
-	UnitBase->DespawnCurrentAbilityIndicator();
 }
 
 void AControllerBase::Multi_SetControllerTeamId_Implementation(int Id)

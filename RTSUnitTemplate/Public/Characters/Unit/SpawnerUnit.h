@@ -82,15 +82,4 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int SquadId = 0;
-
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Ability)
-	AAbilityIndicator* CurrentDraggedAbilityIndicator;
-
-	//UFUNCTION(BlueprintCallable, Category=Ability)
-	UFUNCTION(BlueprintCallable, Category=Ability)
-	void SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityIndicatorClass, FVector SpawnLocation);
-	
-	UFUNCTION(BlueprintCallable, Category=Ability)
-	void DespawnCurrentAbilityIndicator();
-	
 };

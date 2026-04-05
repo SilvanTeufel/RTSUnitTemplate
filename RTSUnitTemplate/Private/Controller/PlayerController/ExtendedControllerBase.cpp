@@ -118,6 +118,28 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 
 	MoveDraggedUnit_Implementation(DeltaSeconds);
 	MoveWorkArea_Local(DeltaSeconds);
+
+	// Cleanup indicator if everything is deselected
+	if (IsLocalController() && SelectedUnits.IsEmpty() && AbilityIndicatorRefCount > 0)
+	{
+		while (AbilityIndicatorRefCount > 0)
+		{
+			HandleAbilityIndicatorEnd();
+		}
+		Server_ClearAbilityIndicator();
+	}
+
+	if (CurrentDraggedAbilityIndicator || AbilityIndicatorRefCount > 0)
+	{
+		static float LastTickLogTime = 0.f;
+		float CurTime = GetWorld()->GetTimeSeconds();
+		if (CurTime - LastTickLogTime > 5.0f)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ExtendedControllerBase::Tick - Active Indicator: %p, RefCount: %d, NetMode: %d"), CurrentDraggedAbilityIndicator, AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
+			LastTickLogTime = CurTime;
+		}
+	}
+
 	MoveAbilityIndicator_Local(DeltaSeconds);
 	UpdateExtractionSounds(DeltaSeconds);
 }
@@ -329,8 +351,22 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		return;
 	}
 
+	// Ability Indicator Spawning
+	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
+	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(UnitBase);
+	if (AbilityArray.IsValidIndex(AbilityIndex))
+	{
+		TSubclassOf<UGameplayAbilityBase> AbilityClass = AbilityArray[AbilityIndex];
+		if (AbilityClass && !UnitBase->IsAbilityOnCooldownByClass(AbilityClass))
+		{
+			UGameplayAbilityBase* AbilityCDO = AbilityClass.GetDefaultObject();
+			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
+			{
+				HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass);
+			}
+		}
+	}
 
-	
 	switch (AbilityArrayIndex)
 	{
 	case 0:
@@ -405,7 +441,7 @@ void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID I
 }
 
 
-TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayForUnit(AUnitBase* Unit)
+TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayForUnit(AGASUnit* Unit)
 {
 	if (!Unit) return TArray<TSubclassOf<UGameplayAbilityBase>>();
 	
@@ -3312,19 +3348,96 @@ void AExtendedControllerBase::SetWorkArea(FTransform AreaTransform)
     }
 }
 
+void AExtendedControllerBase::Server_ClearAbilityIndicator_Implementation()
+{
+	while (AbilityIndicatorRefCount > 0)
+	{
+		HandleAbilityIndicatorEnd();
+	}
+}
+
+void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIndicator> IndicatorClass)
+{
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorStart - IndicatorClass: %s, RefCount: %d, NetMode: %d"), IndicatorClass ? *IndicatorClass->GetName() : TEXT("None"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
+	if (!IndicatorClass) return;
+
+	if (AbilityIndicatorRefCount == 0)
+	{
+		FActorSpawnParameters SpawnParams;
+		SpawnParams.Owner = this;
+		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+		CurrentDraggedAbilityIndicator = GetWorld()->SpawnActor<AAbilityIndicator>(IndicatorClass, FVector::ZeroVector, FRotator::ZeroRotator, SpawnParams);
+		if (CurrentDraggedAbilityIndicator)
+		{
+			CurrentDraggedAbilityIndicator->SetActorHiddenInGame(false);
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Locally spawned AbilityIndicator %s at %p"), *CurrentDraggedAbilityIndicator->GetName(), CurrentDraggedAbilityIndicator);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("[DEBUG_LOG] FAILED to spawn AbilityIndicator of class %s"), *IndicatorClass->GetName());
+		}
+	}
+	AbilityIndicatorRefCount++;
+}
+
+void AExtendedControllerBase::HandleAbilityIndicatorEnd()
+{
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorEnd - RefCount before: %d, NetMode: %d"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
+	AbilityIndicatorRefCount--;
+	if (AbilityIndicatorRefCount <= 0)
+	{
+		if (CurrentDraggedAbilityIndicator)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Destroying AbilityIndicator %s"), *CurrentDraggedAbilityIndicator->GetName());
+			CurrentDraggedAbilityIndicator->Destroy();
+			CurrentDraggedAbilityIndicator = nullptr;
+		}
+		AbilityIndicatorRefCount = 0;
+	}
+}
+
 void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
 {
     // Follow-mouse and snap/pushback like WorkArea, but only when DetectOverlapWithWorkArea is enabled
-    if (SelectedUnits.Num() == 0)
+    if (!CurrentDraggedAbilityIndicator)
     {
+        // Static variable to throttled log to avoid spam
+        static float LastMissingLogTime = 0.f;
+        float CurTime = GetWorld()->GetTimeSeconds();
+        if (CurTime - LastMissingLogTime > 5.0f)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] MoveAbilityIndicator_Local: CurrentDraggedAbilityIndicator is NULL. RefCount: %d"), AbilityIndicatorRefCount);
+            LastMissingLogTime = CurTime;
+        }
         return;
     }
 
-    FVector MouseGround; FHitResult HitResult;
-    const bool bHit = TraceMouseToGround(MouseGround, HitResult);
-    if (!bHit)
+    FVector MouseGround;
+    FHitResult HitResult;
+    bool bHit = false;
+
+    if (IsLocalController())
     {
-        return;
+        bHit = TraceMouseToGround(MouseGround, HitResult);
+        if (!bHit)
+        {
+            return;
+        }
+    }
+    else
+    {
+        MouseGround = ReplicatedMouseLocation;
+        bHit = true; 
+    }
+    
+    // Static variable to throttled log to avoid spam
+    static float LastLogTime = 0.f;
+    float CurrentTime = GetWorld()->GetTimeSeconds();
+    if (CurrentTime - LastLogTime > 2.0f)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] MoveAbilityIndicator_Local: Moving shared indicator %s"), *CurrentDraggedAbilityIndicator->GetName());
+        LastLogTime = CurrentTime;
     }
 
     UWorld* World = GetWorld();
@@ -3333,29 +3446,68 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         return;
     }
 
+    // Consolidated Range Check: If ANY selected unit is out of range, blink
+    bool bAnyOutOfRange = false;
     for (AUnitBase* Unit : SelectedUnits)
     {
         if (!Unit) continue;
-        AAbilityIndicator* CurrentIndicator = Unit->CurrentDraggedAbilityIndicator;
-        if (!CurrentIndicator) continue;
-
-        // Helper: apply optional rotation to face from owner unit to indicator location (yaw only)
-        auto ApplyRotationIfNeeded = [&](AAbilityIndicator* Indicator)
+        
+        float AbilityRange = 0.f;
+        if (Unit->CurrentSnapshot.AbilityClass)
         {
-            if (!Indicator || !Indicator->RotatesToDirection) return;
-            const FVector From = Unit->GetActorLocation();
-            FVector To = Indicator->GetActorLocation();
-            FVector Dir = To - From; Dir.Z = 0.f;
-            if (!Dir.IsNearlyZero(1e-3f))
+            if (UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
             {
-                FRotator Rot = Dir.Rotation();
-                Rot.Pitch = 0.f; Rot.Roll = 0.f;
-                Indicator->SetActorRotation(Rot);
+                AbilityRange = AbilityCDO->Range;
             }
-        };
+        }
 
-        // Handle range blinking regardless of placement mode
+        if (AbilityRange > 0.f)
         {
+            const float Distance = FVector::Dist(MouseGround, Unit->GetActorLocation());
+            if (Distance > AbilityRange)
+            {
+                bAnyOutOfRange = true;
+                break;
+            }
+        }
+    }
+
+    // Blink Logic
+    if (bAnyOutOfRange)
+    {
+        AbilityIndicatorBlinkTimer += DeltaSeconds;
+        if (AbilityIndicatorBlinkTimer > 0.25f)
+        {
+            AbilityIndicatorBlinkTimer = 0.0f;
+            CurrentDraggedAbilityIndicator->SetActorHiddenInGame(!CurrentDraggedAbilityIndicator->IsHidden());
+        }
+    }
+    else
+    {
+        CurrentDraggedAbilityIndicator->SetActorHiddenInGame(false);
+    }
+
+    AAbilityIndicator* CurrentIndicator = CurrentDraggedAbilityIndicator;
+
+    // Helper: apply optional rotation to face from reference unit (the first one) to indicator location (yaw only)
+    auto ApplyRotationIfNeeded = [&](AAbilityIndicator* Indicator)
+    {
+        if (!Indicator || !Indicator->RotatesToDirection || SelectedUnits.Num() == 0 || !SelectedUnits[0]) return;
+        const FVector From = SelectedUnits[0]->GetActorLocation();
+        FVector To = Indicator->GetActorLocation();
+        FVector Dir = To - From; Dir.Z = 0.f;
+        if (!Dir.IsNearlyZero(1e-3f))
+        {
+            FRotator Rot = Dir.Rotation();
+            Rot.Pitch = 0.f; Rot.Roll = 0.f;
+            Indicator->SetActorRotation(Rot);
+        }
+    };
+
+        // Handle range check for first unit (simplified as representative)
+        if (SelectedUnits.Num() > 0 && SelectedUnits[0])
+        {
+            AUnitBase* Unit = SelectedUnits[0];
             const FVector ALocation = Unit->GetActorLocation();
             const float Distance = FVector::Dist(MouseGround, ALocation);
             if (Unit->CurrentSnapshot.AbilityClass)
@@ -3364,17 +3516,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 {
                     if (AbilityCDO->Range != 0.f && Distance > AbilityCDO->Range)
                     {
-                        AbilityIndicatorBlinkTimer += DeltaSeconds;
-                        if (AbilityIndicatorBlinkTimer > 0.25f)
-                        {
-                            AbilityIndicatorBlinkTimer = 0.0f;
-                            if (Unit->AbilityIndicatorVisibility) { Unit->HideAbilityIndicator(CurrentIndicator); }
-                            else { Unit->ShowAbilityIndicator(CurrentIndicator); }
-                        }
-                    }
-                    else
-                    {
-                        Unit->ShowAbilityIndicator(CurrentIndicator);
+                        // Blinking already handled above by bAnyOutOfRange
                     }
                 }
             }
@@ -3391,7 +3533,6 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             FHitResult GroundHit;
             FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_MouseFollowGround")), true, CurrentIndicator);
             Params.AddIgnoredActor(CurrentIndicator);
-            for (AUnitBase* U : SelectedUnits) { if (U && U->CurrentDraggedAbilityIndicator) { Params.AddIgnoredActor(U->CurrentDraggedAbilityIndicator); } }
             const FVector TraceStart(MouseGround.X, MouseGround.Y, MouseGround.Z + 2000.f);
             const FVector TraceEnd  (MouseGround.X, MouseGround.Y, MouseGround.Z - 10000.f);
             FVector FinalLoc = MouseGround;
@@ -3401,7 +3542,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             }
             CurrentIndicator->SetActorLocation(FinalLoc);
             ApplyRotationIfNeeded(CurrentIndicator);
-            continue;
+            return;
         }
 
         // Distance-only logic with recursive pushback (including SnapGap), same as WorkArea
@@ -3415,7 +3556,6 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             FHitResult GroundHit;
             FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_GroundTrace")), true, CurrentIndicator);
             Params.AddIgnoredActor(CurrentIndicator);
-            for (AUnitBase* U : SelectedUnits) { if (U && U->CurrentDraggedAbilityIndicator) { Params.AddIgnoredActor(U->CurrentDraggedAbilityIndicator); } }
             const FVector TraceStart(InLoc.X, InLoc.Y, InLoc.Z + 2000.f);
             const FVector TraceEnd  (InLoc.X, InLoc.Y, InLoc.Z - 10000.f);
             if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
@@ -3448,11 +3588,14 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         auto ConsiderActor = [&](AActor* Candidate)
         {
             if (!Candidate || Candidate == CurrentIndicator) return;
-            // Do not consider the owner unit/building as a blocking/snap target
+            // Do not consider the owner units/buildings as a blocking/snap target
             if (CurrentIndicator->bIgnoreHoldingUnitInDistanceCheck)
             {
-                if (Candidate == Unit) return;
-                if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (Candidate == OwnerBuilding) return; }
+                for (AUnitBase* U : SelectedUnits)
+                {
+                    if (Candidate == U) return;
+                    if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(U)) { if (Candidate == OwnerBuilding) return; }
+                }
             }
             FVector OtherCenter, OtherExtent;
             if (!GetActorBoundsForSnap(Candidate, OtherCenter, OtherExtent)) return;
@@ -3531,11 +3674,16 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 for (AActor* N : Neighbors)
                 {
                     if (!N) continue;
-                    // Do not be blocked by the owning unit/building
+                    // Do not be blocked by the owning units/buildings
                     if (CurrentIndicator->bIgnoreHoldingUnitInDistanceCheck)
                     {
-                        if (N == Unit) continue;
-                        if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (N == OwnerBuilding) continue; }
+                        bool bIsSelected = false;
+                        for (AUnitBase* U : SelectedUnits)
+                        {
+                            if (N == U) { bIsSelected = true; break; }
+                            if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(U)) { if (N == OwnerBuilding) { bIsSelected = true; break; } }
+                        }
+                        if (bIsSelected) continue;
                     }
                     FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
@@ -3577,10 +3725,16 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 for (AActor* N : Neighbors)
                 {
                     if (!N) continue;
+                    // Do not be blocked by the owning units/buildings
                     if (CurrentIndicator->bIgnoreHoldingUnitInDistanceCheck)
                     {
-                        if (N == Unit) continue;
-                        if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(Unit)) { if (N == OwnerBuilding) continue; }
+                        bool bIsSelected = false;
+                        for (AUnitBase* U : SelectedUnits)
+                        {
+                            if (N == U) { bIsSelected = true; break; }
+                            if (ABuildingBase* OwnerBuilding = Cast<ABuildingBase>(U)) { if (N == OwnerBuilding) { bIsSelected = true; break; } }
+                        }
+                        if (bIsSelected) continue;
                     }
                     FVector NC, NE; if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
@@ -3612,7 +3766,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                     ApplyRotationIfNeeded(CurrentIndicator);
                     LastSafeLoc = Corrected; bHasLastSafe = true; WorkAreaIsSnapped = true; CurrentSnapActor = BestCandidate;
                 }
-                continue;
+                return;
             }
         }
 
@@ -3633,7 +3787,6 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                 LastSafeLoc = Proposed; bHasLastSafe = true; WorkAreaIsSnapped = false; CurrentSnapActor = nullptr;
             }
         }
-    }
 }
 
 void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementation(AUnitBase* Unit, AWorkArea* WA)
@@ -4655,7 +4808,13 @@ void AExtendedControllerBase::CancelAbilitiesIfNoBuilding(AUnitBase* Unit)
 					ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
 					
 					if (!BuildingBase || BuildingBase->CanMove)
+					{
+						if (AbilityCDO->AbilityIndicatorClass)
+						{
+							HandleAbilityIndicatorEnd();
+						}
 						CancelCurrentAbility(Unit);
+					}
 				}
 			}
 		}

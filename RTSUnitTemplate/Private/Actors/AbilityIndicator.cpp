@@ -4,6 +4,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
+#include "Engine/World.h"
 
 // Sets default values
 AAbilityIndicator::AAbilityIndicator()
@@ -26,7 +29,7 @@ AAbilityIndicator::AAbilityIndicator()
 	// Optionally, disable collision for the entire actor
 	SetActorEnableCollision(false);
 	
-	bReplicates = true;
+	bReplicates = false;
 	bIgnoreHoldingUnitInDistanceCheck = true;
 }
 
@@ -46,13 +49,6 @@ void AAbilityIndicator::BeginPlay()
 void AAbilityIndicator::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
-}
-
-void AAbilityIndicator::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AAbilityIndicator, TeamId);
-	DOREPLIFETIME(AAbilityIndicator, IndicatorMesh);
 }
 
 // Sets the position of the indicator

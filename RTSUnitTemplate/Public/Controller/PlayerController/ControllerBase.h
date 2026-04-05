@@ -11,6 +11,15 @@
 #include "Actors/UnitSpawnPlatform.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameModes/RTSGameModeBase.h"
+
+class AWorkArea;
+class AActor;
+class UStaticMeshComponent;
+class USoundBase;
+class AUnitBase;
+class AAbilityIndicator;
+class UGameplayAbilityBase;
+
 #include "ControllerBase.generated.h"
 
 /**
@@ -46,7 +55,7 @@ public:
 	virtual void SetupInputComponent() override;
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AAbilityIndicator* CurrentDraggedAbilityIndicator;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

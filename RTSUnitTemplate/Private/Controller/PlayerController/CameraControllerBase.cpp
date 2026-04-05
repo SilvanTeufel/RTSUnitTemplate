@@ -1736,7 +1736,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	if (bHasCastingTag || 
 				CameraUnitWithTag->GetUnitState() == UnitData::Casting ||
 				CameraUnitWithTag->ActivatedAbilityInstance != nullptr ||
-				CameraUnitWithTag->CurrentDraggedAbilityIndicator != nullptr)
+				CurrentDraggedAbilityIndicator != nullptr)
         	{
         		bCanMove = false;
         	}

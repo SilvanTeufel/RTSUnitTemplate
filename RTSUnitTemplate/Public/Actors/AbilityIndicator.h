@@ -5,6 +5,8 @@
 #include "CoreMinimal.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Actor.h"
+#include "Materials/MaterialInterface.h"
+#include "Components/StaticMeshComponent.h"
 
 // Forward declarations for properties used below
 class UMaterialInterface;
@@ -30,15 +32,13 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
-
 	// Sets the position of the indicator
 	void SetIndicatorLocation(const FVector& NewLocation);
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	UStaticMeshComponent* IndicatorMesh;
 
 	// If true, the controller will detect overlaps with WorkAreas and highlight this indicator

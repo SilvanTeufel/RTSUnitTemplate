@@ -598,12 +598,6 @@ void AGASUnit::CancelCurrentAbility()
 	if (ActivatedAbilityInstance)
 	{
 		{
-			if(CurrentDraggedAbilityIndicator)
-			{
-				CurrentDraggedAbilityIndicator->Destroy(true, true);
-				CurrentDraggedAbilityIndicator = nullptr;
-			}
-
 			ActivatedAbilityInstance->ClickCount = 0;
 			ActivatedAbilityInstance->K2_CancelAbility();
 			ActivatedAbilityInstance = nullptr;

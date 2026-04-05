@@ -640,7 +640,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
     } else {
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
-            if (CustomControllerBase->SelectedUnits[i] && !CustomControllerBase->SelectedUnits[i]->IsWorker && CustomControllerBase->SelectedUnits[i]->CurrentSnapshot.AbilityClass && CustomControllerBase->SelectedUnits[i]->CurrentDraggedAbilityIndicator)
+            if (CustomControllerBase->SelectedUnits[i] && !CustomControllerBase->SelectedUnits[i]->IsWorker && CustomControllerBase->SelectedUnits[i]->CurrentSnapshot.AbilityClass && CustomControllerBase->CurrentDraggedAbilityIndicator)
             {
                 CustomControllerBase->FireAbilityMouseHit(CustomControllerBase->SelectedUnits[i], HitResult);
 

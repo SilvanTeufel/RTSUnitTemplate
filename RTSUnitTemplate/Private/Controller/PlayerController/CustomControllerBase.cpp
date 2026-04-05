@@ -2396,9 +2396,42 @@ void ACustomControllerBase::LeftClickPressedMass()
             GetHitResultUnderCursor(ECollisionChannel::ECC_WorldDynamic, false, HitPawn);
         }
 
-        // Only call the server if we previously activated an ability via keyboard
-        if (bUsedKeyboardAbilityBeforeClick)
+        // Check if any unit is currently aiming an ability, dragging a workarea, or if we have an indicator active
+        bool bAnyUnitIsAimingOrDragging = bUsedKeyboardAbilityBeforeClick;
+        if (!bAnyUnitIsAimingOrDragging)
         {
+            if (CurrentDraggedAbilityIndicator)
+            {
+                bAnyUnitIsAimingOrDragging = true;
+            }
+            else
+            {
+                for (AUnitBase* U : SelectedUnits)
+                {
+                    if (U && (U->CurrentSnapshot.AbilityClass || U->CurrentDraggedWorkArea))
+                    {
+                        bAnyUnitIsAimingOrDragging = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (bAnyUnitIsAimingOrDragging)
+        {
+            // Indicator Cleanup (Client-side)
+            for (AUnitBase* U : SelectedUnits)
+            {
+                if (U && U->CurrentSnapshot.AbilityClass)
+                {
+                    UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+                    if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
+                    {
+                        HandleAbilityIndicatorEnd();
+                    }
+                }
+            }
+
             bUsedKeyboardAbilityBeforeClick = false; // consume the flag
             // Send client work area transform (if any) to ensure server has the same placement
             bool bHasClientWorkAreaTransform = false;
@@ -2422,14 +2455,18 @@ void ACustomControllerBase::LeftClickPressedMass()
 
 void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform, int32 InAbilityIndex)
 {
+    UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Server_HandleAbilityUnderCursor called for %d units, AbilityIndex: %d"), Units.Num(), InAbilityIndex);
+    if (Units.Num() == 0) return;
+
     // Ensure server has the same transform for the dragged work area as the client
-    if (bHasClientWorkAreaTransform && Units.Num() > 0 && Units[0] && Units[0]->CurrentDraggedWorkArea)
+    if (bHasClientWorkAreaTransform && Units[0] && Units[0]->CurrentDraggedWorkArea)
     {
         Units[0]->CurrentDraggedWorkArea->SetActorTransform(ClientWorkAreaTransform);
     }
     // Try to drop any active work area for the first unit using the new parameterized variant
-    if (Units.Num() > 0 && Units[0] && Units[0]->CurrentDraggedWorkArea)
+    if (Units[0] && Units[0]->CurrentDraggedWorkArea)
     {
+        UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Dropping WorkArea for unit %s"), *Units[0]->GetName());
         if (!Units[0]->CurrentDraggedWorkArea->InstantDrop) DropWorkAreaForUnit(Units[0], bWorkAreaIsSnapped, InDropWorkAreaFailedSound);
     }
 
@@ -2439,25 +2476,32 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
 
     for (AUnitBase* U : Units)
     {
-        if (U && U->CurrentSnapshot.AbilityClass && U->CurrentDraggedAbilityIndicator)
+        if (U && U->CurrentSnapshot.AbilityClass)
         {
+            UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Firing ability for unit %s, Class: %s"), *U->GetName(), *U->CurrentSnapshot.AbilityClass->GetName());
+
+            // Indicator Cleanup (Server-side)
+            UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+            if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
+            {
+                HandleAbilityIndicatorEnd();
+            }
+
             FireAbilityMouseHit(U, HitPawn);
             AbilityFired = true;
         }
-        else
+        else if (U)
         {
+            UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] Unit %s has no active AbilityClass in Snapshot"), *U->GetName());
             AbilityUnSynced = true;
-            if (U)
+            TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(U);
+            if (AbilityArray.IsValidIndex(InAbilityIndex))
             {
-                TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(U);
-                if (AbilityArray.IsValidIndex(InAbilityIndex))
+                if (AGASUnit* GASUnit = Cast<AGASUnit>(U))
                 {
-                    if (AGASUnit* GASUnit = Cast<AGASUnit>(U))
+                    if (GASUnit->IsAbilityOnCooldownByClass(AbilityArray[InAbilityIndex]))
                     {
-                        if (GASUnit->IsAbilityOnCooldownByClass(AbilityArray[InAbilityIndex]))
-                        {
-                            bFromCooldown = true;
-                        }
+                        bFromCooldown = true;
                     }
                 }
             }

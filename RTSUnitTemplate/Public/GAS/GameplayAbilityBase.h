@@ -51,6 +51,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category= RTSUnitTemplate)
 	EGASAbilityInputID AbilityInputID = EGASAbilityInputID::None;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class AAbilityIndicator> AbilityIndicatorClass;
+
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void OnAbilityCastComplete( const FHitResult& InHitResult = FHitResult());
 	

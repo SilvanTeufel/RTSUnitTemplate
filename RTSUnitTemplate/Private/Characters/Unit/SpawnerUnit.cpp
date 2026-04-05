@@ -25,7 +25,6 @@ void ASpawnerUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutL
 	
 	DOREPLIFETIME(ASpawnerUnit, TeamId);
 	DOREPLIFETIME(ASpawnerUnit, SquadId);
-	DOREPLIFETIME(ASpawnerUnit, CurrentDraggedAbilityIndicator);
 
 	DOREPLIFETIME(ASpawnerUnit, UnitTags);
 	DOREPLIFETIME(ASpawnerUnit, AbilitySelectionTag);
@@ -92,104 +91,4 @@ void ASpawnerUnit::SpawnPickupsArray()
 		i++;
 	}
 	IsSpawned = true;
-}
-
-
-void ASpawnerUnit::SpawnAbilityIndicator(TSubclassOf<AAbilityIndicator> AbilityIndicatorClass,
-											   FVector SpawnLocation)
-{
-
-	AControllerBase* TeamControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
-	
-	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
-	{
-		
-		AController* PlayerController = It->Get();
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-
-
-		
-		if (ControllerBase)
-		{
-
-			if (ControllerBase->SelectableTeamId == TeamId)
-			{
-				if (ControllerBase->CurrentDraggedAbilityIndicator)
-				{
-					CurrentDraggedAbilityIndicator = ControllerBase->CurrentDraggedAbilityIndicator;
-					CurrentDraggedAbilityIndicator->SetReplicateMovement(true);
-					return;
-				}
-
-				TeamControllerBase = ControllerBase;
-				
-			}
-		}
-	}
-	
-	
-	if (AbilityIndicatorClass)
-	{
-
-
-		FActorSpawnParameters SpawnParams;
-		SpawnParams.Owner = this;
-		SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-
-		FRotator SpawnRotation = FRotator::ZeroRotator;
-
-		// Spawn the replicated WorkArea on the server
-		AAbilityIndicator* SpawnedAbilityIndicator = GetWorld()->SpawnActor<AAbilityIndicator>(
-			AbilityIndicatorClass,
-			SpawnLocation,
-			SpawnRotation,
-			SpawnParams
-		);
-
-		if (SpawnedAbilityIndicator)
-		{
-			// Initialize any properties on the spawned WorkArea
-
-			SpawnedAbilityIndicator->TeamId = TeamId;
-			//SpawnedWorkArea->SceneRoot->SetVisibility(false, true);
-			// Keep track of this WorkArea if needed
-			CurrentDraggedAbilityIndicator = SpawnedAbilityIndicator;
-			CurrentDraggedAbilityIndicator->SetReplicateMovement(true);
-
-			if (TeamControllerBase->IsValidLowLevel())
-			{
-				TeamControllerBase->CurrentDraggedAbilityIndicator = CurrentDraggedAbilityIndicator;
-			}
-		}
-	}
-}
-
-void ASpawnerUnit::DespawnCurrentAbilityIndicator()
-{
-	if (CurrentDraggedAbilityIndicator)
-	{
-		CurrentDraggedAbilityIndicator->Destroy(true, true);
-		CurrentDraggedAbilityIndicator = nullptr;
-	}
-
-	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
-	{
-		
-		AController* PlayerController = It->Get();
-		AControllerBase* ControllerBase = Cast<AControllerBase>(PlayerController);
-
-
-		
-		if (ControllerBase)
-		{
-
-			if (ControllerBase->SelectableTeamId == TeamId)
-			{
-				if (ControllerBase->CurrentDraggedAbilityIndicator)
-					ControllerBase->CurrentDraggedAbilityIndicator->Destroy(true, true);
-				
-				ControllerBase->CurrentDraggedAbilityIndicator = nullptr;
-			}
-		}
-	}
 }

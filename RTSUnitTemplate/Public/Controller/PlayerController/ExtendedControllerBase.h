@@ -103,6 +103,9 @@ protected:
 	void HandleExtractionSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 public:
+	UPROPERTY()
+	int32 AbilityIndicatorRefCount = 0;
+
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyCustomizations(
 		USoundBase* InWaypointSound,
@@ -281,10 +284,13 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	int MaxAbilityArrayIndex = 3;
 	
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void Server_ClearAbilityIndicator();
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayByIndex();
 
-	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayForUnit(AUnitBase* Unit);
+	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayForUnit(AGASUnit* Unit);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<UGameplayAbilityBase*> GetAbilityObjectArrayByIndex();
@@ -362,6 +368,9 @@ public:
 	
 	// Local, client-side variant used by Tick; mirrors WorkArea distance/pushback behavior for AbilityIndicator
 	void MoveAbilityIndicator_Local(float DeltaSeconds);
+
+	void HandleAbilityIndicatorStart(TSubclassOf<AAbilityIndicator> IndicatorClass);
+	void HandleAbilityIndicatorEnd();
 
 	// Client informs server about indicator overlap state so server can use it for authoritative logic
 	UFUNCTION(Server, Reliable)

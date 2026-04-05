@@ -23,6 +23,8 @@
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/GASUnit.h"
+#include "Actors/AbilityIndicator.h"
+#include "GameFramework/PlayerState.h"
 #include "GameModes/ResourceGameMode.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
@@ -140,11 +142,14 @@ void UGameplayAbilityBase::OnAbilityMouseHit_Implementation(const FHitResult& In
 
 void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] UGameplayAbilityBase::ActivateAbility - Ability: %s, NetMode: %d"), *GetName(), (int32)GetWorld()->GetNetMode());
+
 	// Mark this ability class as executed in this play session (exact class type)
 	if (UClass* ThisClass = GetClass())
 	{
 		GExecutedAbilityClasses.Add(ThisClass);
 	}
+
 
 	if (bRotateUnitsToMouse)
 	{
@@ -186,10 +191,13 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] UGameplayAbilityBase::EndAbility - Ability: %s, NetMode: %d"), *GetName(), (int32)GetWorld()->GetNetMode());
 	if (!IsEndAbilityValid(Handle, ActorInfo))
 	{
+		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] UGameplayAbilityBase::EndAbility - IsEndAbilityValid FAILED"));
 		return;
 	}
+
 
 	if (bRotateUnitsToMouse)
 	{
