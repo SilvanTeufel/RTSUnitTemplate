@@ -28,6 +28,7 @@ void UMassRotateToMouseProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::All);
+	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 

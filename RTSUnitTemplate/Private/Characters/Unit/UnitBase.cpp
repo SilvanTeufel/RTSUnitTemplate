@@ -695,6 +695,22 @@ void AUnitBase::SetDeselected()
 	{
 		SelectionIcon->HideSelection();
 	}
+
+	// Remove rotation tag on deselection
+	if (MassActorBindingComponent)
+	{
+		FMassEntityHandle Entity = MassActorBindingComponent->GetMassEntityHandle();
+		if (Entity.IsValid())
+		{
+			UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+			if (MassSubsystem)
+			{
+				FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+				EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+				EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
+			}
+		}
+	}
 	
 	Deselected();
 }

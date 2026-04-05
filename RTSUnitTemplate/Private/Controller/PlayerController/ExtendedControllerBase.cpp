@@ -585,6 +585,14 @@ void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase*
 
 	if (ClosestUnit)
 	{
+		if (AGASUnit* GASUnit = Cast<AGASUnit>(ClosestUnit))
+		{
+			if (GASUnit->IsAnyAbilityActive())
+			{
+				return;
+			}
+		}
+
 		ClosestUnit->SetSelected();
 		SelectedUnits.Emplace(ClosestUnit);
 		HUDBase->SetUnitSelected(ClosestUnit, bIsAi);
@@ -592,7 +600,17 @@ void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase*
 		// Check if the ability being activated requires rotation
 		int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(ClosestUnit);
-		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse)
+
+		bool bIsOnCooldown = false;
+		if (AbilityArray.IsValidIndex(AbilityIndex))
+		{
+			if (AGASUnit* GASUnit = Cast<AGASUnit>(ClosestUnit))
+			{
+				bIsOnCooldown = GASUnit->IsAbilityOnCooldownByClass(AbilityArray[AbilityIndex]);
+			}
+		}
+
+		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse && !bIsOnCooldown)
 		{
 			UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::ClientReceiveClosestUnit_Implementation: ClosestUnit ability requires rotation."));
 			TArray<AUnitBase*> TargetUnits = { ClosestUnit };
@@ -624,6 +642,24 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 
 	if (AltIsPressed) return;
 	if (IsCtrlPressed) return;
+
+	// Requirement 2: Block if ANY selected unit is busy
+	for (AUnitBase* Unit : SelectedUnits)
+	{
+		if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+		{
+			if (GASUnit->IsAnyAbilityActive()) return;
+		}
+	}
+
+	// Requirement 2: Block if CameraUnit is busy (if we are going to use it)
+	if (SelectedUnits.Num() == 0 && CameraUnitWithTag)
+	{
+		if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+		{
+			if (GASUnit->IsAnyAbilityActive()) return;
+		}
+	}
 	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
@@ -647,6 +683,14 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			AbilityClass = AbilityArray[AbilityIndex];
 		}
 
+		// Validate CurrentUnitWidgetIndex is within bounds
+		if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num())
+		{
+			CurrentUnitWidgetIndex = 0;
+		}
+
+		AUnitBase* CurrentUnit = SelectedUnits[CurrentUnitWidgetIndex];
+
 		// 2. Batch apply tag if CDO says so
 		if (AbilityClass && AbilityClass.GetDefaultObject()->bRotateUnitsToMouse)
 		{
@@ -655,7 +699,20 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			{
 				if (Unit && Unit->CanActivateAbilities && !Unit->IsWorker)
 				{
-					TargetUnits.Add(Unit);
+					bool bUnitOnCooldown = false;
+					if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+					{
+						TArray<TSubclassOf<UGameplayAbilityBase>> UnitAbilityArray = GetAbilityArrayForUnit(Unit);
+						if (UnitAbilityArray.IsValidIndex(AbilityIndex))
+						{
+							bUnitOnCooldown = GASUnit->IsAbilityOnCooldownByClass(UnitAbilityArray[AbilityIndex]);
+						}
+					}
+
+					if (!bUnitOnCooldown)
+					{
+						TargetUnits.Add(Unit);
+					}
 				}
 			}
 
@@ -666,13 +723,6 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			}
 		}
 		
-		// Validate CurrentUnitWidgetIndex is within bounds
-		if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num())
-		{
-			CurrentUnitWidgetIndex = 0;
-		}
-		
-		AUnitBase* CurrentUnit = SelectedUnits[CurrentUnitWidgetIndex];
 		
 		// Check if the current unit is valid before accessing its properties
 		if (CurrentUnit && CurrentUnit->IsWorker && CurrentUnit->CanActivateAbilities)
@@ -716,10 +766,28 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		SelectedUnits.Emplace(CameraUnitWithTag);
 		HUDBase->SetUnitSelected(CameraUnitWithTag, bIsAi);
 
+		if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+		{
+			if (GASUnit->IsAnyAbilityActive())
+			{
+				return;
+			}
+		}
+
 		// Check if CameraUnit's ability needs rotation
 		int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(CameraUnitWithTag);
-		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse)
+
+		bool bIsOnCooldown = false;
+		if (AbilityArray.IsValidIndex(AbilityIndex))
+		{
+			if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+			{
+				bIsOnCooldown = GASUnit->IsAbilityOnCooldownByClass(AbilityArray[AbilityIndex]);
+			}
+		}
+
+		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse && !bIsOnCooldown)
 		{
 			TArray<AUnitBase*> TargetUnits = { CameraUnitWithTag };
 			BatchSetRotateToMouseTagLocally(TargetUnits, true);
@@ -4754,6 +4822,10 @@ void AExtendedControllerBase::Client_DeselectSingleUnit_Implementation(AUnitBase
 	{
 		return;
 	}
+
+	// Notify server to remove rotation tag
+	TArray<AUnitBase*> Units = { UnitToDeselect };
+	Server_BatchSetRotateToMouseTag(Units, false);
 
 	// Deselect the unit visually
 	UnitToDeselect->SetDeselected();

@@ -200,11 +200,11 @@ public:
 	// Server will process dragged abilities under cursor for selected units. If it does not early return,
 	// it will notify the owning client to continue with selection logic.
 	UFUNCTION(Server, Reliable)
-	void Server_HandleAbilityUnderCursor(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform);
+	void Server_HandleAbilityUnderCursor(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform, int32 InAbilityIndex);
 
 	// Owning client continues with selection under cursor when server indicates no early return.
 	UFUNCTION(Client, Reliable)
-	void Client_ContinueSelectionAfterAbility(const FHitResult& HitPawn);
+	void Client_ContinueSelectionAfterAbility(const FHitResult& HitPawn, bool bFromCooldown = false, bool bResetFlagOnly = false);
 
 	UFUNCTION(Server, Reliable, Blueprintable,  Category = RTSUnitTemplate)
 	void LeftClickAttackMass(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor = nullptr);
@@ -283,4 +283,7 @@ protected:
 	/** The extent used when projecting a point to the NavMesh to validate move commands. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Navigation")
 	FVector NavMeshProjectionExtent = FVector(50.f, 50.f, 250.f);
+
+private:
+	bool bDeselectOnNextClick = false;
 };

@@ -43,6 +43,7 @@
 #include "Characters/Unit/MassUnitBase.h"
 #include "GameplayTagContainer.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "Characters/Unit/GASUnit.h"
 #include "Actors/WorkArea.h"
 #include "GAS/AttributeSetBase.h"
 #include "Blueprint/UserWidget.h"
@@ -2363,11 +2364,12 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 void ACustomControllerBase::LeftClickPressedMass()
 {
     LeftClickIsPressed = true;
+    int32 SavedAbilityIndex = AbilityArrayIndex;
     AbilityArrayIndex = 0;
 
     if (!CameraBase || CameraBase->TabToggled) return;
 
-	if (SwapAttackMove) AttackToggled = false;
+    if (SwapAttackMove) AttackToggled = false;
 	
     // --- ALT: cancel / destroy area ---
 	if (AltIsPressed)
@@ -2406,19 +2408,19 @@ void ACustomControllerBase::LeftClickPressedMass()
                 bHasClientWorkAreaTransform = true;
                 ClientWorkAreaTransform = SelectedUnits[0]->CurrentDraggedWorkArea->GetActorTransform();
             }
-            Server_HandleAbilityUnderCursor(SelectedUnits, HitPawn, WorkAreaIsSnapped, DropWorkAreaFailedSound, bHasClientWorkAreaTransform, ClientWorkAreaTransform);
+            Server_HandleAbilityUnderCursor(SelectedUnits, HitPawn, WorkAreaIsSnapped, DropWorkAreaFailedSound, bHasClientWorkAreaTransform, ClientWorkAreaTransform, SavedAbilityIndex);
         }
         else
         {
             // Skip server and just continue with selection locally
-            Client_ContinueSelectionAfterAbility_Implementation(HitPawn);
+            Client_ContinueSelectionAfterAbility(HitPawn);
         }
         return;
     }
 	
 }
 
-void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform)
+void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform, int32 InAbilityIndex)
 {
     // Ensure server has the same transform for the dragged work area as the client
     if (bHasClientWorkAreaTransform && Units.Num() > 0 && Units[0] && Units[0]->CurrentDraggedWorkArea)
@@ -2433,6 +2435,7 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
 
     bool AbilityFired = false;
     bool AbilityUnSynced = false;
+    bool bFromCooldown = false;
 
     for (AUnitBase* U : Units)
     {
@@ -2444,21 +2447,54 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
         else
         {
             AbilityUnSynced = true;
+            if (U)
+            {
+                TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(U);
+                if (AbilityArray.IsValidIndex(InAbilityIndex))
+                {
+                    if (AGASUnit* GASUnit = Cast<AGASUnit>(U))
+                    {
+                        if (GASUnit->IsAbilityOnCooldownByClass(AbilityArray[InAbilityIndex]))
+                        {
+                            bFromCooldown = true;
+                        }
+                    }
+                }
+            }
         }
     }
 
     if (AbilityFired && !AbilityUnSynced)
     {
-        // Early exit: abilities were processed server-side for all units; no client-side selection follow-up
+        // Reset the flag for the client, but don't perform selection follow-up
+        Client_ContinueSelectionAfterAbility(FHitResult(), false, true);
         return;
     }
 
     // Ask owning client to continue with selection handling
-    Client_ContinueSelectionAfterAbility(HitPawn);
+    Client_ContinueSelectionAfterAbility(HitPawn, bFromCooldown, false);
 }
 
-void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(const FHitResult& HitPawn)
+void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(const FHitResult& HitPawn, bool bFromCooldown, bool bResetFlagOnly)
 {
+    if (bFromCooldown) {
+        // Ability attempt failed due to cooldown; skip deselection now and set flag for next click
+        bDeselectOnNextClick = true;
+        return; 
+    }
+
+    bool bWasDeselectFlagActive = bDeselectOnNextClick;
+    bDeselectOnNextClick = false;
+
+    if (bResetFlagOnly)
+    {
+        return;
+    }
+
+    if (bWasDeselectFlagActive) {
+        HUDBase->DeselectAllUnits();
+    } 
+
     // if we hit a pawn, try to select it (client-side UI and input state)
     if (HitPawn.bBlockingHit && HUDBase)
     {

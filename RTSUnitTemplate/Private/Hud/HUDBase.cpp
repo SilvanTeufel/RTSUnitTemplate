@@ -643,6 +643,11 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 
 void AHUDBase::SetUnitSelected(AUnitBase* Unit, bool bIsAi)
 {
+	if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetOwningPlayerController()))
+	{
+		PC->Batch_RemoveRotateToMouseTag();
+	}
+
 	// Deselect and prune any invalid pointers first
 	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
 	{
@@ -670,6 +675,11 @@ void AHUDBase::SetUnitSelected(AUnitBase* Unit, bool bIsAi)
 
 void AHUDBase::DeselectAllUnits()
 {
+	if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetOwningPlayerController()))
+	{
+		PC->Batch_RemoveRotateToMouseTag();
+	}
+
 	if (CharacterIsUnSelectable)
 	{
 		for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)

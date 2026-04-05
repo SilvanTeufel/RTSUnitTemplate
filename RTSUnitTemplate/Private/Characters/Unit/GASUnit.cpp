@@ -233,6 +233,38 @@ bool AGASUnit::GetToggleUnitDetection()
 }
 
 
+bool AGASUnit::IsAbilityOnCooldownByClass(TSubclassOf<UGameplayAbilityBase> AbilityClass) const
+{
+	if (!AbilitySystemComponent || !AbilityClass)
+	{
+		return false;
+	}
+
+	const UGameplayAbilityBase* AbilityCDO = AbilityClass.GetDefaultObject();
+	if (!AbilityCDO)
+	{
+		return false;
+	}
+
+	const FGameplayTagContainer* CooldownTags = AbilityCDO->GetCooldownTags();
+	if (CooldownTags && CooldownTags->Num() > 0)
+	{
+		if (AbilitySystemComponent->HasAnyMatchingGameplayTags(*CooldownTags))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+bool AGASUnit::IsAnyAbilityActive() const
+{
+	return ActivatedAbilityInstance != nullptr;
+}
+
+
 bool AGASUnit::ActivateAbilityByInputID(
 	EGASAbilityInputID InputID,
 	const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray,

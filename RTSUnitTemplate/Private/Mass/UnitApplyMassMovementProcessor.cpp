@@ -63,6 +63,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 	
 	EntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
 	
@@ -102,6 +104,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
 	ClientEntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	ClientEntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+	ClientEntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+	ClientEntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 	
 	ClientEntityQuery.RegisterWithProcessor(*this);
 }

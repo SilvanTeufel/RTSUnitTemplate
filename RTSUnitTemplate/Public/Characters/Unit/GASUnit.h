@@ -129,6 +129,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool GetToggleUnitDetection();
 	
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsAbilityOnCooldownByClass(TSubclassOf<UGameplayAbilityBase> AbilityClass) const;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsAnyAbilityActive() const;
+
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	bool ActivateAbilityByInputID(EGASAbilityInputID InputID, const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray, const FHitResult& HitResult = FHitResult(), APlayerController* InstigatorPC = nullptr);
 	
