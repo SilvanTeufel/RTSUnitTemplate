@@ -232,8 +232,10 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                         if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
                         {
                             FTransform SpawnXf = Transform;
-                            // Use replicated/predicted offset instead of hardcoded 50f forward, 100f up.
-                            const FVector SpawnPos = SpawnXf.GetLocation() + SpawnXf.TransformVector(Item->AIS_ProjectileSpawnOffset);
+                            // Predicted fragment might be at ground level, but offset is root-relative (center-relative)
+                            // We manually add the capsule height to center the anchor on clients.
+                            SpawnXf.AddToTranslation(FVector(0.f, 0.f, CharFrag.CapsuleHeight)); 
+                            const FVector SpawnPos = SpawnXf.TransformPosition(Item->AIS_ProjectileSpawnOffset);
                             SpawnXf.SetLocation(SpawnPos);
 
                             FVector TargetLoc = TargetFrag.LastKnownLocation;

@@ -41,6 +41,7 @@
 #include "MassSignalSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Characters/Unit/GASUnit.h"
 #include "Mass/MassUnitVisualFragments.h"
 #include "Mass/Replication/ReplicationSettings.h"
 #include "MassReplicationFragments.h"
@@ -747,8 +748,51 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 {
 	const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
 	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this);
+	const bool bIsClient = GetWorld() && GetWorld()->GetNetMode() == NM_Client;
 
-	// 1. Try to find a component with the specific tag
+	// 0. On Client, use predicted Mass transform with manual height adjustment to match PauseStateProcessor
+	if (bIsClient && MassUnit && MassUnit->MassActorBindingComponent)
+	{
+		FMassEntityHandle EntityHandle = MassUnit->MassActorBindingComponent->GetEntityHandle();
+		if (EntityHandle.IsValid())
+		{
+			UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+			if (EntitySubsystem)
+			{
+				const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager();
+				const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(EntityHandle);
+				const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle);
+
+				if (TF && AC)
+				{
+					FTransform PredictedXf = TF->GetTransform();
+					// Predicted fragment might be at ground level, but offset is root-relative (center-relative)
+					// We manually add the capsule height to center the anchor on clients.
+					PredictedXf.AddToTranslation(FVector(0.f, 0.f, AC->CapsuleHeight));
+					
+					// On client, ProjectileSpawnOffset is synced from AIS_ProjectileSpawnOffset (authoritative server-side muzzle)
+					FVector OffsetFromRoot = ProjectileSpawnOffset;
+					
+					// Fallback to component-based calculation if ProjectileSpawnOffset is not yet synced
+					if (OffsetFromRoot.IsNearlyZero())
+					{
+						TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
+						if (Comps.Num() > 0)
+						{
+							if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
+							{
+								OffsetFromRoot = GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+							}
+						}
+					}
+					
+					return PredictedXf.TransformPosition(OffsetFromRoot) + AdditionalOffset;
+				}
+			}
+		}
+	}
+
+	// 1. Try to find a component with the specific tag (Server or non-Mass Client)
 	TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
 	if (Comps.Num() > 0)
 	{
@@ -774,22 +818,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 			}
 			
 			// If not attached to ISM (e.g. attached to StaticMeshComponent), just use standard component location
-			// On client we use the predicted actor transform to transform the relative location
-			FVector OffsetFromRoot;
-			const bool bIsClient = GetWorld()->GetNetMode() == NM_Client;
-			
-			// On client, if it's a Mass unit, we prefer the replicated/synced ProjectileSpawnOffset
-			// as it's the authoritative baked muzzle position from the server.
-			if (bIsClient && MassUnit && !ProjectileSpawnOffset.IsNearlyZero())
-			{
-				OffsetFromRoot = ProjectileSpawnOffset;
-			}
-			else
-			{
-				OffsetFromRoot = GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
-			}
-			
-			return GetMassActorTransform().TransformPosition(OffsetFromRoot);
+			return GetActorTransform().TransformPosition(GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation())) + AdditionalOffset;
 		}
 	}
 
@@ -812,7 +841,11 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 	const FVector ShootingUnitForward = ShootingUnitRotation.Vector();
 	
 	const FVector RotatedProjectileSpawnOffset = ShootingUnitRotation.RotateVector(ProjectileSpawnOffset);
-	return ShootingUnitLocation + Attributes->GetProjectileScaleActorDirectionOffset() * ShootingUnitForward + RotatedProjectileSpawnOffset + AdditionalOffset;
+	
+	// On client, ProjectileSpawnOffset already includes the attribute offset because it was synced from AIS_ProjectileSpawnOffset.
+	float AttributeOffset = bIsClient ? 0.f : Attributes->GetProjectileScaleActorDirectionOffset();
+	
+	return ShootingUnitLocation + AttributeOffset * ShootingUnitForward + RotatedProjectileSpawnOffset + AdditionalOffset;
 }
 
 
@@ -1573,7 +1606,6 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 		return;
 	}
 
-
 	const AProjectile* CDO = Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 	if (!CDO)
 	{
@@ -1587,19 +1619,23 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 	float NewDamage = (DamageOverride >= 0.f) ? DamageOverride : CDO->Damage;
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 
-	if (ShootingUnit && ShootingUnit->Attributes)
+	if (ShootingUnit)
 	{
-		if (CDO->UseAttributeDamage && DamageOverride < 0.f)
+		const UAttributeSetBase* ShooterAttributes = ShootingUnit->Attributes;
+		if (ShooterAttributes)
 		{
-			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - Attributes->GetArmor();
-			if (ShootingUnit->IsDoingMagicDamage)
-				NewDamage = ShootingUnit->Attributes->GetAttackDamage() - Attributes->GetMagicResistance();
-		}
-		else if (DamageOverride < 0.f) // Only apply armor if we use default CDO damage
-		{
-			NewDamage = CDO->Damage - Attributes->GetArmor();
-			if (ShootingUnit->IsDoingMagicDamage)
-				NewDamage = CDO->Damage - Attributes->GetMagicResistance();
+			if (CDO->UseAttributeDamage && DamageOverride < 0.f)
+			{
+				NewDamage = ShooterAttributes->GetAttackDamage() - Attributes->GetArmor();
+				if (ShootingUnit->IsDoingMagicDamage)
+					NewDamage = ShooterAttributes->GetAttackDamage() - Attributes->GetMagicResistance();
+			}
+			else if (DamageOverride < 0.f)
+			{
+				NewDamage = CDO->Damage - Attributes->GetArmor();
+				if (ShootingUnit->IsDoingMagicDamage)
+					NewDamage = CDO->Damage - Attributes->GetMagicResistance();
+			}
 		}
 	}
 
@@ -1612,10 +1648,11 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
     }
     else
     {
-        if (Attributes && Attributes->GetShield() <= 0)
-            SetHealth_Implementation(Attributes->GetHealth() - NewDamage);
-        else if (Attributes)
-            SetShield_Implementation(Attributes->GetShield() - NewDamage);
+        UAttributeSetBase* CurrentAttributes = Attributes;
+        if (CurrentAttributes && CurrentAttributes->GetShield() <= 0)
+            SetHealth_Implementation(CurrentAttributes->GetHealth() - NewDamage);
+        else if (CurrentAttributes)
+            SetShield_Implementation(CurrentAttributes->GetShield() - NewDamage);
 
         // Grant Experience
         if (ShootingUnit)
