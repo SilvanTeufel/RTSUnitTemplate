@@ -10,6 +10,7 @@
 #include "Mass/Projectile/ProjectileVisualManager.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Actors/Projectile.h"
 
 // 0=Off, 1=Warn, 2=Verbose
@@ -44,6 +45,20 @@ void FUnitReplicationItem::PostReplicatedAdd(const FUnitReplicationArray& InArra
 		const FTransform Xf = BuildTransformFromItem(*this);
 		UnitReplicationCache::SetLatest(NetID, Xf);
 
+		if (UWorld* World = InArraySerializer.OwnerBubble->GetWorld())
+		{
+			if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+			{
+				if (UMassActorBindingComponent* MyBind = Cache->FindBindingByMassNetID(NetID.GetValue()))
+				{
+					if (AUnitBase* MyActor = Cast<AUnitBase>(MyBind->GetOwner()))
+					{
+						MyActor->ProjectileSpawnOffset = AIS_ProjectileSpawnOffset;
+					}
+				}
+			}
+		}
+
 		// Synchronize fire counter to avoid spawning on join/initial replication
 		LastServerProjectileFireCounter = AIS_ProjectileFireCounter;
 		PredictedPendingShots = 0;
@@ -62,6 +77,21 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 		// Check for projectile fire events
 		if (AIS_ProjectileFireCounter != LastServerProjectileFireCounter)
 		{
+			if (UWorld* World = InArraySerializer.OwnerBubble->GetWorld())
+			{
+				if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+				{
+					if (UMassActorBindingComponent* MyBind = Cache->FindBindingByMassNetID(NetID.GetValue()))
+					{
+						if (AUnitBase* MyActor = Cast<AUnitBase>(MyBind->GetOwner()))
+						{
+							// Sync the replicated muzzle offset to the actor so predicted/multicast shots use the correct position
+							MyActor->ProjectileSpawnOffset = AIS_ProjectileSpawnOffset;
+						}
+					}
+				}
+			}
+
 			// Ring-safe delta for 8-bit counter
 			uint8 RawDelta = (uint8)(AIS_ProjectileFireCounter - LastServerProjectileFireCounter);
 			
@@ -119,8 +149,8 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 						// Calculate spawn location (roughly from the shooter's position)
 						FTransform SpawnXf = BuildTransformFromItem(*this);
-						// Offset slightly forward/up
-						FVector SpawnPos = SpawnXf.GetLocation() + SpawnXf.GetRotation().GetForwardVector() * 50.f + SpawnXf.GetRotation().GetUpVector() * 100.f;
+						// Use replicated/predicted offset instead of hardcoded 50f forward, 100f up.
+						const FVector SpawnPos = SpawnXf.GetLocation() + SpawnXf.TransformVector(AIS_ProjectileSpawnOffset);
 						SpawnXf.SetLocation(SpawnPos);
 
 						// Re-orient SpawnXf towards TargetLoc for non-homing or initial direction

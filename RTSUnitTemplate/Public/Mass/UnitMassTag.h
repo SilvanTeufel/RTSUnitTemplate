@@ -454,6 +454,9 @@ struct FMassAIStateFragment : public FMassFragment
 	float LastProjectileDamage = 0.f;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector LastProjectileSpawnOffset = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	int32 LastProjectileMaxPiercedTargets = 1;
 	
 };

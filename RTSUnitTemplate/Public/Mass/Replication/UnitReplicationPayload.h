@@ -143,6 +143,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() bool AIS_IsInitialized = true;
 	UPROPERTY() uint8 AIS_ProjectileFireCounter = 0;
 	UPROPERTY() TSubclassOf<class AProjectile> AIS_ProjectileClass;
+	UPROPERTY() FVector_NetQuantize10 AIS_ProjectileSpawnOffset = FVector::ZeroVector;
 	UPROPERTY() float AIS_ProjectileSpeed = 0.f;
 	UPROPERTY() float AIS_HomingInitialAngle = 0.f;
 	UPROPERTY() float AIS_HomingRotationSpeed = 0.f;
@@ -221,6 +222,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, AITargetLastKnownLocation(FVector::ZeroVector)
 		, AbilityTargetLocation(FVector::ZeroVector)
 		, AIS_ProjectileFireCounter(0)
+		, AIS_ProjectileSpawnOffset(FVector::ZeroVector)
 		, AIS_ProjectileSpeed(0.f)
 		, AIS_LastTargetNetID(0u)
 		, AIS_ProjectileScale(FVector::OneVector)

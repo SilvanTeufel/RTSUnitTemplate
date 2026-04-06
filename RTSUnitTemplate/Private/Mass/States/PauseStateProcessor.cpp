@@ -232,7 +232,8 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                         if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
                         {
                             FTransform SpawnXf = Transform;
-                            FVector SpawnPos = SpawnXf.GetLocation() + SpawnXf.GetRotation().GetForwardVector() * 50.f + SpawnXf.GetRotation().GetUpVector() * 100.f;
+                            // Use replicated/predicted offset instead of hardcoded 50f forward, 100f up.
+                            const FVector SpawnPos = SpawnXf.GetLocation() + SpawnXf.TransformVector(Item->AIS_ProjectileSpawnOffset);
                             SpawnXf.SetLocation(SpawnPos);
 
                             FVector TargetLoc = TargetFrag.LastKnownLocation;

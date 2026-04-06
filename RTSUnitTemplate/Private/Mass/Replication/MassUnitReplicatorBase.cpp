@@ -197,10 +197,27 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 if (AUnitBase* UnitActor = Cast<AUnitBase>(Ow))
                 {
                     NewItem.AIS_ProjectileClass = UnitActor->ProjectileBaseClass;
+                    
+                    // Populate predicted projectile spawn offset
+                    FVector BaseOffset = UnitActor->ProjectileSpawnOffset;
                     if (UnitActor->Attributes)
                     {
+                        BaseOffset.X += UnitActor->Attributes->GetProjectileScaleActorDirectionOffset();
                         NewItem.AIS_ProjectileSpeed = UnitActor->Attributes->GetProjectileSpeed();
                     }
+                    
+                    // If a component with the "ProjectileSpawn" tag exists, use its relative location as the base offset.
+                    // This allows predicted projectiles to match units with custom muzzle components.
+                    const TArray<UActorComponent*> SpawnComps = UnitActor->GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
+                    if (SpawnComps.Num() > 0)
+                    {
+                        if (const USceneComponent* SpawnComp = Cast<USceneComponent>(SpawnComps[0]))
+                        {
+                            // Correctly calculate relative offset from Actor Root, even if component is nested
+                            BaseOffset = UnitActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+                        }
+                    }
+                    NewItem.AIS_ProjectileSpawnOffset = BaseOffset;
                 }
             }
         }
@@ -1003,6 +1020,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 Item->AIS_ProjectileScale = AIS->LastProjectileScale;
                                 Item->AIS_ProjectileDamage = AIS->LastProjectileDamage;
                                 Item->AIS_ProjectileMaxPiercedTargets = AIS->LastProjectileMaxPiercedTargets;
+                                Item->AIS_ProjectileSpawnOffset = AIS->LastProjectileSpawnOffset;
                             }
                         }
 

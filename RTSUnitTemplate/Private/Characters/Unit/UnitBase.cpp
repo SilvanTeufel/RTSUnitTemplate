@@ -774,8 +774,22 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 			}
 			
 			// If not attached to ISM (e.g. attached to StaticMeshComponent), just use standard component location
-			// StaticMeshComponents handle their own world transform correctly even when rotating via processors
-			return SpawnComp->GetComponentLocation();
+			// On client we use the predicted actor transform to transform the relative location
+			FVector OffsetFromRoot;
+			const bool bIsClient = GetWorld()->GetNetMode() == NM_Client;
+			
+			// On client, if it's a Mass unit, we prefer the replicated/synced ProjectileSpawnOffset
+			// as it's the authoritative baked muzzle position from the server.
+			if (bIsClient && MassUnit && !ProjectileSpawnOffset.IsNearlyZero())
+			{
+				OffsetFromRoot = ProjectileSpawnOffset;
+			}
+			else
+			{
+				OffsetFromRoot = GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+			}
+			
+			return GetMassActorTransform().TransformPosition(OffsetFromRoot);
 		}
 	}
 
@@ -1533,6 +1547,7 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
             AIS->LastProjectileSpread = Spread;
             AIS->LastProjectileDamage = Damage;
             AIS->LastProjectileMaxPiercedTargets = MaxPiercedTargets;
+            AIS->LastProjectileSpawnOffset = GetActorTransform().InverseTransformPosition(GetProjectileSpawnLocation());
 
             // Resolve target NetID
             AIS->LastTargetNetID = 0;

@@ -126,6 +126,10 @@ FVector AMassUnitBase::GetMassActorLocation() const
 		FMassEntityHandle EntityHandle;
 		if (GetMassEntityData(EntityManager, EntityHandle))
 		{
+			if (const FTransformFragment* TF = EntityManager->GetFragmentDataPtr<FTransformFragment>(EntityHandle))
+			{
+				return TF->GetTransform().GetLocation();
+			}
 			if (const FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
 			{
 				return CharFrag->PositionedTransform.GetLocation();
@@ -144,6 +148,10 @@ FRotator AMassUnitBase::GetMassActorRotation() const
 		FMassEntityHandle EntityHandle;
 		if (GetMassEntityData(EntityManager, EntityHandle))
 		{
+			if (const FTransformFragment* TF = EntityManager->GetFragmentDataPtr<FTransformFragment>(EntityHandle))
+			{
+				return TF->GetTransform().Rotator();
+			}
 			if (const FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
 			{
 				return CharFrag->PositionedTransform.GetRotation().Rotator();
@@ -162,6 +170,10 @@ FTransform AMassUnitBase::GetMassActorTransform() const
 		FMassEntityHandle EntityHandle;
 		if (GetMassEntityData(EntityManager, EntityHandle))
 		{
+			if (const FTransformFragment* TF = EntityManager->GetFragmentDataPtr<FTransformFragment>(EntityHandle))
+			{
+				return TF->GetTransform();
+			}
 			if (const FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
 			{
 				return CharFrag->PositionedTransform;
