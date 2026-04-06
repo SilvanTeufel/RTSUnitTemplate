@@ -747,12 +747,30 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	float CapsuleRadius = 60.f;
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	bool bUseBoxComponent = false;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	FVector BoxExtent = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float VerticalDeathRotationMultiplier = 0.f;
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	bool GroundAlignment = true;
     // UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Characteristics")
     // bool bIsOnPlattform = false; // Dein Plattform-Flag
+
+	float GetRadiusInDirection(const FVector& WorldDirection, const FRotator& WorldRotation) const
+	{
+		if (!bUseBoxComponent) return CapsuleRadius;
+        
+		FVector LocalDir = WorldRotation.UnrotateVector(WorldDirection);
+		LocalDir.Z = 0.f;
+		if (LocalDir.IsNearlyZero()) return 0.f;
+		LocalDir.Normalize();
+        
+		return 1.0f / FMath::Max(FMath::Abs(LocalDir.X) / BoxExtent.X, FMath::Abs(LocalDir.Y) / BoxExtent.Y);
+	}
 };
 
 

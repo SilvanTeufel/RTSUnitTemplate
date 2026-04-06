@@ -6,6 +6,7 @@
 #include "MassEntityManager.h"
 #include "MassEntityTypes.h"
 #include "Mass/Signals/MySignals.h"
+#include "Core/CollisionUtils.h"
 #include "MassCommands.h"
 #include "Characters/Unit/UnitBase.h"
 
@@ -41,7 +42,8 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 {
 	TArray<FMassEntityHandle> Units;
 	TArray<FVector> UnitLocations;
-	TArray<float> UnitRadii;
+	TArray<FRotator> UnitRotations;
+	TArray<FMassAgentCharacteristicsFragment> UnitCharFrags;
 	TArray<int32> UnitTeams;
 
 	UnitQuery.ForEachEntityChunk(EntityManager, Context, ([&](FMassExecutionContext& UnitContext)
@@ -49,13 +51,13 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 		TConstArrayView<FTransformFragment> TransformList = UnitContext.GetFragmentView<FTransformFragment>();
 		TConstArrayView<FMassAgentCharacteristicsFragment> CharList = UnitContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 		TConstArrayView<FMassCombatStatsFragment> CombatList = UnitContext.GetFragmentView<FMassCombatStatsFragment>();
-		TConstArrayView<FMassActorFragment> ActorList = UnitContext.GetFragmentView<FMassActorFragment>();
 		
 		for (int32 i = 0; i < UnitContext.GetNumEntities(); ++i)
 		{
 			Units.Add(UnitContext.GetEntity(i));
 			UnitLocations.Add(TransformList[i].GetTransform().GetLocation());
-			UnitRadii.Add(CharList[i].CapsuleRadius);
+			UnitRotations.Add(TransformList[i].GetTransform().Rotator());
+			UnitCharFrags.Add(CharList[i]);
 			UnitTeams.Add(CombatList[i].TeamId);
 		}
 	}));
@@ -109,7 +111,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				// Enhanced distance check considering speed to prevent tunneling
 				float DistSq = FVector::DistSquared(ProjPos, UnitLocations[j]);
 				float SpeedFactor = Projectile.Speed * Context.GetDeltaTimeSeconds();
-				float TargetCollisionRadius = UnitRadii[j]; 
+				float TargetCollisionRadius = UnitCharFrags[j].GetRadiusInDirection(ProjPos - UnitLocations[j], UnitRotations[j]); 
 				
 				// Be more generous on the server to ensure damage application
 				float SafetyMargin = (Context.GetWorld()->GetNetMode() < NM_Client) ? 50.f : 25.f;
@@ -170,7 +172,8 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 									if (AUnitBase* TargetUnit = Cast<AUnitBase>(TargetActor))
 									{
-										TargetUnit->HandleProjectileImpact(ShooterActor, ProjPos, Projectile.ProjectileClass, Projectile.Damage);
+										FVector PreciseImpactPos = FCollisionUtils::ComputeImpactSurfaceXY(ShooterActor, TargetActor, ProjPos);
+										TargetUnit->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
 									}
 									else
 									{

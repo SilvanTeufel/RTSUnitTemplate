@@ -17,50 +17,13 @@
 #include "Widgets/UnitBaseHealthBar.h"
 #include "Characters/Unit/PerformanceUnit.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Core/CollisionUtils.h"
 
 namespace
 {
 	FVector ComputeImpactSurfaceXY(const FVector& IncomingLocation, const AActor* Target)
 	{
-		if (!Target)
-		{
-			return FVector::ZeroVector;
-		}
-
-		// Determine target center (prefer MassActorLocation if available)
-		FVector TargetCenter = Target->GetActorLocation();
-		if (const AUnitBase* TargetUnit = Cast<AUnitBase>(Target))
-		{
-			TargetCenter = TargetUnit->GetMassActorLocation();
-		}
-
-		// Horizontal direction from incoming location to target
-		FVector Dir2D(TargetCenter.X - IncomingLocation.X, TargetCenter.Y - IncomingLocation.Y, 0.f);
-		if (Dir2D.IsNearlyZero())
-		{
-			return TargetCenter;
-		}
-
-		// Estimate target radius on XY using capsule if present, otherwise bounds
-		float Radius2D = 0.f;
-		if (const UCapsuleComponent* Capsule = Target->FindComponentByClass<UCapsuleComponent>())
-		{
-			Radius2D = Capsule->GetScaledCapsuleRadius();
-			if (const UMassActorBindingComponent* BindingComponent = Target->FindComponentByClass<UMassActorBindingComponent>())
-			{
-				Radius2D += BindingComponent->AdditionalCapsuleRadius;
-			}
-		}
-		else
-		{
-			FVector Origin, Extent;
-			Target->GetActorBounds(true, Origin, Extent);
-			Radius2D = FVector2D(Extent.X, Extent.Y).Size();
-		}
-
-		FVector Surface = TargetCenter - Dir2D.GetSafeNormal() * Radius2D;
-		Surface.Z = TargetCenter.Z;
-		return Surface;
+		return FCollisionUtils::ComputeImpactSurfaceXY(nullptr, Target, IncomingLocation);
 	}
 
 	FRotator MakeFaceRotationXY(const FVector& From, const FVector& To)

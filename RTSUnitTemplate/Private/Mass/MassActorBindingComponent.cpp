@@ -936,6 +936,17 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->PositionedTransform = UnitOwner->GetActorTransform();
         	CharFrag->CapsuleHeight = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         	CharFrag->CapsuleRadius = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius()+AdditionalCapsuleRadius;
+
+			UBoxComponent* TargetedBox = UnitOwner->BoxCollisionComponent;
+
+			if (TargetedBox) {
+				CharFrag->bUseBoxComponent = true;
+				CharFrag->BoxExtent = TargetedBox->GetUnscaledBoxExtent();
+			} else {
+				CharFrag->bUseBoxComponent = false;
+				CharFrag->BoxExtent = FVector::ZeroVector;
+			}
+			
         	CharFrag->VerticalDeathRotationMultiplier = VerticalDeathRotationMultiplier;
         	CharFrag->GroundAlignment = GroundAlignment;
 

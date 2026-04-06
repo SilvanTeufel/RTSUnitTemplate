@@ -15,6 +15,7 @@
 #include "AI/Navigation/NavigationTypes.h"
 #include "UnitBase.generated.h"
 
+class UBoxComponent;
 
 UCLASS()
 class RTSUNITTEMPLATE_API AUnitBase : public AWorkingUnitBase
@@ -27,6 +28,11 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* FollowUnit = nullptr;
 	
+	static const FName BoxCollisionTag;
+
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	UBoxComponent* BoxCollisionComponent = nullptr;
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;
 
@@ -109,6 +115,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnRep_MeshMaterialPath();
+
+	float GetCollisionRadiusInDirection(const FVector& Direction) const;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetMeshRotationServer();

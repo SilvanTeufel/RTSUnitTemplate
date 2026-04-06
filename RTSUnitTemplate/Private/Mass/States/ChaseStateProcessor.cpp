@@ -266,9 +266,32 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
     
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
+            float AttackerRadius = CharFrag.CapsuleRadius;
+            float TargetRadius = 0.f;
+
             FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
-            const float TargetRadius = TargetCharFrag ? TargetCharFrag->CapsuleRadius : 0.f;
-            const float EffectiveAttackRange = Stats.AttackRange + CharFrag.CapsuleRadius + TargetRadius;
+            if (TargetCharFrag)
+            {
+                TargetRadius = TargetCharFrag->CapsuleRadius;
+                if (CharFrag.bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
+                {
+                    FVector Dir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
+                    Dir.Z = 0.f;
+                    if (!Dir.IsNearlyZero())
+                    {
+                        Dir.Normalize();
+                        AttackerRadius = CharFrag.GetRadiusInDirection(Dir, Transform.GetRotation().Rotator());
+                        
+                        FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity);
+                        if (TargetTransformFrag)
+                        {
+                            TargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
+                        }
+                    }
+                }
+            }
+            
+            const float EffectiveAttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---

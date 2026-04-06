@@ -149,33 +149,12 @@ namespace UE::UnitMassAvoidance
  				constexpr int32 MaxSafetyIterations = 1024;
  				while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
  				{
- 					// Get fresh counts each iteration to handle potential concurrent modifications
- 					// This prevents the BitArray assertion in IsValidIndex when the sparse array changes
- 					const int32 CurrentMaxIdx = Items.GetMaxIndex();
- 					const int32 CurrentNum = Items.Num();
- 					
- 					// If array became empty or MaxIndex is invalid during iteration, stop
- 					// Check these first before any index comparisons
- 					if (CurrentNum == 0 || CurrentMaxIdx <= 0)
+ 					// Combined immediate check to handle potential concurrent modifications of the sparse array.
+ 					// We check bounds directly before calling IsValidIndex to minimize the race window.
+ 					// Short-circuiting ensures that if Idx is out of bounds, IsValidIndex (which can assert) is not called.
+ 					if (Idx < 0 || Idx >= Items.GetMaxIndex() || !Items.IsValidIndex(Idx))
  					{
  						break;
- 					}
-					
- 					// Hard range check to avoid TSparseArray assert inside IsValidIndex
- 					// The BitArray inside TSparseArray may have fewer bits than GetMaxIndex() in edge cases
- 					// when the array is being modified concurrently or has been cleared
- 					if (Idx < 0 || Idx >= CurrentMaxIdx)
- 					{
- 						break; // Out-of-range index, stop scanning this cell
- 					}
- 					
- 					// Within range: now check allocation flag in the sparse array
- 					// Note: IsValidIndex internally accesses AllocationFlags[Idx] which can assert
- 					// if the BitArray's NumBits < Idx. Our bounds checks above should prevent this
- 					// by ensuring we don't access indices beyond the current valid range.
- 					if (!Items.IsValidIndex(Idx))
- 					{
- 						break; // Unallocated or stale slot
  					}
  					const FNavigationObstacleHashGrid2D::FItem& It = Items[Idx];
  					OutCloseEntities.Add(It.ID);

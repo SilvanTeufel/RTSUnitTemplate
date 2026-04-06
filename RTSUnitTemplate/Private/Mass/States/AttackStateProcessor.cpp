@@ -131,9 +131,32 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 //const float Dist = FVector::Dist(Transform.GetLocation(), TargetFrag.LastKnownLocation);
                 const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
+                float AttackerRadius = CharFrag.CapsuleRadius;
+                float TargetRadius = 0.f;
+
                 FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
-                const float TargetCapsule = TargetCharFrag ? TargetCharFrag->CapsuleRadius : 0.f;
-                const float AttackRange = Stats.AttackRange+CharFrag.CapsuleRadius+TargetCapsule;
+                if (TargetCharFrag)
+                {
+                    TargetRadius = TargetCharFrag->CapsuleRadius;
+                    if (CharFrag.bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
+                    {
+                        FVector Dir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
+                        Dir.Z = 0.f;
+                        if (!Dir.IsNearlyZero())
+                        {
+                            Dir.Normalize();
+                            AttackerRadius = CharFrag.GetRadiusInDirection(Dir, Transform.GetRotation().Rotator());
+                        
+                            FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity);
+                            if (TargetTransformFrag)
+                            {
+                                TargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
+                            }
+                        }
+                    }
+                }
+            
+                const float AttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
             
                 if (Dist <= AttackRange)
                 {

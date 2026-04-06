@@ -25,6 +25,7 @@
 #include "NavModifierComponent.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "Components/BoxComponent.h"
+#include "Core/CollisionUtils.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
@@ -45,6 +46,8 @@
 #include "Mass/MassUnitVisualFragments.h"
 #include "Mass/Replication/ReplicationSettings.h"
 #include "MassReplicationFragments.h"
+
+const FName AUnitBase::BoxCollisionTag = TEXT("BoxCollision");
 
 AControllerBase* ControllerBase;
 // Sets default values
@@ -130,6 +133,12 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	BoxCollisionComponent = FCollisionUtils::FindTaggedBoxComponent(this);
+	if (BoxCollisionComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AUnitBase::BeginPlay - CACHED BoxCollisionComponent: %s for %s"), *BoxCollisionComponent->GetName(), *GetName());
+	}
 	
 	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
 	SetupTimerWidget();
@@ -1946,8 +1955,10 @@ int32 AUnitBase::GetAliveUnitsInDataSet()
 
 void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 {
+	UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation for %s"), *GetName());
 	if (IsValid(NavObstacleProxy))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Proxy already exists for %s"), *GetName());
 		return;
 	}
 
@@ -1956,12 +1967,24 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 
 	FBox BoundsBox;
 
-	
+	if (BoxCollisionComponent) {
+		BoundsBox = BoxCollisionComponent->Bounds.GetBox();
+		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Using BoxCollisionComponent: %s, Bounds: %s"), *BoxCollisionComponent->GetName(), *BoundsBox.ToString());
+	}
+	else if (UBoxComponent* TaggedBox = FCollisionUtils::FindTaggedBoxComponent(this))
+	{
+		BoundsBox = TaggedBox->Bounds.GetBox();
+		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Using TaggedBox: %s, Bounds: %s"), *TaggedBox->GetName(), *BoundsBox.ToString());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - BoxCollisionComponent IS NULL for %s"), *GetName());
 		// Try to find a capsule collision component first…
 		UCapsuleComponent* Capsule = FindComponentByClass<UCapsuleComponent>();
 
 		if (Capsule)
 		{
+			UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Falling back to Capsule: %s"), *Capsule->GetName());
 			// Pull radius & half‑height (accounting for scale)
 			float Radius = Capsule->GetScaledCapsuleRadius();
 			const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();
@@ -1985,6 +2008,7 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 				return;
 			}
 		}
+	}
 
 	// 2. Pad the bounds slightly to ensure full coverage
 	// Ensure PaddedBounds remains valid even with negative padding
@@ -2028,6 +2052,31 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 	{
 		NavSys->AddDirtyArea(PaddedBounds, ENavigationDirtyFlag::All);
 	}
+}
+
+float AUnitBase::GetCollisionRadiusInDirection(const FVector& Direction) const
+{
+	UBoxComponent* TargetedBox = BoxCollisionComponent;
+	if (!TargetedBox)
+	{
+		TargetedBox = FCollisionUtils::FindTaggedBoxComponent(this);
+	}
+
+	if (TargetedBox) {
+		const FVector BoxExtent = TargetedBox->GetUnscaledBoxExtent();
+		// Use component rotation in case it's different from actor rotation
+		FVector LocalDir = TargetedBox->GetComponentRotation().UnrotateVector(Direction);
+		LocalDir.Z = 0.f;
+		if (LocalDir.IsNearlyZero()) return 0.f;
+		LocalDir.Normalize();
+		return 1.0f / FMath::Max(FMath::Abs(LocalDir.X) / BoxExtent.X, FMath::Abs(LocalDir.Y) / BoxExtent.Y);
+	}
+
+	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
+	{
+		return Capsule->GetScaledCapsuleRadius();
+	}
+	return 0.f;
 }
 
 void AUnitBase::Multicast_UnregisterObstacle_Implementation()

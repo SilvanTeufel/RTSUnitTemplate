@@ -60,82 +60,13 @@
 #include "Characters/Unit/TransportUnit.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/CapsuleComponent.h"
+#include "Core/CollisionUtils.h"
 
 namespace
 {
 	FVector ComputeImpactSurfaceXY(const AActor* Attacker, const AActor* Target)
 	{
-		if (!Target)
-		{
-			return FVector::ZeroVector;
-		}
-
-		// Prefer Mass actor locations when available
-		auto GetMassLoc = [](const AActor* Actor)->FVector
-		{
-			if (const AUnitBase* UB = Cast<AUnitBase>(Actor))
-			{
-				return UB->GetMassActorLocation();
-			}
-			return Actor ? Actor->GetActorLocation() : FVector::ZeroVector;
-		};
-
-		const FVector AttackerLoc = GetMassLoc(Attacker);
-		const FVector TargetCenter = GetMassLoc(Target);
-
-		FVector Dir2D(TargetCenter.X - AttackerLoc.X, TargetCenter.Y - AttackerLoc.Y, 0.f);
-		if (Dir2D.IsNearlyZero())
-		{
-			return TargetCenter;
-		}
-
-		// Use capsule radius if present, otherwise bounds extent
-		float Radius2D = 0.f;
-		if (const UCapsuleComponent* Capsule = Target->FindComponentByClass<UCapsuleComponent>())
-		{
-			Radius2D = Capsule->GetScaledCapsuleRadius();
-			if (const UMassActorBindingComponent* BindingComponent = Target->FindComponentByClass<UMassActorBindingComponent>())
-			{
-				Radius2D += BindingComponent->AdditionalCapsuleRadius;
-			}
-		}
-		else
-		{
-			FVector Origin, Extent;
-			Target->GetActorBounds(true, Origin, Extent);
-			Radius2D = FVector2D(Extent.X, Extent.Y).Size();
-		}
-
-		FVector Surface = TargetCenter - Dir2D.GetSafeNormal() * Radius2D;
-		// If the target is flying, always use target Z (melee impact on flying units)
-		bool bTargetFlying = false;
-		if (const AUnitBase* TargetUB = Cast<AUnitBase>(Target))
-		{
-			bTargetFlying = TargetUB->IsFlying;
-		}
-		else if (const AMassUnitBase* TargetMUB = Cast<AMassUnitBase>(Target))
-		{
-			bTargetFlying = TargetMUB->IsFlying;
-		}
-		if (bTargetFlying)
-		{
-			Surface.Z = TargetCenter.Z;
-		}
-		else
-		{
-			// Otherwise, if attacker is not flying, use attacker Z; else use target Z
-			bool bAttackerFlying = false;
-			if (const AUnitBase* AttackerUB = Cast<AUnitBase>(Attacker))
-			{
-				bAttackerFlying = AttackerUB->IsFlying;
-			}
-			else if (const AMassUnitBase* AttackerMUB = Cast<AMassUnitBase>(Attacker))
-			{
-				bAttackerFlying = AttackerMUB->IsFlying;
-			}
-			Surface.Z = bAttackerFlying ? TargetCenter.Z : AttackerLoc.Z;
-		}
-		return Surface;
+		return FCollisionUtils::ComputeImpactSurfaceXY(Attacker, Target);
 	}
 }
 
@@ -1653,11 +1584,28 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 }
                 
                 float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
-                float RangeWithCapsule = AttackerRange + CharFrag->CapsuleRadius + TargetCharFrag->CapsuleRadius;
-                float AttackRangeSquared = FMath::Square(RangeWithCapsule);
+                
+                float AttackerRadius = CharFrag->CapsuleRadius;
+                float TargetRadius = TargetCharFrag->CapsuleRadius;
 
                 FVector AttackerLoc = AttackerTransformFrag->GetTransform().GetLocation();
                 FVector TargetLoc = TargetTransformFrag->GetTransform().GetLocation();
+
+                if (CharFrag->bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
+                {
+                    FVector Dir = (TargetLoc - AttackerLoc);
+                    Dir.Z = 0.f;
+                    if (!Dir.IsNearlyZero())
+                    {
+                        Dir.Normalize();
+                        AttackerRadius = CharFrag->GetRadiusInDirection(Dir, AttackerTransformFrag->GetTransform().GetRotation().Rotator());
+                        TargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
+                    }
+                }
+                
+                float RangeWithCapsule = AttackerRange + AttackerRadius + TargetRadius;
+                float AttackRangeSquared = FMath::Square(RangeWithCapsule);
+
                 float DistSquared = FVector::DistSquared2D(AttackerLoc, TargetLoc);
 
                 // If out of range, cancel attack and stop here
@@ -3557,9 +3505,12 @@ void UUnitStateProcessor::SyncRepairTime(FName SignalName, TArray<FMassEntityHan
 			}
 
 			AUnitBase* Target = UnitBase->FollowUnit;
-			float MyRadius = 0.f, TargetRadius = 0.f;
-			if (UCapsuleComponent* MyCapsule = UnitBase->GetCapsuleComponent()) MyRadius = MyCapsule->GetScaledCapsuleRadius();
-			if (UCapsuleComponent* TRCapsule = Target->GetCapsuleComponent()) TargetRadius = TRCapsule->GetScaledCapsuleRadius();
+			
+			FVector Dir = (Target->GetMassActorLocation() - UnitBase->GetMassActorLocation());
+			Dir.Z = 0.f;
+			float MyRadius = UnitBase->GetCollisionRadiusInDirection(Dir);
+			float TargetRadius = Target->GetCollisionRadiusInDirection(-Dir);
+
 			const AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase);
 			const float RepairReach = MyRadius + TargetRadius + (Worker ? Worker->RepairDistance : 50.f);
 			const float Dist2D = FVector::Dist2D(UnitBase->GetMassActorLocation(), Target->GetMassActorLocation());
