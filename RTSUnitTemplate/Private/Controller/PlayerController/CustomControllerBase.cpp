@@ -87,7 +87,6 @@ void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AAc
 void ACustomControllerBase::Multi_SetCamLocation_Implementation(FVector NewLocation)
 {
 	//if (!IsLocalController()) return;
-	UE_LOG(LogTemp, Log, TEXT("Multi_HideWidgetWhenNoControl_Implementation - TeamId is now: %d"), SelectableTeamId);
 	
 	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(CameraBase);
 	if (Camera)
@@ -102,7 +101,6 @@ void ACustomControllerBase::Multi_HideEnemyWaypoints_Implementation()
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Multi_HideEnemyWaypoints_Implementation - TeamId is now: %d"), SelectableTeamId);
 
 	// Retrieve all waypoints from the world
 	TArray<AActor*> FoundWaypoints;
@@ -138,37 +136,33 @@ void ACustomControllerBase::Multi_InitFogOfWar_Implementation()
 
 void ACustomControllerBase::AgentInit_Implementation()
 {
-	UE_LOG(LogTemp, Log, TEXT("[AgentInit] Enter Controller=%s IsLocal=%s HasAuthority=%s Role=%d"), *GetNameSafe(this), IsLocalController() ? TEXT("true") : TEXT("false"), HasAuthority() ? TEXT("true") : TEXT("false"), (int32)GetLocalRole());
 	// Only execute for the local controller (Client RPC). Server-spawned AI controllers without owning client will skip here.
 	if (!IsLocalController())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[AgentInit] Skipping AgentInitialization because controller is not local (likely AI without owning client)."));
 		return;
 	}
 
 	ARLAgent* Camera = Cast<ARLAgent>(CameraBase);
 	if (Camera)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[AgentInit] Calling AgentInitialization on Pawn=%s (Controller TeamId=%d)"), *GetNameSafe(Camera), SelectableTeamId);
 		Camera->AgentInitialization();
 	}
 	else
 	{
-  UE_LOG(LogTemp, Warning, TEXT("[AgentInit] CameraBase is not ARLAgent. Name=%s Class=%s"), *GetNameSafe(CameraBase), *GetNameSafe(CameraBase ? CameraBase->GetClass() : nullptr));
 	}
 }
 
 
 void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* WorldContextObject, AUnitBase* Unit, const FVector& NewTargetLocation, float DesiredSpeed, float AcceptanceRadius, bool AttackT)
 {
-	if (!Unit) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit is null")); return; }
+	if (!Unit) { return; }
 		
-	if (!Unit->IsInitialized) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s not initialized"), *GetNameSafe(Unit)); return; }
+	if (!Unit->IsInitialized) { return; }
 		
-	if (!Unit->CanMove) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s CanMove=false"), *GetNameSafe(Unit)); return; }
+	if (!Unit->CanMove) { return; }
 		
 	// Do not accept move orders for dead units
-	if (Unit->UnitState == UnitData::Dead) { UE_LOG(LogTemp, Warning, TEXT("[MoveRPC] Rejected: Unit %s is Dead"), *GetNameSafe(Unit)); return; }
+	if (Unit->UnitState == UnitData::Dead) { return; }
 		
 	if (Unit->CurrentSnapshot.AbilityClass)
 	{
@@ -2455,7 +2449,6 @@ void ACustomControllerBase::LeftClickPressedMass()
 
 void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform, int32 InAbilityIndex)
 {
-    UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Server_HandleAbilityUnderCursor called for %d units, AbilityIndex: %d"), Units.Num(), InAbilityIndex);
     if (Units.Num() == 0) return;
 
     // Ensure server has the same transform for the dragged work area as the client
@@ -2466,7 +2459,6 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
     // Try to drop any active work area for the first unit using the new parameterized variant
     if (Units[0] && Units[0]->CurrentDraggedWorkArea)
     {
-        UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Dropping WorkArea for unit %s"), *Units[0]->GetName());
         if (!Units[0]->CurrentDraggedWorkArea->InstantDrop) DropWorkAreaForUnit(Units[0], bWorkAreaIsSnapped, InDropWorkAreaFailedSound);
     }
 
@@ -2478,7 +2470,6 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
     {
         if (U && U->CurrentSnapshot.AbilityClass)
         {
-            UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Firing ability for unit %s, Class: %s"), *U->GetName(), *U->CurrentSnapshot.AbilityClass->GetName());
 
             // Indicator Cleanup (Server-side)
             UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
@@ -2492,7 +2483,6 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
         }
         else if (U)
         {
-            UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] Unit %s has no active AbilityClass in Snapshot"), *U->GetName());
             AbilityUnSynced = true;
             TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(U);
             if (AbilityArray.IsValidIndex(InAbilityIndex))
@@ -2977,11 +2967,9 @@ void ACustomControllerBase::Client_ApplyOwnerAbilityKeyToggle_Implementation(AUn
 	UAbilitySystemComponent* ASC = Unit ? Unit->GetAbilitySystemComponent() : nullptr;
 	if (!ASC)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[Client_ApplyOwnerAbilityKeyToggle] Missing ASC. Unit=%s Key='%s' Enable=%s"), *GetNameSafe(Unit), *Key, bEnable ? TEXT("true") : TEXT("false"));
 		return;
 	}
 	UGameplayAbilityBase::ApplyOwnerAbilityKeyToggle_Local(ASC, Key, bEnable);
-	UE_LOG(LogTemp, Log, TEXT("[Client_ApplyOwnerAbilityKeyToggle] Applied on client. Unit=%s ASC=%s Key='%s' Enable=%s"), *GetNameSafe(Unit), *GetNameSafe(ASC), *Key, bEnable ? TEXT("true") : TEXT("false"));
 
 	// Refresh the unit selector UI immediately
 	if (AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase))
@@ -3023,7 +3011,6 @@ void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Uni
 	// Validate inputs
 	if (!Unit || !Ability)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Server_RequestCooldown: Invalid Unit or Ability (Unit=%p, Ability=%p)"), Unit, Ability);
 		Client_ReceiveCooldown(AbilityIndex, 0.f);
 		return;
 	}
@@ -3031,7 +3018,6 @@ void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Uni
 	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
 	if (!ASC)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Server_RequestCooldown: Unit has no AbilitySystemComponent."));
 		Client_ReceiveCooldown(AbilityIndex, 0.f);
 		return;
 	}

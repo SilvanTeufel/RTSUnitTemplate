@@ -52,7 +52,6 @@ class RTSUNITTEMPLATE_API AExtendedControllerBase : public AWidgetController
 	GENERATED_BODY()
 private:
 	/** Handle for the timer that logs entity tags after BeginPlay. */
-	FTimerHandle LogTagsTimerHandle;
 
 	UPROPERTY()
 	TMap<EResourceType, FExtractionAudioData> SignaledExtractions;
@@ -69,10 +68,6 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool LogSelectedEntity = false;
-	
-	void LogSelectedUnitsTags();
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//AWorkArea* CurrentDraggedWorkArea;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -99,14 +94,14 @@ protected:
 
 	void UpdateExtractionSounds(float DeltaSeconds);
 
-	UFUNCTION()
+	UFUNCTION(Category = RTSUnitTemplate)
 	void HandleExtractionSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 public:
 	UPROPERTY()
 	int32 AbilityIndicatorRefCount = 0;
 
-	UFUNCTION(Client, Reliable)
+	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void Client_ApplyCustomizations(
 		USoundBase* InWaypointSound,
 		USoundBase* InRunSound,
@@ -116,7 +111,7 @@ public:
 		USoundBase* InDropWorkAreaSound);
 
 	// Play a 2D sound only for this owning client (call from server or client)
-	UFUNCTION(Client, Reliable)
+	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void Client_PlaySound2D(USoundBase* Sound, float VolumeMultiplier = 1.f, float PitchMultiplier = 1.f);
 
 	void SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable);
@@ -134,7 +129,7 @@ public:
 
 	class ABuildingBase* GetBuildingBaseFromActor(AActor* Actor) const;
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, FTransform ClientWorkAreaTransform);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -284,7 +279,7 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = BuildingSnap)
 	int MaxAbilityArrayIndex = 3;
 	
-	UFUNCTION(Server, Reliable, BlueprintCallable)
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_ClearAbilityIndicator();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -304,10 +299,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID);
 	
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void ServerGetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID);
 
-	UFUNCTION(Client, Reliable)
+	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void ClientReceiveClosestUnit(AUnitBase* ClosestUnit, EGASAbilityInputID InputID);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -334,11 +329,11 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_FinalizeWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase);
 
-	UFUNCTION(NetMulticast, Reliable)
+	UFUNCTION(NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void Multicast_ApplyWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase);
 
 	// Update WorkArea location on client, used for clients with same TeamId on drop
-	UFUNCTION(Client, Reliable)
+	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void Client_UpdateWorkAreaPosition(AWorkArea* DraggedArea, FTransform NewActorTransform, AUnitBase* UnitBase);
 
 	// Helper to compute a grounded location so the mesh bottom rests on the ground
@@ -372,26 +367,26 @@ public:
 	void HandleAbilityIndicatorEnd(AGASUnit* Unit = nullptr);
 
 	// Client informs server about indicator overlap state so server can use it for authoritative logic
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_SetIndicatorOverlap(class AAbilityIndicator* Indicator, bool bOverlapping);
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	float AbilityIndicatorBlinkTimer = 0.f;
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void SendWorkerToWork(AUnitBase* Worker);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void SendWorkerToBase(AUnitBase* Worker);
 	
 	// Spawns the ConstructionUnit for an Extension WorkArea on the server
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_SpawnExtensionConstructionUnit(AUnitBase* Unit, AWorkArea* WA);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool DropWorkArea();
 	
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void DestroyDraggedArea(AWorkingUnitBase* Worker);
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -421,13 +416,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CancelAbilitiesIfNoBuilding(AUnitBase* Unit);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void SendWorkerToResource(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void SendWorkerToWorkArea(AWorkingUnitBase* Worker, AWorkArea* WorkArea);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void LoadUnits(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -439,7 +434,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void StopWorkOnSelectedUnit();
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void StopWork(AWorkingUnitBase* Worker);
 
 
@@ -449,20 +444,20 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_AssignTagToSelectedUnits(FGameplayTag Tag, const TArray<AUnitBase*>& Units, int TeamId);
 	
-	UFUNCTION(Client, Reliable)
+	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void Client_UpdateHUDSelection(const TArray<AUnitBase*>& NewSelection, int TeamId);
 	
-	UFUNCTION(Client, Reliable)
+	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void Client_DeselectSingleUnit(AUnitBase* UnitToDeselect);
 
 	void BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_BatchSetRotateToMouseTag(const TArray<AUnitBase*>& Units, bool bAdd);
 
 	void BatchSetRunAnimationTagLocally(const TArray<AUnitBase*>& Units, float Duration, bool bAdd);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_BatchSetRunAnimationTag(const TArray<AUnitBase*>& Units, float Duration, bool bAdd);
 
 	static void ApplyRunAnimationTag(FMassEntityManager& EntityManager, FMassEntityHandle Entity, float Duration, UnitData::EState State);
@@ -474,16 +469,16 @@ public:
 	void CastEndsEvent(AUnitBase* UnitBase);
 	
 	// Squad selection RPCs for selecting full squad on client
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_SelectUnitsFromSameSquad(AUnitBase* SelectedUnit);
 	
-	UFUNCTION(Client, Reliable)
+	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void Client_SelectUnitsFromSameSquad(const TArray<AUnitBase*>& Units);
 
 	UPROPERTY(Replicated)
 	FVector ReplicatedMouseLocation;
 
-	UFUNCTION(Server, Unreliable)
+	UFUNCTION(Server, Unreliable, Category = RTSUnitTemplate)
 	void Server_UpdateMouseLocation(FVector NewLocation);
 	
 };

@@ -91,17 +91,6 @@ void AExtendedControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (LogSelectedEntity)
-	{
-		GetWorld()->GetTimerManager().SetTimer(
-		  LogTagsTimerHandle, 
-		  this, 
-		  &AExtendedControllerBase::LogSelectedUnitsTags, 
-		  0.5f, 
-		  true 
-	  );
-	}
-
 	if (IsLocalController())
 	{
 		if (UMassSignalSubsystem* SignalSubsystem = GetWorld()->GetSubsystem<UMassSignalSubsystem>())
@@ -161,89 +150,15 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 
 		for (AGASUnit* Unit : UnitsToCleanup)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] ExtendedControllerBase::Tick - Safety Cleanup for unit %s"), Unit ? *Unit->GetName() : TEXT("NULL"));
 			HandleAbilityIndicatorEnd(Unit);
 		}
 	}
 
-	if (CurrentDraggedAbilityIndicator || AbilityIndicatorRefCount > 0)
-	{
-		static float LastTickLogTime = 0.f;
-		float CurTime = GetWorld()->GetTimeSeconds();
-		if (CurTime - LastTickLogTime > 5.0f)
-		{
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ExtendedControllerBase::Tick - Active Indicator: %p, RefCount: %d, NetMode: %d"), CurrentDraggedAbilityIndicator, AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
-			LastTickLogTime = CurTime;
-		}
-	}
 
 	MoveAbilityIndicator_Local(DeltaSeconds);
 	UpdateExtractionSounds(DeltaSeconds);
 }
 
-void AExtendedControllerBase::LogSelectedUnitsTags()
-{
-	if (!LogSelectedEntity) return;
-    // Get the world, which is the entry point to all engine subsystems.
-    const UWorld* World = GetWorld();
-    if (!IsValid(World))
-    {
-        UE_LOG(LogTemp, Error, TEXT("LogSelectedUnitsTags: World is not valid."));
-        return;
-    }
-
-    // Access the Mass Entity Subsystem, which is the main manager for Mass entities.
-    const UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
-    if (!EntitySubsystem)
-    {
-        UE_LOG(LogTemp, Error, TEXT("LogSelectedUnitsTags: UMassEntitySubsystem could not be found. Is the Mass plugin enabled and configured?"));
-        return;
-    }
-
-    // Get a reference to the EntityManager. This is used to interact with the underlying entity data.
-    const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager();
-
-    if (SelectedUnits.IsEmpty())
-    {
-        // It can be useful to know when the function runs but there's nothing to process.
-        // UE_LOG(LogTemp, Verbose, TEXT("LogSelectedUnitsTags: Called, but SelectedUnits array is empty."));
-        return;
-    }
-
-    UE_LOG(LogTemp, Log, TEXT("--- Logging Tags for %d Selected Units ---"), SelectedUnits.Num());
-
-    // Iterate over each pointer in the SelectedUnits array.
-    for (int32 Index = 0; Index < SelectedUnits.Num(); ++Index)
-    {
-        AUnitBase* SelectedUnit = SelectedUnits[Index];
-        if (!IsValid(SelectedUnit))
-        {
-            UE_LOG(LogTemp, Warning, TEXT("LogSelectedUnitsTags: Unit at index %d is not valid."), Index);
-            continue; // Skip to the next element in the array.
-        }
-
-        // Each actor that is part of the Mass simulation should have a MassActorBindingsComponent.
-        const UMassActorBindingComponent* BindingsComponent = SelectedUnit->FindComponentByClass<UMassActorBindingComponent>();
-        if (!BindingsComponent)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("LogSelectedUnitsTags: Unit '%s' does not have a UMassActorBindingsComponent."), *SelectedUnit->GetName());
-            continue;
-        }
-
-        // Get the actual Mass Entity handle from the component.
-        const FMassEntityHandle Entity = BindingsComponent->GetMassEntityHandle();
-        if (!Entity.IsSet())
-        {
-            UE_LOG(LogTemp, Warning, TEXT("LogSelectedUnitsTags: Unit '%s' has a binding component but does not have a valid Mass Entity."), *SelectedUnit->GetName());
-            continue;
-        }
-
-        // This is the core debug utility that prints the entity's tags.
-        UE::Mass::Debug::LogEntityTags(Entity, EntityManager, World);
-    }
-
-    UE_LOG(LogTemp, Log, TEXT("--- Finished Logging Tags ---"));
-}
 
 void AExtendedControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -716,7 +631,6 @@ void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase*
 
 		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse && !bIsOnCooldown)
 		{
-			UE_LOG(LogTemp, Log, TEXT("AExtendedControllerBase::ClientReceiveClosestUnit_Implementation: ClosestUnit ability requires rotation."));
 			TArray<AUnitBase*> TargetUnits = { ClosestUnit };
 			BatchSetRotateToMouseTagLocally(TargetUnits, true);
 			Server_BatchSetRotateToMouseTag(TargetUnits, true);
@@ -3426,7 +3340,6 @@ void AExtendedControllerBase::Server_ClearAbilityIndicator_Implementation()
 
 void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIndicator> IndicatorClass, AGASUnit* Unit)
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorStart - IndicatorClass: %s, Unit: %s, RefCount: %d, NetMode: %d"), IndicatorClass ? *IndicatorClass->GetName() : TEXT("None"), Unit ? *Unit->GetName() : TEXT("None"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
 	if (!IndicatorClass) return;
 
 	if (AbilityIndicatorRefCount == 0)
@@ -3439,11 +3352,9 @@ void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIn
 		if (CurrentDraggedAbilityIndicator)
 		{
 			CurrentDraggedAbilityIndicator->SetActorHiddenInGame(false);
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Locally spawned AbilityIndicator %s at %p"), *CurrentDraggedAbilityIndicator->GetName(), CurrentDraggedAbilityIndicator);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("[DEBUG_LOG] FAILED to spawn AbilityIndicator of class %s"), *IndicatorClass->GetName());
 		}
 	}
 
@@ -3453,7 +3364,6 @@ void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIn
 		{
 			CurrentDraggedAbilityIndicator->AssociatedUnits.Add(Unit);
 			AbilityIndicatorRefCount++;
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Added unit %s to AssociatedUnits. New RefCount: %d"), *Unit->GetName(), AbilityIndicatorRefCount);
 		}
 	}
 	else if (!Unit)
@@ -3465,13 +3375,11 @@ void AExtendedControllerBase::HandleAbilityIndicatorStart(TSubclassOf<AAbilityIn
 
 void AExtendedControllerBase::HandleAbilityIndicatorEnd(AGASUnit* Unit)
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AExtendedControllerBase::HandleAbilityIndicatorEnd - Unit: %s, RefCount before: %d, NetMode: %d"), Unit ? *Unit->GetName() : TEXT("None"), AbilityIndicatorRefCount, (int32)GetWorld()->GetNetMode());
 	
 	if (CurrentDraggedAbilityIndicator && CurrentDraggedAbilityIndicator->AssociatedUnits.Contains(Unit))
 	{
 		CurrentDraggedAbilityIndicator->AssociatedUnits.Remove(Unit);
 		AbilityIndicatorRefCount--;
-		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Removed unit %s from AssociatedUnits. New RefCount: %d"), Unit ? *Unit->GetName() : TEXT("NULL"), AbilityIndicatorRefCount);
 	}
 	else
 	{
@@ -3483,7 +3391,6 @@ void AExtendedControllerBase::HandleAbilityIndicatorEnd(AGASUnit* Unit)
 	{
 		if (CurrentDraggedAbilityIndicator)
 		{
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] Destroying AbilityIndicator %s"), *CurrentDraggedAbilityIndicator->GetName());
 			CurrentDraggedAbilityIndicator->Destroy();
 			CurrentDraggedAbilityIndicator = nullptr;
 		}
@@ -3496,14 +3403,6 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
     // Follow-mouse and snap/pushback like WorkArea, but only when DetectOverlapWithWorkArea is enabled
     if (!CurrentDraggedAbilityIndicator)
     {
-        // Static variable to throttled log to avoid spam
-        static float LastMissingLogTime = 0.f;
-        float CurTime = GetWorld()->GetTimeSeconds();
-        if (CurTime - LastMissingLogTime > 5.0f)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] MoveAbilityIndicator_Local: CurrentDraggedAbilityIndicator is NULL. RefCount: %d"), AbilityIndicatorRefCount);
-            LastMissingLogTime = CurTime;
-        }
         return;
     }
 
@@ -3525,15 +3424,6 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         bHit = true; 
     }
     
-    // Static variable to throttled log to avoid spam
-    static float LastLogTime = 0.f;
-    float CurrentTime = GetWorld()->GetTimeSeconds();
-    if (CurrentTime - LastLogTime > 2.0f)
-    {
-        UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] MoveAbilityIndicator_Local: Moving shared indicator %s"), *CurrentDraggedAbilityIndicator->GetName());
-        LastLogTime = CurrentTime;
-    }
-
     UWorld* World = GetWorld();
     if (!World)
     {
@@ -5044,7 +4934,6 @@ void AExtendedControllerBase::Server_AssignTagToSelectedUnits_Implementation(FGa
 void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TArray<AUnitBase*>& NewSelection, int TeamId)
 {
 
-	UE_LOG(LogTemp, Log, TEXT("Client_UpdateHUDSelection: NewSelection.Num=%d, TeamId=%d, SelectableTeamId=%d"), NewSelection.Num(), TeamId, SelectableTeamId);
 	if (SelectableTeamId != TeamId)
 	{
 		return;
@@ -5052,7 +4941,6 @@ void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TAr
 	
 	if (!HUDBase)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Client_UpdateHUDSelection: HUDBase is null!"));
 		return;
 	}
 	
@@ -5375,19 +5263,15 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 // --- Squad selection: forward to server in PC and apply on client ---
 void AExtendedControllerBase::Server_SelectUnitsFromSameSquad_Implementation(AUnitBase* SelectedUnit)
 {
-	UE_LOG(LogTemp, Log, TEXT("[PC][Server_SelectUnitsFromSameSquad] Called. Controller=%s HasAuthority=%d Selected=%s"),
-		*GetName(), HasAuthority(), SelectedUnit ? *SelectedUnit->GetName() : TEXT("NULL"));
 
 	if (!SelectedUnit)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[PC][Server_SelectUnitsFromSameSquad] SelectedUnit is NULL"));
 		return;
 	}
 
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
 	if (!GameMode)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[PC][Server_SelectUnitsFromSameSquad] GameMode is NULL"));
 		return;
 	}
 
@@ -5396,7 +5280,6 @@ void AExtendedControllerBase::Server_SelectUnitsFromSameSquad_Implementation(AUn
 
 	if (SquadId == 0)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[PC][Server_SelectUnitsFromSameSquad] SelectedUnit has no SquadId (0)"));
 	}
 	else
 	{
@@ -5414,7 +5297,6 @@ void AExtendedControllerBase::Server_SelectUnitsFromSameSquad_Implementation(AUn
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[PC][Server_SelectUnitsFromSameSquad] SquadId=%d UnitsFound=%d ControllerTeam=%d"), SquadId, UnitsToSelect.Num(), SelectableTeamId);
 	Client_SelectUnitsFromSameSquad(UnitsToSelect);
 }
 
@@ -5423,7 +5305,6 @@ void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(con
 	if (bIsAi) return;
 
 	AHUDBase* HUD = Cast<AHUDBase>(GetHUD());
-	UE_LOG(LogTemp, Log, TEXT("[PC][Client_SelectUnitsFromSameSquad] Applying selection on client. HUD=%s Units=%d"), HUD ? *HUD->GetName() : TEXT("NULL"), Units.Num());
 	if (!HUD)
 	{
 		return;
@@ -5433,7 +5314,6 @@ void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(con
 		if (!Unit) continue;
 		Unit->SetSelected();
 		HUD->SelectedUnits.AddUnique(Unit);
-		UE_LOG(LogTemp, Verbose, TEXT("[PC][Client_SelectUnitsFromSameSquad] Selected %s (Team=%d Squad=%d)"), *Unit->GetName(), Unit->TeamId, Unit->SquadId);
 	}
 }
 

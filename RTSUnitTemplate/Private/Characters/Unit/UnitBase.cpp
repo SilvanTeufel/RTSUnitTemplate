@@ -990,8 +990,6 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             SpawnXf.SetScale3D(ShootingUnit->ProjectileScale * Scale);
 
             // 4) Deferred spawn + init
-            UE_LOG(LogTemp, Log, TEXT("[SERVER] SpawnProjectileFromClass: Class=%s, bUseMass=%d, RTSReplicationMode=%d"), 
-                *ProjectileClass->GetName(), ProjectileCDO ? ProjectileCDO->bUseMass : -1, (int32)RTSReplicationSettings::GetReplicationMode());
             
             if (ProjectileCDO && ProjectileCDO->bUseMass)
             {
@@ -1092,7 +1090,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     float Scale
 )
 {
-    UE_LOG(LogTemp, Log, TEXT("SpawnProjectileFromClassWithAim: Class=%s"), ProjectileClass ? *ProjectileClass->GetName() : TEXT("None"));
     if (!ProjectileClass)
         return;
 
@@ -1546,13 +1543,9 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
                     AIS->LastTargetNetID = NetIDFrag->NetID.GetValue();
                 }
             }
-
-            UE_LOG(LogTemp, Verbose, TEXT("[SERVER] IncrementMassProjectileFireCounter: Unit=%s, Counter=%d, Class=%s, Speed=%.1f, TargetNetID=%u, InitialAngle=%.1f"), 
-                *GetName(), AIS->ProjectileFireCounter, *ProjectileClass->GetName(), Speed, AIS->LastTargetNetID, InitialAngle);
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("[SERVER] IncrementMassProjectileFireCounter: FMassAIStateFragment not found for entity of unit %s"), *GetName());
         }
     }
 }
@@ -1562,16 +1555,13 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 {
 	if (!ProjectileClass)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[SERVER] HandleProjectileImpact failed: ProjectileClass is null for unit %s"), *GetName());
 		return;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[SERVER] HandleProjectileImpact triggered on %s (Shooter: %s)"), *GetName(), Shooter ? *Shooter->GetName() : TEXT("None"));
 
 	const AProjectile* CDO = Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 	if (!CDO)
 	{
-		UE_LOG(LogTemp, Error, TEXT("[SERVER] HandleProjectileImpact failed: CDO is null for %s"), *ProjectileClass->GetName());
 		return;
 	}
 

@@ -41,6 +41,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bExecuteOnLoadIfDisabled = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	TEnumAsByte<UnitData::EState> UnitAnimOnRotateFinished = UnitData::Attack;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float AnimTimeOnRotateFinished = 0.6f;
+	
 	// New: Unique key to group abilities, default "None"
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString AbilityKey = "None";

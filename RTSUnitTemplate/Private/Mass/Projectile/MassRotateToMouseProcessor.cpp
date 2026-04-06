@@ -78,7 +78,6 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 	// Get local player ID for comparison
 	int32 LocalPlayerId = (LocalPC && LocalPC->PlayerState) ? LocalPC->PlayerState->GetPlayerId() : -2;
-	const FString NetModeStr = World->GetNetMode() == NM_Client ? TEXT("[Client]") : TEXT("[Server]");
 
 	// Cache PlayerId to PC for server-side logic
 	TMap<int32, AExtendedControllerBase*> PlayerIdToPC;
@@ -105,27 +104,16 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		auto Actors = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 		auto Characteristics = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 
-		static float LastLogTime = 0.f;
-		const bool bShouldLog = (World->GetTimeSeconds() - LastLogTime) > 1.0f;
-		if (bShouldLog) LastLogTime = World->GetTimeSeconds();
-
-		if (bShouldLog)
-		{
-			UE_LOG(LogTemp, Log, TEXT("%s UMassRotateToMouseProcessor: Processing %d entities. bIsLocalUpdateNeeded=%d LocalPlayerId=%d"), *NetModeStr, ChunkContext.GetNumEntities(), bIsLocalUpdateNeeded ? 1 : 0, LocalPlayerId);
-		}
-
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
 		{
 			FVector TargetLocation = FVector::ZeroVector;
 			bool bFoundTarget = false;
-			FString TargetSource = TEXT("None");
 
 			// 1. If this unit belongs to our PlayerId, use our local mouse hit
 			if (MouseFrags[i].PlayerId == LocalPlayerId && bIsLocalUpdateNeeded)
 			{
 				TargetLocation = CurrentMouseHit;
 				bFoundTarget = true;
-				TargetSource = TEXT("LocalPC");
 				// Update fragment so server/others see it
 				MouseFrags[i].TargetLocation = TargetLocation;
 			}
@@ -136,7 +124,6 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					TargetLocation = (*PCPtr)->ReplicatedMouseLocation;
 					bFoundTarget = true;
-					TargetSource = TEXT("PlayerIdPC");
 					MouseFrags[i].TargetLocation = TargetLocation;
 				}
 			}
@@ -148,16 +135,11 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				if (!TargetLocation.IsNearlyZero())
 				{
 					bFoundTarget = true;
-					TargetSource = TEXT("Fragment");
 				}
 			}
 
 			if (bFoundTarget)
 			{
-				if (bShouldLog && i == 0)
-				{
-					UE_LOG(LogTemp, Log, TEXT("%s Entity 0 PlayerId=%d Target=%s Source=%s Speed=%.1f"), *NetModeStr, MouseFrags[i].PlayerId, *TargetLocation.ToString(), *TargetSource, Characteristics[i].RotationSpeed);
-				}
 				FTransform& MassTransform = Transforms[i].GetMutableTransform();
 				FVector Dir = TargetLocation - MassTransform.GetLocation();
 				Dir.Z = 0.f;
@@ -179,10 +161,6 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						Actor->SetActorRotation(NewQuat);
 					}
 				}
-			}
-			else if (bShouldLog && i == 0)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("%s Entity 0 PlayerId=%d NO TARGET FOUND (TargetSource=%s)"), *NetModeStr, MouseFrags[i].PlayerId, *TargetSource);
 			}
 		}
 	}));

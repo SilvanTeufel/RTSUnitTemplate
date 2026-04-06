@@ -113,7 +113,6 @@ void AGASUnit::GrantAbilitiesFromList(const TArray<TSubclassOf<UGameplayAbilityB
         // array element is set to "None" in the Blueprint.
         if (!AbilityClass)
         {
-            UE_LOG(LogTemp, Warning, TEXT("Found a null AbilityClass in an ability list for %s. Please check the Blueprint defaults."), *this->GetName());
             continue; // Skip to the next item in the list
         }
 
@@ -122,7 +121,6 @@ void AGASUnit::GrantAbilitiesFromList(const TArray<TSubclassOf<UGameplayAbilityB
         const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
         if (!AbilityCDO)
         {
-            UE_LOG(LogTemp, Error, TEXT("Could not get CDO for AbilityClass %s on %s."), *AbilityClass->GetName(), *this->GetName());
             continue; // Skip if we can't get the CDO for some reason
         }
         

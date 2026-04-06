@@ -82,7 +82,7 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeStateServer(co
 	using namespace UnitData;
 	if (DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct()))
 	{
-		return EState::Pause;
+		return EState::Aim;
 	}
 	if (DoesEntityHaveTag(EntityManager, Entity, FRunAnimationTag::StaticStruct()))
 	{
@@ -184,7 +184,7 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	
 	if (HasTag(FMassRotateToMouseTag::StaticStruct()))
 	{
-		return EState::Pause;
+		return EState::Aim;
 	}
 	if (HasTag(FRunAnimationTag::StaticStruct()))
 	{

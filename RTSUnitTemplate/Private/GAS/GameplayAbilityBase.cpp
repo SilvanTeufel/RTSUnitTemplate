@@ -142,7 +142,6 @@ void UGameplayAbilityBase::OnAbilityMouseHit_Implementation(const FHitResult& In
 
 void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] UGameplayAbilityBase::ActivateAbility - Ability: %s, NetMode: %d"), *GetName(), (int32)GetWorld()->GetNetMode());
 
 	// Mark this ability class as executed in this play session (exact class type)
 	if (UClass* ThisClass = GetClass())
@@ -191,10 +190,8 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] UGameplayAbilityBase::EndAbility - Ability: %s, NetMode: %d"), *GetName(), (int32)GetWorld()->GetNetMode());
 	if (!IsEndAbilityValid(Handle, ActorInfo))
 	{
-		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] UGameplayAbilityBase::EndAbility - IsEndAbilityValid FAILED"));
 		return;
 	}
 
@@ -212,8 +209,9 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 						FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
 						if (Entity.IsValid())
 						{
-							FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
-							if (!bWasCancelled) AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, 1.0f, UnitData::Attack);
+							FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager(); 
+	
+							if (!bWasCancelled) AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, AnimTimeOnRotateFinished, UnitAnimOnRotateFinished);
 
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{
