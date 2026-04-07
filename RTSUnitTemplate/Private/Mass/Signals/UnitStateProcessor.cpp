@@ -2618,7 +2618,7 @@ void UUnitStateProcessor::SpawnWorkResource(
         WorkingUnit->ResourcePlace->Destroy();
         WorkingUnit->ResourcePlace = nullptr;
     }
-    else
+    else if (WorkingUnit->ResourcePlace->ShrinkResource)
     {
         // Otherwise, update the visual scale of the “ResourcePlace” mesh
         float Ratio    = MaxRemain > KINDA_SMALL_NUMBER ? Remaining / MaxRemain : 0.f;

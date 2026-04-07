@@ -64,6 +64,7 @@ AWorkArea::AWorkArea()
 
 	Mesh->SetIsReplicated(false); // was false
 	MaxAvailableResourceAmount = AvailableResourceAmount;
+	ShrinkResource = true;
 }
 
 // Called when the game starts or when spawned
@@ -216,6 +217,7 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, CurrentBuildTime);
 	DOREPLIFETIME(AWorkArea, AvailableResourceAmount);
 	DOREPLIFETIME(AWorkArea, MaxAvailableResourceAmount);
+	DOREPLIFETIME(AWorkArea, ShrinkResource);
 	DOREPLIFETIME(AWorkArea, AreaDropped);
 }
 

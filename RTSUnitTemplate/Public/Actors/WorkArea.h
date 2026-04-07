@@ -138,6 +138,9 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MaxAvailableResourceAmount = AvailableResourceAmount;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool ShrinkResource = true;
+
 	UPROPERTY()
 	FVector OriginalActorScale = FVector(1.f);
 	

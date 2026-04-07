@@ -230,11 +230,14 @@ void UResourceExtractionStateProcessor::HandleUpdateResourceScale(FName SignalNa
 
             AWorkArea* WA = UnitBase->ResourcePlace;
 
-            float Ratio = WA->MaxAvailableResourceAmount > KINDA_SMALL_NUMBER
-                ? WA->AvailableResourceAmount / WA->MaxAvailableResourceAmount : 0.f;
-            float ScaleFactor = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f));
+            if (WA->ShrinkResource)
+            {
+                float Ratio = WA->MaxAvailableResourceAmount > KINDA_SMALL_NUMBER
+                    ? WA->AvailableResourceAmount / WA->MaxAvailableResourceAmount : 0.f;
+                float ScaleFactor = FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f));
 
-            WA->SetActorScale3D(WA->OriginalActorScale * FVector(ScaleFactor));
+                WA->SetActorScale3D(WA->OriginalActorScale * FVector(ScaleFactor));
+            }
         }
     });
 }
