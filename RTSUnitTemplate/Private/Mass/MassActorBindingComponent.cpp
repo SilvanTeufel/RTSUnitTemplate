@@ -890,6 +890,14 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					ImpactFrag->RadiusAtImpactStart = 0.f;
 					ImpactFrag->bImpactScaleTriggered = false;
 					ImpactFrag->bImpactVFXTriggered = false;
+
+					ImpactFrag->bPendingDestruction = false;
+					ImpactFrag->PostImpactTimer = 0.f;
+					ImpactFrag->HideOnDestructionDelay = EffectArea->HideOnDestructionDelay;
+					ImpactFrag->DestroyOnDestructionDelay = EffectArea->DestroyOnDestructionDelay;
+					ImpactFrag->EarlySpawnTime = EffectArea->EarlySpawnTime;
+					ImpactFrag->bHasHiddenVisual = false;
+					ImpactFrag->bHasSpawnedOnDestruction = false;
 				}
 			}
 			return;

@@ -94,6 +94,33 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
 	bool bImpactScaleTriggered = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
+	TSubclassOf<class AUnitBase> SpawnClassOnDestruction = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn", meta = (ClampMin = "1"))
+	int32 SpawnCountOnDestruction = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
+	bool bSpawnDoGroundTrace = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
+	float SpawnVerticalOffset = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Shutdown")
+	float HideOnDestructionDelay = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Shutdown")
+	float DestroyOnDestructionDelay = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
+	float EarlySpawnTime = 1.0f;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Shutdown")
+	bool bPendingDestructionRep = false;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
+	void OnEffectAreaDestructionStarted();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
 	bool bAffectedByFogOfWar = false;
 

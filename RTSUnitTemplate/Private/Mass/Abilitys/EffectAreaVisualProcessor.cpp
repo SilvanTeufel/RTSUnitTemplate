@@ -65,9 +65,18 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
                 bIsVisible = EffectArea->bIsVisibleByFog;
             }
 
+			// If pending destruction and hide delay elapsed, hide once
+			bool bIsHiddenByDestruction = Impact.bPendingDestruction && Impact.PostImpactTimer >= Impact.HideOnDestructionDelay;
+			if (bIsHiddenByDestruction && !Impact.bHasHiddenVisual)
+			{
+				Impact.bHasHiddenVisual = true;
+			}
+
+			bool bShouldShow = bIsVisible && !bIsHiddenByDestruction;
+
 			if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 			{
-				if (bIsVisible)
+				if (bShouldShow)
 				{
 					float LocalRadius = Visual.BaseMeshRadius;
 					float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
@@ -87,7 +96,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
             if (Visual.Niagara_A.IsValid())
             {
                 Visual.Niagara_A->SetWorldTransform(Visual.Niagara_A_RelativeTransform * EntityTransform);
-                Visual.Niagara_A->SetVisibility(bIsVisible);
+                Visual.Niagara_A->SetVisibility(bShouldShow);
             }
 
             // Handle Impact VFX

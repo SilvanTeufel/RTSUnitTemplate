@@ -1247,6 +1247,16 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	bool bImpactScaleTriggered = false;   // guard to trigger only once per area
 	bool bImpactVFXTriggered = false; // Replikations-Hilfe fr Clients
         
+	// Destruction pipeline (hide -> destroy)
+	bool  bPendingDestruction = false;      // set when destruction begins
+	float PostImpactTimer = 0.f;        // accumulates once pending
+	float HideOnDestructionDelay = 0.f;   // copied from actor
+	float DestroyOnDestructionDelay = 0.5f;  // copied from actor
+	float EarlySpawnTime = 1.0f; // copied from actor
+
+	bool bHasHiddenVisual = false;          // ensure hide-once
+	bool bHasSpawnedOnDestruction = false;  // ensure spawn-once
+
 	// Impact properties (cached to avoid frequent Actor access)
 	int32 TeamId = 0;
 	bool IsHealing = false;

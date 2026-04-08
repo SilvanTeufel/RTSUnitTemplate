@@ -40,6 +40,13 @@ AEffectArea::AEffectArea()
 	bDestroyOnImpact = false;
 	bScaleOnImpact = false;
 	bIsScalingAfterImpact = false;
+	bPendingDestructionRep = false;
+	HideOnDestructionDelay = 0.0f;
+	DestroyOnDestructionDelay = 0.5f;
+	EarlySpawnTime = 1.0f;
+	SpawnCountOnDestruction = 1;
+	bSpawnDoGroundTrace = true;
+	SpawnVerticalOffset = 0.f;
 
 	if (HasAuthority())
 	{
@@ -94,6 +101,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, bImpactVFXTriggered);
 	DOREPLIFETIME(AEffectArea, bIsScalingAfterImpact);
 	DOREPLIFETIME(AEffectArea, bImpactScaleTriggered);
+	DOREPLIFETIME(AEffectArea, bPendingDestructionRep);
 }
 
 void AEffectArea::SetActorVisibility(bool bVisible)
