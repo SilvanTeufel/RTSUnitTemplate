@@ -392,6 +392,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 
 	if (BindingType == EMassBindingType::EffectArea)
 	{
+		AEffectArea* EffectArea = Cast<AEffectArea>(Owner);
 		FMassEntityManager& EntityManager = MassEntitySubsystemCache->GetMutableEntityManager();
 		TArray<const UScriptStruct*> FragmentsAndTags = {
 			FTransformFragment::StaticStruct(),
@@ -403,6 +404,12 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FMassAgentCharacteristicsFragment::StaticStruct(),
 			FMassIsEffectAreaTag::StaticStruct()
 		};
+
+		if (EffectArea && EffectArea->bUseEffectAreaImpactProcessor)
+		{
+			FragmentsAndTags.Add(FEffectAreaImpactFragment::StaticStruct());
+			FragmentsAndTags.Add(FMassEffectAreaImpactTag::StaticStruct());
+		}
 
 		FMassArchetypeCreationParams Params;
 		Params.ChunkMemorySize = 0;
@@ -850,6 +857,27 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 			{
 				VisibilityFrag->bIsMyTeam = true;
 				VisibilityFrag->bIsOnViewport = true;
+			}
+
+			if (EffectArea->bUseEffectAreaImpactProcessor)
+			{
+				if (FEffectAreaImpactFragment* ImpactFrag = EntityManager.GetFragmentDataPtr<FEffectAreaImpactFragment>(EntityHandle))
+				{
+					ImpactFrag->StartRadius = EffectArea->StartRadius;
+					ImpactFrag->EndRadius = EffectArea->EndRadius;
+					ImpactFrag->TimeToEndRadius = EffectArea->TimeToEndRadius;
+					ImpactFrag->bScaleMesh = EffectArea->ScaleMesh;
+					ImpactFrag->bIsRadiusScaling = EffectArea->bIsRadiusScaling;
+					ImpactFrag->BaseRadius = EffectArea->BaseRadius;
+					ImpactFrag->CurrentRadius = EffectArea->bIsRadiusScaling ? EffectArea->StartRadius : EffectArea->BaseRadius;
+					ImpactFrag->ElapsedTime = 0.f;
+					ImpactFrag->TeamId = EffectArea->TeamId;
+					ImpactFrag->IsHealing = EffectArea->IsHealing;
+					ImpactFrag->AreaEffectOne = EffectArea->AreaEffectOne;
+					ImpactFrag->AreaEffectTwo = EffectArea->AreaEffectTwo;
+					ImpactFrag->AreaEffectThree = EffectArea->AreaEffectThree;
+					ImpactFrag->HitCount = 0;
+				}
 			}
 			return;
 		}

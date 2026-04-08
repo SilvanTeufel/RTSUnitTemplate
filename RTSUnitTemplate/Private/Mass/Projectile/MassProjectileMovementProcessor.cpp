@@ -38,7 +38,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 	bool bSyncFromCDO = (LogThrottle % 120 == 0); // Sync from CDO every 120 frames
 	LogThrottle++;
 	
-	EntityQuery.ForEachEntityChunk(EntityManager, Context, ([this, &EntityManager, bSyncFromCDO](FMassExecutionContext& Context)
+	EntityQuery.ForEachEntityChunk(Context, ([this, &EntityManager, bSyncFromCDO](FMassExecutionContext& Context)
 	{
 		UProjectileVisualManager* VisualManager = EntityManager.GetWorld()->GetSubsystem<UProjectileVisualManager>();
 		const float DeltaTime = Context.GetDeltaTimeSeconds();

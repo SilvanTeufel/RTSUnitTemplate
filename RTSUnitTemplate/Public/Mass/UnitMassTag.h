@@ -1203,6 +1203,49 @@ struct FMassProjectileVisualFragment : public FMassFragment
 	FTransform Niagara_B_RelativeTransform = FTransform::Identity;
 };
 
+USTRUCT()
+struct FEffectAreaImpactFragment : public FMassFragment
+{
+	GENERATED_BODY()
+	// Scaling properties
+	float StartRadius = 0.f;
+	float EndRadius = 0.f;
+	float TimeToEndRadius = 0.f;
+	float CurrentRadius = 0.f;
+	float ElapsedTime = 0.f;
+	bool bScaleMesh = false;
+	bool bIsRadiusScaling = true;
+	float BaseRadius = 100.f;
+        
+	// Impact properties (cached to avoid frequent Actor access)
+	int32 TeamId = 0;
+	bool IsHealing = false;
+	
+	UPROPERTY()
+	TSubclassOf<UGameplayEffect> AreaEffectOne;
+	UPROPERTY()
+	TSubclassOf<UGameplayEffect> AreaEffectTwo;
+	UPROPERTY()
+	TSubclassOf<UGameplayEffect> AreaEffectThree;
+
+	// Hit tracking (to prevent re-triggering on the same unit)
+	static constexpr int32 MaxHitCount = 32;
+	FMassEntityHandle HitEntities[MaxHitCount];
+	int32 HitCount = 0;
+};
+
+USTRUCT()
+struct FMassEffectAreaImpactTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+template<>
+struct TMassFragmentTraits<FEffectAreaImpactFragment>
+{
+	static constexpr bool AuthorAcceptsItsNotTriviallyCopyable = true;
+};
+
 inline bool IsFullyValidTarget(FMassEntityManager& EM, FMassEntityHandle H)
 {
 	return H.IsSet()

@@ -53,7 +53,7 @@ void UMassRotateToMouseProcessor::HandleMouseUpdateSignal(FName SignalName, TCon
 void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 	// Performance optimization: skip execution if no units require rotation
-	if (EntityQuery.GetNumMatchingEntities(EntityManager) == 0)
+	if (EntityQuery.GetNumMatchingEntities() == 0)
 	{
 		return;
 	}
@@ -95,7 +95,7 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 
-	EntityQuery.ForEachEntityChunk(EntityManager, Context, ([&](FMassExecutionContext& ChunkContext)
+	EntityQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ChunkContext)
 	{
 		const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 		auto Transforms = ChunkContext.GetMutableFragmentView<FTransformFragment>();

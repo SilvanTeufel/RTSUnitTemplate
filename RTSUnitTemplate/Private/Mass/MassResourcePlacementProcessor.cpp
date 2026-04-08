@@ -36,7 +36,7 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
     // Batch-Update: collect updates per ISM component instead of calling UpdateInstanceTransform individually
     TMap<UInstancedStaticMeshComponent*, TArray<FResourceISMInstanceUpdate>> BatchedUpdates;
 
-    EntityQuery.ForEachEntityChunk(EntityManager, Context, ([&BatchedUpdates](FMassExecutionContext& Context) {
+    EntityQuery.ForEachEntityChunk(Context, ([&BatchedUpdates](FMassExecutionContext& Context) {
         TArrayView<FMassActorFragment> ActorList = Context.GetMutableFragmentView<FMassActorFragment>();
         TArrayView<FMassCarriedResourceFragment> ResourceList = Context.GetMutableFragmentView<FMassCarriedResourceFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();

@@ -24,20 +24,11 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 	
-	FTimerHandle DamageTimerHandle;
-
-	FTimerHandle ScaleTimerHandle;
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 	
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ScaleMesh();
-
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SetScaleTimer();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USceneComponent* SceneRoot;
@@ -57,26 +48,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 1;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool IsGettingBigger = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
+	bool bUseEffectAreaImpactProcessor = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float BiggerScaler = 1.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
+	float StartRadius = 100.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float BiggerScaleInterval = 1.0f;
-	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TSubclassOf<UGameplayEffect> AreaEffectOne;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
+	float EndRadius = 500.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TSubclassOf<UGameplayEffect> AreaEffectTwo;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
+	float TimeToEndRadius = 5.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TSubclassOf<UGameplayEffect> AreaEffectThree;
-	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool IsHealing = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
+	bool ScaleMesh = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
+	bool bIsRadiusScaling = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
+	float BaseRadius = 100.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
 	bool bAffectedByFogOfWar = false;
@@ -92,6 +83,18 @@ public:
 
 	UPROPERTY(Transient)
 	bool bIsVisibleByFog = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<UGameplayEffect> AreaEffectOne;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<UGameplayEffect> AreaEffectTwo;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<UGameplayEffect> AreaEffectThree;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool IsHealing = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	UMassActorBindingComponent* MassBindingComponent;

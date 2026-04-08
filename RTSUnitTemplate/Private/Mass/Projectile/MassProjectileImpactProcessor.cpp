@@ -46,7 +46,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 	TArray<FMassAgentCharacteristicsFragment> UnitCharFrags;
 	TArray<int32> UnitTeams;
 
-	UnitQuery.ForEachEntityChunk(EntityManager, Context, ([&](FMassExecutionContext& UnitContext)
+	UnitQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& UnitContext)
 	{
 		TConstArrayView<FTransformFragment> TransformList = UnitContext.GetFragmentView<FTransformFragment>();
 		TConstArrayView<FMassAgentCharacteristicsFragment> CharList = UnitContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
@@ -64,7 +64,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 	if (Units.Num() == 0) return;
 
-	ProjectileQuery.ForEachEntityChunk(EntityManager, Context, ([&](FMassExecutionContext& ProjContext)
+	ProjectileQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ProjContext)
 	{
 		TConstArrayView<FTransformFragment> TransformList = ProjContext.GetFragmentView<FTransformFragment>();
 		TArrayView<FMassProjectileFragment> ProjectileList = ProjContext.GetMutableFragmentView<FMassProjectileFragment>();

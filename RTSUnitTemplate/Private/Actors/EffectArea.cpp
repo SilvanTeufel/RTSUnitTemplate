@@ -28,6 +28,14 @@ AEffectArea::AEffectArea()
 	
 	MassBindingComponent = CreateDefaultSubobject<UMassActorBindingComponent>(TEXT("MassBindingComponent"));
 
+	bUseEffectAreaImpactProcessor = false;
+	StartRadius = 100.f;
+	EndRadius = 500.f;
+	TimeToEndRadius = 5.f;
+	ScaleMesh = false;
+	bIsRadiusScaling = true;
+	BaseRadius = 100.f;
+
 	if (HasAuthority())
 	{
 		bReplicates = true;
@@ -39,7 +47,6 @@ void AEffectArea::BeginPlay()
 {
 	Super::BeginPlay();
 	SetReplicateMovement(true);
-	SetScaleTimer();
 
 	if (MassBindingComponent)
 	{
@@ -68,15 +75,6 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, AreaEffectThree);
 	DOREPLIFETIME(AEffectArea, Mesh);
 	DOREPLIFETIME(AEffectArea, Niagara_A);
-}
-
-void AEffectArea::ScaleMesh()
-{
-	if (IsGettingBigger && Mesh)
-	{
-		FVector NewScale = Mesh->GetComponentScale() * BiggerScaler;
-		Mesh->SetWorldScale3D(NewScale);
-	}
 }
 
 void AEffectArea::SetActorVisibility(bool bVisible)
@@ -145,18 +143,10 @@ bool AEffectArea::ComputeLocalVisibility() const
 	return VisibleByTeam && VisibleByFog;
 }
 
-void AEffectArea::SetScaleTimer()
-{
-	float ScaleInterval = BiggerScaleInterval; // Set this to your desired interval in seconds
-	if (IsGettingBigger)
-	{
-		GetWorld()->GetTimerManager().SetTimer(ScaleTimerHandle, this, &AEffectArea::ScaleMesh, ScaleInterval, true);
-	}
-}
-
-
 void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
+	if (bUseEffectAreaImpactProcessor) return;
+
 	if(OtherActor)
 	{
 		AUnitBase* UnitToHit = Cast<AUnitBase>(OtherActor);
