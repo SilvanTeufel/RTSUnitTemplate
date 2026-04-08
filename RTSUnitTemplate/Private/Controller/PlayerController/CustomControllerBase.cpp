@@ -2465,6 +2465,12 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
     bool AbilityFired = false;
     bool AbilityUnSynced = false;
     bool bFromCooldown = false;
+    bool bAnyAbilityWantsToKeepSelection = false;
+
+    if (this->IsShiftPressed)
+    {
+        bAnyAbilityWantsToKeepSelection = true;
+    }
 
     for (AUnitBase* U : Units)
     {
@@ -2473,9 +2479,17 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
 
             // Indicator Cleanup (Server-side)
             UGameplayAbilityBase* AbilityCDO = U->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-            if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
+            if (AbilityCDO)
             {
-                HandleAbilityIndicatorEnd(U);
+                if (AbilityCDO->AbilityIndicatorClass)
+                {
+                    HandleAbilityIndicatorEnd(U);
+                }
+
+                if (AbilityCDO->bKeepSelectionAfterAbility)
+                {
+                    bAnyAbilityWantsToKeepSelection = true;
+                }
             }
 
             FireAbilityMouseHit(U, HitPawn);
@@ -2487,18 +2501,25 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
             TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(U);
             if (AbilityArray.IsValidIndex(InAbilityIndex))
             {
-                if (AGASUnit* GASUnit = Cast<AGASUnit>(U))
+                if (UGameplayAbilityBase* AbilityCDO = AbilityArray[InAbilityIndex]->GetDefaultObject<UGameplayAbilityBase>())
                 {
-                    if (GASUnit->IsAbilityOnCooldownByClass(AbilityArray[InAbilityIndex]))
+                    if (AbilityCDO->bKeepSelectionAfterAbility)
                     {
-                        bFromCooldown = true;
+                        bAnyAbilityWantsToKeepSelection = true;
+                        if (AGASUnit* GASUnit = Cast<AGASUnit>(U))
+                        {
+                            if (GASUnit->IsAbilityOnCooldownByClass(AbilityArray[InAbilityIndex]))
+                            {
+                                bFromCooldown = true;
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    if (AbilityFired && !AbilityUnSynced)
+    if (AbilityFired && !AbilityUnSynced && bAnyAbilityWantsToKeepSelection)
     {
         // Reset the flag for the client, but don't perform selection follow-up
         Client_ContinueSelectionAfterAbility(FHitResult(), false, true);

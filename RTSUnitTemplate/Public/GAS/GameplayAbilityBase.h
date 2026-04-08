@@ -37,6 +37,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bDisabled = false;
 
+	// New: Keep units selected after executing this ability
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bKeepSelectionAfterAbility = false;
+
 	// If true and this ability was saved as Disabled, execute it once when loading instead of disabling it
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bExecuteOnLoadIfDisabled = false;

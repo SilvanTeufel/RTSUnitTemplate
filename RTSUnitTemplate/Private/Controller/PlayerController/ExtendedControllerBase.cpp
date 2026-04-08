@@ -661,21 +661,43 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	if (AltIsPressed) return;
 	if (IsCtrlPressed) return;
 
-	// Requirement 2: Block if ANY selected unit is busy
-	for (AUnitBase* Unit : SelectedUnits)
+	// 1. Identify the ability class from the current selection and InputID
+	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
+	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayByIndex();
+	TSubclassOf<UGameplayAbilityBase> AbilityClass = nullptr;
+
+	if (AbilityArray.IsValidIndex(AbilityIndex))
 	{
-		if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+		AbilityClass = AbilityArray[AbilityIndex];
+	}
+
+	bool bAllowQueuing = false;
+	if (AbilityClass)
+	{
+		if (UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
 		{
-			if (GASUnit->IsAnyAbilityActive()) return;
+			bAllowQueuing = AbilityCDO->UseAbilityQue;
 		}
 	}
 
-	// Requirement 2: Block if CameraUnit is busy (if we are going to use it)
-	if (SelectedUnits.Num() == 0 && CameraUnitWithTag)
+	if (!bAllowQueuing)
 	{
-		if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+		// Requirement 2: Block if ANY selected unit is busy
+		for (AUnitBase* Unit : SelectedUnits)
 		{
-			if (GASUnit->IsAnyAbilityActive()) return;
+			if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+			{
+				if (GASUnit->IsAnyAbilityActive()) return;
+			}
+		}
+
+		// Requirement 2: Block if CameraUnit is busy (if we are going to use it)
+		if (SelectedUnits.Num() == 0 && CameraUnitWithTag)
+		{
+			if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+			{
+				if (GASUnit->IsAnyAbilityActive()) return;
+			}
 		}
 	}
 	
@@ -691,15 +713,6 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	bool bActivatedAny = false;
 	if (SelectedUnits.Num() > 0)
 	{
-		// 1. Identify the ability class from the current selection and InputID
-		int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
-		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayByIndex();
-		TSubclassOf<UGameplayAbilityBase> AbilityClass = nullptr;
-
-		if (AbilityArray.IsValidIndex(AbilityIndex))
-		{
-			AbilityClass = AbilityArray[AbilityIndex];
-		}
 
 		// Validate CurrentUnitWidgetIndex is within bounds
 		if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num())
@@ -784,17 +797,28 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		SelectedUnits.Emplace(CameraUnitWithTag);
 		HUDBase->SetUnitSelected(CameraUnitWithTag, bIsAi);
 
-		if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+		// Check if CameraUnit's ability needs rotation
+		AbilityArray = GetAbilityArrayForUnit(CameraUnitWithTag);
+
+		bool bAllowCameraQueuing = false;
+		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex])
 		{
-			if (GASUnit->IsAnyAbilityActive())
+			if (UGameplayAbilityBase* AbilityCDO = AbilityArray[AbilityIndex]->GetDefaultObject<UGameplayAbilityBase>())
 			{
-				return;
+				bAllowCameraQueuing = AbilityCDO->UseAbilityQue;
 			}
 		}
 
-		// Check if CameraUnit's ability needs rotation
-		int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
-		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(CameraUnitWithTag);
+		if (!bAllowCameraQueuing)
+		{
+			if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+			{
+				if (GASUnit->IsAnyAbilityActive())
+				{
+					return;
+				}
+			}
+		}
 
 		bool bIsOnCooldown = false;
 		if (AbilityArray.IsValidIndex(AbilityIndex))
