@@ -106,6 +106,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
 	float SpawnVerticalOffset = 0.f;
 
+	// Random XY offset applied per spawned unit (radius in cm)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn", meta=(ClampMin="0.0"))
+	float SpawnRandomOffsetMin = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn", meta=(ClampMin="0.0"))
+	float SpawnRandomOffsetMax = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Shutdown")
 	float HideOnDestructionDelay = 0.0f;
 

@@ -29,6 +29,5 @@ protected:
 private:
 	// These members were private in the original, so we must re-declare them here.
 	TObjectPtr<UWorld> World;
-	TObjectPtr<UMassNavigationSubsystem> NavigationSubsystem;
 	FMassEntityQuery EntityQuery;
 };

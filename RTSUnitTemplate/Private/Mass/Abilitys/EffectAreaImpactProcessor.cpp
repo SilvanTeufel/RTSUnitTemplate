@@ -9,7 +9,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
 
-static void SpawnUnitsForEffectArea(FMassExecutionContext& Ctx, AEffectArea& Area, const FVector& SpawnCenter)
+static void SpawnUnitsForEffectArea(FMassExecutionContext& Ctx, AEffectArea& Area, const FVector& SpawnCenter, const FEffectAreaImpactFragment& Impact)
 {
 	UWorld* World = Ctx.GetWorld();
 	if (!World || World->GetNetMode() == NM_Client) return; // server-only
@@ -19,9 +19,20 @@ static void SpawnUnitsForEffectArea(FMassExecutionContext& Ctx, AEffectArea& Are
 
 	const int32 Count = FMath::Max(1, Area.SpawnCountOnDestruction);
 
-	for (int32 idx = 0; idx < Count; ++idx)
-	{
-		FVector SpawnLoc = SpawnCenter;
+		for (int32 idx = 0; idx < Count; ++idx)
+		{
+			FVector SpawnLoc = SpawnCenter;
+			// Apply random XY offset within ring [Min,Max]
+			float MinR = FMath::Max(0.f, Impact.SpawnRandomOffsetMin);
+			float MaxR = FMath::Max(MinR, Impact.SpawnRandomOffsetMax);
+			if (MaxR > 0.f)
+			{
+				const float U = FMath::FRand();
+				const float Radius = FMath::Sqrt(FMath::Lerp(MinR * MinR, MaxR * MaxR, U));
+				const float Angle = FMath::FRand() * 2.f * PI;
+				SpawnLoc.X += FMath::Cos(Angle) * Radius;
+				SpawnLoc.Y += FMath::Sin(Angle) * Radius;
+			}
 
 		if (Area.bSpawnDoGroundTrace)
 		{
@@ -175,7 +186,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					if (Impact.PostImpactTimer >= SpawnTriggerTime)
 					{
 						Impact.bHasSpawnedOnDestruction = true;
-						SpawnUnitsForEffectArea(AreaContext, *EffectArea, AreaLocation);
+						SpawnUnitsForEffectArea(AreaContext, *EffectArea, AreaLocation, Impact);
 					}
 				}
 
@@ -213,7 +224,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					if (TimeRemaining <= Impact.EarlySpawnTime)
 					{
 						Impact.bHasSpawnedOnDestruction = true;
-						SpawnUnitsForEffectArea(AreaContext, *EffectArea, AreaLocation);
+						SpawnUnitsForEffectArea(AreaContext, *EffectArea, AreaLocation, Impact);
 					}
 				}
 				

@@ -343,7 +343,7 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 	ExecutionFlags = static_cast<uint8>(EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
 
 	// Does not require Game Thread
-	bRequiresGameThreadExecution = true;
+	bRequiresGameThreadExecution = false;
 }
 
 void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -375,6 +375,7 @@ void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 
 	// ***** YOUR CUSTOMIZATION GOES HERE *****
 	EntityQuery.AddTagRequirement<FMassDisableAvoidanceTag>(EMassFragmentPresence::None);
+	EntityQuery.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
 	
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -385,14 +386,14 @@ void UUnitMovingAvoidanceProcessor::InitializeInternal(UObject& Owner, const TSh
 	Super::InitializeInternal(Owner, EntityManager);
 
 	World = Owner.GetWorld();
-	NavigationSubsystem = UWorld::GetSubsystem<UMassNavigationSubsystem>(Owner.GetWorld());
 }
 
 void UUnitMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
-	if (!World || !NavigationSubsystem)
+	const UMassNavigationSubsystem* ContextNavSubsystem = Context.GetSubsystem<UMassNavigationSubsystem>();
+	if (!World || !ContextNavSubsystem)
 	{
 		return;
 	}
@@ -402,7 +403,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		return;
 	}
 
-	EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager](FMassExecutionContext& Context)
+	EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, ContextNavSubsystem](FMassExecutionContext& Context)
 	{
 		const float DeltaTime = Context.GetDeltaTimeSeconds();
 		const double CurrentTime = World->GetTimeSeconds();
@@ -455,7 +456,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		};
 		TArray<FCollider, TInlineAllocator<16>> Colliders;
 
-		const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid = NavigationSubsystem->GetObstacleGrid();
+		const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid = ContextNavSubsystem->GetObstacleGrid();
 
 		for (FMassExecutionContext::FEntityIterator EntityIt = Context.CreateEntityIterator(); EntityIt; ++EntityIt)
 		{

@@ -896,6 +896,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					ImpactFrag->HideOnDestructionDelay = EffectArea->HideOnDestructionDelay;
 					ImpactFrag->DestroyOnDestructionDelay = EffectArea->DestroyOnDestructionDelay;
 					ImpactFrag->EarlySpawnTime = EffectArea->EarlySpawnTime;
+					// Copy random spawn offset range from actor
+					ImpactFrag->SpawnRandomOffsetMin = EffectArea->SpawnRandomOffsetMin;
+					ImpactFrag->SpawnRandomOffsetMax = EffectArea->SpawnRandomOffsetMax;
 					ImpactFrag->bHasHiddenVisual = false;
 					ImpactFrag->bHasSpawnedOnDestruction = false;
 				}

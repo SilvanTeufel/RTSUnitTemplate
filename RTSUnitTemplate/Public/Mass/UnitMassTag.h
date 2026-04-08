@@ -1253,6 +1253,9 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	float HideOnDestructionDelay = 0.f;   // copied from actor
 	float DestroyOnDestructionDelay = 0.5f;  // copied from actor
 	float EarlySpawnTime = 1.0f; // copied from actor
+	// Random spawn offset (radius range in cm) copied from actor
+	float SpawnRandomOffsetMin = 0.f;
+	float SpawnRandomOffsetMax = 0.f;
 
 	bool bHasHiddenVisual = false;          // ensure hide-once
 	bool bHasSpawnedOnDestruction = false;  // ensure spawn-once

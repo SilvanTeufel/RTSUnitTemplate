@@ -47,6 +47,8 @@ AEffectArea::AEffectArea()
 	SpawnCountOnDestruction = 1;
 	bSpawnDoGroundTrace = true;
 	SpawnVerticalOffset = 0.f;
+	SpawnRandomOffsetMin = 0.f;
+	SpawnRandomOffsetMax = 0.f;
 
 	if (HasAuthority())
 	{
