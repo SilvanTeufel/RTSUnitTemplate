@@ -1663,8 +1663,8 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
         else if (CurrentAttributes)
             SetShield_Implementation(CurrentAttributes->GetShield() - NewDamage);
 
-        // Grant Experience
-        if (ShootingUnit)
+        // Grant Experience - FIX: Added team check to prevent XP on friendly fire
+        if (ShootingUnit && ShootingUnit->TeamId != TeamId)
         {
             ShootingUnit->IncreaseExperience();
         }

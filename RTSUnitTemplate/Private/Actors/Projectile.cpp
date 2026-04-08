@@ -52,7 +52,7 @@ AProjectile::AProjectile()
 	ISMComponent->SetupAttachment(RootComponent);
 	ISMComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision); // Disable collision on the ISM
 	ISMComponent->SetIsReplicated(true);
-	ISMComponent->SetVisibility(false, true);
+	ISMComponent->SetHiddenInGame(true);
 	ISMComponent->SetMobility(EComponentMobility::Movable);
 	
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_A"));
@@ -63,8 +63,6 @@ AProjectile::AProjectile()
 	Niagara_B->SetupAttachment(SceneRoot);
 	Niagara_B->SetMobility(EComponentMobility::Movable);
 	
-	SceneRoot->SetVisibility(false, true);
-
 	bReplicates = true;
 	InstanceIndex = INDEX_NONE; // Initialize the instance index
 	LastWallHitLocation = FVector::ZeroVector;
@@ -73,6 +71,12 @@ AProjectile::AProjectile()
 void AProjectile::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+
+	// Automatically add an instance for editor preview if a mesh is chosen
+	if (ISMComponent && ISMComponent->GetInstanceCount() == 0 && ISMComponent->GetStaticMesh())
+	{
+		InstanceIndex = ISMComponent->AddInstance(FTransform::Identity);
+	}
 
 	InitISMComponent(Transform);
 	
