@@ -37,6 +37,7 @@
 #include "GameModes/RTSGameModeBase.h"
 #include "Subsystems/UnitVisualManager.h"
 #include "Subsystems/ResourceVisualManager.h"
+#include "Mass/Abilitys/EffectAreaVisualManager.h"
 #include "Mass/Replication/UnitReplicationCacheSubsystem.h"
 #include "MassReplicationFragments.h"
 #include "MassReplicationSubsystem.h"
@@ -409,6 +410,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		{
 			FragmentsAndTags.Add(FEffectAreaImpactFragment::StaticStruct());
 			FragmentsAndTags.Add(FMassEffectAreaImpactTag::StaticStruct());
+			FragmentsAndTags.Add(FEffectAreaVisualFragment::StaticStruct());
+			FragmentsAndTags.Add(FMassEffectAreaActiveTag::StaticStruct());
 		}
 
 		FMassArchetypeCreationParams Params;
@@ -877,6 +880,16 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					ImpactFrag->AreaEffectTwo = EffectArea->AreaEffectTwo;
 					ImpactFrag->AreaEffectThree = EffectArea->AreaEffectThree;
 					ImpactFrag->HitCount = 0;
+
+					ImpactFrag->MaxLifeTime = EffectArea->MaxLifeTime;
+					ImpactFrag->bPulsate = EffectArea->bPulsate;
+					ImpactFrag->bDestroyOnImpact = EffectArea->bDestroyOnImpact;
+					ImpactFrag->bScaleOnImpact = EffectArea->bScaleOnImpact;
+					ImpactFrag->bIsScalingAfterImpact = false;
+					ImpactFrag->ImpactScalingElapsedTime = 0.f;
+					ImpactFrag->RadiusAtImpactStart = 0.f;
+					ImpactFrag->bImpactScaleTriggered = false;
+					ImpactFrag->bImpactVFXTriggered = false;
 				}
 			}
 			return;
@@ -1176,6 +1189,14 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 		
 		FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
 		ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
+
+		if (AEffectArea* EffectAreaActor = Cast<AEffectArea>(GetOwner()))
+		{
+			if (UEffectAreaVisualManager* VisualManager = World->GetSubsystem<UEffectAreaVisualManager>())
+			{
+				VisualManager->AddVisualInstance(MassEntityHandle, EffectAreaActor);
+			}
+		}
 	}
 	return MassEntityHandle;
 }

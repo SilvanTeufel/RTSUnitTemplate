@@ -1285,10 +1285,8 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 	if (MyEffectArea != nullptr)
 	{
 		MyEffectArea->TeamId = TeamId;
-		MyEffectArea->Mesh->OnComponentBeginOverlap.AddDynamic(MyEffectArea, &AEffectArea::OnOverlapBegin);
-
-		// Apply scale to the Mesh
-		MyEffectArea->Mesh->SetWorldScale3D(Scale);
+		// Overlap handling removed: EffectArea now uses Mass-based processors for impact
+		// Visual scaling is handled by the VisualProcessor (ISM instances)
 
 		if(ActorToLockOn)
 		{

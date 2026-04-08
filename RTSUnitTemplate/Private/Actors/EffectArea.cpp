@@ -5,6 +5,7 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "NiagaraComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "Components/InstancedStaticMeshComponent.h"
 
 
 // Sets default values
@@ -16,12 +17,12 @@ AEffectArea::AEffectArea()
 	SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
 	SetRootComponent(SceneRoot);
 
-	Mesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
-	Mesh->SetupAttachment(SceneRoot);
-	
-	Mesh->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Mesh->SetCollisionProfileName(TEXT("Trigger")); // Kollisionsprofil festlegen
-	Mesh->SetGenerateOverlapEvents(true);
+	ISMTemplate = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISMTemplate"));
+	ISMTemplate->SetupAttachment(SceneRoot);
+	// Template is only for Blueprint setup; no collision/overlap
+	ISMTemplate->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	ISMTemplate->SetGenerateOverlapEvents(false);
+	ISMTemplate->SetHiddenInGame(true);
 
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara_A->SetupAttachment(SceneRoot);
@@ -35,6 +36,10 @@ AEffectArea::AEffectArea()
 	ScaleMesh = false;
 	bIsRadiusScaling = true;
 	BaseRadius = 100.f;
+	bPulsate = false;
+	bDestroyOnImpact = false;
+	bScaleOnImpact = false;
+	bIsScalingAfterImpact = false;
 
 	if (HasAuthority())
 	{
@@ -48,6 +53,7 @@ void AEffectArea::BeginPlay()
 	Super::BeginPlay();
 	SetReplicateMovement(true);
 
+
 	if (MassBindingComponent)
 	{
 		MassBindingComponent->SetupMassOnEffectArea();
@@ -59,12 +65,23 @@ void AEffectArea::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
-	LifeTime+=DeltaTime;
-	
-	if(LifeTime >= MaxLifeTime){
-		Destroy(true, false);
+	if (!bUseEffectAreaImpactProcessor)
+	{
+		LifeTime += DeltaTime;
+		if (MaxLifeTime > 0.f && LifeTime >= MaxLifeTime) {
+			Destroy(true, false);
+		}
 	}
-	
+}
+
+void AEffectArea::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	// Adds an instance for preview in the editor if a mesh is selected
+	if (ISMTemplate && ISMTemplate->GetInstanceCount() == 0 && ISMTemplate->GetStaticMesh())
+	{
+		ISMTemplate->AddInstance(FTransform::Identity);
+	}
 }
 
 void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -73,18 +90,21 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, AreaEffectOne);
 	DOREPLIFETIME(AEffectArea, AreaEffectTwo);
 	DOREPLIFETIME(AEffectArea, AreaEffectThree);
-	DOREPLIFETIME(AEffectArea, Mesh);
 	DOREPLIFETIME(AEffectArea, Niagara_A);
+	DOREPLIFETIME(AEffectArea, bImpactVFXTriggered);
+	DOREPLIFETIME(AEffectArea, bIsScalingAfterImpact);
+	DOREPLIFETIME(AEffectArea, bImpactScaleTriggered);
 }
 
 void AEffectArea::SetActorVisibility(bool bVisible)
 {
-	if (Mesh) Mesh->SetVisibility(bVisible);
 	if (Niagara_A) Niagara_A->SetVisibility(bVisible);
 }
 
 void AEffectArea::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 {
+	if (bUseEffectAreaImpactProcessor) return;
+
 	if (DetectingActor == nullptr || !DetectingActor->IsValidLowLevelFast())
 	{
 		return;

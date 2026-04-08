@@ -1204,6 +1204,24 @@ struct FMassProjectileVisualFragment : public FMassFragment
 };
 
 USTRUCT()
+struct FMassEffectAreaActiveTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT()
+struct FEffectAreaVisualFragment : public FMassFragment
+{
+	GENERATED_BODY()
+	int32 InstanceIndex = INDEX_NONE;
+	TWeakObjectPtr<UInstancedStaticMeshComponent> ISMComponent;
+	FTransform VisualRelativeTransform = FTransform::Identity;
+	TWeakObjectPtr<UNiagaraComponent> Niagara_A;
+	FTransform Niagara_A_RelativeTransform = FTransform::Identity;
+	float BaseMeshRadius = 100.f;
+};
+
+USTRUCT()
 struct FEffectAreaImpactFragment : public FMassFragment
 {
 	GENERATED_BODY()
@@ -1216,6 +1234,18 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	bool bScaleMesh = false;
 	bool bIsRadiusScaling = true;
 	float BaseRadius = 100.f;
+
+	float MaxLifeTime = 0.f;        // 0.f = Unendlich
+	bool bPulsate = false;          // Wechselt zwischen Start/EndRadius
+	bool bDestroyOnImpact = false;  // Zerstrung bei erstem Treffer
+	bool bScaleOnImpact = false;    // Skaliert auf EndRadius vor Zerstrung
+    
+	// Status fr Processor
+	bool bIsScalingAfterImpact = false;
+	float ImpactScalingElapsedTime = 0.f;
+	float RadiusAtImpactStart = 0.f;      // lerp from this to EndRadius
+	bool bImpactScaleTriggered = false;   // guard to trigger only once per area
+	bool bImpactVFXTriggered = false; // Replikations-Hilfe fr Clients
         
 	// Impact properties (cached to avoid frequent Actor access)
 	int32 TeamId = 0;
