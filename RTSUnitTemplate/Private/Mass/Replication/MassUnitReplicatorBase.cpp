@@ -213,8 +213,10 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                     {
                         if (const USceneComponent* SpawnComp = Cast<USceneComponent>(SpawnComps[0]))
                         {
-                            // Correctly calculate relative offset from Actor Root, even if component is nested
-                            BaseOffset = UnitActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+                            // Correctly calculate relative offset from Actor Root (Ground/Feet)
+                            FVector SpawnOffset = UnitActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+                            SpawnOffset.Z += UnitActor->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+                            BaseOffset = SpawnOffset;
                         }
                     }
                     NewItem.AIS_ProjectileSpawnOffset = BaseOffset;

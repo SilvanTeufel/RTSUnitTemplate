@@ -54,14 +54,19 @@ AProjectile::AProjectile()
 	ISMComponent->SetIsReplicated(true);
 	ISMComponent->SetHiddenInGame(true);
 	ISMComponent->SetMobility(EComponentMobility::Movable);
+	// ISMComponent->SetIsVisualizationComponent(true);
 	
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_A"));
 	Niagara_A->SetupAttachment(SceneRoot);
 	Niagara_A->SetMobility(EComponentMobility::Movable);
+	// Niagara_A->SetIsVisualizationComponent(true);
+	Niagara_A->SetAutoActivate(false);
 	
 	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
 	Niagara_B->SetupAttachment(SceneRoot);
 	Niagara_B->SetMobility(EComponentMobility::Movable);
+	// Niagara_B->SetIsVisualizationComponent(true);
+	Niagara_B->SetAutoActivate(false);
 	
 	bReplicates = true;
 	InstanceIndex = INDEX_NONE; // Initialize the instance index
@@ -72,13 +77,21 @@ void AProjectile::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 
-	// Automatically add an instance for editor preview if a mesh is chosen
-	if (ISMComponent && ISMComponent->GetInstanceCount() == 0 && ISMComponent->GetStaticMesh())
+	// FIX: Zuerst alle alten Instanzen löschen, um "Artefakte" zu vermeiden
+	if (ISMComponent)
 	{
-		InstanceIndex = ISMComponent->AddInstance(FTransform::Identity);
-	}
+		ISMComponent->ClearInstances();
+		InstanceIndex = INDEX_NONE;
 
-	InitISMComponent(Transform);
+		// Fügt eine neue Instanz für die Vorschau hinzu, falls ein Mesh gewählt wurde
+		if (ISMComponent->GetStaticMesh())
+		{
+			InstanceIndex = ISMComponent->AddInstance(FTransform::Identity);
+		}
+
+		// Initialisiert die Instanz für den Flug (setzt Richtung etc.)
+		InitISMComponent(Transform);
+	}
 	
 	if (Niagara_A)
 	{
@@ -272,10 +285,21 @@ void AProjectile::InitForLocationPosition(FVector Aim, AActor* ShootingActor)
 
 void AProjectile::SetProjectileVisibility_Implementation()
 {
+	const bool bGameWorld = GetWorld() && GetWorld()->IsGameWorld();
+
+	if (bGameWorld)
+	{
+		// In game, the Actor's own components are just previews/templates and should stay hidden.
+		// The actual visuals are managed by Mass/VisualManager via separate instances.
+		if (ISMComponent) ISMComponent->SetHiddenInGame(true);
+		if (Niagara_A) Niagara_A->SetHiddenInGame(true);
+		if (Niagara_B) Niagara_B->SetHiddenInGame(true);
+		return;
+	}
 
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 	AUnitBase* TargetUnit = Cast<AUnitBase>(Target);
-
+	
 	bool bShootingVisible = ShootingUnit ? ((ShootingUnit->IsVisibleEnemy || ShootingUnit->IsMyTeam) ? true : (!ShootingUnit->EnableFog)) : false;
 	bool bTargetVisible   = TargetUnit ? ((TargetUnit->IsVisibleEnemy  || TargetUnit->IsMyTeam)  ? true : (!TargetUnit->EnableFog))   : false;
 	bool bFinalVisibility = bShootingVisible || bTargetVisible;
@@ -288,7 +312,30 @@ void AProjectile::SetProjectileVisibility_Implementation()
 void AProjectile::BeginPlay()
 {
 	Super::BeginPlay();
-	SetReplicateMovement(true);
+
+	// 1) Preview-Instanzen entfernen
+	if (ISMComponent)
+	{
+		ISMComponent->ClearInstances();
+		InstanceIndex = INDEX_NONE;
+		ISMComponent->SetHiddenInGame(true);
+	}
+
+	// 2) Editor-VFX im Spiel deaktivieren & verstecken
+	if (Niagara_A)
+	{
+		Niagara_A->Deactivate();
+		Niagara_A->SetHiddenInGame(true);
+	}
+	if (Niagara_B)
+	{
+		Niagara_B->Deactivate();
+		Niagara_B->SetHiddenInGame(true);
+	}
+
+	// 3) Zur Sicherheit: keine Actor-Transform-Replikation für das Template
+	// (die Mass-Visuals kommen aus dem VisualManager)
+	SetReplicateMovement(false);
 }
 
 void AProjectile::InitArc(FVector ArcBeginLocation)
@@ -423,7 +470,6 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 	}
 }
 
-/*
 // Called every frame
 void AProjectile::Tick(float DeltaTime)
 {
@@ -547,7 +593,7 @@ void AProjectile::Tick(float DeltaTime)
 		}
 	}
 }
-*/
+
 void AProjectile::CheckViewport()
 {
 	if (IsInViewport(GetActorLocation(), VisibilityOffset))
@@ -646,7 +692,9 @@ void AProjectile::FlyToUnitTarget(float DeltaSeconds)
 
 
     // --- 3. Calculate this frame's movement ---
-    const float FrameSpeed = MovementSpeed * DeltaSeconds * 10.f;
+    // ROBUSTHEIT: Notfall-Geschwindigkeit von 100 Einheiten/s
+    const float EffectiveSpeed = FMath::Max(MovementSpeed, 10.f); 
+    const float FrameSpeed = EffectiveSpeed * DeltaSeconds * 10.f;
     const FVector FrameMovement = FlightDirection * FrameSpeed;
     
     
@@ -740,7 +788,9 @@ void AProjectile::FlyToLocationTarget(float DeltaSeconds)
 		}
 	}
 	
-    const FVector FrameMovement = FlightDirection * MovementSpeed * DeltaSeconds * 10.f;
+    // ROBUSTHEIT: Notfall-Geschwindigkeit von 100 Einheiten/s
+    const float EffectiveSpeed = FMath::Max(MovementSpeed, 10.f); 
+    const FVector FrameMovement = FlightDirection * EffectiveSpeed * DeltaSeconds * 10.f;
     // The potential new location after this frame's movement
     const FVector EndLocation = CurrentLocation + FrameMovement;
     

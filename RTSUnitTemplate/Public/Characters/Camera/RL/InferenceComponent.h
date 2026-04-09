@@ -73,13 +73,13 @@ struct FGameStateData
 	float EnemyTotalAttackDamage = 0.0f;
 
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-	FVector AgentPosition;
+	FVector AgentPosition = FVector::ZeroVector;
 
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-	FVector AverageFriendlyPosition;
+	FVector AverageFriendlyPosition = FVector::ZeroVector;
 
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
-	FVector AverageEnemyPosition;
+	FVector AverageEnemyPosition = FVector::ZeroVector;
 
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
 	float PrimaryResource = 0.0f;

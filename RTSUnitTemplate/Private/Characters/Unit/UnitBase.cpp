@@ -775,11 +775,12 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 				if (TF && AC)
 				{
 					FTransform PredictedXf = TF->GetTransform();
-					// Predicted fragment might be at ground level, but offset is root-relative (center-relative)
-					// We manually add the capsule height to center the anchor on clients.
-					PredictedXf.AddToTranslation(FVector(0.f, 0.f, AC->CapsuleHeight));
+					// Use LastGroundLocation as a stable Z-anchor on clients.
+					FVector GroundLoc = PredictedXf.GetLocation();
+					GroundLoc.Z = AC->LastGroundLocation;
+					PredictedXf.SetLocation(GroundLoc);
 					
-					// On client, ProjectileSpawnOffset is synced from AIS_ProjectileSpawnOffset (authoritative server-side muzzle)
+					// On client, ProjectileSpawnOffset is synced from AIS_ProjectileSpawnOffset (authoritative ground-relative muzzle)
 					FVector OffsetFromRoot = ProjectileSpawnOffset;
 					
 					// Fallback to component-based calculation if ProjectileSpawnOffset is not yet synced
@@ -1050,18 +1051,26 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             if (ProjectileCDO && ProjectileCDO->bUseMass)
             {
                 float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
-
                 float FinalSpeed = SpeedFromAttributes;
+
+                // ROBUSTHEIT: Falls das Attribut 0 liefert, nutze den CDO-Standardwert
+                if (FinalSpeed <= 0.f && ProjectileCDO)
+                {
+                    FinalSpeed = ProjectileCDO->MovementSpeed;
+                    UE_LOG(LogTemp, Warning, TEXT("[RTSUnitTemplate] Unit %s has ProjectileSpeed 0! Falling back to Projectile CDO Default: %.1f"), *GetName(), FinalSpeed);
+                }
+
                 float InitialAngle = 0.f;
                 float RotSpeed = 0.f;
                 float MaxRadius = 0.f;
                 float InterpSpeed = ProjectileCDO->HomingInterpSpeed;
                 bool bFollow = ProjectileCDO->FollowTarget;
 
-                if (HomingCount > 0 || ProjectileCDO->HomingMaxSpiralRadius > 0.f)
+                if (HomingCount > 0)
                 {
                     bFollow = true;
                     FinalSpeed += FMath::RandRange(-ProjectileCDO->HomingSpeedVariation, ProjectileCDO->HomingSpeedVariation);
+                    FinalSpeed = FMath::Max(FinalSpeed, 100.f); // Mindestens 100 Einheiten/s bei Homing
                     InitialAngle = FMath::RandRange(0.f, 360.f);
                     RotSpeed = ProjectileCDO->HomingRotationSpeed * FMath::RandRange(0.9f, 1.4f);
                     if (FMath::RandBool()) RotSpeed *= -1.f;
@@ -1218,8 +1227,15 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             if (ProjectileCDO && ProjectileCDO->bUseMass)
             {
                 float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
-
                 float FinalSpeed = SpeedFromAttributes;
+
+                // ROBUSTHEIT: Falls das Attribut 0 liefert, nutze den CDO-Standardwert
+                if (FinalSpeed <= 0.f && ProjectileCDO)
+                {
+                    FinalSpeed = ProjectileCDO->MovementSpeed;
+                    UE_LOG(LogTemp, Warning, TEXT("[RTSUnitTemplate] Unit %s has ProjectileSpeed 0! Falling back to Projectile CDO Default: %.1f"), *GetName(), FinalSpeed);
+                }
+
                 float InitialAngle = 0.f;
                 float RotSpeed = 0.f;
                 float MaxRadius = 0.f;
@@ -1229,10 +1245,11 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 // Non-homing aimed shots should be linear to allow flying past the target easily
                 bool bFollow = false;
 
-                if (HomingCount > 0 || ProjectileCDO->HomingMaxSpiralRadius > 0.f)
+                if (HomingCount > 0)
                 {
                     bFollow = true;
                     FinalSpeed += FMath::RandRange(-ProjectileCDO->HomingSpeedVariation, ProjectileCDO->HomingSpeedVariation);
+                    FinalSpeed = FMath::Max(FinalSpeed, 100.f); // Mindestens 100 Einheiten/s bei Homing
                     InitialAngle = FMath::RandRange(0.f, 360.f);
                     RotSpeed = ProjectileCDO->HomingRotationSpeed * FMath::RandRange(0.9f, 1.4f);
                     if (FMath::RandBool()) RotSpeed *= -1.f;
@@ -1589,7 +1606,10 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
             AIS->LastProjectileSpread = Spread;
             AIS->LastProjectileDamage = Damage;
             AIS->LastProjectileMaxPiercedTargets = MaxPiercedTargets;
-            AIS->LastProjectileSpawnOffset = GetActorTransform().InverseTransformPosition(GetProjectileSpawnLocation());
+            // Calculate offset relative to the ground (Feet) instead of center
+            FVector SpawnOffset = GetActorTransform().InverseTransformPosition(GetProjectileSpawnLocation());
+            SpawnOffset.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+            AIS->LastProjectileSpawnOffset = SpawnOffset;
 
             // Resolve target NetID
             AIS->LastTargetNetID = 0;
@@ -1764,16 +1784,25 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 Transform.SetScale3D(FVector(ProjectileScale));
 
                 float FinalSpeed = SpeedFromAttributes;
+
+                // ROBUSTHEIT: Falls das Attribut 0 liefert, nutze den CDO-Standardwert
+                if (FinalSpeed <= 0.f && ProjectileCDO)
+                {
+                    FinalSpeed = ProjectileCDO->MovementSpeed;
+                    UE_LOG(LogTemp, Warning, TEXT("[RTSUnitTemplate] Unit %s has ProjectileSpeed 0! Falling back to Projectile CDO Default: %.1f"), *GetName(), FinalSpeed);
+                }
+
                 float InitialAngle = 0.f;
                 float RotSpeed = 0.f;
                 float MaxRadius = 0.f;
                 float InterpSpeed = ProjectileCDO->HomingInterpSpeed;
                 bool bFollow = ProjectileCDO->FollowTarget;
 
-                if (HomingCount > 0 || ProjectileCDO->HomingMaxSpiralRadius > 0.f)
+                if (HomingCount > 0)
                 {
                     bFollow = true;
                     FinalSpeed += FMath::RandRange(-ProjectileCDO->HomingSpeedVariation, ProjectileCDO->HomingSpeedVariation);
+                    FinalSpeed = FMath::Max(FinalSpeed, 100.f); // Mindestens 100 Einheiten/s bei Homing
                     InitialAngle = FMath::RandRange(0.f, 360.f);
                     RotSpeed = ProjectileCDO->HomingRotationSpeed * FMath::RandRange(0.9f, 1.4f);
                     if (FMath::RandBool()) RotSpeed *= -1.f;

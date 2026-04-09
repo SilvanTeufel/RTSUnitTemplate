@@ -281,9 +281,11 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                         if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
                         {
                             FTransform SpawnXf = Transform;
-                            // Predicted fragment might be at ground level, but offset is root-relative (center-relative)
-                            // We manually add the capsule height to center the anchor on clients.
-                            SpawnXf.AddToTranslation(FVector(0.f, 0.f, CharFrag.CapsuleHeight)); 
+                            // Use LastGroundLocation as a stable Z-anchor on clients.
+                            FVector GroundLoc = SpawnXf.GetLocation();
+                            GroundLoc.Z = CharFrag.LastGroundLocation;
+                            SpawnXf.SetLocation(GroundLoc);
+
                             const FVector SpawnPos = SpawnXf.TransformPosition(Item->AIS_ProjectileSpawnOffset);
                             SpawnXf.SetLocation(SpawnPos);
 

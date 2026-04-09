@@ -1008,10 +1008,11 @@ void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMu
 					}
 				}
 			}
-			else
+			else if (!World->IsNetMode(NM_Standalone))
 			{
 				// If there is no instigator, it's likely an AI or automated action.
 				// For UI/Local sounds, we skip it to prevent AI actions from being heard by human players.
+				// In Standalone, we skip this return to fall through to the player controller loop below.
 				return;
 			}
 		}

@@ -149,9 +149,11 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 						// Calculate spawn location (roughly from the shooter's position)
 						FTransform SpawnXf = BuildTransformFromItem(*this);
-						// Predicted fragment might be at ground level on client, but offset is root-relative (center-relative)
-						// We manually add the capsule height to center the anchor on clients.
-						SpawnXf.AddToTranslation(FVector(0.f, 0.f, AC_CapsuleHeight)); 
+						// Use AC_LastGroundLocation as a stable Z-anchor on clients.
+						FVector GroundLoc = SpawnXf.GetLocation();
+						GroundLoc.Z = AC_LastGroundLocation;
+						SpawnXf.SetLocation(GroundLoc);
+
 						const FVector SpawnPos = SpawnXf.TransformPosition(AIS_ProjectileSpawnOffset);
 						SpawnXf.SetLocation(SpawnPos);
 

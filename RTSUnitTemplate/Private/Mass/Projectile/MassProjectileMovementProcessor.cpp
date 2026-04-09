@@ -81,14 +81,16 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 			if (Projectile.LifeTime >= Projectile.MaxLifeTime)
 			{
-				// Deactivate projectile
-				Context.Defer().RemoveTag<FMassProjectileActiveTag>(Context.GetEntity(i));
+				// Destroy projectile entity
+				Context.Defer().DestroyEntity(Context.GetEntity(i));
 
 				// Cleanup visuals
 				if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 				{
-					FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+					// Set Scale to 0 AND move far away to prevent ANY visual artifacts (including shadows)
+					FTransform HiddenTransform(FRotator::ZeroRotator, FVector(0.f, 0.f, -1000000.f), FVector::ZeroVector);
 					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, HiddenTransform, true, true, true);
+					Visual.InstanceIndex = INDEX_NONE;
 				}
 
 				if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())
@@ -121,31 +123,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 				}
 			}
 
-			if (Projectile.LifeTime >= Projectile.MaxLifeTime)
-			{
-				// Deactivate projectile
-				Context.Defer().RemoveTag<FMassProjectileActiveTag>(Context.GetEntity(i));
-				if (Visual.ISMComponent.IsValid())
-				{
-					FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
-					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, HiddenTransform, true, true, true);
-				}
-
-				if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())
-				{
-					NC_A->Deactivate();
-					NC_A->SetVisibility(false);
-					NC_A->DestroyComponent();
-				}
-
-				if (UNiagaraComponent* NC_B = Visual.Niagara_B.Get())
-				{
-					NC_B->Deactivate();
-					NC_B->SetVisibility(false);
-					NC_B->DestroyComponent();
-				}
-				continue;
-			}
 
 			FVector CurrentLocation = Transform.GetLocation();
 			FVector TargetLocation = Projectile.TargetLocation;
@@ -304,7 +281,9 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
                     }
 				}
 
-				float MoveDist = (Projectile.Speed * 10.f) * DeltaTime;
+				// ROBUSTHEIT: Falls das Projektil mit Speed 0 existiert, nutze eine Notfall-Geschwindigkeit (mind. 100 Einheiten/s)
+				const float EffectiveSpeed = FMath::Max(Projectile.Speed, 10.f); 
+				float MoveDist = (EffectiveSpeed * 10.f) * DeltaTime;
 				float DistToTarget = FVector::Dist(CurrentLocation, TargetLocation);
 
 				if (MoveDist >= DistToTarget && !Projectile.bFollowTarget && !Projectile.bContinueAfterTarget)

@@ -83,13 +83,13 @@ struct FDijkstraMatrix
 	GENERATED_USTRUCT_BODY()
 
 	UPROPERTY()
-	int32 Id;
+	int32 Id = 0;
 	
 	UPROPERTY()
 	TArray<FDijkstraRow> Matrix;
 	
 	UPROPERTY()
-	FVector3d CenterPoint;
+	FVector3d CenterPoint = FVector3d::Zero();
 
 };
 
@@ -100,9 +100,9 @@ struct FPathPoint
 	GENERATED_USTRUCT_BODY()
 		
 	UPROPERTY()
-	int32 Id;
+	int32 Id = 0;
 	
 	UPROPERTY()
-	FVector3d Point;
+	FVector3d Point = FVector3d::Zero();
 		
 };

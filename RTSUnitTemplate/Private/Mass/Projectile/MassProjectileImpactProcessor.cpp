@@ -130,13 +130,15 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					
 					if (Projectile.PiercedTargets >= Projectile.MaxPiercedTargets)
 					{
-						ProjContext.Defer().RemoveTag<FMassProjectileActiveTag>(ProjEntity);
+						ProjContext.Defer().DestroyEntity(ProjEntity);
 						
 						FMassProjectileVisualFragment& Visual = VisualList[i];
 						if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 						{
-							FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+							// Set Scale to 0 AND move far away to prevent ANY visual artifacts (including shadows)
+							FTransform HiddenTransform(FRotator::ZeroRotator, FVector(0.f, 0.f, -1000000.f), FVector::ZeroVector);
 							Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, HiddenTransform, true, true, true);
+							Visual.InstanceIndex = INDEX_NONE;
 						}
 
 						if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())
