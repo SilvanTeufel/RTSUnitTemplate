@@ -124,7 +124,31 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
             // Compute effective repair reach based on FollowRadius (keep hysteresis)
             const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
-            const float EffectiveReach = CharFrag.CapsuleRadius + FriendlyRadius + FollowRadius;
+            
+            float AttackerRadius = CharFrag.CapsuleRadius;
+            float TargetRadius = FriendlyRadius;
+
+            FVector Dir = (FriendlyLoc - CurrentTransform.GetLocation());
+            Dir.Z = 0.f;
+
+            if (!Dir.IsNearlyZero())
+            {
+                Dir.Normalize();
+                AttackerRadius = CharFrag.GetRadiusInDirection(Dir, CurrentTransform.GetRotation().Rotator());
+
+                if (const FMassAgentCharacteristicsFragment* FriendlyChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    if (FriendlyChar->bUseBoxComponent)
+                    {
+                        if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                        {
+                            TargetRadius = FriendlyChar->GetRadiusInDirection(-Dir, FriendlyXform->GetTransform().GetRotation().Rotator());
+                        }
+                    }
+                }
+            }
+
+            const float EffectiveReach = AttackerRadius + TargetRadius + FollowRadius;
             const float EnterBuffer = 20.f; // hysteresis buffer for enter
 
             const float Dist2D = FVector::Dist2D(CurrentTransform.GetLocation(), FriendlyLoc);

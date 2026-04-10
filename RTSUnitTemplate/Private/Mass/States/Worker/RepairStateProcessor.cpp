@@ -11,7 +11,7 @@
 
 URepairStateProcessor::URepairStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::All;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -25,7 +25,7 @@ void URepairStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -56,95 +56,148 @@ void URepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         return;
     }
 
+    UWorld* World = EntityManager.GetWorld();
+    if (!World) return;
+
+    const bool bIsClient = (World->GetNetMode() == NM_Client);
+
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, &EntityManager, bIsClient](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
-        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
-        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            FMassAIStateFragment& StateFrag = StateList[i];
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
-            const FTransform& CurrentTransform = TransformList[i].GetTransform();
-            const FMassAITargetFragment& TargetFrag = TargetList[i];
-            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-
-            // 1) Distance regression/out-of-range check with hysteresis
-            const FMassEntityHandle TargetEntity = TargetFrag.FriendlyTargetEntity;
-            bool bIsTargetActive = EntityManager.IsEntityActive(TargetEntity);
-            bool bIsTargetAlive = false;
-
-            if (bIsTargetActive)
+            if (bIsClient)
             {
-                if (const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity))
-                {
-                    bIsTargetAlive = TargetStats->Health > 0.f;
-                }
+                ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i);
             }
-
-            if ((!bIsTargetActive || !bIsTargetAlive) && !StateFrag.SwitchingState)
+            else
             {
-                UE_LOG(LogTemp, Log, TEXT("[Repair] Target invalid or dead -> GoToBase for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
-                StateFrag.SwitchingState = true;
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
-                }
-                continue;
+                ServerExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i);
             }
-            
-            if (bIsTargetActive && bIsTargetAlive)
-            {
-                FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
-                float FriendlyRadius = 0.f;
-                if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
-                {
-                    FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
-                }
-                if (const FMassAgentCharacteristicsFragment* FriendlyChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
-                {
-                    FriendlyRadius = FriendlyChar->CapsuleRadius;
-                }
-
-                const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
-                const float EffectiveReach = CharFrag.CapsuleRadius + FriendlyRadius + FollowRadius;
-                const float ExitBuffer = 40.f;
-                const float Dist2D = FVector::Dist2D(CurrentTransform.GetLocation(), FriendlyLoc);
-
-                if (Dist2D > (EffectiveReach + ExitBuffer) && !StateFrag.SwitchingState)
-                {
-                    UE_LOG(LogTemp, Log, TEXT("[Repair] Out of range (%.1f > %.1f) -> GoToRepair for Entity [%d:%d]"), Dist2D, (EffectiveReach + ExitBuffer), Entity.Index, Entity.SerialNumber);
-                    StateFrag.SwitchingState = true;
-                    if (SignalSubsystem)
-                    {
-                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToRepair, Entity);
-                    }
-                    continue;
-                }
-            }
-
-            // 2) Cast time reached -> GoToBase
-            if (StateFrag.StateTimer >= StatsFrag.CastTime && !StateFrag.SwitchingState)
-            {
-                UE_LOG(LogTemp, Log, TEXT("[Repair] Cast complete (%.2f/%.2f) -> GoToBase for Entity [%d:%d]"), StateFrag.StateTimer, StatsFrag.CastTime, Entity.Index, Entity.SerialNumber);
-                StateFrag.SwitchingState = true;
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
-                }
-                continue;
-            }
-
-            // 3) Drive repair-time synchronization each tick
-            SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SyncRepairTime, Entity);
         }
     });
+}
+
+void URepairStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
+    FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
+    const FMassCombatStatsFragment& StatsFrag, const FMassEntityHandle Entity, const int32 EntityIdx)
+{
+    const auto TransformList = Context.GetMutableFragmentView<FTransformFragment>();
+    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+    
+    FTransform& CurrentTransform = TransformList[EntityIdx].GetMutableTransform();
+    const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
+
+    // 1) Distance regression/out-of-range check with hysteresis
+    const FMassEntityHandle TargetEntity = TargetFrag.FriendlyTargetEntity;
+    bool bIsTargetActive = EntityManager.IsEntityActive(TargetEntity);
+    bool bIsTargetAlive = false;
+
+    if (bIsTargetActive)
+    {
+        if (const FMassCombatStatsFragment* TargetStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity))
+        {
+            bIsTargetAlive = TargetStats->Health > 0.f;
+        }
+    }
+
+    if ((!bIsTargetActive || !bIsTargetAlive) && !StateFrag.SwitchingState)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Repair] Target invalid or dead -> GoToBase for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
+        StateFrag.SwitchingState = true;
+        if (SignalSubsystem)
+        {
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::GoToBase, Entity);
+        }
+        return;
+    }
+    
+    if (bIsTargetActive && bIsTargetAlive)
+    {
+        FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+        float FriendlyRadius = 0.f;
+        if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+        {
+            FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+        }
+        if (const FMassAgentCharacteristicsFragment* FriendlyChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+        {
+            FriendlyRadius = FriendlyChar->CapsuleRadius;
+        }
+
+        const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+        
+        float AttackerRadius = CharFrag.CapsuleRadius;
+        float TargetRadius = FriendlyRadius;
+
+        FVector Dir = (FriendlyLoc - CurrentTransform.GetLocation());
+        Dir.Z = 0.f;
+
+        if (!Dir.IsNearlyZero())
+        {
+            Dir.Normalize();
+            AttackerRadius = CharFrag.GetRadiusInDirection(Dir, CurrentTransform.GetRotation().Rotator());
+
+            if (const FMassAgentCharacteristicsFragment* FriendlyChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+            {
+                if (FriendlyChar->bUseBoxComponent)
+                {
+                    if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                    {
+                        TargetRadius = FriendlyChar->GetRadiusInDirection(-Dir, FriendlyXform->GetTransform().GetRotation().Rotator());
+                    }
+                }
+            }
+        }
+
+        const float EffectiveReach = AttackerRadius + TargetRadius + FollowRadius;
+        const float ExitBuffer = 40.f;
+        const float Dist2D = FVector::Dist2D(CurrentTransform.GetLocation(), FriendlyLoc);
+
+        if (Dist2D > (EffectiveReach + ExitBuffer) && !StateFrag.SwitchingState)
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Repair] Out of range (%.1f > %.1f) -> GoToRepair for Entity [%d:%d]"), Dist2D, (EffectiveReach + ExitBuffer), Entity.Index, Entity.SerialNumber);
+            StateFrag.SwitchingState = true;
+            if (SignalSubsystem)
+            {
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::GoToRepair, Entity);
+            }
+            return;
+        }
+
+        // Rotation Logic
+        FVector LookDir = Dir; // Dir is already normalized FriendlyLoc - CurrentLoc
+        if (!LookDir.IsNearlyZero())
+        {
+            FQuat TargetRotation = FRotationMatrix::MakeFromX(LookDir).ToQuat();
+            CurrentTransform.SetRotation(TargetRotation);
+        }
+    }
+
+    // 2) Cast time reached -> GoToBase
+    if (StateFrag.StateTimer >= StatsFrag.CastTime && !StateFrag.SwitchingState)
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Repair] Cast complete (%.2f/%.2f) -> GoToBase for Entity [%d:%d]"), StateFrag.StateTimer, StatsFrag.CastTime, Entity.Index, Entity.SerialNumber);
+        StateFrag.SwitchingState = true;
+        if (SignalSubsystem)
+        {
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::GoToBase, Entity);
+        }
+        return;
+    }
+
+    // 3) Drive repair-time synchronization each tick
+    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncRepairTime, Entity);
+}
+
+void URepairStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
+    FMassAIStateFragment& AIState, const FMassAITargetFragment& TargetFrag, 
+    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx)
+{
+    // Rotation logic on client is now handled by UActorTransformSyncProcessor
 }

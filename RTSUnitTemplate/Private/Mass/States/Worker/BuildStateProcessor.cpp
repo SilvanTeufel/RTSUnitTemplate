@@ -7,6 +7,7 @@
 #include "Async/Async.h"             // For AsyncTask
 #include "Engine/World.h"            // For UWorld
 #include "Templates/SubclassOf.h"    // For TSubclassOf check
+#include "MassCommonFragments.h"
 
 // Your project specific includes
 #include "Mass/UnitMassTag.h"
@@ -16,7 +17,7 @@
 
 UBuildStateProcessor::UBuildStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::All;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -30,6 +31,7 @@ void UBuildStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     // Read-only fragments needed by the external system handling SpawnBuildingRequest signal:
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite); // For BuildAreaPosition
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // For TeamID
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 
     // State Tag
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::All);
@@ -69,52 +71,75 @@ void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
     if (!SignalSubsystem) return;
 
+    const bool bIsClient = (World->GetNetMode() == NM_Client);
+
     EntityQuery.ForEachEntityChunk(Context,
-        [this, World](FMassExecutionContext& Context)
+        [this, &EntityManager, bIsClient](FMassExecutionContext& ChunkContext)
     {
-        const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
-        const TArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetMutableFragmentView<FMassWorkerStatsFragment>();
+        auto AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        auto WorkerStatsList = ChunkContext.GetMutableFragmentView<FMassWorkerStatsFragment>();
+        const int32 NumEntities = ChunkContext.GetNumEntities();
 
-        const int32 NumEntities = Context.GetNumEntities();
-
-        //UE_LOG(LogTemp, Log, TEXT("UBuildStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            FMassAIStateFragment& AIState = AIStateList[i];
-            const FMassEntityHandle Entity = Context.GetEntity(i);
-            const FMassWorkerStatsFragment WorkerStats = WorkerStatsList[i];
-            
-
-            if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable)
+            if (bIsClient)
             {
-                AIState.SwitchingState = true;
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::GoToBase, Entity);
-                }
-                continue; // Skip this entity
+                ClientExecute(EntityManager, ChunkContext, AIStateList[i], WorkerStatsList[i], ChunkContext.GetEntity(i), i);
             }
-
-            const float PreviousStateTimer = AIState.StateTimer;
-            AIState.StateTimer += ExecutionInterval;
-            AIState.DeltaTime = ExecutionInterval;
-            
-            if (SignalSubsystem)
+            else
             {
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncCastTime, Entity);
+                ServerExecute(EntityManager, ChunkContext, AIStateList[i], WorkerStatsList[i], ChunkContext.GetEntity(i), i);
             }
-            // --- Completion Check ---
-            if (AIState.StateTimer >= WorkerStats.BuildTime && !AIState.SwitchingState)
-            {
-                AIState.SwitchingState = true;
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SpawnBuildingRequest, Entity);
-                }
-                continue; // Skip to next entity in chunk
-            }
+        }
+    });
 
-        } // End loop through entities
-    }); // End ForEachEntityChunk
+}
 
+void UBuildStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
+    FMassAIStateFragment& AIState, FMassWorkerStatsFragment& WorkerStats, const FMassEntityHandle Entity, const int32 EntityIdx)
+{
+    if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable)
+    {
+        AIState.SwitchingState = true;
+        if (SignalSubsystem)
+        {
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::GoToBase, Entity);
+        }
+        return;
+    }
+
+    AIState.StateTimer += ExecutionInterval;
+    AIState.DeltaTime = ExecutionInterval;
+
+    if (SignalSubsystem)
+    {
+        SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncCastTime, Entity);
+    }
+
+    // --- Completion Check ---
+    if (AIState.StateTimer >= WorkerStats.BuildTime && !AIState.SwitchingState)
+    {
+        AIState.SwitchingState = true;
+        if (SignalSubsystem)
+        {
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SpawnBuildingRequest, Entity);
+        }
+    }
+
+    // Rotation Logic
+    auto TransformList = Context.GetMutableFragmentView<FTransformFragment>();
+    FTransform& CurrentTransform = TransformList[EntityIdx].GetMutableTransform();
+    FVector LookDir = (WorkerStats.BuildAreaPosition - CurrentTransform.GetLocation());
+    LookDir.Z = 0.f;
+    if (!LookDir.IsNearlyZero())
+    {
+        FQuat TargetRotation = FRotationMatrix::MakeFromX(LookDir).ToQuat();
+        CurrentTransform.SetRotation(TargetRotation);
+    }
+}
+
+void UBuildStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
+    FMassAIStateFragment& AIState, FMassWorkerStatsFragment& WorkerStats, const FMassEntityHandle Entity, const int32 EntityIdx)
+{
+    // Rotation logic on client is now handled by UActorTransformSyncProcessor
 }
