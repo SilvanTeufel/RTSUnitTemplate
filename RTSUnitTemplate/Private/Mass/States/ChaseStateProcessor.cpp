@@ -298,7 +298,11 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
             {
                 // Queue signal instead of sending directly
-                StopMovement(MoveTarget, World);
+                if (!Stats.bCanMoveWhileAttacking)
+                {
+                    StopMovement(MoveTarget, World);
+                }
+                
                 if (SignalSubsystem)
                 {
                     // MirrorStopMovement disabled (movement now replicated via Mass bubble)
@@ -312,10 +316,17 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
            //FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
 
            FVector TargetLocation = TargetFrag.LastKnownLocation;
-
+           if (Stats.bCanMoveWhileAttacking)
+           {
+               const float DistToStoredSq = FVector::DistSquared2D(Transform.GetLocation(), StateFrag.StoredLocation);
+               if (DistToStoredSq > FMath::Square(MoveTarget.SlackRadius))
+               {
+                   TargetLocation = StateFrag.StoredLocation;
+               }
+           }
            // If we are a ground unit and the target has characteristic data, 
            // use its buffered ground height for our movement target Z
-           if (TargetCharFrag)
+           if (TargetCharFrag && !Stats.bCanMoveWhileAttacking)
            {
                TargetLocation.Z = TargetCharFrag->LastGroundLocation;
            }

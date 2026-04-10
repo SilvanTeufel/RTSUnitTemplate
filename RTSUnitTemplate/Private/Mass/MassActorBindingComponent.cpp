@@ -953,6 +953,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             CombatStatsFrag->PauseDuration = UnitOwner->PauseDuration;// We need to add this to Attributes i guess;
         	CombatStatsFrag->AttackDuration = UnitOwner->AttackDuration;
             CombatStatsFrag->bUseProjectile = UnitOwner->UseProjectile; // Assuming UsesProjectile() on Attributes
+        	CombatStatsFrag->bCanMoveWhileAttacking = CanMoveWhileAttacking;
         	CombatStatsFrag->IsAttackedDuration = IsAttackedDuration;
         	CombatStatsFrag->CastTime = UnitOwner->CastTime;
         	CombatStatsFrag->IsInitialized = UnitOwner->IsInitialized;

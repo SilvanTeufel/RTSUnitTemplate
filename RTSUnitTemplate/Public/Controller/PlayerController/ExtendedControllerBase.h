@@ -292,9 +292,6 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddAbilityIndex(int Add);
-
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void ApplyMovementInputToUnit(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID);

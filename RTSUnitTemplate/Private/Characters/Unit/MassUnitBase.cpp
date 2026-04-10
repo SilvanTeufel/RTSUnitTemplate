@@ -3037,10 +3037,18 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 		}
 		else
 		{
+			FMassCombatStatsFragment* CombatStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
+			bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
+			bool bIsMovingWhileAttacking = CombatStatsFrag && CombatStatsFrag->bCanMoveWhileAttacking && bIsAttackingOrPausing;
+
 			AITFrag->FriendlyTargetEntity.Reset();
-			AITFrag->TargetEntity.Reset();
-			AITFrag->IsFocusedOnTarget = false;
 			AITFrag->LastKnownFriendlyLocation = FVector::ZeroVector;
+
+			if (!bIsMovingWhileAttacking)
+			{
+				AITFrag->TargetEntity.Reset();
+				AITFrag->IsFocusedOnTarget = false;
+			}
 		}
 	}
 

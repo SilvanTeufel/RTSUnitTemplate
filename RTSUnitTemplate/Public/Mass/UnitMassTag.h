@@ -671,9 +671,12 @@ struct FMassCombatStatsFragment : public FMassFragment
     float PauseDuration = 0.5f;
 
      /** Flag, ob die Einheit Projektile verwendet. */
-     UPROPERTY(EditAnywhere, Category = "Stats")
-     bool bUseProjectile = false;
+   UPROPERTY(EditAnywhere, Category = "Stats")
+    bool bUseProjectile = false;
 
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	bool bCanMoveWhileAttacking = false;
+	
 	UPROPERTY(EditAnywhere, Category = "Stats")
 	float MinRange = 0.f;
 };

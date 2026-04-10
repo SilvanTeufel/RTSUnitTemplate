@@ -522,18 +522,6 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 }
 
 
-void AExtendedControllerBase::ApplyMovementInputToUnit_Implementation(const FVector& Direction, float Scale, AUnitBase* Unit, int TeamId)
-{
-	if (Unit && (Unit->TeamId == TeamId))
-	{
-		if (Unit->GetController()) // Ensure the unit has a valid Controller
-		{
-			Unit->AddMovementInput(Direction, Scale);
-			Unit->SetUnitState(UnitData::Run);
-		}
-	}
-}
-
 void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamId, EGASAbilityInputID InputID)
 {
 		if(!RTSGameMode || !RTSGameMode->AllUnits.Num()) return;
