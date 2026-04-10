@@ -87,7 +87,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				bool bShouldImpact = false;
 				if (Projectile.IsHealing)
 				{
-					bShouldImpact = bSameTeam;
+					bShouldImpact = bSameTeam && bIsTarget;
 				}
 				else
 				{
@@ -120,6 +120,11 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				if (DistSq <= FMath::Square(CombinedRadius))
 				{
 					// Impact!
+					if (bIsTarget)
+					{
+						Projectile.bHasHitTarget = true;
+					}
+					
 					// Register hit
 					if (Projectile.HitCount < 16)
 					{

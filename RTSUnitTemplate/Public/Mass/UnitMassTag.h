@@ -1168,6 +1168,9 @@ struct FMassProjectileFragment : public FMassFragment
 	bool bContinueAfterTarget = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bHasHitTarget = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FlightDirection = FVector::ZeroVector;
 
     FMassEntityHandle HitEntities[16];
