@@ -115,7 +115,8 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 		ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 		ClientEntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 	*/
-		ClientEntityQuery.RegisterWithProcessor(*this);
+	ClientEntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    ClientEntityQuery.RegisterWithProcessor(*this);
 }
 
 
@@ -403,14 +404,36 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
 void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
 {
     // Proceed if we have either a resolved target entity OR a valid target flag with a non-zero last known location, and rotation to enemy is enabled
-    const bool bHasUsableTarget = TargetFrag.TargetEntity.IsSet() || (TargetFrag.bHasValidTarget && !TargetFrag.LastKnownLocation.IsNearlyZero());
+    const bool bHasUsableTarget = TargetFrag.TargetEntity.IsSet() || (TargetFrag.bHasValidTarget && !TargetFrag.LastKnownLocation.IsNearlyZero()) ||
+                                   TargetFrag.FriendlyTargetEntity.IsSet() || !TargetFrag.LastKnownFriendlyLocation.IsNearlyZero();
+
     if (!bHasUsableTarget || !Char.RotatesToEnemy)
     {
         return;
     }
     
-    FVector TargetLocation = TargetFrag.LastKnownLocation;
-    const FMassEntityHandle TargetEntity = TargetFrag.TargetEntity;
+    FVector TargetLocation = FVector::ZeroVector;
+    FMassEntityHandle TargetEntity;
+
+    if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
+    {
+        TargetEntity = TargetFrag.TargetEntity;
+        TargetLocation = TargetFrag.LastKnownLocation;
+    }
+    else if (EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity))
+    {
+        TargetEntity = TargetFrag.FriendlyTargetEntity;
+        TargetLocation = TargetFrag.LastKnownFriendlyLocation;
+    }
+    else if (!TargetFrag.LastKnownLocation.IsNearlyZero())
+    {
+        TargetLocation = TargetFrag.LastKnownLocation;
+    }
+    else if (!TargetFrag.LastKnownFriendlyLocation.IsNearlyZero())
+    {
+        TargetLocation = TargetFrag.LastKnownFriendlyLocation;
+    }
+
     if (EntityManager.IsEntityValid(TargetEntity))
     {
         if (const FTransformFragment* TargetXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity))
@@ -419,6 +442,11 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
         }
     }
    
+    if (TargetLocation.IsNearlyZero())
+    {
+        return;
+    }
+
     FVector Dir = TargetLocation - CurrentActorLocation;
     Dir.Z = 0.f;
     if (!Dir.Normalize())
@@ -557,6 +585,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
+        const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const TConstArrayView<FMassRepresentationLODFragment> LODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -588,11 +617,12 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
             // 1. Adjust rotation based on state (moving vs. attacking)
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());;
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
 
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
             
-
             if (bIsDead || bIsYawFollowing)
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)
@@ -612,7 +642,30 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             }
             else
             {
-                RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                // Extension: If we are building and have a WorkerStatsFragment, prioritize the build area position
+                bool bRotatedToBuildArea = false;
+                if (WorkerStatsList.IsValidIndex(i) && DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()))
+                {
+                    const FMassWorkerStatsFragment& WS = WorkerStatsList[i];
+                    if (!WS.BuildAreaPosition.IsNearlyZero())
+                    {
+                        FVector LookDir = (WS.BuildAreaPosition - CurrentActorLocation);
+                        LookDir.Z = 0.f;
+                        if (!LookDir.IsNearlyZero())
+                        {
+                            const FRotator TargetRot = LookDir.Rotation();
+                            const float InterpSpeed = (StatsList[i].RotationSpeed > 0.f) ? StatsList[i].RotationSpeed : CharList[i].RotationSpeed;
+                            const FRotator NewRot = FMath::RInterpTo(Actor->GetActorRotation(), TargetRot, ActualDeltaTime, InterpSpeed);
+                            MassTransform.SetRotation(NewRot.Quaternion());
+                            bRotatedToBuildArea = true;
+                        }
+                    }
+                }
+
+                if (!bRotatedToBuildArea)
+                {
+                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                }
             }
 
             // 2. Adjust height for ground snapping or flying

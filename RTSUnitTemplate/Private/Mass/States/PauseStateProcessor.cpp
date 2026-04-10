@@ -49,7 +49,7 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddTagRequirement<FMassStateIdleTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
+    //EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 
     EntityQuery.RegisterWithProcessor(*this);
 }

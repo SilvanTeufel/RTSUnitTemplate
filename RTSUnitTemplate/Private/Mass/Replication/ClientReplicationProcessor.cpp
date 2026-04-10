@@ -104,6 +104,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassRotateToMouseFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FRunAnimationFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	// Prediction fragment so we can skip reconciliation while client-side prediction is active
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
@@ -465,6 +466,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
 			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
 			TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
+			TArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetMutableFragmentView<FMassWorkerStatsFragment>();
 			TArrayView<FMassRotateToMouseFragment> RotateToMouseList = Context.GetMutableFragmentView<FMassRotateToMouseFragment>();
 			TArrayView<FRunAnimationFragment> RunAnimList = Context.GetMutableFragmentView<FRunAnimationFragment>();
 			// Prediction fragment view (mutable)
@@ -616,6 +618,22 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								{
     									AITFrag.TargetEntity.Reset();
     								}
+
+									// Friendly Target
+									AITFrag.LastKnownFriendlyLocation = FVector(TagItem->AIFriendlyTargetLastKnownLocation);
+									const uint32 FriendlyTgtID = TagItem->AIFriendlyTargetNetID;
+									if (FriendlyTgtID != 0)
+									{
+										if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(FriendlyTgtID))
+										{
+											AITFrag.FriendlyTargetEntity = *FoundHandle;
+										}
+									}
+									else
+									{
+										AITFrag.FriendlyTargetEntity.Reset();
+									}
+
     								// Rebuild seen sets from replicated NetID arrays
     								AITFrag.PreviouslySeen.Reset();
     								for (const uint32 SeenID : TagItem->AITargetPrevSeenIDs)
@@ -729,6 +747,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								AIS.BirthTime = TagItem->AIS_BirthTime;
 								AIS.DeathTime = TagItem->AIS_DeathTime;
 								AIS.IsInitialized = TagItem->AIS_IsInitialized;
+							}
+							if (WorkerStatsList.IsValidIndex(EntityIdx))
+							{
+								WorkerStatsList[EntityIdx].BuildAreaPosition = FVector(TagItem->Worker_BuildAreaPosition);
 							}
 								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
 								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
@@ -875,6 +897,22 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									AITFrag.IsFocusedOnTarget = (UseItem->AITargetFlags & 2u) != 0;
 									AITFrag.LastKnownLocation = FVector(UseItem->AITargetLastKnownLocation);
 									AITFrag.AbilityTargetLocation = FVector(UseItem->AbilityTargetLocation);
+									
+									// Resolve friendly target NetID
+									const uint32 FriendlyTgtID = UseItem->AIFriendlyTargetNetID;
+									if (FriendlyTgtID != 0)
+									{
+										if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(FriendlyTgtID))
+										{
+											AITFrag.FriendlyTargetEntity = *FoundHandle;
+										}
+									}
+									else
+									{
+										AITFrag.FriendlyTargetEntity.Reset();
+									}
+									AITFrag.LastKnownFriendlyLocation = FVector(UseItem->AIFriendlyTargetLastKnownLocation);
+
 									// Resolve target entity handle on client if we know the NetID -> Entity mapping in this chunk
 									const uint32 TgtID = UseItem->AITargetNetID;
 									if (TgtID != 0)
@@ -1003,6 +1041,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									if (!Effect.OscillationTargetISM.IsValid()) Effect.OscillationTargetISM = UnitBase->ISMComponent;
 								}
 							}
+
+							if (WorkerStatsList.IsValidIndex(EntityIdx))
+							{
+								FMassWorkerStatsFragment& WS = WorkerStatsList[EntityIdx];
+								WS.BuildAreaPosition = FVector(UseItem->Worker_BuildAreaPosition);
+							}
+
  								// Apply MoveTarget if present (guarded by bStopMovementReplication)
  		           if (UseItem->Move_bHasTarget)
  	       {

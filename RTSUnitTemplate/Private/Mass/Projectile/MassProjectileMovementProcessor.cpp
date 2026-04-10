@@ -66,6 +66,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
                     if (Projectile.Damage >= 0.f) Projectile.Damage = CDO->Damage;
                     Projectile.IsHealing = CDO->IsHealing;
                     Projectile.bContinueAfterTarget = CDO->bContinueAfterTarget;
+                    if (!Projectile.bHasHitTarget) Projectile.bFollowTarget = CDO->FollowTarget;
                     Projectile.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
                     Projectile.ArcHeight = CDO->ArcHeight;
 					// Robust sync for Niagara
@@ -125,6 +126,22 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 
 			FVector CurrentLocation = Transform.GetLocation();
+
+			if (Projectile.bHasHitTarget)
+			{
+				Projectile.bFollowTarget = false;
+				Projectile.bIsHoming = false;
+				Projectile.ArcHeight = 0.f;
+				Projectile.ArcHeightDistanceFactor = 0.f;
+				Projectile.FlightDirection.Z = 0.f;
+				if (Projectile.FlightDirection.IsNearlyZero())
+				{
+					Projectile.FlightDirection = Transform.GetRotation().GetForwardVector();
+					Projectile.FlightDirection.Z = 0.f;
+				}
+				Projectile.FlightDirection.Normalize();
+			}
+			
 			FVector TargetLocation = Projectile.TargetLocation;
 
             if (LogThrottle % 60 == 0) {

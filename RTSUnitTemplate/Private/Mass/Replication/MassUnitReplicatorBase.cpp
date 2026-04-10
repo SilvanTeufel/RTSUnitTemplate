@@ -271,6 +271,19 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 }
             }
             NewItem.AITargetNetID = TargetNetIDVal;
+
+            // Resolve friendly target NetID
+            uint32 FriendlyTargetNetIDVal = 0u;
+            if (AIT->FriendlyTargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->FriendlyTargetEntity))
+            {
+                if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                {
+                    FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                }
+            }
+            NewItem.AIFriendlyTargetNetID = FriendlyTargetNetIDVal;
+            NewItem.AIFriendlyTargetLastKnownLocation = AIT->LastKnownFriendlyLocation;
+
             // Build seen arrays (cap to 64 entries each to limit bandwidth)
             NewItem.AITargetPrevSeenIDs.Reset();
             NewItem.AITargetCurrSeenIDs.Reset();
@@ -367,6 +380,12 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.AIS_ProjectileScale = AIS->LastProjectileScale;
             NewItem.AIS_ProjectileDamage = AIS->LastProjectileDamage;
             NewItem.AIS_ProjectileMaxPiercedTargets = AIS->LastProjectileMaxPiercedTargets;
+        }
+
+        // Fill Worker Stats
+        if (const FMassWorkerStatsFragment* WS = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(Entity))
+        {
+            NewItem.Worker_BuildAreaPosition = WS->BuildAreaPosition;
         }
 
         // Fill RotateToMouse target location
@@ -701,6 +720,18 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 }
                             }
                             NewItem.AITargetNetID = TargetNetIDVal;
+
+                            // Resolve friendly target NetID
+                            uint32 FriendlyTargetNetIDVal = 0u;
+                            if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
+                            {
+                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                                {
+                                    FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                                }
+                            }
+                            NewItem.AIFriendlyTargetNetID = FriendlyTargetNetIDVal;
+                            NewItem.AIFriendlyTargetLastKnownLocation = AIT->LastKnownFriendlyLocation;
                         }
                         // Fill additional replicated fragments at creation time (full data)
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
@@ -862,6 +893,19 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->AITargetFlags != NewFlags) { Item->AITargetFlags = NewFlags; bDirty = true; }
                             if (Item->AITargetNetID != NewTargetNetID) { Item->AITargetNetID = NewTargetNetID; bDirty = true; }
                             if (!Item->AITargetLastKnownLocation.Equals(AIT->LastKnownLocation, 10.0f)) { Item->AITargetLastKnownLocation = AIT->LastKnownLocation; bDirty = true; }
+                            
+                            // Sync friendly target
+                            uint32 NewFriendlyTargetNetID = 0u;
+                            if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
+                            {
+                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                                {
+                                    NewFriendlyTargetNetID = TgtNet->NetID.GetValue();
+                                }
+                            }
+                            if (Item->AIFriendlyTargetNetID != NewFriendlyTargetNetID) { Item->AIFriendlyTargetNetID = NewFriendlyTargetNetID; bDirty = true; }
+                            if (!Item->AIFriendlyTargetLastKnownLocation.Equals(AIT->LastKnownFriendlyLocation, 10.0f)) { Item->AIFriendlyTargetLastKnownLocation = AIT->LastKnownFriendlyLocation; bDirty = true; }
+
                             if (!Item->AbilityTargetLocation.Equals(AIT->AbilityTargetLocation, 10.0f)) { Item->AbilityTargetLocation = AIT->AbilityTargetLocation; bDirty = true; }
 
                             // Sync RunAnimation fragment data
@@ -1023,6 +1067,40 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 Item->AIS_ProjectileDamage = AIS->LastProjectileDamage;
                                 Item->AIS_ProjectileMaxPiercedTargets = AIS->LastProjectileMaxPiercedTargets;
                                 Item->AIS_ProjectileSpawnOffset = AIS->LastProjectileSpawnOffset;
+                            }
+                        }
+
+                        // Update Friendly Target info
+                        if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
+                        {
+                            uint32 FriendlyTargetNetIDVal = 0u;
+                            if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityActive(AIT->FriendlyTargetEntity))
+                            {
+                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                                {
+                                    FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                                }
+                            }
+
+                            if (Item->AIFriendlyTargetNetID != FriendlyTargetNetIDVal)
+                            {
+                                Item->AIFriendlyTargetNetID = FriendlyTargetNetIDVal;
+                                bDirty = true;
+                            }
+                            if (!Item->AIFriendlyTargetLastKnownLocation.Equals(AIT->LastKnownFriendlyLocation, 1.0f))
+                            {
+                                Item->AIFriendlyTargetLastKnownLocation = AIT->LastKnownFriendlyLocation;
+                                bDirty = true;
+                            }
+                        }
+
+                        // Update Worker Stats (BuildAreaPosition)
+                        if (const FMassWorkerStatsFragment* WS = EM->GetFragmentDataPtr<FMassWorkerStatsFragment>(EH))
+                        {
+                            if (!Item->Worker_BuildAreaPosition.Equals(WS->BuildAreaPosition, 1.0f))
+                            {
+                                Item->Worker_BuildAreaPosition = WS->BuildAreaPosition;
+                                bDirty = true;
                             }
                         }
 

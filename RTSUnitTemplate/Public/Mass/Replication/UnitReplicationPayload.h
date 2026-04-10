@@ -155,6 +155,19 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	uint32 AIS_LastTargetNetID = 0u;
 
+	// --- Worker and Friendly Target replication ---
+	// NetID of the current AI friendly target entity (0 if none/invalid)
+	UPROPERTY()
+	uint32 AIFriendlyTargetNetID = 0u;
+
+	// Last known location of the friendly target
+	UPROPERTY()
+	FVector_NetQuantize AIFriendlyTargetLastKnownLocation;
+
+	// Build area position for worker state
+	UPROPERTY()
+	FVector_NetQuantize Worker_BuildAreaPosition;
+
 	UPROPERTY()
 	FVector_NetQuantize10 AIS_ProjectileTargetLocation = FVector::ZeroVector;
 

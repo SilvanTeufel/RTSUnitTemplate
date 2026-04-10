@@ -195,6 +195,9 @@ public:
 	bool UseRotateToTargetProcessor = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	bool CanMoveWhileAttacking = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float RotateToTargetDuration = 1.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
