@@ -368,8 +368,9 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
         LookAtDir.Z = 0.f;
         if (LookAtDir.Normalize())
         {
-            
-            if (UnitBase->GetUnitState() != UnitData::Run && UnitBase->GetUnitState() != UnitData::GoToRepair && UnitBase->GetUnitState() != UnitData::Repair && UnitBase->GetUnitState() != UnitData::Casting)
+            const bool bIsAttackingOrPaused = (UnitBase->GetUnitState() == UnitData::Attack || UnitBase->GetUnitState() == UnitData::Pause);
+
+            if (!bIsAttackingOrPaused && UnitBase->GetUnitState() != UnitData::Run && UnitBase->GetUnitState() != UnitData::GoToRepair && UnitBase->GetUnitState() != UnitData::Repair && UnitBase->GetUnitState() != UnitData::Casting)
             {
                 UnitBase->SetUnitState(UnitData::Run);
             }
@@ -621,6 +622,9 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
 
+            const bool bRotatesToMovementWhileAttacking = StatsList[i].bCanMoveWhileAttacking && StatsList[i].bRotatesToMovementIfMoveWhileAttacking;
+            const bool bIsMoving = !VelocityList[i].Value.IsNearlyZero(50.f);
+
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
             
             if (bIsDead || bIsYawFollowing)
@@ -636,7 +640,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if (!bIsAttackingOrPaused)
+            else if (!bIsAttackingOrPaused || (bRotatesToMovementWhileAttacking && bIsMoving))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }
@@ -821,6 +825,9 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
 
+            const bool bRotatesToMovementWhileAttacking = StatsList[i].bCanMoveWhileAttacking && StatsList[i].bRotatesToMovementIfMoveWhileAttacking;
+            const bool bIsMoving = !VelocityList[i].Value.IsNearlyZero(50.f);
+
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
             
             if (bIsDead || bIsYawFollowing)
@@ -837,7 +844,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if (!bIsAttackingOrPaused && UnitBase->GetUnitState() != UnitData::Casting)
+            else if ((!bIsAttackingOrPaused && UnitBase->GetUnitState() != UnitData::Casting) || (bRotatesToMovementWhileAttacking && bIsMoving))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }

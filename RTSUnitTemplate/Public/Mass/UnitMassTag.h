@@ -678,6 +678,9 @@ struct FMassCombatStatsFragment : public FMassFragment
 	bool bCanMoveWhileAttacking = false;
 	
 	UPROPERTY(EditAnywhere, Category = "Stats")
+	bool bRotatesToMovementIfMoveWhileAttacking = false;
+	
+	UPROPERTY(EditAnywhere, Category = "Stats")
 	float MinRange = 0.f;
 };
 

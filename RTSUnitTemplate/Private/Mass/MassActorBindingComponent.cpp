@@ -954,6 +954,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CombatStatsFrag->AttackDuration = UnitOwner->AttackDuration;
             CombatStatsFrag->bUseProjectile = UnitOwner->UseProjectile; // Assuming UsesProjectile() on Attributes
         	CombatStatsFrag->bCanMoveWhileAttacking = CanMoveWhileAttacking;
+        	CombatStatsFrag->bRotatesToMovementIfMoveWhileAttacking = RotatesToMovementIfMoveWhileAttacking
         	CombatStatsFrag->IsAttackedDuration = IsAttackedDuration;
         	CombatStatsFrag->CastTime = UnitOwner->CastTime;
         	CombatStatsFrag->IsInitialized = UnitOwner->IsInitialized;

@@ -676,6 +676,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								CS.LoseSightRadius = TagItem->CS_LoseSightRadius;
     								CS.PauseDuration = TagItem->CS_PauseDuration;
     								CS.bUseProjectile = TagItem->CS_bUseProjectile;
+    								CS.bCanMoveWhileAttacking = TagItem->CS_bCanMoveWhileAttacking;
+    								CS.bRotatesToMovementIfMoveWhileAttacking = TagItem->CS_bRotatesToMovementIfMoveWhileAttacking;
     							}
     							if (CharList.IsValidIndex(EntityIdx))
     							{
@@ -950,6 +952,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								CS.LoseSightRadius = UseItem->CS_LoseSightRadius;
  								CS.PauseDuration = UseItem->CS_PauseDuration;
  								CS.bUseProjectile = UseItem->CS_bUseProjectile;
+ 								CS.bCanMoveWhileAttacking = UseItem->CS_bCanMoveWhileAttacking;
+ 								CS.bRotatesToMovementIfMoveWhileAttacking = UseItem->CS_bRotatesToMovementIfMoveWhileAttacking;
  							}
  							if (CharList.IsValidIndex(EntityIdx))
  							{

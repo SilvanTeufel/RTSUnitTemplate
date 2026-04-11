@@ -334,6 +334,8 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.CS_LoseSightRadius = CS->LoseSightRadius;
             NewItem.CS_PauseDuration = CS->PauseDuration;
             NewItem.CS_bUseProjectile = CS->bUseProjectile;
+            NewItem.CS_bCanMoveWhileAttacking = CS->bCanMoveWhileAttacking;
+            NewItem.CS_bRotatesToMovementIfMoveWhileAttacking = CS->bRotatesToMovementIfMoveWhileAttacking;
         }
         if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
         {
@@ -755,6 +757,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.CS_LoseSightRadius = CS->LoseSightRadius;
                             NewItem.CS_PauseDuration = CS->PauseDuration;
                             NewItem.CS_bUseProjectile = CS->bUseProjectile;
+                            NewItem.CS_bCanMoveWhileAttacking = CS->bCanMoveWhileAttacking;
+                            NewItem.CS_bRotatesToMovementIfMoveWhileAttacking = CS->bRotatesToMovementIfMoveWhileAttacking;
                         }
                         if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
                         {
@@ -994,6 +998,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (!FMath::IsNearlyEqual(Item->CS_LoseSightRadius, CS->LoseSightRadius, SightThresh)) { Item->CS_LoseSightRadius = CS->LoseSightRadius; bDirty = true; }
                             if (!FMath::IsNearlyEqual(Item->CS_PauseDuration, CS->PauseDuration, 0.5f)) { Item->CS_PauseDuration = CS->PauseDuration; bDirty = true; }
                             if (Item->CS_bUseProjectile != CS->bUseProjectile) { Item->CS_bUseProjectile = CS->bUseProjectile; bDirty = true; }
+                            if (Item->CS_bCanMoveWhileAttacking != CS->bCanMoveWhileAttacking) { Item->CS_bCanMoveWhileAttacking = CS->bCanMoveWhileAttacking; bDirty = true; }
+                            if (Item->CS_bRotatesToMovementIfMoveWhileAttacking != CS->bRotatesToMovementIfMoveWhileAttacking) { Item->CS_bRotatesToMovementIfMoveWhileAttacking = CS->bRotatesToMovementIfMoveWhileAttacking; bDirty = true; }
                         }
                         // Sync RotateToMouse target location and PlayerId
                         if (const FMassRotateToMouseFragment* RTM = EM->GetFragmentDataPtr<FMassRotateToMouseFragment>(EH))

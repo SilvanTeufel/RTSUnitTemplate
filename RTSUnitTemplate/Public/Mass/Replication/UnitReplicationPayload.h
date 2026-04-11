@@ -97,6 +97,8 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float CS_LoseSightRadius = 0.f;
 	UPROPERTY() float CS_PauseDuration = 0.f;
 	UPROPERTY() bool CS_bUseProjectile = false;
+	UPROPERTY() bool CS_bCanMoveWhileAttacking = false;
+	UPROPERTY() bool CS_bRotatesToMovementIfMoveWhileAttacking = false;
 
 	// --- FMassAgentCharacteristicsFragment (subset) ---
 	UPROPERTY() bool AC_bIsFlying = false;
@@ -246,6 +248,8 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, PredictedPendingShots(0)
 		, PredictionTimer(0.f)
 		, bPredictedLatch(false)
+		, CS_bCanMoveWhileAttacking(false)
+		, CS_bRotatesToMovementIfMoveWhileAttacking(false)
 	{
 	}
 
