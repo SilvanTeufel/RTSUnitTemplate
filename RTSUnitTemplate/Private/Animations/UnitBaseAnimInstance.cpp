@@ -16,6 +16,12 @@ void UUnitBaseAnimInstance::NativeInitializeAnimation()
 {
 	Super::NativeInitializeAnimation();
 	bHasLastActorLocation = false;
+	bWasInLocomotionLastFrame = false;
+	bWasMovingLastFrame = false;
+	FilteredVelocity2D = FVector2D::ZeroVector;
+	LastReliableVelocity2D = FVector2D::ZeroVector;
+	TimeSinceReliableVelocity = 0.0f;
+	bIsReliableMoving = false;
 }
 
 void UUnitBaseAnimInstance::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -53,10 +59,19 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			CharAnimState = UnitBase->GetUnitState();
 			UpdateLocomotionData(UnitBase, Deltaseconds);
 
-			const bool bIsInLocomotion = bUseLocomotionBlendspaceInputs && IsLocomotionState(CharAnimState);
+			// Global override: when enabled, locomotion inputs always drive blendspace consumption.
+			const bool bIsInLocomotion = bUseLocomotionBlendspaceInputs;
 
 			// Detect state transition: leaving locomotion
 			if (!bIsInLocomotion && bWasInLocomotionLastFrame)
+			{
+				SmoothedSpeed = 0.0f;
+				SmoothedDirection = 0.0f;
+			}
+			// Detect state transition: entering locomotion — reset so stale SmoothedSpeed
+			// from a previous movement burst doesn't cause the run animation to play
+			// before the unit actually begins moving (sliding with run anim issue).
+			else if (bIsInLocomotion && !bWasInLocomotionLastFrame)
 			{
 				SmoothedSpeed = 0.0f;
 				SmoothedDirection = 0.0f;
@@ -67,6 +82,13 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			{
 				// Locomotion path: smooth speed and direction, drive blend points directly
 				const float TargetSpeed = LocomotionData.Speed;
+
+				// Start moving edge: snap once so movement animation starts immediately.
+				if (LocomotionData.bIsMoving && !bWasMovingLastFrame)
+				{
+					SmoothedSpeed = TargetSpeed;
+					SmoothedDirection = LocomotionData.DirectionDegrees;
+				}
 
 				// Lerp speed with asymmetric rates: fast up, slow down
 				const float SpeedInterp = (TargetSpeed > SmoothedSpeed)
@@ -80,10 +102,12 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 					const float RawTarget = LocomotionData.DirectionDegrees;
 					SmoothedDirection = FMath::FInterpTo(SmoothedDirection, RawTarget, Deltaseconds, LocomotionDirectionInterp);
 				}
-				else if (SmoothedSpeed <= LocomotionIdleSpeedThreshold)
+				else if (SmoothedSpeed <= LocomotionMoveStopSpeed)
 				{
 					SmoothedDirection = 0.0f;
 				}
+
+				bWasMovingLastFrame = LocomotionData.bIsMoving;
 
 				// Feed directly to blend points
 				BlendPoint_1 = SmoothedDirection;
@@ -94,6 +118,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			}
 			else
 			{
+				bWasMovingLastFrame = false;
 				// Non-locomotion path: use data table, apply traditional interp to blend points
 				SetBlendPoints(UnitBase, Deltaseconds);
 
@@ -134,37 +159,83 @@ void UUnitBaseAnimInstance::UpdateLocomotionData(const AUnitBase* Unit, float De
 	}
 
 	const FVector CurrentLocation = Unit->GetActorLocation();
-	FVector CurrentVelocity = Unit->GetVelocity();
+	const FVector ReportedVelocity = Unit->GetVelocity();
+
+	FVector EstimatedVelocity = FVector::ZeroVector;
+	float EstimatedSpeed2D = 0.0f;
+	float Delta2DSize = 0.0f;
 
 	if (bHasLastActorLocation && DeltaSeconds > KINDA_SMALL_NUMBER)
 	{
 		const FVector DeltaLocation = CurrentLocation - LastActorLocation;
-		const FVector EstimatedVelocity(
-			DeltaLocation.X / DeltaSeconds,
-			DeltaLocation.Y / DeltaSeconds,
-			DeltaLocation.Z / DeltaSeconds);
-		if (CurrentVelocity.SizeSquared2D() <= KINDA_SMALL_NUMBER && EstimatedVelocity.SizeSquared2D() > KINDA_SMALL_NUMBER)
-		{
-			CurrentVelocity = EstimatedVelocity;
-		}
+		Delta2DSize = FVector2D(DeltaLocation.X, DeltaLocation.Y).Size();
+		const float InvDt = 1.0f / DeltaSeconds;
+		EstimatedVelocity = FVector(DeltaLocation.X * InvDt, DeltaLocation.Y * InvDt, DeltaLocation.Z * InvDt);
+		EstimatedSpeed2D = EstimatedVelocity.Size2D();
 	}
 
 	LastActorLocation = CurrentLocation;
 	bHasLastActorLocation = true;
 
+	const float ReportedSpeed2D = ReportedVelocity.Size2D();
+	const bool bReportedReliable = ReportedSpeed2D > LocomotionMoveStopSpeed;
+	const bool bEstimatedReliable =
+		Delta2DSize >= LocomotionMinEstimatedStep &&
+		EstimatedSpeed2D > LocomotionMoveStopSpeed &&
+		EstimatedSpeed2D <= LocomotionMaxEstimatedSpeed;
+
+	FVector2D ChosenVelocity2D = FVector2D::ZeroVector;
+	const bool bHasReliableVelocityNow = bReportedReliable || bEstimatedReliable;
+
+	if (bReportedReliable)
+	{
+		ChosenVelocity2D = FVector2D(ReportedVelocity.X, ReportedVelocity.Y);
+	}
+	else if (bEstimatedReliable)
+	{
+		ChosenVelocity2D = FVector2D(EstimatedVelocity.X, EstimatedVelocity.Y);
+	}
+	else
+	{
+		TimeSinceReliableVelocity += DeltaSeconds;
+		if (TimeSinceReliableVelocity < LocomotionVelocityHoldTime)
+		{
+			const float HoldAlpha = 1.0f - (TimeSinceReliableVelocity / FMath::Max(KINDA_SMALL_NUMBER, LocomotionVelocityHoldTime));
+			ChosenVelocity2D = LastReliableVelocity2D * FMath::Clamp(HoldAlpha, 0.0f, 1.0f);
+		}
+	}
+
+	if (bHasReliableVelocityNow)
+	{
+		LastReliableVelocity2D = ChosenVelocity2D;
+		TimeSinceReliableVelocity = 0.0f;
+	}
+
+	FilteredVelocity2D = ChosenVelocity2D;
+	const float FilteredSpeed2D = FilteredVelocity2D.Size();
+
+	if (!bIsReliableMoving)
+	{
+		bIsReliableMoving = FilteredSpeed2D >= LocomotionMoveStartSpeed;
+	}
+	else
+	{
+		bIsReliableMoving = FilteredSpeed2D >= LocomotionMoveStopSpeed;
+	}
+
 	LocomotionData.Rotation = Unit->GetActorRotation();
-	LocomotionData.Velocity = CurrentVelocity;
-	LocomotionData.Speed = CurrentVelocity.Size2D();
-	LocomotionData.bIsMoving = LocomotionData.Speed > LocomotionIdleSpeedThreshold;
+	LocomotionData.Velocity = FVector(FilteredVelocity2D.X, FilteredVelocity2D.Y, 0.0f);
+	LocomotionData.Speed = FilteredSpeed2D;
+	LocomotionData.bIsMoving = bIsReliableMoving;
 
 	if (LocomotionData.bIsMoving)
 	{
-		const FVector VelocityDir2D = CurrentVelocity.GetSafeNormal2D();
+		const FVector VelocityDir2D(FilteredVelocity2D.X, FilteredVelocity2D.Y, 0.0f);
 		const FVector Forward2D = Unit->GetActorForwardVector().GetSafeNormal2D();
 		const FVector Right2D = Unit->GetActorRightVector().GetSafeNormal2D();
 
-		const float ForwardDot = FVector::DotProduct(Forward2D, VelocityDir2D);
-		const float RightDot = FVector::DotProduct(Right2D, VelocityDir2D);
+		const float ForwardDot = FVector::DotProduct(Forward2D, VelocityDir2D.GetSafeNormal2D());
+		const float RightDot = FVector::DotProduct(Right2D, VelocityDir2D.GetSafeNormal2D());
 		LocomotionData.DirectionDegrees = FMath::RadiansToDegrees(FMath::Atan2(RightDot, ForwardDot));
 	}
 	else
@@ -235,4 +306,3 @@ void UUnitBaseAnimInstance::SetBlendPoints(AUnitBase* Unit, float Deltaseconds)
 
 
 }
-

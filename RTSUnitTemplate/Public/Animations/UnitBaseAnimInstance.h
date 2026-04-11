@@ -64,7 +64,7 @@ struct FUnitAnimData : public FTableRowBase
 };
 
 /**
- * 
+ *
  */
 UCLASS(transient, Blueprintable, hideCategories = AnimInstance, BlueprintType)
 class RTSUNITTEMPLATE_API UUnitBaseAnimInstance : public UAnimInstance
@@ -92,6 +92,26 @@ public:
 	/** How fast direction smooths (higher = snappier) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta=(ClampMin="0.0"))
 	float LocomotionDirectionInterp = 10.0f;
+
+	/** Enter moving when filtered speed rises above this (cm/s) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta=(ClampMin="0.0"))
+	float LocomotionMoveStartSpeed = 45.0f;
+
+	/** Stay moving until filtered speed drops below this (cm/s) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta=(ClampMin="0.0"))
+	float LocomotionMoveStopSpeed = 20.0f;
+
+	/** Hold last reliable velocity briefly when inputs momentarily drop to zero */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta=(ClampMin="0.0"))
+	float LocomotionVelocityHoldTime = 0.12f;
+
+	/** Ignore estimated spikes above this speed (cm/s) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta=(ClampMin="0.0"))
+	float LocomotionMaxEstimatedSpeed = 2200.0f;
+
+	/** Minimum 2D step before delta-location velocity is considered reliable (cm) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta=(ClampMin="0.0"))
+	float LocomotionMinEstimatedStep = 1.0f;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FUnitLocomotionBlendData LocomotionData;
@@ -165,7 +185,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
 	bool IsLocomotionState(TEnumAsByte<UnitData::EState> State) const;
-	
+
 	FUnitAnimData* UnitAnimData;
 
 private:
@@ -174,6 +194,14 @@ private:
 
 	/** Track if we're currently in a locomotion state to avoid resetting smoothed values mid-movement */
 	bool bWasInLocomotionLastFrame = false;
+
+	/** Track moving edge for start snap in anim smoothing */
+	bool bWasMovingLastFrame = false;
+
+	/** Runtime filtered planar velocity used to stabilize locomotion input */
+	FVector2D FilteredVelocity2D = FVector2D::ZeroVector;
+	FVector2D LastReliableVelocity2D = FVector2D::ZeroVector;
+	float TimeSinceReliableVelocity = 0.0f;
+	bool bIsReliableMoving = false;
 	
 };
-
