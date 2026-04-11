@@ -473,6 +473,8 @@ void AProjectile::Multicast_UpdateISMTransform_Implementation(const FTransform& 
 // Called every frame
 void AProjectile::Tick(float DeltaTime)
 {
+	if (bUseMass) return;
+	
 	if (ISMComponent && ISMComponent->IsValidInstance(InstanceIndex))
 	{
 		FTransform InstanceXform;
