@@ -1152,7 +1152,8 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     bool IsBouncingNext,
     bool IsBouncingBack,
     float ZOffset,
-    float Scale
+    float Scale,
+    FVector SpawnOffset
 )
 {
     if (!ProjectileClass)
@@ -1205,9 +1206,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 
             // Build the spawn transform
             FTransform SpawnXf;
-            SpawnXf.SetLocation(ActualSpawnOrigin);
+            FVector FinalSpawnPos = ActualSpawnOrigin + SpawnOffset;
+            SpawnXf.SetLocation(FinalSpawnPos);
 
-            FVector Dir         = (LocationToShoot - ActualSpawnOrigin).GetSafeNormal();
+            FVector Dir         = (LocationToShoot - FinalSpawnPos).GetSafeNormal();
 
             // For homing multi-missiles, add a slight initial direction variance
             if (HomingCount > 0 && BaseCount > 1)

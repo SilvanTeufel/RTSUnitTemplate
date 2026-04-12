@@ -24,8 +24,9 @@
 #include "MassLODFragments.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "Mass/UnitMassTag.h"
-
-namespace UE::UnitMassAvoidance
+#include "MassExternalSubsystemTraits.h"
+ 
+ namespace UE::UnitMassAvoidance
 {
 	namespace Tweakables
 	{
@@ -376,6 +377,7 @@ void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 	// ***** YOUR CUSTOMIZATION GOES HERE *****
 	EntityQuery.AddTagRequirement<FMassDisableAvoidanceTag>(EMassFragmentPresence::None);
 	EntityQuery.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
+	ProcessorRequirements.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
 	
 	EntityQuery.RegisterWithProcessor(*this);
 }

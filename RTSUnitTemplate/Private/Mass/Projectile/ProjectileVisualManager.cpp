@@ -10,6 +10,8 @@
 #include "Mass/MassActorBindingComponent.h"
 #include "MassCommonFragments.h"
 #include "UObject/UObjectIterator.h"
+#include "LandscapeProxy.h"
+#include "Landscape.h"
 
 void UProjectileVisualManager::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -132,6 +134,34 @@ UInstancedStaticMeshComponent* UProjectileVisualManager::GetOrCreatePooledISM(US
     return NewISM;
 }
 
+FTransform UProjectileVisualManager::GetProjectileTransform(FMassEntityHandle EntityHandle) const
+{
+    if (!EntityManager || !EntityHandle.IsValid())
+    {
+        return FTransform::Identity;
+    }
+
+    if (const FTransformFragment* TransformFragment = EntityManager->GetFragmentDataPtr<FTransformFragment>(EntityHandle))
+    {
+        return TransformFragment->GetTransform();
+    }
+
+    return FTransform::Identity;
+}
+
+UInstancedStaticMeshComponent* UProjectileVisualManager::GetVisualISM(UInstancedStaticMeshComponent* TemplateISM)
+{
+    if (!TemplateISM) return nullptr;
+
+    UStaticMesh* Mesh = TemplateISM->GetStaticMesh();
+    UMaterialInterface* Material = TemplateISM->GetMaterial(0);
+    bool bCastShadow = TemplateISM->CastShadow;
+
+    if (!Mesh) return nullptr;
+
+    return GetOrCreatePooledISM(Mesh, Material, bCastShadow);
+}
+
 const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProjectile> ProjectileClass)
 {
 	if (!ProjectileClass) return nullptr;
@@ -217,6 +247,8 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.CollisionRadius = CDO->CollisionRadius;
 	ProjectileFragment.MaxLifeTime = CDO->MaxLifeTime;
 	ProjectileFragment.LifeTime = 0.f;
+	ProjectileFragment.WorldContext = World;
+    ProjectileFragment.bEnableLandscapeHit = CDO->bEnableLandscapeHit;
 	ProjectileFragment.ArcHeight = CDO->ArcHeight;
     ProjectileFragment.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
 	ProjectileFragment.ArcStartLocation = Transform.GetLocation();
@@ -243,6 +275,12 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.RotationSpeed = CDO->RotationSpeed;
 	ProjectileFragment.bDisableAnyRotation = CDO->DisableAnyRotation;
 	ProjectileFragment.bRotateMesh = CDO->RotateMesh;
+
+	// Trigger BeginSpawn on CDO
+	if (AProjectile* MutableCDO = const_cast<AProjectile*>(CDO))
+	{
+		MutableCDO->BeginSpawn(ScaledTransform, World);
+	}
 	
 	// EnergyWall Interaktion
 	ProjectileFragment.bCanBeRepelledByEnergyWall = CDO->bCanBeRepelledByEnergyWall;
@@ -267,6 +305,32 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 				ProjectileFragment.bHasWallImpact = true;
 				ProjectileFragment.WallImpactLocation = WallHit.ImpactPoint;
 				ProjectileFragment.WallActor = EnergyWall;
+			}
+		}
+	}
+
+	// Landscape Collision Check (Optimization: trace once at start)
+	if (ProjectileFragment.bEnableLandscapeHit && GetWorld())
+	{
+		TArray<FHitResult> HitResults;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(Shooter);
+		if (ManagerActor) Params.AddIgnoredActor(ManagerActor);
+
+		FVector TraceStart = Transform.GetLocation();
+		// Trace far ahead (beyond max life time distance)
+		FVector TraceEnd = TraceStart + ProjectileFragment.FlightDirection * (ProjectileFragment.Speed * ProjectileFragment.MaxLifeTime * 1.5f);
+
+		if (GetWorld()->LineTraceMultiByChannel(HitResults, TraceStart, TraceEnd, ECC_WorldStatic, Params))
+		{
+			for (const FHitResult& Hit : HitResults)
+			{
+				if (Hit.GetActor() && (Hit.GetActor()->IsA<ALandscapeProxy>() || Hit.GetActor()->IsA<ALandscape>()))
+				{
+					ProjectileFragment.bHasLandscapeImpact = true;
+					ProjectileFragment.LandscapeImpactLocation = Hit.ImpactPoint;
+					break; // Found it
+				}
 			}
 		}
 	}

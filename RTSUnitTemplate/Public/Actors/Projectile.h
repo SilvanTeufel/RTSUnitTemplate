@@ -9,6 +9,9 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Projectile.generated.h"
 
+class AUnitBase;
+class AEffectArea;
+
 UCLASS()
 class RTSUNITTEMPLATE_API AProjectile : public AActor
 {
@@ -203,6 +206,9 @@ public:
 	bool IsHealing = false;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bEnableLandscapeHit = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool IsBouncingBack = false;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
@@ -262,7 +268,13 @@ public:
 	void OnOverlapBegin(class UPrimitiveComponent* OverlappedComp, class AActor* OtherActor, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
+	void BeginSpawn(FTransform Transform, UObject* WorldContext);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
 	void ImpactEvent();
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
+	void GroundHit(FVector ImpactLocation, UObject* WorldContext);
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void DestroyWhenMaxPierced();
@@ -290,4 +302,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SetVisibility(bool Visible);
+
+    /** Returns the transform of the projectile from Mass if it's bound to an entity */
+    UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile")
+    FTransform GetMassProjectileTransform(UObject* WorldContext = nullptr) const;
+
+    /** Retrieves a pooled ISM matching the template's mesh, material, and shadow settings */
+    UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile")
+    UInstancedStaticMeshComponent* GetVisualISM(UInstancedStaticMeshComponent* TemplateISM, UObject* WorldContext = nullptr);
+
+	/** Spawns an EffectArea actor and optionally attaches it to a unit */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile")
+	void SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn = nullptr);
 };

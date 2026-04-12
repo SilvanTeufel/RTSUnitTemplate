@@ -1071,6 +1071,10 @@ struct FMassProjectileFragment : public FMassFragment
 	UPROPERTY(Transient)
 	FMassEntityHandle ShooterEntity;
 
+	/** Stored world context for CDO-based calls */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<UObject> WorldContext;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AProjectile> ProjectileClass;
 
@@ -1100,6 +1104,15 @@ struct FMassProjectileFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ArcTravelTime = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bEnableLandscapeHit = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bHasLandscapeImpact = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector LandscapeImpactLocation = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bFollowTarget = false;

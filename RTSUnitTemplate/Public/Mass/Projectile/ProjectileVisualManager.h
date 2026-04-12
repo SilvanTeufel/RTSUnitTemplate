@@ -43,8 +43,14 @@ public:
 	/** Register a projectile class and return its default values */
 	const AProjectile* GetProjectileCDO(TSubclassOf<AProjectile> ProjectileClass);
 
-    /** Spawns a new mass projectile */
+   	/** Spawns a new mass projectile */
     FMassEntityHandle SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(), float ProjectileSpeed = 0.f, int32 ShooterTeamId = -1, bool bFollowTarget = false, float HomingInitialAngle = 0.f, float HomingRotationSpeed = 0.f, float HomingMaxSpiralRadius = 0.f, float HomingInterpSpeed = 2.f, struct FMassCommandBuffer* CommandBuffer = nullptr, FVector Scale = FVector::OneVector, float Damage = -1.f, int32 MaxPiercedTargets = -1);
+
+    /** Returns the transform of a Mass projectile from its fragment */
+    FTransform GetProjectileTransform(FMassEntityHandle EntityHandle) const;
+
+    /** Retrieves a pooled ISM matching the template's mesh, material, and shadow settings */
+    UInstancedStaticMeshComponent* GetVisualISM(UInstancedStaticMeshComponent* TemplateISM);
 
 private:
 	UPROPERTY()

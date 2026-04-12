@@ -46,7 +46,7 @@
 #include "Mass/Signals/MassUnitSpawnerSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 #include "Mass/Traits/UnitReplicationFragments.h"
-// Replication pipeline helpers
+#include "MassCommandBuffer.h"
 #include "Mass/Replication/ReplicationSettings.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
@@ -954,7 +954,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CombatStatsFrag->AttackDuration = UnitOwner->AttackDuration;
             CombatStatsFrag->bUseProjectile = UnitOwner->UseProjectile; // Assuming UsesProjectile() on Attributes
         	CombatStatsFrag->bCanMoveWhileAttacking = CanMoveWhileAttacking;
-        	CombatStatsFrag->bRotatesToMovementIfMoveWhileAttacking = RotatesToMovementIfMoveWhileAttacking
+        	CombatStatsFrag->bRotatesToMovementIfMoveWhileAttacking = RotatesToMovementIfMoveWhileAttacking;
         	CombatStatsFrag->IsAttackedDuration = IsAttackedDuration;
         	CombatStatsFrag->CastTime = UnitOwner->CastTime;
         	CombatStatsFrag->IsInitialized = UnitOwner->IsInitialized;
@@ -1214,6 +1214,43 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 	return MassEntityHandle;
 }
 
+struct FMassSetupEffectAreaCommand : public FMassBatchedCommand
+{
+	FMassSetupEffectAreaCommand()
+		: FMassBatchedCommand(EMassCommandOperationType::Create)
+	{
+	}
+
+	void Add(UMassActorBindingComponent& InComponent)
+	{
+		Component = &InComponent;
+		bHasWork = true;
+	}
+
+	virtual void Run(FMassEntityManager& EntityManager) override
+	{
+		if (Component.IsValid())
+		{
+			Component->CreateAndLinkEffectAreaToMassEntity();
+		}
+	}
+
+	virtual SIZE_T GetAllocatedSize() const override
+	{
+		return sizeof(*this);
+	}
+
+#if CSV_PROFILER_STATS || WITH_MASSENTITY_DEBUG
+	virtual int32 GetNumOperationsStat() const override
+	{
+		return bHasWork ? 1 : 0;
+	}
+#endif
+
+private:
+	TWeakObjectPtr<UMassActorBindingComponent> Component;
+};
+
 void UMassActorBindingComponent::SetupMassOnEffectArea()
 {
 	BindingType = EMassBindingType::EffectArea;
@@ -1227,6 +1264,10 @@ void UMassActorBindingComponent::SetupMassOnEffectArea()
 		if (!EM.IsProcessing())
 		{
 			CreateAndLinkEffectAreaToMassEntity();
+		}
+		else
+		{
+			EM.Defer().PushCommand<FMassSetupEffectAreaCommand>(*this);
 		}
 	}
 }

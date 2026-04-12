@@ -1179,7 +1179,9 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// Remove our specific instance from the component when the actor is destroyed
 	if (InstanceIndex != INDEX_NONE && ISMComponent)
 	{
-		ISMComponent->RemoveInstance(InstanceIndex);
+		// Set scale to 0 instead of RemoveInstance to avoid shifting indices for other entities
+		FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+		ISMComponent->UpdateInstanceTransform(InstanceIndex, HiddenTransform, true, true, true);
 		InstanceIndex = INDEX_NONE; // Reset the index
 	}
 

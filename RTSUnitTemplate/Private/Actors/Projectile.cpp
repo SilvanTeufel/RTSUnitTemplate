@@ -10,7 +10,9 @@
 #include "Components/StaticMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
+#include "Engine/Engine.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Actors/EffectArea.h"
 #include "Controller/AIController/UnitControllerBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
@@ -18,6 +20,8 @@
 #include "Characters/Unit/PerformanceUnit.h"
 #include "Characters/Unit/MassUnitBase.h"
 #include "Core/CollisionUtils.h"
+#include "Mass/MassActorBindingComponent.h"
+#include "Mass/Projectile/ProjectileVisualManager.h"
 
 namespace
 {
@@ -362,6 +366,7 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, HomingInitialAngle);
 	DOREPLIFETIME(AProjectile, HomingSpeedVariation);
 	DOREPLIFETIME(AProjectile, ImpactSound);
+	DOREPLIFETIME(AProjectile, bEnableLandscapeHit);
 	DOREPLIFETIME(AProjectile, ImpactVFX);
 	
 	//DOREPLIFETIME(AProjectile, Material);
@@ -1563,5 +1568,85 @@ void AProjectile::SetVisibility(bool Visible)
 
 	if (Niagara_A) Niagara_A->SetVisibility(Visible);
 	if (Niagara_B) Niagara_B->SetVisibility(Visible);
+}
+
+FTransform AProjectile::GetMassProjectileTransform(UObject* WorldContext) const
+{
+    UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+    if (!World) World = GetWorld();
+
+    if (const UMassActorBindingComponent* BindingComp = FindComponentByClass<UMassActorBindingComponent>())
+	{
+		FMassEntityHandle EntityHandle = BindingComp->GetMassEntityHandle();
+		if (EntityHandle.IsValid())
+		{
+			if (const UProjectileVisualManager* VisualManager = World ? World->GetSubsystem<UProjectileVisualManager>() : nullptr)
+			{
+				return VisualManager->GetProjectileTransform(EntityHandle);
+			}
+		}
+	}
+	
+	return GetActorTransform();
+}
+
+UInstancedStaticMeshComponent* AProjectile::GetVisualISM(UInstancedStaticMeshComponent* TemplateISM, UObject* WorldContext)
+{
+    UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+    if (!World) World = GetWorld();
+
+    if (UProjectileVisualManager* VisualManager = World ? World->GetSubsystem<UProjectileVisualManager>() : nullptr)
+    {
+        return VisualManager->GetVisualISM(TemplateISM);
+    }
+    return nullptr;
+}
+
+void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn)
+{
+	if (!EAClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AProjectile::SpawnEffectArea: EAClass is null!"));
+		return;
+	}
+
+	UWorld* World = nullptr;
+	if (WorldContext && !WorldContext->IsA<UClass>())
+	{
+		World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+	}
+	
+	if (!World) World = GetWorld();
+
+	UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Spawning EffectArea of class %s at %s. World: %s"), 
+		*EAClass->GetName(), *Location.ToString(), World ? TEXT("Valid") : TEXT("Null"));
+
+	FTransform Transform;
+	Transform.SetLocation(Location);
+	Transform.SetRotation(FQuat(FRotator::ZeroRotator));
+	Transform.SetScale3D(Scale);
+		
+	const auto MyEffectArea = Cast<AEffectArea>
+						(UGameplayStatics::BeginDeferredActorSpawnFromClass
+						(World ? (UObject*)World : WorldContext, EAClass, Transform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+	
+	if (MyEffectArea != nullptr)
+	{
+		UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Successfully created MyEffectArea (Deferred)"));
+		MyEffectArea->TeamId = InTeamId;
+
+		if(ActorToLockOn)
+		{
+			UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Attaching to ActorToLockOn: %s"), *ActorToLockOn->GetName());
+			MyEffectArea->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("rootSocket"));
+		}
+		
+		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
+		UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Finished Spawning Actor"));
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("AProjectile::SpawnEffectArea: Failed to spawn MyEffectArea! (MyEffectArea is null)"));
+	}
 }
 

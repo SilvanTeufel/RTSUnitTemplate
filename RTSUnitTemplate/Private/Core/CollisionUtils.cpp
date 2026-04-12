@@ -27,9 +27,6 @@ UBoxComponent* FCollisionUtils::FindTaggedBoxComponent(const AActor* Actor)
 
 FVector FCollisionUtils::ComputeImpactSurfaceXY(const AActor* Attacker, const AActor* Target, TOptional<FVector> OverrideIncomingLocation)
 {
-    UE_LOG(LogTemp, Warning, TEXT("ENTERING ComputeImpactSurfaceXY (Utils) - Attacker: %s, Target: %s"), 
-        Attacker ? *Attacker->GetName() : TEXT("NULL"), Target ? *Target->GetName() : TEXT("NULL"));
-
     if (!Target)
     {
         return FVector::ZeroVector;
@@ -99,13 +96,10 @@ FVector FCollisionUtils::ComputeImpactSurfaceXY(const AActor* Attacker, const AA
             {
                 LocalSurface.Y = (LocalIncoming.Y >= 0) ? Extent.Y : -Extent.Y;
             }
-            UE_LOG(LogTemp, Warning, TEXT("ComputeImpactSurfaceXY (Utils) - Point was INSIDE box, pushing to edge."));
         }
 
         // 4. Transform back to world space
         Surface = BoxTransform.TransformPosition(LocalSurface);
-        UE_LOG(LogTemp, Warning, TEXT("ComputeImpactSurfaceXY (Utils) - BOX Surface: %s (Local: %s, Extent: %s)"), 
-            *Surface.ToString(), *LocalSurface.ToString(), *Extent.ToString());
     }
     else
     {
@@ -117,19 +111,16 @@ FVector FCollisionUtils::ComputeImpactSurfaceXY(const AActor* Attacker, const AA
             {
                 Radius2D += BindingComponent->AdditionalCapsuleRadius;
             }
-            UE_LOG(LogTemp, Warning, TEXT("ComputeImpactSurfaceXY (Utils) - Using Capsule Radius: %f"), Radius2D);
         }
         else
         {
             FVector Origin, Extent;
             Target->GetActorBounds(false, Origin, Extent);
             Radius2D = FMath::Max(Extent.X, Extent.Y);
-            UE_LOG(LogTemp, Warning, TEXT("ComputeImpactSurfaceXY (Utils) - Using Actor Bounds Radius: %f"), Radius2D);
         }
 
         Dir2D.Normalize();
         Surface = TargetCenter - Dir2D * Radius2D;
-        UE_LOG(LogTemp, Warning, TEXT("ComputeImpactSurfaceXY (Utils) - CAPSULE/OTHER Surface: %s"), *Surface.ToString());
     }
 
     // Keep Z-axis height logic (bTargetFlying, bAttackerFlying)

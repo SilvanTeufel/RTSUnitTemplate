@@ -10,6 +10,9 @@
 #include "MassCommands.h"
 #include "Characters/Unit/UnitBase.h"
 
+#include "LandscapeProxy.h"
+#include "Actors/Projectile.h"
+
 UMassProjectileImpactProcessor::UMassProjectileImpactProcessor()
 {
 	ExecutionFlags = (int32)EProcessorExecutionFlags::All;
@@ -62,7 +65,8 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 		}
 	}));
 
-	if (Units.Num() == 0) return;
+	// UnitQuery and filling Units array...
+	// We no longer return early if no units, because we might need to check landscape hits.
 
 	ProjectileQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ProjContext)
 	{
@@ -75,6 +79,44 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			const FVector& ProjPos = TransformList[i].GetTransform().GetLocation();
 			FMassProjectileFragment& Projectile = ProjectileList[i];
 			FMassEntityHandle ProjEntity = ProjContext.GetEntity(i);
+
+			// --- NEW: Landscape Collision Check (Optimized) ---
+			if (Projectile.bEnableLandscapeHit && Projectile.bHasLandscapeImpact)
+			{
+				float DistSq = FVector::DistSquared(ProjPos, Projectile.LandscapeImpactLocation);
+				// Check if we are within collision radius, accounting for speed to avoid skipping
+				float SpeedBuffer = Projectile.Speed * Context.GetDeltaTimeSeconds();
+				float CheckRadius = Projectile.CollisionRadius + SpeedBuffer + 25.f;
+
+				if (DistSq <= FMath::Square(CheckRadius))
+				{
+					// Trigger GroundHit on CDO
+					if (Projectile.ProjectileClass)
+					{
+						if (AProjectile* ProjCDO = Projectile.ProjectileClass->GetDefaultObject<AProjectile>())
+						{
+							UObject* WorldCtx = Projectile.WorldContext.IsValid() ? Projectile.WorldContext.Get() : (UObject*)Context.GetWorld();
+							ProjCDO->GroundHit(Projectile.LandscapeImpactLocation, WorldCtx);
+						}
+					}
+
+					// Destroy Projectile
+					EntityManager.Defer().DestroyEntity(ProjEntity);
+
+					// Cleanup Visuals
+					if (VisualList[i].InstanceIndex != INDEX_NONE && VisualList[i].ISMComponent.IsValid())
+					{
+						// Set Scale to 0 AND move far away to prevent ANY visual artifacts (including shadows)
+						FTransform HiddenTransform(FRotator::ZeroRotator, FVector(0.f, 0.f, -1000000.f), FVector::ZeroVector);
+						VisualList[i].ISMComponent->UpdateInstanceTransform(VisualList[i].InstanceIndex, HiddenTransform, true, true, true);
+						VisualList[i].InstanceIndex = INDEX_NONE;
+					}
+					if (VisualList[i].Niagara_A.IsValid()) { VisualList[i].Niagara_A->Deactivate(); VisualList[i].Niagara_A->DestroyComponent(); }
+					if (VisualList[i].Niagara_B.IsValid()) { VisualList[i].Niagara_B->Deactivate(); VisualList[i].Niagara_B->DestroyComponent(); }
+
+					continue; // Move to next projectile
+				}
+			}
 
 			// Check distance to all units
 			for (int32 j = 0; j < Units.Num(); ++j)

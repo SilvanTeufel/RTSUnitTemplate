@@ -14,13 +14,11 @@ void UUnitVisualManager::Initialize(FSubsystemCollectionBase& Collection) {
 
 void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedStaticMeshComponent* TemplateISM, AMassUnitBase* Unit) {
 	if (!TemplateISM || !TemplateISM->GetStaticMesh()) {
-		UE_LOG(LogTemp, Warning, TEXT("UUnitVisualManager::AssignUnitVisual: TemplateISM is null or has no static mesh!"));
 		return;
 	}
 
 	UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
 	if (!EntitySubsystem) {
-		UE_LOG(LogTemp, Error, TEXT("UUnitVisualManager::AssignUnitVisual: EntitySubsystem is null!"));
 		return;
 	}
 
@@ -29,7 +27,6 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
 
 	if (!VisualFrag) {
-		UE_LOG(LogTemp, Warning, TEXT("UUnitVisualManager::AssignUnitVisual: VisualFrag is null for entity %s!"), *Entity.DebugGetDescription());
 		return;
 	}
 
@@ -77,7 +74,6 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 
 	UInstancedStaticMeshComponent* ISM = GetOrCreateISM(Mesh, Material, bCastShadow);
 	if (!ISM) {
-		UE_LOG(LogTemp, Error, TEXT("UUnitVisualManager::AssignUnitVisual: Failed to get or create ISM for mesh %s!"), *Mesh->GetName());
 		return;
 	}
 
@@ -164,8 +160,6 @@ void UUnitVisualManager::SetUnitVisualVisible(FMassEntityHandle Entity, bool bVi
 
 	if (EffectFrag) {
 		EffectFrag->bForceHidden = !bVisible;
-		UE_LOG(LogTemp, Log, TEXT("UUnitVisualManager::SetUnitVisualVisible: Entity %s, Visible %d"), 
-			*Entity.DebugGetDescription(), (int32)bVisible);
 	}
 
 	if (VisualFrag) {
@@ -178,9 +172,7 @@ void UUnitVisualManager::SetUnitVisualVisible(FMassEntityHandle Entity, bool bVi
 				}
 			}
 		}
-	} else {
-		UE_LOG(LogTemp, Warning, TEXT("UUnitVisualManager::SetUnitVisualVisible: Entity %s HAS NO VISUAL FRAGMENT!"), *Entity.DebugGetDescription());
-	}
+	} 
 }
 
 UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow) {

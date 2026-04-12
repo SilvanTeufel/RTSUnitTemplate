@@ -236,6 +236,8 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, Scale(FVector(1.0f, 1.0f, 1.0f))
 		, AITargetLastKnownLocation(FVector::ZeroVector)
 		, AbilityTargetLocation(FVector::ZeroVector)
+		, CS_bCanMoveWhileAttacking(false)
+		, CS_bRotatesToMovementIfMoveWhileAttacking(false)
 		, AIS_ProjectileFireCounter(0)
 		, AIS_ProjectileSpawnOffset(FVector::ZeroVector)
 		, AIS_ProjectileSpeed(0.f)
@@ -248,8 +250,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, PredictedPendingShots(0)
 		, PredictionTimer(0.f)
 		, bPredictedLatch(false)
-		, CS_bCanMoveWhileAttacking(false)
-		, CS_bRotatesToMovementIfMoveWhileAttacking(false)
 	{
 	}
 
