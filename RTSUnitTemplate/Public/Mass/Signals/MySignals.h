@@ -87,6 +87,8 @@ namespace UnitSignals
 	const FName UpdateResourceScale(TEXT("UpdateResourceScale"));
 
 	const FName UpdateMouseLocation(TEXT("UpdateMouseLocation"));
+	const FName CustomOverlapStart(TEXT("CustomOverlapStart"));
+	const FName CustomOverlapEnd(TEXT("CustomOverlapEnd"));
 }
 
 USTRUCT()

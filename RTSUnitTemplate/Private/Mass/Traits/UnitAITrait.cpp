@@ -49,6 +49,7 @@ void UUnitAITrait::BuildTemplate(FMassEntityTemplateBuildContext& BuildContext, 
 	BuildContext.AddFragment<FMassAgentCharacteristicsFragment>();
 	BuildContext.AddFragment<FMassChargeTimerFragment>();
 	BuildContext.AddFragment<FMassWorkerStatsFragment>();
+	BuildContext.AddFragment<FMassHoverFragment>();
 
 	// Ensure entities with AI also carry the client-side replicated transform fragment
 	// This is safe even if UnitReplicationTrait also adds it; AddFragment is idempotent.

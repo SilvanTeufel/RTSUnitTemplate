@@ -381,6 +381,12 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastISMTransformSync(const FVector& Location, const FRotator& Rotation, const FVector& Scale, UInstancedStaticMeshComponent* InISMComponent = nullptr);
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "RTS|Hover")
+	void CustomOverlapStart(int32 InInstanceIndex, USkeletalMeshComponent* InMesh);
+
+	UFUNCTION(BlueprintImplementableEvent, Category = "RTS|Hover")
+	void CustomOverlapEnd(int32 InInstanceIndex, USkeletalMeshComponent* InMesh);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

@@ -263,6 +263,18 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
+	UFUNCTION()
+	void HandleCustomOverlapStart(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
+	UFUNCTION()
+	void HandleCustomOverlapEnd(
+		FName SignalName,
+		TArray<FMassEntityHandle>& Entities
+	);
+
 
 	UFUNCTION()
 	void HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
@@ -272,6 +284,9 @@ private:
 
 	UFUNCTION()
 	void HandleUpdateSelectionCircle(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	FDelegateHandle CustomOverlapStartDelegateHandle;
+	FDelegateHandle CustomOverlapEndDelegateHandle;
 	
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);

@@ -62,9 +62,9 @@ protected:
 	// Handles follow command on right-click. Returns true if a follow action was issued (and should early return)
 	bool TryHandleFollowOnRightClick(const FHitResult& HitPawn);
 
+public:
 	AUnitBase* GetUnitFromHitResult(const FHitResult& Hit) const;
 
-public:
 	virtual void BeginPlay() override;
 
 	UFUNCTION(NetMulticast, Reliable)

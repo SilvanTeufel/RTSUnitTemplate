@@ -780,6 +780,22 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 };
 
 
+USTRUCT()
+struct FMassHoverFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(Transient)
+	int32 HoveredInstanceIndex = INDEX_NONE;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<USkeletalMeshComponent> HoveredMesh;
+
+	UPROPERTY(Transient)
+	bool bIsHovered = false;
+};
+
+
 //----------------------------------------------------------------------//
 //  Patrol Fragment
 //----------------------------------------------------------------------//

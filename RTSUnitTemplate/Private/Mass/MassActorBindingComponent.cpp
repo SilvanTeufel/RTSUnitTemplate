@@ -472,6 +472,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassUnitVisualFragment::StaticStruct(),
 		FMassVisualTweenFragment::StaticStruct(),
 		FMassVisualEffectFragment::StaticStruct(),
+		FMassHoverFragment::StaticStruct(),
     };
 	
 	if(UnitBase->AddEffectTargetFragement)
