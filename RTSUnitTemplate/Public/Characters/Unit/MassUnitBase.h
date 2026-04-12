@@ -387,6 +387,9 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTS|Hover")
 	void CustomOverlapEnd(int32 InInstanceIndex, USkeletalMeshComponent* InMesh);
 
+	UFUNCTION(BlueprintCallable, Category = "RTS|Mass")
+	bool EditHoverTag(bool bApply);
+
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;

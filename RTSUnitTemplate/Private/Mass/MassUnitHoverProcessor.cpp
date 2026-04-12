@@ -15,7 +15,10 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/SkeletalMesh.h"
 #include "GameFramework/Character.h"
+#include "Async/Async.h"
+#include "MassEntitySubsystem.h"
 
 UMassUnitHoverProcessor::UMassUnitHoverProcessor()
 {
@@ -32,9 +35,68 @@ void UMassUnitHoverProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
 	EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassHoverFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddTagRequirement<FMassHoverTag>(EMassFragmentPresence::All); // Nur Entities im Hover-Zustand
 	EntityQuery.RegisterWithProcessor(*this);
+}
 
-	SignalSubsystem = EntityManager->GetWorld()->GetSubsystem<UMassSignalSubsystem>();
+void UMassUnitHoverProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
+{
+	Super::InitializeInternal(Owner, EntityManager);
+	
+	if (UWorld* World = Owner.GetWorld())
+	{
+		SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
+	}
+
+	if (SignalSubsystem)
+	{
+		CustomOverlapStartDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapStart)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UMassUnitHoverProcessor, HandleCustomOverlapStart));
+
+		CustomOverlapEndDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapEnd)
+				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UMassUnitHoverProcessor, HandleCustomOverlapEnd));
+	}
+}
+
+void UMassUnitHoverProcessor::BeginDestroy()
+{
+	if (SignalSubsystem)
+	{
+		if (CustomOverlapStartDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapStart);
+			Delegate.Remove(CustomOverlapStartDelegateHandle);
+			CustomOverlapStartDelegateHandle.Reset();
+		}
+
+		if (CustomOverlapEndDelegateHandle.IsValid())
+		{
+			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapEnd);
+			Delegate.Remove(CustomOverlapEndDelegateHandle);
+			CustomOverlapEndDelegateHandle.Reset();
+		}
+	}
+
+	Super::BeginDestroy();
+}
+
+static float GetRadiusFromBounds(const FVector& LocalExtent, const FVector& LocalDir)
+{
+	float AbsX = FMath::Abs(LocalDir.X);
+	float AbsY = FMath::Abs(LocalDir.Y);
+
+	// Ensure Extent is valid to avoid div by zero
+	float Ex = FMath::Max(1.0f, LocalExtent.X);
+	float Ey = FMath::Max(1.0f, LocalExtent.Y);
+
+	if (AbsX < 1e-4f && AbsY < 1e-4f) return FMath::Max(Ex, Ey);
+
+	// Normalize LocalDir in 2D for radius calculation
+	float L = FMath::Sqrt(AbsX * AbsX + AbsY * AbsY);
+	float nX = AbsX / L;
+	float nY = AbsY / L;
+
+	return 1.0f / FMath::Max(nX / Ex, nY / Ey);
 }
 
 void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -77,6 +139,16 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			const FTransform& EntityTransform = Transforms[i].GetTransform();
 			const FVector EntityLocation = EntityTransform.GetLocation();
 
+			// Project mouse to Entity's Z plane
+			if (FMath::IsNearlyZero(RayDirection.Z)) continue;
+			float t = (EntityLocation.Z - RayOrigin.Z) / RayDirection.Z;
+			if (t < 0) continue;
+			FVector MousePosAtZ = RayOrigin + t * RayDirection;
+
+			FVector DirToMouse = MousePosAtZ - EntityLocation;
+			DirToMouse.Z = 0.f;
+			float DistSq = DirToMouse.SizeSquared();
+
 			if (VisualFrags[i].bUseSkeletalMovement)
 			{
 				if (const AActor* Actor = ActorFrags[i].Get())
@@ -85,12 +157,25 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 					{
 						if (USkeletalMeshComponent* Mesh = Char->GetMesh())
 						{
-							FBox WorldBox = Mesh->Bounds.GetBox();
-							if (FMath::LineBoxIntersection(WorldBox, RayOrigin, RayEnd, RayDirection))
+							FVector LocalExtent = Mesh->Bounds.BoxExtent; // Fallback
+							if (Mesh->GetSkeletalMeshAsset())
 							{
-								bHit = true;
-								CurrentMesh = Mesh;
+								LocalExtent = Mesh->GetSkeletalMeshAsset()->GetBounds().BoxExtent * EntityTransform.GetScale3D();
 							}
+
+							FVector LocalDir = EntityTransform.GetRotation().UnrotateVector(DirToMouse);
+							LocalDir.Z = 0.f;
+
+							if (DistSq < 1.0f) {
+								bHit = true;
+							} else {
+								float Radius = GetRadiusFromBounds(LocalExtent, LocalDir.GetSafeNormal2D());
+								if (DistSq <= FMath::Square(Radius)) {
+									bHit = true;
+								}
+							}
+
+							if (bHit) CurrentMesh = Mesh;
 						}
 					}
 				}
@@ -106,11 +191,27 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 						if (SM)
 						{
 							FTransform WorldTransform = EntityTransform * Instance.CurrentRelativeTransform;
-							FBox WorldBox = SM->GetBounds().GetBox().TransformBy(WorldTransform);
+							FVector InstanceLocation = WorldTransform.GetLocation();
+							
+							FVector InstanceDirToMouse = MousePosAtZ - InstanceLocation;
+							InstanceDirToMouse.Z = 0.f;
+							float InstanceDistSq = InstanceDirToMouse.SizeSquared();
 
-							if (FMath::LineBoxIntersection(WorldBox, RayOrigin, RayEnd, RayDirection))
-							{
+							FVector LocalExtent = SM->GetBounds().BoxExtent * WorldTransform.GetScale3D();
+							FVector LocalDir = WorldTransform.GetRotation().UnrotateVector(InstanceDirToMouse);
+							LocalDir.Z = 0.f;
+
+							if (InstanceDistSq < 1.0f) {
 								bHit = true;
+							} else {
+								float Radius = GetRadiusFromBounds(LocalExtent, LocalDir.GetSafeNormal2D());
+								if (InstanceDistSq <= FMath::Square(Radius)) {
+									bHit = true;
+								}
+							}
+
+							if (bHit)
+							{
 								CurrentInstanceIndex = Instance.InstanceIndex;
 								break; 
 							}
@@ -133,17 +234,30 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 		}
 	}));
 
-	// Update hover states and signal changes
-	if (BestEntity != LastHoveredEntity)
+	// Detect if we changed entity OR instance index/mesh for the same entity
+	bool bInstanceChanged = false;
+	if (BestEntity.IsValid() && BestEntity == LastHoveredEntity)
 	{
-		// End hover for old entity
+		if (FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(BestEntity))
+		{
+			if (HoverFrag->HoveredInstanceIndex != BestInstanceIndex || HoverFrag->HoveredMesh != BestMesh)
+			{
+				bInstanceChanged = true;
+			}
+		}
+	}
+
+	// Update hover states and signal changes
+	if (BestEntity != LastHoveredEntity || bInstanceChanged)
+	{
+		// End hover for old entity (or old instance)
 		if (EntityManager.IsEntityValid(LastHoveredEntity))
 		{
 			FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(LastHoveredEntity);
-			if (HoverFrag)
+			if (HoverFrag && HoverFrag->bIsHovered)
 			{
-				HoverFrag->bIsHovered = false;
 				SignalSubsystem->SignalEntity(UnitSignals::CustomOverlapEnd, LastHoveredEntity);
+				HoverFrag->bIsHovered = false;
 			}
 		}
 
@@ -151,20 +265,118 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 		if (EntityManager.IsEntityValid(BestEntity))
 		{
 			FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(BestEntity);
-			if (HoverFrag)
+			if (HoverFrag && !HoverFrag->bIsHovered)
 			{
-				HoverFrag->bIsHovered = true;
 				HoverFrag->HoveredInstanceIndex = BestInstanceIndex;
 				HoverFrag->HoveredMesh = BestMesh;
+				HoverFrag->bIsHovered = true;
 				SignalSubsystem->SignalEntity(UnitSignals::CustomOverlapStart, BestEntity);
 			}
 		}
 
 		LastHoveredEntity = BestEntity;
 		
-		if (BestEntity.IsValid())
-		{
-			UE_LOG(LogTemp, Log, TEXT("[HoverProcessor] New Hovered Entity: %d:%d (InstanceIndex: %d)"), BestEntity.Index, BestEntity.SerialNumber, BestInstanceIndex);
-		}
 	}
+}
+
+void UMassUnitHoverProcessor::HandleCustomOverlapStart(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	UWorld* World = GetWorld();
+	if (!SignalSubsystem || !World) return;
+
+	TArray<FMassEntityHandle> EntitiesCopy = Entities;
+
+	AsyncTask(ENamedThreads::GameThread, [this, World, EntitiesCopy]()
+	{
+		UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+		if (!EntitySubsystem) return;
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+		for (FMassEntityHandle Entity : EntitiesCopy)
+		{
+			if (EntityManager.IsEntityValid(Entity))
+			{
+				FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+				FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(Entity);
+				
+				if (ActorFrag && HoverFrag)
+				{
+					if (HoverFrag->LastStartSignalFrame == GFrameCounter) continue;
+					HoverFrag->LastStartSignalFrame = GFrameCounter;
+
+					if (AMassUnitBase* Unit = const_cast<AMassUnitBase*>(Cast<AMassUnitBase>(ActorFrag->Get())))
+					{
+						Unit->CustomOverlapStart(HoverFrag->HoveredInstanceIndex, HoverFrag->HoveredMesh.Get());
+
+						if (this->bSetCustomDataValue && HoverFrag->HoveredInstanceIndex != INDEX_NONE)
+						{
+							const FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
+							if (VisualFrag)
+							{
+								for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+								{
+									if (Instance.InstanceIndex == HoverFrag->HoveredInstanceIndex && Instance.TargetISM.IsValid())
+									{
+										Instance.TargetISM->SetCustomDataValue(Instance.InstanceIndex, 0, 1.0f, true);
+										break;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	});
+}
+
+void UMassUnitHoverProcessor::HandleCustomOverlapEnd(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+	UWorld* World = GetWorld();
+	if (!SignalSubsystem || !World) return;
+
+	TArray<FMassEntityHandle> EntitiesCopy = Entities;
+
+	AsyncTask(ENamedThreads::GameThread, [this, World, EntitiesCopy]()
+	{
+		UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+		if (!EntitySubsystem) return;
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+		for (FMassEntityHandle Entity : EntitiesCopy)
+		{
+			if (EntityManager.IsEntityValid(Entity))
+			{
+				FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+				FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(Entity);
+				
+				if (ActorFrag && HoverFrag)
+				{
+					if (HoverFrag->LastEndSignalFrame == GFrameCounter) continue;
+					HoverFrag->LastEndSignalFrame = GFrameCounter;
+
+					if (AMassUnitBase* Unit = const_cast<AMassUnitBase*>(Cast<AMassUnitBase>(ActorFrag->Get())))
+					{
+						Unit->CustomOverlapEnd(HoverFrag->HoveredInstanceIndex, HoverFrag->HoveredMesh.Get());
+
+						if (this->bSetCustomDataValue && HoverFrag->HoveredInstanceIndex != INDEX_NONE)
+						{
+							const FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
+							if (VisualFrag)
+							{
+								for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+								{
+									if (Instance.InstanceIndex == HoverFrag->HoveredInstanceIndex && Instance.TargetISM.IsValid())
+									{
+										Instance.TargetISM->SetCustomDataValue(Instance.InstanceIndex, 0, 0.0f, true);
+										break;
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	});
 }

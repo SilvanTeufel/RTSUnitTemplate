@@ -90,6 +90,12 @@ USTRUCT() struct FMassIsEffectAreaTag : public FMassTag { GENERATED_BODY() };
 
 // Tag to enable the custom chase rotation processor
 USTRUCT()
+struct FMassHoverTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT()
 struct FMassUnitYawFollowTag : public FMassTag
 {
 	GENERATED_BODY()
@@ -793,6 +799,12 @@ struct FMassHoverFragment : public FMassFragment
 
 	UPROPERTY(Transient)
 	bool bIsHovered = false;
+
+	UPROPERTY(Transient)
+	uint64 LastStartSignalFrame = 0;
+
+	UPROPERTY(Transient)
+	uint64 LastEndSignalFrame = 0;
 };
 
 

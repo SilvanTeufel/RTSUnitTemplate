@@ -193,12 +193,6 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 		LoadUnitDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::LoadUnit)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleLoadUnit));
 
-		CustomOverlapStartDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapStart)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleCustomOverlapStart));
-
-		CustomOverlapEndDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapEnd)
-				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleCustomOverlapEnd));
-
 		// Follow feature delegates removed: following now uses FriendlyTargetEntity on FMassAITargetFragment
 		}
 }
@@ -380,20 +374,6 @@ void UUnitStateProcessor::UnbindDelegates_Internal()
 			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::LoadUnit);
 			Delegate.Remove(LoadUnitDelegateHandle);
 			LoadUnitDelegateHandle.Reset();
-		}
-
-		if (CustomOverlapStartDelegateHandle.IsValid())
-		{
-			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapStart);
-			Delegate.Remove(CustomOverlapStartDelegateHandle);
-			CustomOverlapStartDelegateHandle.Reset();
-		}
-
-		if (CustomOverlapEndDelegateHandle.IsValid())
-		{
-			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::CustomOverlapEnd);
-			Delegate.Remove(CustomOverlapEndDelegateHandle);
-			CustomOverlapEndDelegateHandle.Reset();
 		}
 	}
 
@@ -2861,45 +2841,6 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
 	});
 }
 
-void UUnitStateProcessor::HandleCustomOverlapStart(FName SignalName, TArray<FMassEntityHandle>& Entities)
-{
-	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-	for (FMassEntityHandle Entity : Entities)
-	{
-		if (EntityManager.IsEntityValid(Entity))
-		{
-			FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-			const FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(Entity);
-			if (ActorFrag && HoverFrag)
-			{
-				if (AMassUnitBase* Unit = const_cast<AMassUnitBase*>(Cast<AMassUnitBase>(ActorFrag->Get())))
-				{
-					Unit->CustomOverlapStart(HoverFrag->HoveredInstanceIndex, HoverFrag->HoveredMesh.Get());
-				}
-			}
-		}
-	}
-}
-
-void UUnitStateProcessor::HandleCustomOverlapEnd(FName SignalName, TArray<FMassEntityHandle>& Entities)
-{
-	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-	for (FMassEntityHandle Entity : Entities)
-	{
-		if (EntityManager.IsEntityValid(Entity))
-		{
-			FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
-			const FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(Entity);
-			if (ActorFrag && HoverFrag)
-			{
-				if (AMassUnitBase* Unit = const_cast<AMassUnitBase*>(Cast<AMassUnitBase>(ActorFrag->Get())))
-				{
-					Unit->CustomOverlapEnd(HoverFrag->HoveredInstanceIndex, HoverFrag->HoveredMesh.Get());
-				}
-			}
-		}
-	}
-}
 
 void UUnitStateProcessor::HandleSightSignals(FName /*SignalName*/, TArray<FMassEntityHandle>& /*Entities*/)
 {

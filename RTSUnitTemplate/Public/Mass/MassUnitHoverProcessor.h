@@ -27,6 +27,8 @@ public:
 
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
+	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
+	virtual void BeginDestroy() override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 	UPROPERTY()
@@ -37,4 +39,16 @@ protected:
 
 	FMassEntityQuery EntityQuery;
 	float AccumulatedTime = 0.f;
+
+	UFUNCTION()
+	void HandleCustomOverlapStart(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	UFUNCTION()
+	void HandleCustomOverlapEnd(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	FDelegateHandle CustomOverlapStartDelegateHandle;
+	FDelegateHandle CustomOverlapEndDelegateHandle;
+
+	UPROPERTY(EditAnywhere, Category = "RTS|Hover")
+	bool bSetCustomDataValue = true;
 };

@@ -1063,6 +1063,26 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 	return true;
 }
 
+bool AMassUnitBase::EditHoverTag(bool bApply)
+{
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+
+	if (GetMassEntityData(EntityManager, EntityHandle))
+	{
+		if (bApply)
+		{
+			EntityManager->AddTagToEntity(EntityHandle, FMassHoverTag::StaticStruct());
+		}
+		else
+		{
+			EntityManager->RemoveTagFromEntity(EntityHandle, FMassHoverTag::StaticStruct());
+		}
+		return true;
+	}
+	return false;
+}
+
 bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle)
 {
 	OutEntityManager = nullptr;
