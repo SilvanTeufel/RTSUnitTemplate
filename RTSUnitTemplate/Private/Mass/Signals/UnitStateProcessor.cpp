@@ -990,6 +990,41 @@ FVector FindGroundLocationForActor(const UObject* WorldContextObject, AActor* Ta
 	CollisionParams.AddIgnoredActor(TargetActor);
 	CollisionParams.AddIgnoredActors(ActorsToIgnore);
 
+	TArray<UPrimitiveComponent*> AllComponentsToIgnore;
+
+	auto CollectUnitComponents = [&](AActor* InActor)
+	{
+		if (!InActor) return;
+		if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(InActor))
+		{
+			if (MassUnit->ISMComponent) AllComponentsToIgnore.AddUnique(MassUnit->ISMComponent);
+			for (UInstancedStaticMeshComponent* AdditionalISM : MassUnit->AdditionalISMComponents)
+			{
+				if (AdditionalISM) AllComponentsToIgnore.AddUnique(AdditionalISM);
+			}
+
+			if (const FMassUnitVisualFragment* VisualFrag = MassUnit->GetVisualFragment())
+			{
+				for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+				{
+					if (Instance.TargetISM.IsValid())
+					{
+						AllComponentsToIgnore.AddUnique(Instance.TargetISM.Get());
+					}
+				}
+			}
+		}
+	};
+
+	CollectUnitComponents(TargetActor);
+	for (AActor* IgnoreActor : ActorsToIgnore)
+	{
+		CollectUnitComponents(IgnoreActor);
+	}
+
+	CollisionParams.AddIgnoredComponents(AllComponentsToIgnore);
+
+	
 	if (World->LineTraceSingleByChannel(HitResult, StartTrace, EndTrace, ECC_Visibility, CollisionParams))
 	{
 		// We hit something. Return a vector with the actor's X/Y and the hit's Z.

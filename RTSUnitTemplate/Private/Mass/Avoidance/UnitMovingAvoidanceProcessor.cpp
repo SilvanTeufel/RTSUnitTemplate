@@ -63,12 +63,14 @@
 				return;
 			}
 
-			const FVector::FReal CappedSearchRadius = FMath::Min(SearchRadius, 10000.0); // Cap at 100 meters
-			
+			// Defensive: Check if grid is valid
 			if (AvoidanceObstacleGrid.NumLevels <= 0)
 			{
 				return;
 			}
+
+			const FVector::FReal CappedSearchRadius = FMath::Min(SearchRadius, 10000.0); // Cap at 100 meters
+			
 			const FVector Extent(CappedSearchRadius, CappedSearchRadius, 0.);
 			const FBox QueryBox = FBox(Center - Extent, Center + Extent);
 
@@ -85,6 +87,8 @@
 			for (int32 Level = 0; Level < AvoidanceObstacleGrid.NumLevels; Level++)
 			{
 				const FVector::FReal CellSize = AvoidanceObstacleGrid.GetCellSize(Level);
+				if (CellSize <= 0.) continue; // Defensive: skip invalid levels
+
 				const FNavigationObstacleHashGrid2D::FCellRect Rect = AvoidanceObstacleGrid.CalcQueryBounds(QueryBox, Level);
 				// Defensive: skip degenerate rects
 				if (Rect.MinX > Rect.MaxX || Rect.MinY > Rect.MaxY)
@@ -122,57 +126,60 @@
 				}
 			}
 
+			if (Cells.Num() == 0)
+			{
+				return;
+			}
+
 			Cells.Sort([](const FSortingCell& A, const FSortingCell& B) { return A.SqDist < B.SqDist; });
 
- 		// Defensive: cache reference to items once
- 		const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
- 		
- 		// Early exit if the sparse array is empty - prevents issues with uninitialized/cleared arrays
- 		if (Items.Num() == 0)
- 		{
- 			return;
- 		}
- 		
- 		for (const FSortingCell& SortedCell : Cells)
- 		{
+			// Defensive: cache reference to items once
+			const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
 			
- 			if (SortedCell.Level < 0 || SortedCell.Level >= AvoidanceObstacleGrid.NumLevels)
- 			{
- 				continue;
- 			}
+			// Early exit if the sparse array is empty - prevents issues with uninitialized/cleared arrays
+			if (Items.Num() == 0)
+			{
+				return;
+			}
+			
+			for (const FSortingCell& SortedCell : Cells)
+			{
+				// Ensure Level is still within bounds before calling FindCell
+				if (SortedCell.Level < 0 || SortedCell.Level >= AvoidanceObstacleGrid.NumLevels)
+				{
+					continue;
+				}
 
- 			if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
- 			{
- 				// Validate starting index
- 				int32 Idx = Cell->First;
- 				// Put a hard cap to avoid potential infinite loops if data is corrupted
- 				int32 SafetyCounter = 0;
- 				constexpr int32 MaxSafetyIterations = 1024;
- 				while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
- 				{
- 					// Combined immediate check to handle potential concurrent modifications of the sparse array.
- 					// We check bounds directly before calling IsValidIndex to minimize the race window.
- 					// Short-circuiting ensures that if Idx is out of bounds, IsValidIndex (which can assert) is not called.
- 					if (Idx < 0 || Idx >= Items.GetMaxIndex() || !Items.IsValidIndex(Idx))
- 					{
- 						break;
- 					}
- 					const FNavigationObstacleHashGrid2D::FItem& It = Items[Idx];
- 					OutCloseEntities.Add(It.ID);
- 					if (OutCloseEntities.Num() >= MaxResults)
- 					{
- 						return;
- 					}
- 					const int32 NextIdx = It.Next;
- 					if (NextIdx == Idx)
- 					{
- 						break; // Self-loop guard
- 					}
- 					Idx = NextIdx;
- 				}
- 			}
- 		}
- 	}
+				if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
+				{
+					// Validate starting index
+					int32 Idx = Cell->First;
+					// Put a hard cap to avoid potential infinite loops if data is corrupted
+					int32 SafetyCounter = 0;
+					constexpr int32 MaxSafetyIterations = 1024;
+					while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
+					{
+						// Combined immediate check to handle potential concurrent modifications of the sparse array.
+						if (Idx < 0 || Idx >= Items.GetMaxIndex() || !Items.IsValidIndex(Idx))
+						{
+							break;
+						}
+						const FNavigationObstacleHashGrid2D::FItem& It = Items[Idx];
+						OutCloseEntities.Add(It.ID);
+						if (OutCloseEntities.Num() >= MaxResults)
+						{
+							return;
+						}
+						const int32 NextIdx = It.Next;
+						if (NextIdx == Idx)
+						{
+							break; // Self-loop guard
+						}
+						Idx = NextIdx;
+					}
+				}
+			}
+		}
 
 	// Adapted from ray-capsule intersection: https://iquilezles.org/www/articles/intersectors/intersectors.htm
 	static FVector::FReal ComputeClosestPointOfApproach(const FVector2D Pos, const FVector2D Vel, const FVector::FReal Rad, const FVector2D SegStart, const FVector2D SegEnd, const FVector::FReal TimeHoriz)
@@ -405,7 +412,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		return;
 	}
 
-	EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, ContextNavSubsystem](FMassExecutionContext& Context)
+		EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, ContextNavSubsystem](FMassExecutionContext& Context)
 	{
 		const float DeltaTime = Context.GetDeltaTimeSeconds();
 		const double CurrentTime = World->GetTimeSeconds();
@@ -418,8 +425,17 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		const TConstArrayView<FAgentRadiusFragment> RadiusList = Context.GetFragmentView<FAgentRadiusFragment>();
 		const TConstArrayView<FMassAvoidanceEntitiesToIgnoreFragment> EntitiesToIgnoreList = Context.GetFragmentView<FMassAvoidanceEntitiesToIgnoreFragment>();
 		const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetFragmentView<FMassMoveTargetFragment>();
-		const FMassMovingAvoidanceParameters& MovingAvoidanceParams = Context.GetConstSharedFragment<FMassMovingAvoidanceParameters>();
-		const FMassMovementParameters& MovementParams = Context.GetConstSharedFragment<FMassMovementParameters>();
+		
+		const FMassMovingAvoidanceParameters* MovingAvoidanceParamsPtr = Context.GetConstSharedFragmentPtr<FMassMovingAvoidanceParameters>();
+		const FMassMovementParameters* MovementParamsPtr = Context.GetConstSharedFragmentPtr<FMassMovementParameters>();
+
+		if (!MovingAvoidanceParamsPtr || !MovementParamsPtr)
+		{
+			return;
+		}
+
+		const FMassMovingAvoidanceParameters& MovingAvoidanceParams = *MovingAvoidanceParamsPtr;
+		const FMassMovementParameters& MovementParams = *MovementParamsPtr;
 
 		const FVector::FReal InvPredictiveAvoidanceTime = 1. / MovingAvoidanceParams.PredictiveAvoidanceTime;
 

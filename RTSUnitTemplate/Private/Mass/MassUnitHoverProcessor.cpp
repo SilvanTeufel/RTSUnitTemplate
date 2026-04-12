@@ -34,6 +34,7 @@ void UMassUnitHoverProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassHoverFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassHoverTag>(EMassFragmentPresence::All); // Nur Entities im Hover-Zustand
 	EntityQuery.RegisterWithProcessor(*this);
@@ -80,25 +81,6 @@ void UMassUnitHoverProcessor::BeginDestroy()
 	Super::BeginDestroy();
 }
 
-static float GetRadiusFromBounds(const FVector& LocalExtent, const FVector& LocalDir)
-{
-	float AbsX = FMath::Abs(LocalDir.X);
-	float AbsY = FMath::Abs(LocalDir.Y);
-
-	// Ensure Extent is valid to avoid div by zero
-	float Ex = FMath::Max(1.0f, LocalExtent.X);
-	float Ey = FMath::Max(1.0f, LocalExtent.Y);
-
-	if (AbsX < 1e-4f && AbsY < 1e-4f) return FMath::Max(Ex, Ey);
-
-	// Normalize LocalDir in 2D for radius calculation
-	float L = FMath::Sqrt(AbsX * AbsX + AbsY * AbsY);
-	float nX = AbsX / L;
-	float nY = AbsY / L;
-
-	return 1.0f / FMath::Max(nX / Ex, nY / Ey);
-}
-
 void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 	UWorld* World = EntityManager.GetWorld();
@@ -128,6 +110,7 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 		const auto VisualFrags = ChunkContext.GetFragmentView<FMassUnitVisualFragment>();
 		const auto Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
 		const auto ActorFrags = ChunkContext.GetFragmentView<FMassActorFragment>();
+		const auto CharFrags = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
 		{
@@ -139,43 +122,26 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			const FTransform& EntityTransform = Transforms[i].GetTransform();
 			const FVector EntityLocation = EntityTransform.GetLocation();
 
-			// Project mouse to Entity's Z plane
-			if (FMath::IsNearlyZero(RayDirection.Z)) continue;
-			float t = (EntityLocation.Z - RayOrigin.Z) / RayDirection.Z;
-			if (t < 0) continue;
-			FVector MousePosAtZ = RayOrigin + t * RayDirection;
-
-			FVector DirToMouse = MousePosAtZ - EntityLocation;
-			DirToMouse.Z = 0.f;
-			float DistSq = DirToMouse.SizeSquared();
+			const FMassAgentCharacteristicsFragment& CharFrag = CharFrags[i];
+			float Height = CharFrag.bUseBoxComponent ? CharFrag.BoxExtent.Z * 2.0f : CharFrag.CapsuleHeight * 2.0f;
 
 			if (VisualFrags[i].bUseSkeletalMovement)
 			{
-				if (const AActor* Actor = ActorFrags[i].Get())
+				FVector OutP1, OutP2;
+				FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, EntityLocation, EntityLocation + FVector(0,0,Height), OutP1, OutP2);
+				float DistSq = FVector::DistSquared(OutP1, OutP2);
+
+				FVector DirToMouse = OutP1 - OutP2;
+				DirToMouse.Z = 0.f;
+				float Radius = CharFrag.GetRadiusInDirection(DirToMouse.GetSafeNormal2D(), EntityTransform.GetRotation().Rotator());
+				if (DistSq <= FMath::Square(Radius))
 				{
-					if (const ACharacter* Char = Cast<ACharacter>(Actor))
+					bHit = true;
+					if (const AActor* Actor = ActorFrags[i].Get())
 					{
-						if (USkeletalMeshComponent* Mesh = Char->GetMesh())
+						if (const ACharacter* Char = Cast<ACharacter>(Actor))
 						{
-							FVector LocalExtent = Mesh->Bounds.BoxExtent; // Fallback
-							if (Mesh->GetSkeletalMeshAsset())
-							{
-								LocalExtent = Mesh->GetSkeletalMeshAsset()->GetBounds().BoxExtent * EntityTransform.GetScale3D();
-							}
-
-							FVector LocalDir = EntityTransform.GetRotation().UnrotateVector(DirToMouse);
-							LocalDir.Z = 0.f;
-
-							if (DistSq < 1.0f) {
-								bHit = true;
-							} else {
-								float Radius = GetRadiusFromBounds(LocalExtent, LocalDir.GetSafeNormal2D());
-								if (DistSq <= FMath::Square(Radius)) {
-									bHit = true;
-								}
-							}
-
-							if (bHit) CurrentMesh = Mesh;
+							CurrentMesh = Char->GetMesh();
 						}
 					}
 				}
@@ -185,37 +151,22 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 				// Check Visual ISMs instances
 				for (const FMassUnitVisualInstance& Instance : VisualFrags[i].VisualInstances)
 				{
-					if (Instance.TargetISM.IsValid())
+					FTransform WorldTransform = EntityTransform * Instance.CurrentRelativeTransform;
+					FVector InstanceLocation = WorldTransform.GetLocation();
+					
+					FVector OutP1, OutP2;
+					FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, InstanceLocation, InstanceLocation + FVector(0,0,Height), OutP1, OutP2);
+					float DistSq = FVector::DistSquared(OutP1, OutP2);
+
+					FVector InstanceDirToMouse = OutP1 - OutP2;
+					InstanceDirToMouse.Z = 0.f;
+
+					float Radius = CharFrag.GetRadiusInDirection(InstanceDirToMouse.GetSafeNormal2D(), WorldTransform.GetRotation().Rotator());
+					if (DistSq <= FMath::Square(Radius))
 					{
-						UStaticMesh* SM = Instance.TargetISM->GetStaticMesh();
-						if (SM)
-						{
-							FTransform WorldTransform = EntityTransform * Instance.CurrentRelativeTransform;
-							FVector InstanceLocation = WorldTransform.GetLocation();
-							
-							FVector InstanceDirToMouse = MousePosAtZ - InstanceLocation;
-							InstanceDirToMouse.Z = 0.f;
-							float InstanceDistSq = InstanceDirToMouse.SizeSquared();
-
-							FVector LocalExtent = SM->GetBounds().BoxExtent * WorldTransform.GetScale3D();
-							FVector LocalDir = WorldTransform.GetRotation().UnrotateVector(InstanceDirToMouse);
-							LocalDir.Z = 0.f;
-
-							if (InstanceDistSq < 1.0f) {
-								bHit = true;
-							} else {
-								float Radius = GetRadiusFromBounds(LocalExtent, LocalDir.GetSafeNormal2D());
-								if (InstanceDistSq <= FMath::Square(Radius)) {
-									bHit = true;
-								}
-							}
-
-							if (bHit)
-							{
-								CurrentInstanceIndex = Instance.InstanceIndex;
-								break; 
-							}
-						}
+						bHit = true;
+						CurrentInstanceIndex = Instance.InstanceIndex;
+						break; 
 					}
 				}
 			}
