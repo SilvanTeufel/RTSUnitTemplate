@@ -269,6 +269,9 @@ struct FMassWorkerStatsFragment : public FMassFragment
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	float BuildAreaArrivalDistance = 300.f;
 
+	UPROPERTY(VisibleAnywhere, Category = "Worker|State", Transient)
+	float BuildAreaRadius = 0.f;
+
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	FVector BasePosition = FVector::ZeroVector; // Populated by external logic
 
@@ -295,6 +298,9 @@ struct FMassWorkerStatsFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	float ResourceArrivalDistance = 300.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "Worker|State", Transient)
+	float ResourceRadius = 0.f;
 
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	bool UpdateMovement = true;

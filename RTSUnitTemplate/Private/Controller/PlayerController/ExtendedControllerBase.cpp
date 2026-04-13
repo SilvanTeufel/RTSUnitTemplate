@@ -105,6 +105,24 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
+	if (LogSelectedTags)
+	{
+		if (UWorld* World = GetWorld())
+		{
+			if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+			{
+				const FMassEntityManager& EntityManager = MassSubsystem->GetEntityManager();
+				for (AUnitBase* Unit : SelectedUnits)
+				{
+					if (Unit)
+					{
+						UE::Mass::Debug::LogEntityTags(Unit->MassActorBindingComponent->GetEntityHandle(), EntityManager, this);
+					}
+				}
+			}
+		}
+	}
+
 	MoveDraggedUnit_Implementation(DeltaSeconds);
 	MoveWorkArea_Local(DeltaSeconds);
 

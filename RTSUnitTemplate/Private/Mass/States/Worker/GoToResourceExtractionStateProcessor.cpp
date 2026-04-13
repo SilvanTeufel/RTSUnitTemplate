@@ -32,6 +32,7 @@ void UGoToResourceExtractionStateProcessor::ConfigureQueries(const TSharedRef<FM
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly);   // Read ResourceArrivalDistance
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);    // Write new move target / stop movement
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
     // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // Might read velocity to see if stuck? Optional.
 
 
@@ -85,6 +86,8 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const auto CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 
             //UE_LOG(LogTemp, Log, TEXT("UGoToResourceExtractionStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
@@ -94,11 +97,13 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             FMassAIStateFragment& AIState = AIStateList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
+            const FMassCombatStatsFragment& CombatStats = CombatStatsList[i];
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
             AIState.StateTimer += ExecutionInterval;
             // --- 1. Check Target Validity ---
-
-   
+            
             if (!WorkerStatsFrag.ResourceAvailable)
             {
                 // Target is lost or invalid. Signal to go idle or find a new task.
@@ -121,19 +126,23 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
             const float DistanceToTargetCenter = FVector::Dist2D(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
             
-            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance) && !AIState.SwitchingState)
+            MoveTarget.DistanceToGoal = DistanceToTargetCenter - (WorkerStatsFrag.ResourceArrivalDistance + CharFrag.CapsuleRadius); // Update distance
+
+            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance + CharFrag.CapsuleRadius) && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement and mirror to clients when reaching the resource
-                FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
                 StopMovement(MoveTarget, World);
                 // Queue signals thread-safely using the deferred command buffer
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ResourceExtraction, Entity);
                 }
+                continue;
             }
             
+            if (!AIState.SwitchingState)
+                UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStats.RunSpeed, World);
         }
     }); // End ForEachEntityChunk
 

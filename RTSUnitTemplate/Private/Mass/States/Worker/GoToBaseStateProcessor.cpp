@@ -99,7 +99,7 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
         const TArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         const int32 NumEntities = ChunkContext.GetNumEntities();
-
+            //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -107,6 +107,7 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
             const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[i];
             FMassAIStateFragment& AIState = AIStateList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
+            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
             
@@ -121,13 +122,13 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
             }
 
             // --- 1. Arrival Check ---
-            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition) - CharFrag.CapsuleRadius;
-
-            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
+            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
+ 
+            MoveTarget.DistanceToGoal = DistanceToTargetCenter - (WorkerStats.BaseArrivalDistance + CharFrag.CapsuleRadius); // Update distance
+            if (DistanceToTargetCenter <= (WorkerStats.BaseArrivalDistance + CharFrag.CapsuleRadius) && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
-                FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
                 StopMovement(MoveTarget, World);
                 if (SignalSubsystem)
                 {
@@ -135,9 +136,12 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
                 }
                 continue;
             }
+            
+            //if (!AIState.SwitchingState)
+                //UpdateMoveTarget(MoveTarget, WorkerStats.BasePosition, CombatStatsList[i].RunSpeed, World);
+            
 
             // --- 2. Movement Logic ---
-            UpdateMoveTarget(MoveTargetList[i], WorkerStats.BasePosition, CombatStatsList[i].RunSpeed, World);
         } // End loop through entities
     }); // End ForEachEntityChunk
 }

@@ -63,7 +63,7 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     }
 
     UWorld* World = EntityManager.GetWorld();
-
+    
     EntityQuery.ForEachEntityChunk(Context,
         [this, &EntityManager, World](FMassExecutionContext& ChunkContext)
     {
@@ -75,7 +75,7 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
-
+           // UE_LOG(LogTemp, Log, TEXT("UGoToRepairStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];

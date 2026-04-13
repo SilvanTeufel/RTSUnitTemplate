@@ -968,26 +968,24 @@ void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandl
 	}
 }
 
-FVector FindGroundLocationForActor(const UObject* WorldContextObject, AActor* TargetActor, TArray<AActor*> ActorsToIgnore, float TraceDistance = 10000.f)
+FVector FindGroundLocationAtPosition(const UObject* WorldContextObject, FVector Position, TArray<AActor*> ActorsToIgnore, float TraceDistance = 10000.f)
 {
-	if (!TargetActor || !WorldContextObject)
+	if (!WorldContextObject)
 	{
-		return TargetActor ? TargetActor->GetActorLocation() : FVector::ZeroVector;
+		return Position;
 	}
 
 	UWorld* World = WorldContextObject->GetWorld();
 	if (!World)
 	{
-		return TargetActor->GetActorLocation();
+		return Position;
 	}
 
-	FVector ActorLocation = TargetActor->GetActorLocation();
-	FVector StartTrace = ActorLocation + FVector(0.f, 0.f, TraceDistance);
-	FVector EndTrace = ActorLocation - FVector(0.f, 0.f, TraceDistance);
+	FVector StartTrace = Position + FVector(0.f, 0.f, TraceDistance);
+	FVector EndTrace = Position - FVector(0.f, 0.f, TraceDistance);
 
 	FHitResult HitResult;
 	FCollisionQueryParams CollisionParams;
-	CollisionParams.AddIgnoredActor(TargetActor);
 	CollisionParams.AddIgnoredActors(ActorsToIgnore);
 
 	TArray<UPrimitiveComponent*> AllComponentsToIgnore;
@@ -1016,7 +1014,6 @@ FVector FindGroundLocationForActor(const UObject* WorldContextObject, AActor* Ta
 		}
 	};
 
-	CollectUnitComponents(TargetActor);
 	for (AActor* IgnoreActor : ActorsToIgnore)
 	{
 		CollectUnitComponents(IgnoreActor);
@@ -1024,17 +1021,55 @@ FVector FindGroundLocationForActor(const UObject* WorldContextObject, AActor* Ta
 
 	CollisionParams.AddIgnoredComponents(AllComponentsToIgnore);
 
-	
 	if (World->LineTraceSingleByChannel(HitResult, StartTrace, EndTrace, ECC_Visibility, CollisionParams))
 	{
-		// We hit something. Return a vector with the actor's X/Y and the hit's Z.
-		return FVector(ActorLocation.X, ActorLocation.Y, HitResult.Location.Z);
+		return FVector(Position.X, Position.Y, HitResult.Location.Z);
 	}
 
-	// If the trace fails, return the original actor location as a fallback.
-	return ActorLocation;
+	return Position;
 }
 
+FVector FindGroundLocationForActor(const UObject* WorldContextObject, AActor* TargetActor, TArray<AActor*> ActorsToIgnore, float TraceDistance = 10000.f)
+{
+	if (!TargetActor)
+	{
+		return FVector::ZeroVector;
+	}
+
+	return FindGroundLocationAtPosition(WorldContextObject, TargetActor->GetActorLocation(), ActorsToIgnore, TraceDistance);
+}
+
+
+static FVector ProjectLocationToNavMeshOnEdge(UWorld* World, const FVector& Center, const FVector& TargetPos, float TotalRadius)
+{
+	if (!World) return TargetPos;
+
+	UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World);
+	if (!NavSys) return TargetPos;
+
+	FNavLocation ProjectedLocation;
+	// 1. Prüfen, ob der Punkt bereits auf dem NavMesh liegt (kleiner Radius)
+	if (NavSys->ProjectPointToNavigation(TargetPos, ProjectedLocation, FVector(20.f, 20.f, 200.f)))
+	{
+		return ProjectedLocation.Location;
+	}
+
+	// 2. Wenn nicht, suche in einem größeren Umkreis
+	if (NavSys->ProjectPointToNavigation(TargetPos, ProjectedLocation, FVector(500.f, 500.f, 500.f)))
+	{
+		FVector Dir = (ProjectedLocation.Location - Center);
+		Dir.Z = 0.f;
+		if (!Dir.IsNearlyZero())
+		{
+			Dir.Normalize();
+			// 3. Auf den Rand zurückprojizieren
+			return Center + Dir * TotalRadius;
+		}
+		return ProjectedLocation.Location;
+	}
+
+	return TargetPos;
+}
 
 void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle Entity)
 {
@@ -1191,29 +1226,45 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			
             		if (StrongUnitActor->Base)
             		{
-            			WorkerStats->BasePosition = FindGroundLocationForActor(this, StrongUnitActor->Base, {StrongUnitActor, StrongUnitActor->Base}); //StrongUnitActor->Base->GetActorLocation();
-						FVector Origin, BoxExtent;
+            			FVector WorkerLoc = StrongUnitActor->GetActorLocation();
+            			FVector BaseLoc = StrongUnitActor->Base->GetActorLocation();
 
-						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
-						if (CharFragment)
-						{
-							WorkerStats->BaseArrivalDistance = CharFragment->CapsuleRadius+170.f;
-						}else
-						{
-							WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+170.f;
-						}
-            			
+            			// 2D Richtung von Basis zum Worker
+            			FVector DirToWorker = (WorkerLoc - BaseLoc);
+            			DirToWorker.Z = 0.f;
+            			DirToWorker = DirToWorker.GetSafeNormal();
+
+            			float BaseRadius = StrongUnitActor->Base->GetCollisionRadiusInDirection(DirToWorker);
+            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetActorRotation()) : 0.f;
+
+            			// Position am Rand der Basis extrapolieren
+            			FVector TargetXY = BaseLoc + DirToWorker * (BaseRadius + AgentRadius);
+            			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), BaseLoc, TargetXY, BaseRadius + AgentRadius);
+
+            			// Z-Höhe korrigieren (Trace am neuen Punkt)
+            			WorkerStats->BasePosition = FindGroundLocationAtPosition(this, TargetXY, {StrongUnitActor, StrongUnitActor->Base});
+            			WorkerStats->BaseArrivalDistance = BaseArrivalDistance;
             		}
 
             		WorkerStats->BuildingAreaAvailable = (StrongUnitActor->BuildArea && IsValid(StrongUnitActor->BuildArea)) ? true : false;
             		if (StrongUnitActor->BuildArea)
             		{
-            			FVector Origin, BoxExtent;
-						StrongUnitActor->BuildArea->GetActorBounds( false, Origin, BoxExtent);
+            			FVector WorkerLoc = StrongUnitActor->GetActorLocation();
+            			FVector AreaLoc = StrongUnitActor->BuildArea->GetActorLocation();
+            			FVector DirToWorker = (WorkerLoc - AreaLoc);
+            			DirToWorker.Z = 0.f;
+            			DirToWorker = DirToWorker.GetSafeNormal();
 
-            			WorkerStats->BuildAreaArrivalDistance = BoxExtent.Size()/2+150.f;
+            			float AreaRadius = StrongUnitActor->BuildArea->GetCollisionRadiusInDirection(DirToWorker);
+            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetActorRotation()) : 0.f;
+            			
+            			FVector TargetXY = AreaLoc + DirToWorker * (AreaRadius + AgentRadius);
+            			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
+
+            			WorkerStats->BuildAreaRadius = AreaRadius;
+            			WorkerStats->BuildAreaArrivalDistance = BaseArrivalDistance; // Nutze konsistente Distanz
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
-            			WorkerStats->BuildAreaPosition = FindGroundLocationForActor(this, StrongUnitActor->BuildArea, {StrongUnitActor, StrongUnitActor->BuildArea}); // StrongUnitActor->BuildArea->GetActorLocation();
+            			WorkerStats->BuildAreaPosition = FindGroundLocationAtPosition(this, TargetXY, {StrongUnitActor, StrongUnitActor->BuildArea});
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
             		}
 
@@ -1225,10 +1276,21 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		
             		if (StrongUnitActor->ResourcePlace)
             		{
-            			FVector Origin, BoxExtent;
-						StrongUnitActor->ResourcePlace->GetActorBounds(false, Origin, BoxExtent);
-            			WorkerStats->ResourceArrivalDistance = BoxExtent.Size()/2+50.f;
-            			WorkerStats->ResourcePosition = FindGroundLocationForActor(this, StrongUnitActor->ResourcePlace, {StrongUnitActor, StrongUnitActor->ResourcePlace});
+            			FVector WorkerLoc = StrongUnitActor->GetActorLocation();
+            			FVector AreaLoc = StrongUnitActor->ResourcePlace->GetActorLocation();
+            			FVector DirToWorker = (WorkerLoc - AreaLoc);
+            			DirToWorker.Z = 0.f;
+            			DirToWorker = DirToWorker.GetSafeNormal();
+
+            			float AreaRadius = StrongUnitActor->ResourcePlace->GetCollisionRadiusInDirection(DirToWorker);
+            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetActorRotation()) : 0.f;
+
+            			FVector TargetXY = AreaLoc + DirToWorker * (AreaRadius + AgentRadius);
+            			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
+
+            			WorkerStats->ResourceRadius = AreaRadius;
+            			WorkerStats->ResourceArrivalDistance = BaseArrivalDistance; // Nutze konsistente Distanz
+            			WorkerStats->ResourcePosition = FindGroundLocationAtPosition(this, TargetXY, {StrongUnitActor, StrongUnitActor->ResourcePlace});
             		}
             		
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
@@ -1314,21 +1376,6 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 						   && StrongUnitActor->GetUnitState() == UnitData::Idle) || (DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())))){
     				StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
 				}
-    	
-    			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
-    			}else if(StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
-    				State->StateTimer = 0.f;
-    				SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
-    			}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
-    				State->StateTimer = 0.f;
-					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
-    			}else if(StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
-    			}else if(StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
-    			}
-
 
     			if(StrongUnitActor->GetUnitState() != UnitData::GoToBuild && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
     				StrongUnitActor->SetUnitState(UnitData::GoToBuild);
@@ -1342,6 +1389,19 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 					StrongUnitActor->SetUnitState(UnitData::GoToBase);
 				}
     	
+    			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
+					State->StateTimer = 0.f;
+					SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
+					State->StateTimer = 0.f;
+					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
+					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
+				}
     	
    				// Debug logging for UnitState, Tags, and BuildArea before movement update
 
@@ -3477,7 +3537,7 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 		FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr;
 		const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
 				
-		if (UnitBase->UnitState == UnitData::GoToResourceExtraction)
+		if (UnitBase->UnitState == UnitData::GoToResourceExtraction) // DoesEntityHaveTag(EntityManager,Entity, FMassStateGoToResourceExtractionTag::StaticStruct()) - UnitBase->UnitState == UnitData::GoToResourceExtraction
 		{
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);

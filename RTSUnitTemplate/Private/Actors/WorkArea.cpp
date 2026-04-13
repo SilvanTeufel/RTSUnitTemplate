@@ -47,11 +47,11 @@ AWorkArea::AWorkArea()
 
 
 	
-	//TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Is WorkArea Capsule"));
-	//TriggerCapsule->InitCapsuleSize(100.f, 100.0f);;
-	//TriggerCapsule->SetCollisionProfileName(TEXT("Trigger"));
-	//TriggerCapsule->SetupAttachment(RootComponent);
-	//TriggerCapsule->OnComponentBeginOverlap.AddDynamic(this, &AWorkArea::OnOverlapBegin);
+	TriggerCapsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("TriggerCapsule"));
+	TriggerCapsule->SetupAttachment(SceneRoot);
+	TriggerCapsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	TriggerCapsule->SetCollisionResponseToAllChannels(ECR_Ignore);
+	TriggerCapsule->InitCapsuleSize(100.f, 100.0f);
 
 	//SceneRoot->SetVisibility(false, true);
 	
@@ -701,4 +701,16 @@ void AWorkArea::OnOverflowTimer()
 		// Remove worker from array via helper (ensures consistent behavior)
 		RemoveWorkerFromArray(Worker);
 	}
+}
+
+float AWorkArea::GetCollisionRadiusInDirection(const FVector& Direction) const
+{
+	if (TriggerCapsule)
+	{
+		return TriggerCapsule->GetScaledCapsuleRadius();
+	}
+
+	FVector MyOrigin, BoxExtent;
+	GetActorBounds(false, MyOrigin, BoxExtent);
+	return FMath::Max(BoxExtent.X, BoxExtent.Y);
 }

@@ -58,6 +58,8 @@ private:
 	FDelegateHandle ExtractionSignalHandle;
 	
 public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool LogSelectedTags = false;
 	// Set to true when a keyboard ability was just executed; consumed on next left click
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool bUsedKeyboardAbilityBeforeClick = false;

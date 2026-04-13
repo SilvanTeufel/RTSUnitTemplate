@@ -263,7 +263,8 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				const bool bShowDueToPing = bRecentPing && bNotFull && (Vis.bIsMyTeam || Vis.bIsVisibleEnemy);
 
 				// Include construction check and recently damaged/leveled/pinged popups; always auto-collapse after VisibleDuration or if health <= 0
-				Unit->OpenHealthWidget = (Stats.Health > 0.f) && (bIsConstruction || bRecentlyDamaged || bRecentlyLeveled || bShowDueToPing);
+				// Special case: Construction units show healthbar even at 0 health while being built
+				Unit->OpenHealthWidget = (Stats.Health > 0.f || bIsConstruction) && (bIsConstruction || bRecentlyDamaged || bRecentlyLeveled || bShowDueToPing);
 				Unit->bShowLevelOnly = (Stats.Health > 0.f) && (bRecentlyLeveled && !bShowDueToPing && !bIsConstruction && !bRecentlyDamaged);
 			}
 

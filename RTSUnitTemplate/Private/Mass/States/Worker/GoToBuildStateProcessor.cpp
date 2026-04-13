@@ -113,10 +113,10 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                  continue;
             }
             
-            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition)-CharFrag.CapsuleRadius;
+            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition);
 
-            MoveTarget.DistanceToGoal = DistanceToTargetCenter-WorkerStats.BuildAreaArrivalDistance; // Update distance
-            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
+            MoveTarget.DistanceToGoal = DistanceToTargetCenter - (WorkerStats.BuildAreaArrivalDistance + CharFrag.CapsuleRadius); // Update distance
+            if (DistanceToTargetCenter <= (WorkerStats.BuildAreaArrivalDistance + CharFrag.CapsuleRadius) && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
@@ -127,6 +127,9 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                 }
                 continue;
             }
+            
+            if (!AIState.SwitchingState)
+                UpdateMoveTarget(MoveTarget, WorkerStats.BuildAreaPosition, Stats.RunSpeed, World);
         } // End loop through entities
     }); // End ForEachEntityChunk
 
