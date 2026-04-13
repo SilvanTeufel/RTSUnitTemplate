@@ -124,8 +124,8 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
             // --- 1. Arrival Check ---
             const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
  
-            MoveTarget.DistanceToGoal = DistanceToTargetCenter - (WorkerStats.BaseArrivalDistance + CharFrag.CapsuleRadius); // Update distance
-            if (DistanceToTargetCenter <= (WorkerStats.BaseArrivalDistance + CharFrag.CapsuleRadius) && !AIState.SwitchingState)
+            MoveTarget.DistanceToGoal = DistanceToTargetCenter - WorkerStats.BaseArrivalDistance; // Update distance
+            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients
@@ -196,7 +196,7 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
             }
 
             // Arrival check using GoToBase conditions
-            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition) - CharFrag.CapsuleRadius;
+            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
             if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;

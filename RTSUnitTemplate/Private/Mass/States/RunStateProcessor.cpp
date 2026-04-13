@@ -309,7 +309,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
                 UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);
             }
-            else if (!bIsFriendlyActive && FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+            else if (!bIsFriendlyActive && FVector::Dist2D(CurrentLocation, FinalDestination) <= (AcceptanceRadius))
             {
                 StateFrag.SwitchingState = true;
                 VelocityList[i].Value = FVector::ZeroVector;

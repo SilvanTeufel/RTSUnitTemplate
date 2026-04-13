@@ -1243,7 +1243,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
             			// Z-Höhe korrigieren (Trace am neuen Punkt)
             			WorkerStats->BasePosition = FindGroundLocationAtPosition(this, TargetXY, {StrongUnitActor, StrongUnitActor->Base});
-            			WorkerStats->BaseArrivalDistance = BaseArrivalDistance;
+            			WorkerStats->BaseArrivalDistance = ArrivalDistanceMultiplier * StrongUnitActor->MovementAcceptanceRadius;
             		}
 
             		WorkerStats->BuildingAreaAvailable = (StrongUnitActor->BuildArea && IsValid(StrongUnitActor->BuildArea)) ? true : false;
@@ -1262,7 +1262,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
 
             			WorkerStats->BuildAreaRadius = AreaRadius;
-            			WorkerStats->BuildAreaArrivalDistance = BaseArrivalDistance; // Nutze konsistente Distanz
+            			WorkerStats->BuildAreaArrivalDistance = ArrivalDistanceMultiplier * StrongUnitActor->MovementAcceptanceRadius; // Nutze konsistente Distanz
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
             			WorkerStats->BuildAreaPosition = FindGroundLocationAtPosition(this, TargetXY, {StrongUnitActor, StrongUnitActor->BuildArea});
 						WorkerStats->BuildTime = StrongUnitActor->BuildArea->BuildTime;
@@ -1289,7 +1289,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
 
             			WorkerStats->ResourceRadius = AreaRadius;
-            			WorkerStats->ResourceArrivalDistance = BaseArrivalDistance; // Nutze konsistente Distanz
+            			WorkerStats->ResourceArrivalDistance = ArrivalDistanceMultiplier * StrongUnitActor->MovementAcceptanceRadius; // Nutze konsistente Distanz
             			WorkerStats->ResourcePosition = FindGroundLocationAtPosition(this, TargetXY, {StrongUnitActor, StrongUnitActor->ResourcePlace});
             		}
             		
@@ -1337,7 +1337,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     TWeakObjectPtr<AUnitBase> WeakUnitActor(const_cast<AUnitBase*>(UnitActor));
     FMassEntityHandle CapturedEntity = Entity;
 	
-    AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity, &EntityManager]() mutable
+    AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity]() mutable
     {
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
@@ -1355,6 +1355,25 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 						SwitchState(UnitSignals::Casting, CapturedEntity, GTEntityManager);
 		}
     	
+    	if(StrongUnitActor->GetUnitState() == UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateRunTag::StaticStruct())){
+    		if (FMassAIStateFragment* StateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity))
+    		{
+    			StateFrag->SyncIdleCount++;
+    			if (StateFrag->SyncIdleCount >= 3)
+    			{
+    				SwitchState(UnitSignals::Idle, CapturedEntity, GTEntityManager);
+    				StateFrag->SyncIdleCount = 0;
+    			}
+    		}
+    	}
+    	else
+    	{
+    		if (FMassAIStateFragment* StateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity))
+    		{
+    			StateFrag->SyncIdleCount = 0;
+    		}
+    	}
+    	
     	if (!StrongUnitActor->IsWorker) return;
     		
         if (!EntitySubsystem)
@@ -1363,7 +1382,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
             return;
         }
         
-    	FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
+    	FMassAIStateFragment* State = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
     	FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
 
 				TArray<FMassEntityHandle> CapturedEntitys;
@@ -3574,10 +3593,10 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 				UpdateMoveTarget(MoveTarget, Goal, StatsFrag.RunSpeed, World);
 			}
 		}
-		else if (UnitBase->UnitState == UnitData::Idle)
+		/*else if (UnitBase->UnitState == UnitData::Idle)
 		{
 			StopMovement(MoveTarget, World);
-		}
+		}*/
 	}
 }
 

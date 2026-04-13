@@ -470,6 +470,9 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	int32 LastProjectileMaxPiercedTargets = 1;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	uint8 SyncIdleCount = 0;
 	
 };
 

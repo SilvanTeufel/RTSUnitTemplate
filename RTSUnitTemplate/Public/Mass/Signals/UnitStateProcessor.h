@@ -44,7 +44,7 @@ public:
 	float RangedZPositionDamageMultiplier = 0.75f;
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	float BaseArrivalDistance = 50.f;
+	float ArrivalDistanceMultiplier = 5.f;
 protected:
 	// We don't need ConfigureQueries or Execute for typical frame updates
 	// We only need to register our signal handler

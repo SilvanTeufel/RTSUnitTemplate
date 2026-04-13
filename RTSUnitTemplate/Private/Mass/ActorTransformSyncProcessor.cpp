@@ -370,7 +370,16 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
         {
             const bool bIsAttackingOrPaused = (UnitBase->GetUnitState() == UnitData::Attack || UnitBase->GetUnitState() == UnitData::Pause);
 
-            if (!bIsAttackingOrPaused && !UnitBase->IsWorker && UnitBase->GetUnitState() != UnitData::Run && UnitBase->GetUnitState() != UnitData::GoToRepair && UnitBase->GetUnitState() != UnitData::Repair && UnitBase->GetUnitState() != UnitData::Casting)
+            if (!bIsAttackingOrPaused &&
+                UnitBase->GetUnitState() != UnitData::Run &&
+                UnitBase->GetUnitState() != UnitData::GoToRepair &&
+                UnitBase->GetUnitState() != UnitData::GoToBase &&
+                UnitBase->GetUnitState() != UnitData::GoToResourceExtraction &&
+                UnitBase->GetUnitState() != UnitData::ResourceExtraction &&
+                UnitBase->GetUnitState() != UnitData::GoToBuild &&
+                UnitBase->GetUnitState() != UnitData::Build &&
+                UnitBase->GetUnitState() != UnitData::Repair &&
+                UnitBase->GetUnitState() != UnitData::Casting)
             {
                 UnitBase->SetUnitState(UnitData::Run);
             }

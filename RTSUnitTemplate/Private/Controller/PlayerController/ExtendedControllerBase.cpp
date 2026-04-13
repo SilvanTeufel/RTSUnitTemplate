@@ -112,10 +112,13 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 			if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 			{
 				const FMassEntityManager& EntityManager = MassSubsystem->GetEntityManager();
+				const UEnum* UnitStateEnum = StaticEnum<UnitData::EState>();
 				for (AUnitBase* Unit : SelectedUnits)
 				{
 					if (Unit)
 					{
+						FString UnitStateStr = UnitStateEnum ? UnitStateEnum->GetNameStringByValue(Unit->GetUnitState().GetValue()) : TEXT("Unknown");
+						UE_LOG(LogTemp, Log, TEXT("Unit: %s | State: %s"), *Unit->Name, *UnitStateStr);
 						UE::Mass::Debug::LogEntityTags(Unit->MassActorBindingComponent->GetEntityHandle(), EntityManager, this);
 					}
 				}

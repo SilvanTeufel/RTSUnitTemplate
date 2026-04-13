@@ -126,9 +126,9 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
             const float DistanceToTargetCenter = FVector::Dist2D(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
             
-            MoveTarget.DistanceToGoal = DistanceToTargetCenter - (WorkerStatsFrag.ResourceArrivalDistance + CharFrag.CapsuleRadius); // Update distance
+            MoveTarget.DistanceToGoal = DistanceToTargetCenter - WorkerStatsFrag.ResourceArrivalDistance; // Update distance
 
-            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance + CharFrag.CapsuleRadius) && !AIState.SwitchingState)
+            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement and mirror to clients when reaching the resource
@@ -141,8 +141,8 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 continue;
             }
             
-            if (!AIState.SwitchingState)
-                UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStats.RunSpeed, World);
+           // if (!AIState.SwitchingState)
+                //UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStats.RunSpeed, World);
         }
     }); // End ForEachEntityChunk
 
