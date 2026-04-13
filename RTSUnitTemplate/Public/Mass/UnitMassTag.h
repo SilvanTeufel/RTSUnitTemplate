@@ -795,6 +795,9 @@ struct FMassHoverFragment : public FMassFragment
 	int32 HoveredInstanceIndex = INDEX_NONE;
 
 	UPROPERTY(Transient)
+	TWeakObjectPtr<UInstancedStaticMeshComponent> HoveredISM;
+
+	UPROPERTY(Transient)
 	TWeakObjectPtr<USkeletalMeshComponent> HoveredMesh;
 
 	UPROPERTY(Transient)

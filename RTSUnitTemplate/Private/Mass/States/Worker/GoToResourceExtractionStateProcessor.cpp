@@ -119,9 +119,9 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 continue;
             }
 
-            const float DistanceToTargetCenter = FVector::Dist(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
+            const float DistanceToTargetCenter = FVector::Dist2D(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
             
-            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance+50.f) && !AIState.SwitchingState)
+            if (DistanceToTargetCenter <= (WorkerStatsFrag.ResourceArrivalDistance) && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement and mirror to clients when reaching the resource

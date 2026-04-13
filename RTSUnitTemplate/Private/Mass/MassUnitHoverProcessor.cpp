@@ -32,11 +32,11 @@ void UMassUnitHoverProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
 {
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
-	EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassHoverFragment>(EMassFragmentAccess::ReadWrite);
-	EntityQuery.AddTagRequirement<FMassHoverTag>(EMassFragmentPresence::All); // Nur Entities im Hover-Zustand
+	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All); // All units and buildings
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -103,12 +103,13 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 	FMassEntityHandle BestEntity;
 	float ClosestDistanceSq = FLT_MAX;
 	int32 BestInstanceIndex = INDEX_NONE;
+	TWeakObjectPtr<UInstancedStaticMeshComponent> BestISM = nullptr;
 	TWeakObjectPtr<USkeletalMeshComponent> BestMesh = nullptr;
 
 	EntityQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ChunkContext)
 	{
-		const auto VisualFrags = ChunkContext.GetFragmentView<FMassUnitVisualFragment>();
 		const auto Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
+		const auto VisualFrags = ChunkContext.GetFragmentView<FMassUnitVisualFragment>();
 		const auto ActorFrags = ChunkContext.GetFragmentView<FMassActorFragment>();
 		const auto CharFrags = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
@@ -117,68 +118,68 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 			bool bHit = false;
 			int32 CurrentInstanceIndex = INDEX_NONE;
+			TWeakObjectPtr<UInstancedStaticMeshComponent> CurrentISM = nullptr;
 			TWeakObjectPtr<USkeletalMeshComponent> CurrentMesh = nullptr;
 
 			const FTransform& EntityTransform = Transforms[i].GetTransform();
-			const FVector EntityLocation = EntityTransform.GetLocation();
-
 			const FMassAgentCharacteristicsFragment& CharFrag = CharFrags[i];
-			float Height = CharFrag.bUseBoxComponent ? CharFrag.BoxExtent.Z * 2.0f : CharFrag.CapsuleHeight * 2.0f;
 
-			if (VisualFrags[i].bUseSkeletalMovement)
+			FVector BaseLocation = EntityTransform.GetLocation();
+			const float HalfHeight = CharFrag.bUseBoxComponent ? CharFrag.BoxExtent.Z : CharFrag.CapsuleHeight;
+			const float Height = HalfHeight * 2.0f;
+
+			BaseLocation.Z = CharFrag.LastGroundLocation;
+			if (CharFrag.bIsFlying)
 			{
-				FVector OutP1, OutP2;
-				FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, EntityLocation, EntityLocation + FVector(0,0,Height), OutP1, OutP2);
-				float DistSq = FVector::DistSquared(OutP1, OutP2);
+				BaseLocation.Z += (CharFrag.FlyHeight - HalfHeight);
+			}
 
-				FVector DirToMouse = OutP1 - OutP2;
-				DirToMouse.Z = 0.f;
-				float Radius = CharFrag.GetRadiusInDirection(DirToMouse.GetSafeNormal2D(), EntityTransform.GetRotation().Rotator());
-				if (DistSq <= FMath::Square(Radius))
+			FVector OutP1, OutP2;
+			FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, BaseLocation, BaseLocation + FVector(0,0,Height), OutP1, OutP2);
+			float DistSq = FVector::DistSquared(OutP1, OutP2);
+
+			FVector DirToMouse = OutP1 - OutP2;
+			DirToMouse.Z = 0.f;
+			float Radius = CharFrag.GetRadiusInDirection(DirToMouse.GetSafeNormal2D(), EntityTransform.GetRotation().Rotator());
+
+			if (DistSq <= FMath::Square(Radius))
+			{
+				bHit = true;
+
+				const FMassUnitVisualFragment& VisualFrag = VisualFrags[i];
+				if (VisualFrag.VisualInstances.Num() > 0)
 				{
-					bHit = true;
-					if (const AActor* Actor = ActorFrags[i].Get())
+					CurrentInstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
+					CurrentISM = VisualFrag.VisualInstances[0].TargetISM.Get();
+				}
+
+				if (const AActor* Actor = ActorFrags[i].Get())
+				{
+					if (CurrentInstanceIndex == INDEX_NONE)
 					{
-						if (const ACharacter* Char = Cast<ACharacter>(Actor))
+						if (const AMassUnitBase* Unit = Cast<AMassUnitBase>(Actor))
 						{
-							CurrentMesh = Char->GetMesh();
+							CurrentInstanceIndex = Unit->InstanceIndex;
+							CurrentISM = Unit->ISMComponent;
 						}
 					}
-				}
-			}
-			else
-			{
-				// Check Visual ISMs instances
-				for (const FMassUnitVisualInstance& Instance : VisualFrags[i].VisualInstances)
-				{
-					FTransform WorldTransform = EntityTransform * Instance.CurrentRelativeTransform;
-					FVector InstanceLocation = WorldTransform.GetLocation();
 					
-					FVector OutP1, OutP2;
-					FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, InstanceLocation, InstanceLocation + FVector(0,0,Height), OutP1, OutP2);
-					float DistSq = FVector::DistSquared(OutP1, OutP2);
-
-					FVector InstanceDirToMouse = OutP1 - OutP2;
-					InstanceDirToMouse.Z = 0.f;
-
-					float Radius = CharFrag.GetRadiusInDirection(InstanceDirToMouse.GetSafeNormal2D(), WorldTransform.GetRotation().Rotator());
-					if (DistSq <= FMath::Square(Radius))
+					if (const ACharacter* Char = Cast<ACharacter>(Actor))
 					{
-						bHit = true;
-						CurrentInstanceIndex = Instance.InstanceIndex;
-						break; 
+						CurrentMesh = Char->GetMesh();
 					}
 				}
 			}
 
 			if (bHit)
 			{
-				float DistToCamSq = FVector::DistSquared(RayOrigin, EntityLocation);
+				float DistToCamSq = FVector::DistSquared(RayOrigin, EntityTransform.GetLocation());
 				if (DistToCamSq < ClosestDistanceSq)
 				{
 					ClosestDistanceSq = DistToCamSq;
 					BestEntity = Entity;
 					BestInstanceIndex = CurrentInstanceIndex;
+					BestISM = CurrentISM;
 					BestMesh = CurrentMesh;
 				}
 			}
@@ -191,7 +192,7 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 	{
 		if (FMassHoverFragment* HoverFrag = EntityManager.GetFragmentDataPtr<FMassHoverFragment>(BestEntity))
 		{
-			if (HoverFrag->HoveredInstanceIndex != BestInstanceIndex || HoverFrag->HoveredMesh != BestMesh)
+			if (HoverFrag->HoveredInstanceIndex != BestInstanceIndex || HoverFrag->HoveredMesh != BestMesh || HoverFrag->HoveredISM != BestISM)
 			{
 				bInstanceChanged = true;
 			}
@@ -219,6 +220,7 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			if (HoverFrag && !HoverFrag->bIsHovered)
 			{
 				HoverFrag->HoveredInstanceIndex = BestInstanceIndex;
+				HoverFrag->HoveredISM = BestISM;
 				HoverFrag->HoveredMesh = BestMesh;
 				HoverFrag->bIsHovered = true;
 				SignalSubsystem->SignalEntity(UnitSignals::CustomOverlapStart, BestEntity);
@@ -261,17 +263,13 @@ void UMassUnitHoverProcessor::HandleCustomOverlapStart(FName SignalName, TArray<
 
 						if (this->bSetCustomDataValue && HoverFrag->HoveredInstanceIndex != INDEX_NONE)
 						{
-							const FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
-							if (VisualFrag)
+							if (UInstancedStaticMeshComponent* TargetISM = HoverFrag->HoveredISM.Get())
 							{
-								for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
-								{
-									if (Instance.InstanceIndex == HoverFrag->HoveredInstanceIndex && Instance.TargetISM.IsValid())
-									{
-										Instance.TargetISM->SetCustomDataValue(Instance.InstanceIndex, 0, 1.0f, true);
-										break;
-									}
-								}
+								TargetISM->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 1.0f, true);
+							}
+							else if (Unit->ISMComponent)
+							{
+								Unit->ISMComponent->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 1.0f, true);
 							}
 						}
 					}
@@ -312,17 +310,13 @@ void UMassUnitHoverProcessor::HandleCustomOverlapEnd(FName SignalName, TArray<FM
 
 						if (this->bSetCustomDataValue && HoverFrag->HoveredInstanceIndex != INDEX_NONE)
 						{
-							const FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
-							if (VisualFrag)
+							if (UInstancedStaticMeshComponent* TargetISM = HoverFrag->HoveredISM.Get())
 							{
-								for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
-								{
-									if (Instance.InstanceIndex == HoverFrag->HoveredInstanceIndex && Instance.TargetISM.IsValid())
-									{
-										Instance.TargetISM->SetCustomDataValue(Instance.InstanceIndex, 0, 0.0f, true);
-										break;
-									}
-								}
+								TargetISM->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 0.0f, true);
+							}
+							else if (Unit->ISMComponent)
+							{
+								Unit->ISMComponent->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 0.0f, true);
 							}
 						}
 					}

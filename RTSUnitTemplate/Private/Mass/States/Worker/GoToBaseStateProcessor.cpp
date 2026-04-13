@@ -121,7 +121,7 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
             }
 
             // --- 1. Arrival Check ---
-            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BasePosition) - CharFrag.CapsuleRadius;
+            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition) - CharFrag.CapsuleRadius;
 
             if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !AIState.SwitchingState)
             {

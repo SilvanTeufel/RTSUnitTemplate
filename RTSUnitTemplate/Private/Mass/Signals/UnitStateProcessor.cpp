@@ -1195,7 +1195,14 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						FVector Origin, BoxExtent;
 
 						StrongUnitActor->Base->GetActorBounds(true, Origin, BoxExtent);
-						WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+170.f;
+						if (CharFragment)
+						{
+							WorkerStats->BaseArrivalDistance = CharFragment->CapsuleRadius+170.f;
+						}else
+						{
+							WorkerStats->BaseArrivalDistance = BoxExtent.Size()/2+170.f;
+						}
+            			
             		}
 
             		WorkerStats->BuildingAreaAvailable = (StrongUnitActor->BuildArea && IsValid(StrongUnitActor->BuildArea)) ? true : false;

@@ -113,7 +113,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                  continue;
             }
             
-            const float DistanceToTargetCenter = FVector::Dist(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition)-CharFrag.CapsuleRadius;
+            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition)-CharFrag.CapsuleRadius;
 
             MoveTarget.DistanceToGoal = DistanceToTargetCenter-WorkerStats.BuildAreaArrivalDistance; // Update distance
             if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
