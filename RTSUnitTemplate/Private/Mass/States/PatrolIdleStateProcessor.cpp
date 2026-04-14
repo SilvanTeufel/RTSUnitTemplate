@@ -32,6 +32,7 @@ void UPatrolIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Velocity auf 0
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -75,6 +76,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>(); // Mutable for stopping
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Keep mutable if needed
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
 
            // UE_LOG(LogTemp, Log, TEXT("UPatrolIdleStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
@@ -85,8 +87,13 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             FMassVelocityFragment& Velocity = VelocityList[i]; // Mutable for stopping
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Keep reference if needed
             const FMassCombatStatsFragment& Stats = StatsList[i];
+            const FTransformFragment& TransformFrag = TransformList[i];
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            // --- Update StoredLocation to current position ---
+            const FVector CurrentLocation = TransformFrag.GetTransform().GetLocation();
+            StateFrag.StoredLocation = CurrentLocation;
 
             // --- Stop Movement & Update Timer ---
             Velocity.Value = FVector::ZeroVector; // Modification stays here

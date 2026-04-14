@@ -106,11 +106,12 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 const FVector CurrentLocation = TransformFrag.GetTransform().GetLocation();
                 const FVector CurrentDestination = MoveTarget.Center;
                 const float AcceptanceRadius = MoveTarget.SlackRadius * 4;
-                const float Dist= FVector::Dist(CurrentLocation, CurrentDestination);
+                const float Dist= FVector::Dist2D(CurrentLocation, CurrentDestination);
                 
                 if (Dist <= AcceptanceRadius && !StateFrag.SwitchingState)
                 {
                     StateFrag.SwitchingState = true;
+                    StateFrag.StoredLocation = CurrentLocation; // Speichere den erreichten Punkt als Rückkehrziel
           
                     if (SignalSubsystem)
                     {

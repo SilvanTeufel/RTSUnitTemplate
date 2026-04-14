@@ -1598,9 +1598,37 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 	return false;
 }
 
+bool ACustomControllerBase::TryCancelActiveAbilities()
+{
+	bool bAnyAbilityCanceled = false;
+	for (AUnitBase* Unit : SelectedUnits)
+	{
+		if (Unit && Unit->IsAnyAbilityActive() && Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && AbilityCDO->AbilityCanBeCanceled)
+			{
+				ABuildingBase* BuildingBase = Cast<ABuildingBase>(Unit);
+				// Cancel if CanMove is true, or if CanMove is false, or if it's a building without a waypoint.
+				if (!BuildingBase || (BuildingBase && !BuildingBase->HasWaypoint))
+				{
+					CancelCurrentAbility(Unit);
+					bAnyAbilityCanceled = true;
+				}
+			}
+		}
+	}
+	return bAnyAbilityCanceled;
+}
+
 void ACustomControllerBase::RightClickPressedMass()
 {
 	Batch_RemoveRotateToMouseTag();
+
+	if (TryCancelActiveAbilities())
+	{
+		return;
+	}
 	
 	if (SwapAttackMove && AttackToggled)
 	{
@@ -1643,6 +1671,11 @@ void ACustomControllerBase::RightClickPressedMassMinimap(const FVector& GroundLo
 	AttackToggled = false;
 
 	if (!SelectedUnits.Num())
+	{
+		return;
+	}
+
+	if (TryCancelActiveAbilities())
 	{
 		return;
 	}

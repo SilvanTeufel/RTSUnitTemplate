@@ -62,6 +62,9 @@ protected:
 	// Handles follow command on right-click. Returns true if a follow action was issued (and should early return)
 	bool TryHandleFollowOnRightClick(const FHitResult& HitPawn);
 
+	// Tries to cancel active abilities for selected units. Returns true if any ability was canceled.
+	bool TryCancelActiveAbilities();
+
 public:
 	AUnitBase* GetUnitFromHitResult(const FHitResult& Hit) const;
 

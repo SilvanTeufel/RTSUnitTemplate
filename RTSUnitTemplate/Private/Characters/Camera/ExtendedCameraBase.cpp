@@ -825,6 +825,15 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 					{
 						if (Unit)
 						{
+							if (Unit->IsAnyAbilityActive() && Unit->CurrentSnapshot.AbilityClass)
+							{
+								UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+								if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled)
+								{
+									continue;
+								}
+							}
+
 							// 1. Destroy any dragged work area (like a building placement)
 							AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit);
 							if (Worker && Worker->CurrentDraggedWorkArea)

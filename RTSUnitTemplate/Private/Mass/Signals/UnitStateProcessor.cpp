@@ -3069,6 +3069,11 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr; // Mutable Referenz
 				const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
 				
+				StateFrag.CanMove = Unit->CanMove;
+				StateFrag.CanAttack = Unit->CanAttack;
+				StateFrag.IsInitialized = Unit->IsInitialized;
+				StateFrag.StoredLocation = Unit->GetActorLocation();
+
 				if (Unit->UnitState == UnitData::PatrolRandom)
 				{
 					if (!EntityManager.IsEntityValid(E))
@@ -3077,21 +3082,20 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					}
 
 					UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
-					if (!NavSys) { continue; }
-
-					if (IsValid(Unit->NextWaypoint))
+					if (NavSys)
 					{
-						PatrolFrag.TargetWaypointLocation = Unit->NextWaypoint->GetActorLocation();
+						if (IsValid(Unit->NextWaypoint))
+						{
+							PatrolFrag.TargetWaypointLocation = Unit->NextWaypoint->GetActorLocation();
+						}
+						else
+						{
+							// Fallback: Wenn kein Wegpunkt da ist, nutze die gerade gesetzte StoredLocation (Spawn-Punkt)
+							PatrolFrag.TargetWaypointLocation = StateFrag.StoredLocation;
+						}
 						SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
-						// Mirror this initial patrol move to clients
 					}
 				}
-				
-				
-				StateFrag.CanMove = Unit->CanMove;
-				StateFrag.CanAttack = Unit->CanAttack;
-				StateFrag.IsInitialized = Unit->IsInitialized;
-				StateFrag.StoredLocation = Unit->GetActorLocation();
 				
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 
