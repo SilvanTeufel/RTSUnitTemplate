@@ -239,9 +239,31 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 
 	const AProjectile* CDO = GetProjectileCDO(ProjectileClass);
 
+	// Entity-Handles vom Server sind auf dem Client nicht gültig. Wir müssen sie lokal auflösen.
+	FMassEntityHandle ResolvedTargetEntity = TargetEntity;
+	if (bIsClient || !ResolvedTargetEntity.IsValid())
+	{
+		if (Target)
+		{
+			if (UMassActorBindingComponent* Binding = Target->FindComponentByClass<UMassActorBindingComponent>())
+			{
+				ResolvedTargetEntity = Binding->GetEntityHandle();
+			}
+		}
+	}
+
+	FVector AdjustedTargetLocation = TargetLocation;
+	if (ResolvedTargetEntity.IsValid())
+	{
+		if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(ResolvedTargetEntity))
+		{
+			AdjustedTargetLocation.Z = (TargetChar->bIsFlying ? TargetChar->FlyHeight : TargetChar->CapsuleHeight) + TargetChar->LastGroundLocation;
+		}
+	}
+
 	FMassProjectileFragment ProjectileFragment;
 	ProjectileFragment.ProjectileClass = ProjectileClass;
-	ProjectileFragment.TargetLocation = TargetLocation;
+	ProjectileFragment.TargetLocation = AdjustedTargetLocation;
 	ProjectileFragment.Speed = ProjectileSpeed;
 	ProjectileFragment.Damage = (Damage >= 0.f) ? Damage : CDO->Damage;
 	ProjectileFragment.CollisionRadius = CDO->CollisionRadius;
@@ -258,7 +280,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.MaxPiercedTargets = (MaxPiercedTargets >= 0) ? MaxPiercedTargets : CDO->MaxPiercedTargets;
     ProjectileFragment.ProjectileScale = Scale;
     ProjectileFragment.bContinueAfterTarget = CDO->bContinueAfterTarget;
-    ProjectileFragment.FlightDirection = (TargetLocation - Transform.GetLocation()).GetSafeNormal();
+    ProjectileFragment.FlightDirection = (AdjustedTargetLocation - Transform.GetLocation()).GetSafeNormal();
     if (ProjectileFragment.FlightDirection.IsNearlyZero())
     {
         ProjectileFragment.FlightDirection = Transform.GetRotation().GetForwardVector();
@@ -349,17 +371,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	}
 	ProjectileFragment.ShooterEntity = ResolvedShooterEntity;
 
-	FMassEntityHandle ResolvedTargetEntity = TargetEntity;
-	if (bIsClient || !ResolvedTargetEntity.IsValid())
-	{
-		if (Target)
-		{
-			if (UMassActorBindingComponent* Binding = Target->FindComponentByClass<UMassActorBindingComponent>())
-			{
-				ResolvedTargetEntity = Binding->GetEntityHandle();
-			}
-		}
-	}
+	// ResolvedTargetEntity already resolved above
 	ProjectileFragment.TargetEntity = ResolvedTargetEntity;
 
 	FMassProjectileVisualFragment VisualFragment;

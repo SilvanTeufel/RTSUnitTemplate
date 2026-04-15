@@ -38,6 +38,7 @@ void UMassProjectileImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	UnitQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	UnitQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	UnitQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+	UnitQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
 	UnitQuery.RegisterWithProcessor(*this);
 }
 
@@ -48,25 +49,43 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 	TArray<FRotator> UnitRotations;
 	TArray<FMassAgentCharacteristicsFragment> UnitCharFrags;
 	TArray<int32> UnitTeams;
+	TArray<bool> UnitIsDead;
 
 	UnitQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& UnitContext)
 	{
 		TConstArrayView<FTransformFragment> TransformList = UnitContext.GetFragmentView<FTransformFragment>();
 		TConstArrayView<FMassAgentCharacteristicsFragment> CharList = UnitContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 		TConstArrayView<FMassCombatStatsFragment> CombatList = UnitContext.GetFragmentView<FMassCombatStatsFragment>();
-		
+		const bool bChunkIsDead = UnitContext.DoesArchetypeHaveTag<FMassStateDeadTag>();
 		for (int32 i = 0; i < UnitContext.GetNumEntities(); ++i)
 		{
 			Units.Add(UnitContext.GetEntity(i));
-			UnitLocations.Add(TransformList[i].GetTransform().GetLocation());
+			
+			FVector Location = TransformList[i].GetTransform().GetLocation();
+			
+			// Z-Position für die Kollisionsprüfung anpassen, damit Projektile 
+			// die Brust (oder Flughöhe) treffen statt über die Füße zu fliegen.
+			if (CharList[i].bIsFlying)
+			{
+				Location.Z = CharList[i].FlyHeight + CharList[i].LastGroundLocation;
+			}
+			else
+			{
+				Location.Z = CharList[i].CapsuleHeight + CharList[i].LastGroundLocation;
+			}
+
+			UnitLocations.Add(Location);
 			UnitRotations.Add(TransformList[i].GetTransform().Rotator());
 			UnitCharFrags.Add(CharList[i]);
 			UnitTeams.Add(CombatList[i].TeamId);
+			UnitIsDead.Add(bChunkIsDead);
 		}
 	}));
 
-	// UnitQuery and filling Units array...
-	// We no longer return early if no units, because we might need to check landscape hits.
+	if (Units.Num() == 0)
+	{
+		// return; // We no longer return early if no units, because we might need to check landscape hits.
+	}
 
 	ProjectileQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ProjContext)
 	{
@@ -122,6 +141,13 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			for (int32 j = 0; j < Units.Num(); ++j)
 			{
 				bool bIsTarget = (Units[j] == Projectile.TargetEntity);
+				
+				// Skip dead units unless they are the target
+				if (UnitIsDead[j] && !bIsTarget)
+				{
+					continue;
+				}
+
 				bool bSameTeam = (Projectile.TeamId == UnitTeams[j]);
 
 				// Damage logic: Impact if different team OR if it's the specific target unit

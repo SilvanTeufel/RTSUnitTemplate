@@ -118,6 +118,19 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			
 			if (Projectile.LifeTime < DeltaTime && EntityManager.GetWorld())
 			{
+				if (Projectile.TargetEntity.IsValid())
+				{
+					if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Projectile.TargetEntity))
+					{
+						// Initialen Offset anwenden, falls TargetLocation noch am Boden (Z-Differenz gering)
+						float Offset = TargetChar->bIsFlying ? TargetChar->FlyHeight : TargetChar->CapsuleHeight;
+						Projectile.TargetLocation.Z = Offset+TargetChar->LastGroundLocation;
+
+						// NEU: FlightDirection aktualisieren, da TargetLocation sich geandert hat
+						Projectile.FlightDirection = (Projectile.TargetLocation - Transform.GetLocation()).GetSafeNormal();
+					}
+				}
+
 				if (EntityManager.GetWorld()->GetNetMode() == NM_Client && Projectile.TargetLocation.IsZero())
 				{
 					UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Projectile %d started with ZERO TargetLocation!"), Context.GetEntity(i).Index);
@@ -129,15 +142,41 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 			if (Projectile.bHasHitTarget)
 			{
+				// NEW: Check if target is flying or if it was an arc projectile
+				bool bTargetIsFlying = false;
+				if (Projectile.TargetEntity.IsValid())
+				{
+					if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Projectile.TargetEntity))
+					{
+						bTargetIsFlying = TargetChar->bIsFlying;
+					}
+				}
+
+				bool bWasArc = (Projectile.ArcHeight > 0.f || Projectile.ArcHeightDistanceFactor > 0.f);
+				if (bWasArc)
+				{
+					// If it was an arc, set flight direction to the direction from start to target (linear pass-through)
+					Projectile.FlightDirection = (Projectile.TargetLocation - Projectile.ArcStartLocation).GetSafeNormal();
+				}
+
 				Projectile.bFollowTarget = false;
 				Projectile.bIsHoming = false;
 				Projectile.ArcHeight = 0.f;
 				Projectile.ArcHeightDistanceFactor = 0.f;
-				Projectile.FlightDirection.Z = 0.f;
+
+				// Only flatten Z if NEITHER the target was flying NOR it was an arc projectile
+				if (!bTargetIsFlying && !bWasArc)
+				{
+					Projectile.FlightDirection.Z = 0.f;
+				}
+
 				if (Projectile.FlightDirection.IsNearlyZero())
 				{
 					Projectile.FlightDirection = Transform.GetRotation().GetForwardVector();
-					Projectile.FlightDirection.Z = 0.f;
+					if (!bTargetIsFlying && !bWasArc)
+					{
+						Projectile.FlightDirection.Z = 0.f;
+					}
 				}
 				Projectile.FlightDirection.Normalize();
 			}
@@ -160,6 +199,21 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					if (const FTransformFragment* TargetTransform = EntityManager.GetFragmentDataPtr<FTransformFragment>(Projectile.TargetEntity))
 					{
 						TargetLocation = TargetTransform->GetTransform().GetLocation();
+
+						// NEW: Check for flying units or ground units for Z-offset
+						if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Projectile.TargetEntity))
+						{
+							if (TargetChar->bIsFlying)
+							{
+								TargetLocation.Z = TargetChar->FlyHeight+TargetChar->LastGroundLocation;
+							}
+							else
+							{
+								// NEW: Add CapsuleHeight for ground units to target the chest area
+								TargetLocation.Z = TargetChar->CapsuleHeight+TargetChar->LastGroundLocation;
+							}
+						}
+
 						Projectile.TargetLocation = TargetLocation;
 					}
 				}
