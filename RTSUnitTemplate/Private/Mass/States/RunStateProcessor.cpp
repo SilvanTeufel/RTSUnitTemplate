@@ -33,7 +33,8 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+   	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+       EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
@@ -186,6 +187,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
             
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -193,6 +195,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for Update/Stop
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
+            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
@@ -207,13 +210,13 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
             
             
-            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) &&
-                TargetFrag.bHasValidTarget && !StateFrag.SwitchingState)
+            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && !Stats.bCanMoveWhileAttacking)
             {
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)
                 {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
+                  SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
+                    // If AttackTOggled -> Chase
                 }
             }else if (bIsFriendlyActive && !StateFrag.SwitchingState)
             {
@@ -308,6 +311,47 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
                 UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);
+            }else if ( DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) &&
+                    TargetFrag.bHasValidTarget && Stats.bCanMoveWhileAttacking)
+            {
+                    const float DistSq = FVector::DistSquared2D(CurrentLocation, TargetFrag.LastKnownLocation);
+                    float AttackerRadius = CharFrag.CapsuleRadius;
+                    float TargetRadius = 0.f;
+
+                    bool bIsEnemyActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+                    if (const FMassAgentCharacteristicsFragment* TargetCharFrag = bIsEnemyActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr)
+                    {
+                        TargetRadius = TargetCharFrag->CapsuleRadius;
+                        if (CharFrag.bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
+                        {
+                            FVector Dir = (TargetFrag.LastKnownLocation - CurrentLocation);
+                            Dir.Z = 0.f;
+                            if (!Dir.IsNearlyZero())
+                            {
+                                Dir.Normalize();
+                                AttackerRadius = CharFrag.GetRadiusInDirection(Dir, CurrentMassTransform.GetRotation().Rotator());
+
+                                if (const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity))
+                                {
+                                    TargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
+                                }
+                            }
+                        }
+                    }
+
+                    const float EffectiveAttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
+                    const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
+
+                    if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
+                    {
+
+                        if (SignalSubsystem)
+                        {
+                            SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Pause, Entity);
+                        }
+                        StateFrag.SwitchingState = true;
+                        continue;
+                    }
             }
             else if (!bIsFriendlyActive && FVector::Dist2D(CurrentLocation, FinalDestination) <= (AcceptanceRadius))
             {

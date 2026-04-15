@@ -212,7 +212,8 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         StateFrag.SwitchingState = true;
         if (SignalSubsystem)
         {
-            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
+            if (!Stats.bCanMoveWhileAttacking) SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
+            else SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
         }
     }
 }

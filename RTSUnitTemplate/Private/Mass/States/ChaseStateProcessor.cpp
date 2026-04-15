@@ -297,11 +297,8 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             // --- In Attack Range ---
             if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
             {
-                // Queue signal instead of sending directly
-                if (!Stats.bCanMoveWhileAttacking)
-                {
-                    StopMovement(MoveTarget, World);
-                }
+
+                StopMovement(MoveTarget, World);
                 
                 if (SignalSubsystem)
                 {
@@ -311,22 +308,10 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 StateFrag.SwitchingState = true;
                 continue;
             }
-
-           // You might want to adjust Min/Max Radius based on unit size or target.
-           //FVector ChaseOffset = CalculateChaseOffset(Entity, 0.0f, 50.0f);
-
+            
            FVector TargetLocation = TargetFrag.LastKnownLocation;
-           if (Stats.bCanMoveWhileAttacking)
-           {
-               const float DistToStoredSq = FVector::DistSquared2D(Transform.GetLocation(), StateFrag.StoredLocation);
-               if (DistToStoredSq > FMath::Square(MoveTarget.SlackRadius))
-               {
-                   TargetLocation = StateFrag.StoredLocation;
-               }
-           }
-           // If we are a ground unit and the target has characteristic data, 
-           // use its buffered ground height for our movement target Z
-           if (TargetCharFrag && !Stats.bCanMoveWhileAttacking)
+
+           if (TargetCharFrag  && !Stats.bCanMoveWhileAttacking) //  && !Stats.bCanMoveWhileAttacking
            {
                TargetLocation.Z = TargetCharFrag->LastGroundLocation;
            }

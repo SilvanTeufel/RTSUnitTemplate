@@ -77,7 +77,7 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
             }
 
             // Wunsch Punkt 1: "setzen skippen", wenn FMassStateStopMovementTag aktiv ist (außer bei Tod für den Spin)
-            if (bChunkIsStopped && !bChunkIsDead)
+            if (bChunkIsStopped && !bChunkIsDead && !CharFrag.bTransformDirty)
             {
                 continue;
             }

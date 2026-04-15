@@ -187,7 +187,8 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                     StateFrag.SwitchingState = true;
                     if (SignalSubsystem)
                     {
-                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
+                        if (!Stats.bCanMoveWhileAttacking) SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Chase, Entity);
+                        else SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Run, Entity);
                     }
                     continue;
                 }
