@@ -112,6 +112,9 @@ public:
 	int ClickCount = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bUseCastingFallbackProcessor = false;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Range = 0.f;
 
 	// Enable/Disable abilities by AbilityKey for the owner team (uses Owner from ActorInfo)

@@ -1156,6 +1156,10 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		}else if(!AIStateFragment->CanMove && !bHasDeadTag && CharFragment->CanManipulateNavMesh)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
+
+                    // Dirty-Flag setzen, um den korrigierenden Lauf des PlacementProcessors zu triggern
+                    CharFragment->bTransformDirty = true;
+                    
         			if (StrongUnitActor->HasAuthority() && !StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_RegisterBuildingAsObstacle();
         		}
         		AIStateFragment->CanAttack = StrongUnitActor->CanAttack;

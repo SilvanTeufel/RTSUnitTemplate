@@ -20,13 +20,13 @@ UMassUnitPlacementProcessor::UMassUnitPlacementProcessor() {
 
 void UMassUnitPlacementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) {
     EntityQuery.Initialize(EntityManager);
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Optional);
+    EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -42,19 +42,21 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
     // Batch-Update: collect updates per ISM component instead of calling UpdateInstanceTransform individually
     TMap<UInstancedStaticMeshComponent*, TArray<FISMInstanceUpdate>> BatchedUpdates;
 
-    EntityQuery.ForEachEntityChunk(Context, ([&EntityManager, &BatchedUpdates](FMassExecutionContext& Context) {
-        TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
+        EntityQuery.ForEachEntityChunk(Context, ([&EntityManager, &BatchedUpdates](FMassExecutionContext& Context) {
         TArrayView<FMassUnitVisualFragment> VisualList = Context.GetMutableFragmentView<FMassUnitVisualFragment>();
         TConstArrayView<FMassVisualEffectFragment> EffectList = Context.GetFragmentView<FMassVisualEffectFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
-        TConstArrayView<FMassActorFragment> ActorList = Context.GetFragmentView<FMassActorFragment>();
         TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         TConstArrayView<FMassRepresentationLODFragment> LODFragments = Context.GetFragmentView<FMassRepresentationLODFragment>();
+
+        const bool bChunkIsStopped = Context.DoesArchetypeHaveTag<FMassStateStopMovementTag>();
+        const bool bChunkIsDead = Context.DoesArchetypeHaveTag<FMassStateDeadTag>();
 
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassUnitVisualFragment& VisualFrag = VisualList[i];
             const FMassVisualEffectFragment& EffectFrag = EffectList[i];
             const FMassVisibilityFragment& Vis = VisibilityList[i];
+            FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
 
             // LOD-Skip: Entities with LOD::Off get their ISMs hidden and are skipped
             if (LODFragments[i].LOD == EMassLOD::Off)
@@ -74,24 +76,71 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 continue;
             }
 
-            const AActor* Actor = ActorList[i].Get();
-            const AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-            FTransform BaseTransform;
-
-            if (UnitBase && !UnitBase->bUseSkeletalMovement)
+            // Wunsch Punkt 1: "setzen skippen", wenn FMassStateStopMovementTag aktiv ist (außer bei Tod für den Spin)
+            if (bChunkIsStopped && !bChunkIsDead)
             {
-                BaseTransform = CharList[i].PositionedTransform;
+                continue;
             }
-            else if (Actor) {
-                BaseTransform = Actor->GetActorTransform();
-            } else {
-                BaseTransform = TransformList[i].GetTransform();
+
+            // Wunsch Punkt 2: Keine Casts mehr, direkt PositionedTransform (BaseTransform)
+            FTransform BaseTransform = CharFrag.PositionedTransform;
+
+            if (bChunkIsStopped && bChunkIsDead)
+            {
+                // Todes-Rotation nur für fliegende Einheiten fortführen
+                if (CharFrag.bIsFlying)
+                {
+                    FVector CurrentLocation = BaseTransform.GetLocation();
+                    FRotator CurrentRot = BaseTransform.GetRotation().Rotator();
+                    
+                    // Ziel-Z ist der Boden (LastGroundLocation + Kapsel-Offset)
+                    float TargetZ = CharFrag.LastGroundLocation + CharFrag.CapsuleHeight;
+                    bool bIsStillFalling = CurrentLocation.Z > (TargetZ + 1.f);
+
+                    if (bIsStillFalling)
+                    {
+                        float DeltaTime = Context.GetDeltaTimeSeconds();
+
+                        // A: Rotation (Spin) fortführen
+                        if (CharFrag.VerticalDeathRotationMultiplier > 0.f)
+                        {
+                            CurrentRot.Yaw += CharFrag.VerticalDeathRotationMultiplier * DeltaTime;
+                        }
+
+                        // B: Sinken (Z-Bewegung) erzwingen
+                        // 500.f dient als Beispiel für die Sinkgeschwindigkeit (entspricht ca. SyncProcessor-Speed)
+                        float NewZ = FMath::FInterpConstantTo(CurrentLocation.Z, TargetZ, DeltaTime, 500.f);
+                        CurrentLocation.Z = NewZ;
+
+                        // C: Transformation aktualisieren
+                        BaseTransform.SetLocation(CurrentLocation);
+                        BaseTransform.SetRotation(FRotator(0.f, CurrentRot.Yaw, 0.f).Quaternion());
+
+                        // D: Persistenz (Schreiben ins Fragment), damit der nächste Frame auf der neuen Position aufsetzt
+                        CharFrag.PositionedTransform = BaseTransform;
+
+                        // Update im nächsten Frame erzwingen, solange wir fallen/drehen
+                        CharFrag.bTransformDirty = true;
+                    }
+                    else
+                    {
+                        // Am Boden angekommen: Rotation nivellieren (Pitch/Roll nullen)
+                        BaseTransform.SetRotation(FRotator(0.f, CurrentRot.Yaw, 0.f).Quaternion());
+                        CharFrag.PositionedTransform.SetRotation(BaseTransform.GetRotation());
+                    }
+                }
+                else 
+                {
+                    // Nicht-fliegende tote Einheiten: Nur Rotation nivellieren
+                    FRotator CurrentRot = BaseTransform.GetRotation().Rotator();
+                    BaseTransform.SetRotation(FRotator(0.f, CurrentRot.Yaw, 0.f).Quaternion());
+                }
             }
 
             bool bVisible = Vis.bIsVisibleEnemy && Vis.bIsOnViewport && !EffectFrag.bForceHidden;
 
             // Dirty-Flag check: skip entities whose transform hasn't changed and whose visibility is unchanged
-            if (!CharList[i].bTransformDirty && !VisualFrag.bUseSkeletalMovement)
+            if (!CharFrag.bTransformDirty && !VisualFrag.bUseSkeletalMovement)
             {
                 bool bVisibilityChanged = false;
                 for (const FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances)
@@ -109,7 +158,7 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
             }
 
             // Reset dirty flag after processing
-            CharList[i].bTransformDirty = false;
+            CharFrag.bTransformDirty = false;
 
             if (VisualFrag.bUseSkeletalMovement) {
                 for (FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances) {

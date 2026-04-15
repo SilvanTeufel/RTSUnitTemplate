@@ -28,6 +28,7 @@
 #include "GameModes/ResourceGameMode.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/Abilitys/CastingFallBackProcessor.h"
 #include "MassCommonFragments.h"
 
 // Static registry of disabled ability keys per team
@@ -184,6 +185,24 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 			}
 		}
 	}
+
+	if (bUseCastingFallbackProcessor && ActorInfo && ActorInfo->IsNetAuthority())
+	{
+		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			if (Unit->MassActorBindingComponent)
+			{
+				FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+				if (Entity.IsValid())
+				{
+					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+					{
+						MassSubsystem->GetMutableEntityManager().Defer().AddTag<FMassStateCastingTag>(Entity);
+					}
+				}
+			}
+		}
+	}
 	
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 }
@@ -227,6 +246,24 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 								}
 							}
 						}
+					}
+				}
+			}
+		}
+	}
+
+	if (bUseCastingFallbackProcessor && ActorInfo && ActorInfo->IsNetAuthority())
+	{
+		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			if (Unit->MassActorBindingComponent)
+			{
+				FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+				if (Entity.IsValid())
+				{
+					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+					{
+						MassSubsystem->GetMutableEntityManager().Defer().RemoveTag<FMassStateCastingTag>(Entity);
 					}
 				}
 			}

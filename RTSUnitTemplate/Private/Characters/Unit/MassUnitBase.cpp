@@ -243,6 +243,10 @@ bool AMassUnitBase::AddStopMovementTagToEntity()
 		return false;
 	}
 	
+	if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+	{
+		CharFrag->bTransformDirty = true;
+	}
 	EntityManager->Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
 	
  return true;
