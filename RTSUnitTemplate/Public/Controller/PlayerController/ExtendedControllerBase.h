@@ -382,8 +382,6 @@ public:
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void Server_SpawnExtensionConstructionUnit(AUnitBase* Unit, AWorkArea* WA);
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	bool DropWorkArea();
 	
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void DestroyDraggedArea(AWorkingUnitBase* Worker);

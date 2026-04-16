@@ -2584,9 +2584,9 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	}
 
 	// 6. Finale Bewegung
-	if (bFoundCompatible)
+	if (bFoundCompatible || Unit->ExtensionSnapMethod == EExtensionSnapMethod::None)
 	{
-		// Harter Snap ohne Verzögerung an das Gebäude
+		// Harter Snap ohne Verzögerung an das Gebäude oder wenn kein Snap-Lag gewünscht ist
 		DraggedWorkArea->SetActorLocation(TargetLoc);
 	}
 	else
@@ -2611,9 +2611,17 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		}
 	}
 
-	if (DraggedWorkArea->InstantDrop)
+	if (DraggedWorkArea->InstantDrop && !DraggedWorkArea->AreaDropped)
 	{
-		Server_DropWorkAreaForUnit(Unit, true, DropWorkAreaFailedSound, DraggedWorkArea->GetActorTransform());
+		if (HasAuthority())
+		{
+			DropWorkAreaForUnit(Unit, true, DropWorkAreaFailedSound);
+		}
+		else
+		{
+			Server_DropWorkAreaForUnit(Unit, true, DropWorkAreaFailedSound, DraggedWorkArea->GetActorTransform());
+			DraggedWorkArea->AreaDropped = true;
+		}
 	}
 
 	
@@ -2646,7 +2654,7 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
         return;
     }
     AWorkArea* DraggedWorkArea = SelectedUnits[0]->CurrentDraggedWorkArea;
-    if (!DraggedWorkArea)
+    if (!DraggedWorkArea || DraggedWorkArea->AreaDropped)
     {
         return;
     }
@@ -2667,9 +2675,17 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
         {
             UpdateExtensionWorkAreaPosition(DraggedWorkArea, Unit, DeltaSeconds);
 
-            if (Unit->ExtensionSnapMethod == EExtensionSnapMethod::None)
+            if (Unit->ExtensionSnapMethod == EExtensionSnapMethod::None && !DraggedWorkArea->AreaDropped)
             {
-                DropWorkArea();
+                if (HasAuthority())
+                {
+                    DropWorkAreaForUnit(SelectedUnits[0], WorkAreaIsSnapped, DropWorkAreaFailedSound);
+                }
+                else
+                {
+                    Server_DropWorkAreaForUnit(SelectedUnits[0], WorkAreaIsSnapped, DropWorkAreaFailedSound, DraggedWorkArea->GetActorTransform());
+                    DraggedWorkArea->AreaDropped = true;
+                }
             }
         }
         return;
@@ -4061,96 +4077,6 @@ void AExtendedControllerBase::SendWorkerToBase_Implementation(AUnitBase* Worker)
 	Worker->SwitchEntityTagByState(UnitData::GoToBase, Worker->UnitStatePlaceholder);
 }
 
-bool AExtendedControllerBase::DropWorkArea()
-{
-	if(SelectedUnits.Num() && SelectedUnits[0])
-	if (SelectedUnits[0]->CurrentDraggedWorkArea && SelectedUnits[0]->CurrentDraggedWorkArea->PlannedBuilding == false)
-	{
-		// Get all actors overlapping with the CurrentDraggedWorkArea
-		TArray<AActor*> OverlappingActors;
-		SelectedUnits[0]->CurrentDraggedWorkArea->GetOverlappingActors(OverlappingActors);
-	
-		bool bIsOverlappingWithValidArea = false;
-		bool IsNoBuildZone = false;
-		// Determine initiating building to ignore for extension areas
-		ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(SelectedUnits[0]);
-		const bool bIsExtensionArea = SelectedUnits[0]->CurrentDraggedWorkArea->IsExtensionArea;
-		// Loop through the overlapping actors to check if they are instances of AWorkArea or ABuildingBase
-		for (AActor* OverlappedActor : OverlappingActors)
-		{
-			// Ignore the initiating building when placing an Extension Area
-			if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
-			{
-				continue;
-			}
-			if (OverlappedActor && (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass())))
-			{
-				AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
-				if (NoBuildZone && NoBuildZone->IsNoBuildZone == true) IsNoBuildZone = NoBuildZone->IsNoBuildZone;
-				
-				bIsOverlappingWithValidArea = true;
-				break;
-			}
-		}
-
-		// NeedsBeacon check: outside of any beacon range?
-		bool bNeedsBeaconOutOfRange = false;
-		if (SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea && SelectedUnits[0]->CurrentDraggedWorkArea->NeedsBeacon)
-		{
-			UWorld* WorldCtx = GetWorld();
-			if (WorldCtx)
-			{
-				const FVector Pos = SelectedUnits[0]->CurrentDraggedWorkArea->GetActorLocation();
-				bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
-			}
-		}
-		
-		// If overlapping with AWorkArea or ABuildingBase, destroy the CurrentDraggedWorkArea
-		if ((bIsOverlappingWithValidArea && !WorkAreaIsSnapped) || IsNoBuildZone || bNeedsBeaconOutOfRange) // bIsOverlappingWithValidArea &&
-		{
-			if (DropWorkAreaFailedSound)
-			{
-				Client_PlaySound2D(DropWorkAreaFailedSound);
-			}
-			
-			SelectedUnits[0]->CurrentDraggedWorkArea->Destroy();
-			SelectedUnits[0]->BuildArea = nullptr;
-			SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
-			CancelCurrentAbility(SelectedUnits[0]);
-			SendWorkerToBase(SelectedUnits[0]);
-			return true;
-		}
-
-		if(SelectedUnits.Num() && SelectedUnits[0] && SelectedUnits[0]->IsWorker)
-		{
-			if (DropWorkAreaSound)
-			{
-				Client_PlaySound2D(DropWorkAreaSound);
-			}
-	
- 			// Finalize placement on the server now that the player dropped the area
-				if (SelectedUnits[0]->CurrentDraggedWorkArea)
-				{
-					Server_FinalizeWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea,
-						SelectedUnits[0]->CurrentDraggedWorkArea->GetActorTransform(), SelectedUnits[0]);
-				}
-				// If this is an extension area, spawn its ConstructionUnit now on the server
-				SendWorkerToWork(SelectedUnits[0]);
-				return true;
-		}
-
-		if (SelectedUnits[0]->CurrentDraggedWorkArea && SelectedUnits[0]->CurrentDraggedWorkArea->IsExtensionArea)
-		{
-			Server_FinalizeWorkAreaPosition(SelectedUnits[0]->CurrentDraggedWorkArea,
-			SelectedUnits[0]->CurrentDraggedWorkArea->GetActorTransform(), SelectedUnits[0]);
-			Server_SpawnExtensionConstructionUnit(SelectedUnits[0], SelectedUnits[0]->CurrentDraggedWorkArea);
-			SetAbilityEnabledByKey(SelectedUnits[0], "ExtensionAbility", false);
-			return true;
-		}
-	}
- //SelectedUnits[0]->CurrentDraggedWorkArea = nullptr;
-	return false;
-}
 
 
 void AExtendedControllerBase::SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable)
@@ -4307,6 +4233,14 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		{
 			
 			ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
+			if (!InitiatingBuilding)
+			{
+				if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+				{
+					InitiatingBuilding = Worker->Base;
+				}
+			}
+
 			if (InitiatingBuilding)
 			{
 				const float SavedZ = DraggedWorkArea->GetActorLocation().Z;
