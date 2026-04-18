@@ -414,6 +414,12 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FragmentsAndTags.Add(FMassEffectAreaActiveTag::StaticStruct());
 		}
 
+		if (EffectArea && EffectArea->DuplicationRadius > 10.f)
+		{
+			FragmentsAndTags.Add(FEffectAreaDuplicateFragment::StaticStruct());
+			FragmentsAndTags.Add(FMassEffectAreaDuplicateTag::StaticStruct());
+		}
+
 		FMassArchetypeCreationParams Params;
 		Params.ChunkMemorySize = 0;
 		Params.DebugName = FName("UMassActorBindingComponent_EffectArea");
@@ -904,6 +910,26 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					ImpactFrag->bHasSpawnedOnDestruction = false;
 				}
 			}
+
+			if (FEffectAreaDuplicateFragment* DuplicateFrag = EntityManager.GetFragmentDataPtr<FEffectAreaDuplicateFragment>(EntityHandle))
+			{
+				DuplicateFrag->DuplicationRadius = EffectArea->DuplicationRadius;
+				DuplicateFrag->DuplicationTime = EffectArea->DuplicationTime;
+				DuplicateFrag->DuplicationTimer = 0.f;
+				DuplicateFrag->RandomAngleRange = EffectArea->RandomAngleRange;
+				DuplicateFrag->EffectAreaClass = EffectArea->GetClass();
+				DuplicateFrag->SpawnedChild = nullptr;
+				DuplicateFrag->ChildMassWaitTimer = 0.f;
+				DuplicateFrag->TeamId = EffectArea->TeamId;
+				DuplicateFrag->LastDirection = EffectArea->LastDuplicationDirection;
+				DuplicateFrag->MaxDuplicationCount = EffectArea->MaxDuplicationCount;
+				DuplicateFrag->DuplicationId = EffectArea->DuplicationId;
+
+				UE_LOG(LogTemp, Warning, TEXT("[MassLink] EffectArea %s Initialized: Radius=%.2f, Time=%.2f, MaxCount=%d, ID=%d"), 
+					*EffectArea->GetName(), DuplicateFrag->DuplicationRadius, DuplicateFrag->DuplicationTime, 
+					DuplicateFrag->MaxDuplicationCount, DuplicateFrag->DuplicationId);
+			}
+
 			return;
 		}
 	}
@@ -1323,8 +1349,8 @@ void UMassActorBindingComponent::RequestClientMassLink()
 
 bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 {
-	UWorld* World = GetWorld();
-	if (!World || World->GetNetMode() != NM_Client)
+	UWorld* MyWorld = GetWorld();
+	if (!MyWorld || MyWorld->GetNetMode() != NM_Client)
 	{
 		return true;
 	}
@@ -1332,7 +1358,7 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	AActor* OwnerActor = GetOwner();
 	const FString OwnerName = OwnerActor ? OwnerActor->GetName() : TEXT("None");
 
-	URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>();
+	URTSWorldCacheSubsystem* CacheSub = MyWorld->GetSubsystem<URTSWorldCacheSubsystem>();
 	if (!CacheSub)
 	{
 		return false;
@@ -1385,11 +1411,11 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	if (!bInBubble)
 	{
 		// Wir haben eine NetID, aber die Bubble-Daten fehlen noch
-		static float LastLogTime = 0;
-		if (bDebugLogs && World->GetTimeSeconds() - LastLogTime > 1.0f) // Verhindere Frame-Spam
+		static double LastLogTime = 0;
+		if (bDebugLogs && MyWorld->GetTimeSeconds() - LastLogTime > 1.0) // Verhindere Frame-Spam
 		{
 			UE_LOG(LogTemp, Log, TEXT("[MassLink] %s: Waiting for Bubble data (NetID: %u)"), *OwnerName, RegItem->NetID.GetValue());
-			LastLogTime = World->GetTimeSeconds();
+			LastLogTime = MyWorld->GetTimeSeconds();
 		}
 		return false;
 	}

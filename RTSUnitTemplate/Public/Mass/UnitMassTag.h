@@ -1345,8 +1345,59 @@ struct FMassEffectAreaImpactTag : public FMassTag
 	GENERATED_BODY()
 };
 
+USTRUCT()
+struct FMassEffectAreaDuplicateTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT()
+struct FEffectAreaDuplicateFragment : public FMassFragment
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	float DuplicationRadius = 0.f;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	float DuplicationTime = 0.f;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	float DuplicationTimer = 0.f;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	float RandomAngleRange = 360.f;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	TSubclassOf<class AEffectArea> EffectAreaClass = nullptr;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<class AEffectArea> SpawnedChild = nullptr;
+
+	UPROPERTY(Transient)
+	float ChildMassWaitTimer = 0.f;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	int32 TeamId = 0;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	FVector LastDirection = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	int32 MaxDuplicationCount = 0;
+
+	UPROPERTY(EditAnywhere, Category = "Duplication")
+	int32 DuplicationId = 0;
+};
+
 template<>
 struct TMassFragmentTraits<FEffectAreaImpactFragment>
+{
+	static constexpr bool AuthorAcceptsItsNotTriviallyCopyable = true;
+};
+
+template<>
+struct TMassFragmentTraits<FEffectAreaDuplicateFragment>
 {
 	static constexpr bool AuthorAcceptsItsNotTriviallyCopyable = true;
 };

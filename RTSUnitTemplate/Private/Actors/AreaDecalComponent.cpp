@@ -16,6 +16,7 @@
 #include "Actors/RSVirtualTextureActor.h"
 #include "Mass/Abilitys/DecalScalingFragments.h"
 #include "MassEntityManager.h"
+#include "Mass/MassActorBindingComponent.h"
 
 UAreaDecalComponent::UAreaDecalComponent()
 {
@@ -379,29 +380,34 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 	// The server also needs to see the change immediately.
 	UpdateDecalVisuals();
 
-	// 1. Cast the owner to AUnitBase
-	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
+	// 1. Get Mass data from owner
+	UWorld* World = GetWorld();
+	UMassEntitySubsystem* MassSubsystem = World ? World->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+	if (!MassSubsystem) return;
+	FMassEntityManager& EM = MassSubsystem->GetMutableEntityManager();
+	
+	FMassEntityManager* EntityManager = &EM;
+	FMassEntityHandle EntityHandle;
+	bool bHasMassData = false;
 
-	// 2. CRITICAL: Check if the cast was successful before using the pointer!
-	if (!OwningUnit)
+	if (AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner()))
 	{
-		UE_LOG(LogTemp, Error, TEXT("AreaDecalComponent's owner '%s' is not an AUnitBase! Cannot interact with Mass."), *GetOwner()->GetName());
-		return;
+		bHasMassData = OwningUnit->GetMassEntityData(EntityManager, EntityHandle);
+	}
+	else if (UMassActorBindingComponent* BindingComp = GetOwner()->FindComponentByClass<UMassActorBindingComponent>())
+	{
+		EntityHandle = BindingComp->GetMassEntityHandle();
+		bHasMassData = EntityHandle.IsValid();
 	}
 
-	FMassEntityManager* EntityManager;
-	FMassEntityHandle EntityHandle;
-	
-	if (!OwningUnit->GetMassEntityData(EntityManager, EntityHandle))
+	if (!bHasMassData)
 	{
-		// Error already logged in GetMassEntityData
 		return;
 	}
 
 	// Check if entity is still valid
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
 		return;
 	}
 	
@@ -469,8 +475,26 @@ void UAreaDecalComponent::Multicast_ScaleDecalToRadius_Implementation(float EndR
 	}
 
 	// Switch to Mass-based scaling: initialize component state and add the processing tag on both server and clients
-	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
-	if (!OwningUnit)
+	UWorld* World = GetWorld();
+	UMassEntitySubsystem* MassSubsystem = World ? World->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+	if (!MassSubsystem) return;
+	FMassEntityManager& EM = MassSubsystem->GetMutableEntityManager();
+
+	FMassEntityManager* EntityManager = &EM;
+	FMassEntityHandle EntityHandle;
+	bool bHasMassData = false;
+
+	if (AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner()))
+	{
+		bHasMassData = OwningUnit->GetMassEntityData(EntityManager, EntityHandle);
+	}
+	else if (UMassActorBindingComponent* BindingComp = GetOwner()->FindComponentByClass<UMassActorBindingComponent>())
+	{
+		EntityHandle = BindingComp->GetMassEntityHandle();
+		bHasMassData = EntityHandle.IsValid();
+	}
+
+	if (!bHasMassData)
 	{
 		return;
 	}
@@ -478,9 +502,7 @@ void UAreaDecalComponent::Multicast_ScaleDecalToRadius_Implementation(float EndR
 	// Initialize local scaling state on the component
 	StartMassScaling(CurrentDecalRadius, EndRadius, TimeSeconds, OwnerIsBeacon);
 
-	FMassEntityManager* EntityManager = nullptr;
-	FMassEntityHandle EntityHandle;
-	if (OwningUnit->GetMassEntityData(EntityManager, EntityHandle) && EntityManager && EntityManager->IsEntityValid(EntityHandle))
+	if (EntityManager && EntityManager->IsEntityValid(EntityHandle))
 	{
 		EntityManager->Defer().AddTag<FMassDecalScalingTag>(EntityHandle);
 	}
@@ -533,15 +555,27 @@ void UAreaDecalComponent::SetCurrentDecalRadiusFromMass(float NewRadius)
 
 void UAreaDecalComponent::UpdateMassEffectRadius(float NewRadius)
 {
-	AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner());
-	if (!OwningUnit)
+	// 1. Get Mass data from owner
+	UWorld* World = GetWorld();
+	UMassEntitySubsystem* MassSubsystem = World ? World->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+	if (!MassSubsystem) return;
+	FMassEntityManager& EM = MassSubsystem->GetMutableEntityManager();
+
+	FMassEntityManager* EntityManager = &EM;
+	FMassEntityHandle EntityHandle;
+	bool bHasMassData = false;
+
+	if (AUnitBase* OwningUnit = Cast<AUnitBase>(GetOwner()))
 	{
-		return;
+		bHasMassData = OwningUnit->GetMassEntityData(EntityManager, EntityHandle);
+	}
+	else if (UMassActorBindingComponent* BindingComp = GetOwner()->FindComponentByClass<UMassActorBindingComponent>())
+	{
+		EntityHandle = BindingComp->GetMassEntityHandle();
+		bHasMassData = EntityHandle.IsValid();
 	}
 
-	FMassEntityManager* EntityManager;
-	FMassEntityHandle EntityHandle;
-	if (!OwningUnit->GetMassEntityData(EntityManager, EntityHandle))
+	if (!bHasMassData)
 	{
 		return;
 	}

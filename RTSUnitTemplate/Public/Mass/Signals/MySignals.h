@@ -89,6 +89,7 @@ namespace UnitSignals
 	const FName UpdateMouseLocation(TEXT("UpdateMouseLocation"));
 	const FName CustomOverlapStart(TEXT("CustomOverlapStart"));
 	const FName CustomOverlapEnd(TEXT("CustomOverlapEnd"));
+	const FName DuplicateEffectArea(TEXT("DuplicateEffectArea"));
 }
 
 USTRUCT()

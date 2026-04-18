@@ -7,7 +7,6 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/InstancedStaticMeshComponent.h"
 
-
 // Sets default values
 AEffectArea::AEffectArea()
 {
@@ -39,6 +38,11 @@ AEffectArea::AEffectArea()
 	bPulsate = false;
 	bDestroyOnImpact = false;
 	bScaleOnImpact = false;
+	DuplicationRadius = 0.f;
+	DuplicationTime = 0.f;
+	RandomAngleRange = 360.f;
+	MaxDuplicationCount = 0;
+	DuplicationId = 0;
 	bIsScalingAfterImpact = false;
 	bPendingDestructionRep = false;
 	HideOnDestructionDelay = 0.0f;
@@ -61,7 +65,6 @@ void AEffectArea::BeginPlay()
 {
 	Super::BeginPlay();
 	SetReplicateMovement(true);
-
 
 	if (MassBindingComponent)
 	{
