@@ -28,6 +28,7 @@ void UMassProjectileMovementProcessor::ConfigureQueries(const TSharedRef<FMassEn
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassProjectileFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassProjectileVisualFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FMassProjectileActiveTag>(EMassFragmentPresence::All);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -45,12 +46,16 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 		TArrayView<FTransformFragment> TransformList = Context.GetMutableFragmentView<FTransformFragment>();
 		TArrayView<FMassProjectileFragment> ProjectileList = Context.GetMutableFragmentView<FMassProjectileFragment>();
 		TArrayView<FMassProjectileVisualFragment> VisualList = Context.GetMutableFragmentView<FMassProjectileVisualFragment>();
+		TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
 
 		for (int32 i = 0; i < Context.GetNumEntities(); ++i)
 		{
 			FTransform& Transform = TransformList[i].GetMutableTransform();
 			FMassProjectileFragment& Projectile = ProjectileList[i];
 			FMassProjectileVisualFragment& Visual = VisualList[i];
+			const FMassVisibilityFragment& Visibility = VisibilityList[i];
+
+			const bool bVisible = Visibility.bIsOnViewport && (!Visibility.bAffectedByFogOfWar || Visibility.bIsMyTeam || Visibility.bIsVisibleEnemy);
 
 			if (bSyncFromCDO && VisualManager)
 			{
@@ -462,28 +467,40 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			{
 				FTransform FinalNiagaraTransform = Visual.Niagara_A_RelativeTransform * Transform;
 				NC_A->SetWorldTransform(FinalNiagaraTransform);
+				NC_A->SetVisibility(bVisible);
 			}
 
 			if (UNiagaraComponent* NC_B = Visual.Niagara_B.Get())
 			{
 				FTransform FinalNiagaraTransform = Visual.Niagara_B_RelativeTransform * Transform;
 				NC_B->SetWorldTransform(FinalNiagaraTransform);
+				NC_B->SetVisibility(bVisible);
 			}
 
 			// Update ISM
 			if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 			{
-				// Auf dem Client stellen wir sicher, dass die Sichtbarkeit aktiv bleibt
-				if (EntityManager.GetWorld() && EntityManager.GetWorld()->GetNetMode() == NM_Client)
+				if (bVisible)
 				{
-					if (!Visual.ISMComponent->IsVisible() || Visual.ISMComponent->bHiddenInGame)
+					// Auf dem Client stellen wir sicher, dass die Sichtbarkeit aktiv bleibt
+					if (EntityManager.GetWorld() && EntityManager.GetWorld()->GetNetMode() == NM_Client)
 					{
-						Visual.ISMComponent->SetHiddenInGame(false);
-						Visual.ISMComponent->SetVisibility(true);
+						if (!Visual.ISMComponent->IsVisible() || Visual.ISMComponent->bHiddenInGame)
+						{
+							Visual.ISMComponent->SetHiddenInGame(false);
+							Visual.ISMComponent->SetVisibility(true);
+						}
 					}
-				}
 
-				Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, Visual.VisualRelativeTransform * Transform, true, true, true);
+					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, Visual.VisualRelativeTransform * Transform, true, true, true);
+				}
+				else
+				{
+					// Hide instance by setting scale to zero
+					FTransform HiddenTransform = Visual.VisualRelativeTransform * Transform;
+					HiddenTransform.SetScale3D(FVector::ZeroVector);
+					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, HiddenTransform, true, true, true);
+				}
 			}
 		}
 	}));

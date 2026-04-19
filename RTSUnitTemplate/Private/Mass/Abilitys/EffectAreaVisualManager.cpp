@@ -94,7 +94,8 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
     if (!ISM) return;
 
     VisualFrag->ISMComponent = ISM;
-    VisualFrag->InstanceIndex = ISM->AddInstance(FTransform::Identity);
+    // Add instance with zero scale to avoid flickering before the first processor update
+    VisualFrag->InstanceIndex = ISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector));
     VisualFrag->VisualRelativeTransform = EffectAreaActor->ISMTemplate ? EffectAreaActor->ISMTemplate->GetRelativeTransform() : FTransform::Identity;
     VisualFrag->BaseMeshRadius = Mesh->GetBounds().BoxExtent.X;
     

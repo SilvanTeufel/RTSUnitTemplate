@@ -41,6 +41,19 @@ void AFogActor::BeginPlay()
 {
 	Super::BeginPlay();
 	InitFogMaskTexture();
+
+	// Register with local controller if possible
+	if (GetNetMode() != NM_DedicatedServer)
+	{
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+		{
+			if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+			{
+				CustomPC->OnTeamIdChanged.AddDynamic(this, &AFogActor::OnTeamIdChanged);
+			}
+		}
+	}
+
 	// Try immediately; if TeamId isn’t replicated yet, we’ll retry via timer below.
 	InitializeFogPostProcess();
 
@@ -131,21 +144,25 @@ void AFogActor::InitializeFogPostProcess()
 	if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
 	{
 		// Check if this fog actor belongs to the local player's team
-		if (CustomPC->SelectableTeamId == TeamId)
+		// If TeamId is -1, it's not yet initialized/replicated for a specific team.
+		if (CustomPC->IsLocalController() && TeamId != -1 && CustomPC->SelectableTeamId == TeamId)
 		{
 			if (FogMaterial && FogMaskTexture && PostProcessComponent)
 			{
 				if (!PostProcessComponent->bEnabled)
 				{
-					// Create the Dynamic Material Instance
-					UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(FogMaterial, this);
-					MID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
+					if (!FogMID)
+					{
+						FogMID = UMaterialInstanceDynamic::Create(FogMaterial, this);
+					}
+					
+					FogMID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
 					
 					FVector4 FogBounds(FogMinBounds.X, FogMinBounds.Y, FogMaxBounds.X, FogMaxBounds.Y);
-					MID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
+					FogMID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
 					
 					// Apply the material directly to our component
-					PostProcessComponent->Settings.AddBlendable(MID, 1.0f);
+					PostProcessComponent->Settings.AddBlendable(FogMID, 1.0f);
 					PostProcessComponent->bEnabled = true; // Enable the effect!
 					// Clear retry timer if running
 					if (GetWorld())
@@ -159,7 +176,17 @@ void AFogActor::InitializeFogPostProcess()
 				UE_LOG(LogTemp, Error, TEXT("Fog post-process init failed: Missing material, texture, or component."));
 			}
 		}
+		else if (PostProcessComponent && PostProcessComponent->bEnabled)
+		{
+			// Disable if team no longer matches (e.g. after team switch)
+			PostProcessComponent->bEnabled = false;
+		}
 	}
+}
+
+void AFogActor::OnTeamIdChanged(int32 NewTeamId)
+{
+	InitializeFogPostProcess();
 }
 
 void AFogActor::SetFogBounds(const FVector2D& Min, const FVector2D& Max)

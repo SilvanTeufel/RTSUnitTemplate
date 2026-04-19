@@ -56,29 +56,26 @@ void UUnitSightProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
 void UUnitSightProcessor::HandleUpdateFogMask(FName /*SignalName*/, TArray<FMassEntityHandle>& Entities)
 {
-    if (!World)
+    if (!World || World->GetNetMode() == NM_DedicatedServer)
     {
         return;
     }
+
     APlayerController* PC = World->GetFirstPlayerController();
-    if (!PC)
+    if (PC && PC->IsLocalController())
     {
-        return;
+        ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+        if (CustomPC)
+        {
+            // Copy entity array for async safety
+            TArray<FMassEntityHandle> Copied = Entities;
+            AsyncTask(ENamedThreads::GameThread, [CustomPC, Copied = MoveTemp(Copied)]()
+            {
+                CustomPC->UpdateFogMaskWithCircles(Copied);
+                CustomPC->UpdateMinimap(Copied);
+            });
+        }
     }
-    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
-    if (!CustomPC)
-    {
-        return;
-    }
-    
-    // Copy entity array for async safety
-    TArray<FMassEntityHandle> Copied = Entities;
-    AsyncTask(ENamedThreads::GameThread, [CustomPC, Copied = MoveTemp(Copied)]()
-    {
-        CustomPC->UpdateFogMaskWithCircles(Copied);
-        CustomPC->UpdateMinimap(Copied);
-    });
-    
 }
 
 void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -104,6 +101,16 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EffectAreaQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
     EffectAreaQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::All);
     EffectAreaQuery.RegisterWithProcessor(*this);
+
+    // Query for Projectiles
+    ProjectileQuery.Initialize(EntityManager);
+    ProjectileQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    ProjectileQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    ProjectileQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
+    ProjectileQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    ProjectileQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+    ProjectileQuery.AddTagRequirement<FMassProjectileTag>(EMassFragmentPresence::All);
+    ProjectileQuery.RegisterWithProcessor(*this);
 }
 
 void UUnitSightProcessor::Execute(
@@ -134,14 +141,15 @@ void UUnitSightProcessor::ExecuteServer(
         FMassAgentCharacteristicsFragment*          Char;
         FMassAIStateFragment*                       State;
         FMassSightFragment*                         Sight;
+        bool                                        bCanRevealFog;
     };
     TArray<FLocalInfo> AllEntities;
     AllEntities.Reserve(256);
     
-    auto GatherEntities = [&](FMassEntityQuery& Query)
+    auto GatherEntities = [&](FMassEntityQuery& Query, bool bInCanRevealFog)
     {
         Query.ForEachEntityChunk(Context,
-            [&AllEntities, this](FMassExecutionContext& ChunkCtx)
+            [&AllEntities, this, bInCanRevealFog](FMassExecutionContext& ChunkCtx)
         {
             const int32 N = ChunkCtx.GetNumEntities();
             const auto& Transforms = ChunkCtx.GetFragmentView<FTransformFragment>();
@@ -197,14 +205,16 @@ void UUnitSightProcessor::ExecuteServer(
                     &StatsList[i],
                     &CharList[i],
                     StateList ? &StateList[i] : nullptr,
-                    &SightList[i]
+                    &SightList[i],
+                    bInCanRevealFog
                 });
             }
         });
     };
 
-    GatherEntities(EntityQuery);
-    GatherEntities(EffectAreaQuery);
+    GatherEntities(EntityQuery, true);
+    GatherEntities(EffectAreaQuery, true);
+    GatherEntities(ProjectileQuery, false);
 
     // 3) Calculate Overlaps
     TArray<FMassEntityHandle>         FogEntities;
@@ -219,7 +229,10 @@ void UUnitSightProcessor::ExecuteServer(
         // Dead Units should not able to detect Enemy Alive Units
         if (Det.Stats->Health <= 0.f) continue;
 
-        FogEntities.Add(Det.Entity);
+        if (Det.bCanRevealFog)
+        {
+            FogEntities.Add(Det.Entity);
+        }
 
         for (int32 j = 0; j < AllEntities.Num(); ++j)
         {
@@ -238,12 +251,15 @@ void UUnitSightProcessor::ExecuteServer(
             if (DistSqr > SightR2) 
                 continue;
             
-            if (Det.Char->bCanDetectInvisible || !Tgt.Char->bCanBeInvisible)
+            if (Det.bCanRevealFog)
             {
-                Tgt.Sight->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
+                if (Det.Char->bCanDetectInvisible || !Tgt.Char->bCanBeInvisible)
+                {
+                    Tgt.Sight->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
+                }
+                
+                Tgt.Sight->TeamOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
             }
-            
-            Tgt.Sight->TeamOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
         }
     }
 

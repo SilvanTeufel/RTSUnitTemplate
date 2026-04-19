@@ -25,7 +25,7 @@ public:
 
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int32 TeamId = 0;
+	int32 TeamId = -1;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FogOfWar")
 	UPostProcessComponent* PostProcessComponent;
@@ -92,6 +92,12 @@ private:
 
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 	TArray<FColor> FogPixels;
+
+	UFUNCTION()
+	void OnTeamIdChanged(int32 NewTeamId);
+
+	UPROPERTY()
+	UMaterialInstanceDynamic* FogMID;
 
 	int32 InitPPAttempts = 0; // retry counter for PP init on clients
 	

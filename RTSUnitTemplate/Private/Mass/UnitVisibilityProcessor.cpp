@@ -17,7 +17,7 @@ UUnitVisibilityProcessor::UUnitVisibilityProcessor()
 {
 	ProcessingPhase = EMassProcessingPhase::PostPhysics;
 	bAutoRegisterWithProcessingPhases = true;
-	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server);
+	ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Standalone);
 	bRequiresGameThreadExecution = true; // Required for ProjectWorldToScreen
 }
 
@@ -69,7 +69,7 @@ void UUnitVisibilityProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadWrite);
-	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
@@ -128,9 +128,8 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		{
 			FMassVisibilityFragment& Vis = VisibilityList[i];
 			const FMassCombatStatsFragment& Stats = StatsList[i];
-			AActor* Actor = ActorList[i].GetMutable();
+			AActor* Actor = ActorList.Num() > 0 ? ActorList[i].GetMutable() : nullptr;
 			IMassVisibilityInterface* VisInterface = Cast<IMassVisibilityInterface>(Actor);
-			if (!VisInterface) continue;
 
 			APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor);
 			AEffectArea* Area = Cast<AEffectArea>(Actor);
@@ -159,11 +158,11 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					}
 
 					// 1.5) Update Fog Visibility
-					if (Vis.bIsMyTeam)
+					if (Vis.bIsMyTeam || !Vis.bAffectedByFogOfWar)
 					{
 						bIsVisibleByFog = true;
 					}
-					else
+					else if (SightList.Num() > 0)
 					{
 						const int32* OverlapCount = SightList[i].ConsistentTeamOverlapsPerTeam.Find(LocalTeamId);
 						const int32* AttackerOverlapCount = SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Find(LocalTeamId);
@@ -184,6 +183,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 						}
 						bIsVisibleByFog = (OverlapCount && *OverlapCount > 0) || (AttackerOverlapCount && *AttackerOverlapCount > 0) || bAttacksMyTeam;
 					}
+					
 					if (bIsVisibleByFog)
 					{
 						Vis.bIsVisibleEnemy = true;

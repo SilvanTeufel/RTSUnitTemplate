@@ -527,6 +527,9 @@ struct FMassVisibilityFragment : public FMassFragment
 	float VisibilityOffset = 150.f;
 
 	UPROPERTY()
+	bool bAffectedByFogOfWar = true;
+
+	UPROPERTY()
 	float LastHealthChangeTime = -100.f;
 
 	UPROPERTY()

@@ -25,6 +25,8 @@ AEffectArea::AEffectArea()
 
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara_A->SetupAttachment(SceneRoot);
+	Niagara_A->SetAutoActivate(true);
+	Niagara_A->SetVisibility(false); // Hide initially to avoid flickering before processor update
 	
 	MassBindingComponent = CreateDefaultSubobject<UMassActorBindingComponent>(TEXT("MassBindingComponent"));
 

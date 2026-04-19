@@ -55,6 +55,7 @@
 #include "Mass/Replication/MassUnitReplicatorBase.h"
 #include "Mass/Replication/ReplicationBootstrap.h"
 #include "GameStates/ResourceGameState.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 // CVAR for startup freeze
 static TAutoConsoleVariable<int32> CVarRTS_StartupFreeze_Enable(
@@ -865,8 +866,24 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 			}
 			if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
 			{
-				VisibilityFrag->bIsMyTeam = true;
+				// Determine if it's my team to avoid flickering in FOW
+				int32 LocalTeamId = -1;
+				if (UWorld* World = EffectArea->GetWorld())
+				{
+					if (APlayerController* PC = World->GetFirstPlayerController())
+					{
+						if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+						{
+							LocalTeamId = CustomPC->SelectableTeamId;
+						}
+					}
+				}
+
+				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == EffectArea->TeamId) || LocalTeamId == 0;
 				VisibilityFrag->bIsOnViewport = true;
+				VisibilityFrag->bIsVisibleEnemy = false;
+				VisibilityFrag->VisibilityOffset = EffectArea->VisibilityOffset;
+				VisibilityFrag->bAffectedByFogOfWar = EffectArea->bAffectedByFogOfWar;
 			}
 
 			if (EffectArea->bUseEffectAreaImpactProcessor)
@@ -1146,19 +1163,42 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
        *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius() + AdditionalCapsuleRadius));
     }
 
-	if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
-	{
-		if (APerformanceUnit* PerfUnit = Cast<APerformanceUnit>(UnitOwner))
+		if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
 		{
-			VisibilityFrag->bIsMyTeam = PerfUnit->IsMyTeam;
-			VisibilityFrag->bIsOnViewport = PerfUnit->IsOnViewport;
-			VisibilityFrag->bIsVisibleEnemy = PerfUnit->IsVisibleEnemy;
-			VisibilityFrag->VisibilityOffset = PerfUnit->VisibilityOffset;
-			VisibilityFrag->bLastIsMyTeam = PerfUnit->IsMyTeam;
-			VisibilityFrag->bLastIsOnViewport = PerfUnit->IsOnViewport;
-			VisibilityFrag->bLastIsVisibleEnemy = PerfUnit->IsVisibleEnemy;
+			// Determine if it's my team to avoid flickering in FOW
+			int32 LocalTeamId = -1;
+			if (UWorld* World = UnitOwner->GetWorld())
+			{
+				if (APlayerController* PC = World->GetFirstPlayerController())
+				{
+					if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+					{
+						LocalTeamId = CustomPC->SelectableTeamId;
+					}
+				}
+			}
+
+			if (APerformanceUnit* PerfUnit = Cast<APerformanceUnit>(UnitOwner))
+			{
+				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == UnitOwner->TeamId) || LocalTeamId == 0;
+				VisibilityFrag->bIsOnViewport = true;
+				VisibilityFrag->bIsVisibleEnemy = false;
+				VisibilityFrag->VisibilityOffset = PerfUnit->VisibilityOffset;
+				VisibilityFrag->bLastIsMyTeam = VisibilityFrag->bIsMyTeam;
+				VisibilityFrag->bLastIsOnViewport = VisibilityFrag->bIsOnViewport;
+				VisibilityFrag->bLastIsVisibleEnemy = VisibilityFrag->bIsVisibleEnemy;
+				VisibilityFrag->bAffectedByFogOfWar = true;
+			}
+			else
+			{
+				// Buildings and other units
+				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == UnitOwner->TeamId) || LocalTeamId == 0;
+				VisibilityFrag->bIsOnViewport = true;
+				VisibilityFrag->bIsVisibleEnemy = false;
+				VisibilityFrag->VisibilityOffset = 150.f; // Default for non-performance units
+				VisibilityFrag->bAffectedByFogOfWar = true;
+			}
 		}
-	}
 
 	if(FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle))
 	{

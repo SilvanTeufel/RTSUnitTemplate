@@ -136,8 +136,11 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	FRotator RotationOffset = FRotator(0.f);
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
-	float VisibilityOffset = 0.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
+	float VisibilityOffset = 150.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
+	bool bAffectedByFogOfWar = true;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool FollowTarget = false;

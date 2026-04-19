@@ -12,6 +12,7 @@
 #include "UObject/UObjectIterator.h"
 #include "LandscapeProxy.h"
 #include "Landscape.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 void UProjectileVisualManager::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -216,6 +217,10 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		Fragments.Add(FTransformFragment::StaticStruct());
 		Fragments.Add(FMassProjectileFragment::StaticStruct());
 		Fragments.Add(FMassProjectileVisualFragment::StaticStruct());
+		Fragments.Add(FMassVisibilityFragment::StaticStruct());
+		Fragments.Add(FMassCombatStatsFragment::StaticStruct());
+		Fragments.Add(FMassSightFragment::StaticStruct());
+		Fragments.Add(FMassAgentCharacteristicsFragment::StaticStruct());
         
 		TArray<const UScriptStruct*> Tags;
 		Tags.Add(FMassProjectileTag::StaticStruct());
@@ -420,9 +425,47 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	}
 
     // Apply fragments
+    FMassVisibilityFragment VisibilityFragment;
+    VisibilityFragment.VisibilityOffset = CDO->VisibilityOffset;
+    VisibilityFragment.bAffectedByFogOfWar = CDO->bAffectedByFogOfWar;
+
+	// Determine if it's my team to avoid flickering in FOW
+	int32 LocalTeamId = 0;
+	if (World)
+	{
+		if (APlayerController* PC = World->GetFirstPlayerController())
+		{
+			if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+			{
+				LocalTeamId = CustomPC->SelectableTeamId;
+			}
+		}
+	}
+
+    VisibilityFragment.bIsMyTeam = (LocalTeamId == ProjectileFragment.TeamId || LocalTeamId == 0);
+    VisibilityFragment.bIsOnViewport = true; // Will be updated by processor
+	VisibilityFragment.bIsVisibleEnemy = false; // Will be updated by processor
+
+    FMassCombatStatsFragment StatsFragment;
+    StatsFragment.TeamId = ProjectileFragment.TeamId;
+    StatsFragment.Health = 100.f; // Non-zero for sight system to consider it valid
+    StatsFragment.SightRadius = 0.f;
+    StatsFragment.LoseSightRadius = 0.f;
+
+    FMassSightFragment SightFragment;
+    // Sight settings from CDO if needed, but projectiles usually don't "see", they are seen.
+    
+    FMassAgentCharacteristicsFragment CharFragment;
+    // Basic characteristics
+    CharFragment.CapsuleRadius = 10.f; // Small radius for projectiles
+
     EntityManager->GetFragmentDataChecked<FTransformFragment>(Entity) = TransformFragment;
     EntityManager->GetFragmentDataChecked<FMassProjectileFragment>(Entity) = ProjectileFragment;
     EntityManager->GetFragmentDataChecked<FMassProjectileVisualFragment>(Entity) = VisualFragment;
+    EntityManager->GetFragmentDataChecked<FMassVisibilityFragment>(Entity) = VisibilityFragment;
+    EntityManager->GetFragmentDataChecked<FMassCombatStatsFragment>(Entity) = StatsFragment;
+    EntityManager->GetFragmentDataChecked<FMassSightFragment>(Entity) = SightFragment;
+    EntityManager->GetFragmentDataChecked<FMassAgentCharacteristicsFragment>(Entity) = CharFragment;
     
 	return Entity;
 }

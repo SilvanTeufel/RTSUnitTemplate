@@ -147,6 +147,9 @@ public:
 	void OnEffectAreaDestructionStarted();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
+	float VisibilityOffset = 150.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
 	bool bAffectedByFogOfWar = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")

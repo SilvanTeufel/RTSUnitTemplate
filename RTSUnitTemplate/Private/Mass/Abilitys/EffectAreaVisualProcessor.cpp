@@ -58,12 +58,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 			AActor* AreaActor = ActorList[i].GetMutable();
 			AEffectArea* EffectArea = Cast<AEffectArea>(AreaActor);
 
-            bool bIsVisible = true;
-            if (EffectArea && EffectArea->bAffectedByFogOfWar)
-            {
-                // In a real scenario, we'd check against a fog subsystem or use FMassVisibilityFragment if updated by another processor
-                bIsVisible = EffectArea->bIsVisibleByFog;
-            }
+			bool bIsVisibleByFog = !Visibility.bAffectedByFogOfWar || Visibility.bIsMyTeam || Visibility.bIsVisibleEnemy;
 
 			// If pending destruction and hide delay elapsed, hide once
 			bool bIsHiddenByDestruction = Impact.bPendingDestruction && Impact.PostImpactTimer >= Impact.HideOnDestructionDelay;
@@ -72,7 +67,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 				Impact.bHasHiddenVisual = true;
 			}
 
-			bool bShouldShow = bIsVisible && !bIsHiddenByDestruction;
+			bool bShouldShow = bIsVisibleByFog && Visibility.bIsOnViewport && !bIsHiddenByDestruction;
 
 			if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 			{
@@ -102,7 +97,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
             // Handle Impact VFX
             bool bTriggerVFX = Impact.bImpactVFXTriggered || (EffectArea && EffectArea->bImpactVFXTriggered);
 
-            if (bTriggerVFX && bIsVisible && EffectArea && EffectArea->ImpactVFX)
+            if (bTriggerVFX && bIsVisibleByFog && EffectArea && EffectArea->ImpactVFX)
             {
                 UNiagaraFunctionLibrary::SpawnSystemAtLocation(VisualContext.GetWorld(), EffectArea->ImpactVFX, EntityTransform.GetLocation());
                 Impact.bImpactVFXTriggered = false;

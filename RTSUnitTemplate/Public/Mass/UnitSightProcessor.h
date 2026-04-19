@@ -41,6 +41,9 @@ private:
 
 	// Query for EffectAreas
 	FMassEntityQuery EffectAreaQuery;
+
+	// Query for Projectiles
+	FMassEntityQuery ProjectileQuery;
 	
 	float TimeSinceLastRun = 0.0f;
 	const float ExecutionInterval = 0.2f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
