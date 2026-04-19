@@ -89,6 +89,7 @@ void UMassEffectAreaImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	AreaQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddTagRequirement<FMassEffectAreaImpactTag>(EMassFragmentPresence::All);
 	AreaQuery.AddTagRequirement<FMassEffectAreaActiveTag>(EMassFragmentPresence::All);
+	AreaQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
 	AreaQuery.RegisterWithProcessor(*this);
 
 	UnitQuery.Initialize(EntityManager);

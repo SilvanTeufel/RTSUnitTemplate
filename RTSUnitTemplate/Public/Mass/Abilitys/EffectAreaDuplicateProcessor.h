@@ -25,7 +25,7 @@ protected:
 
 	FMassEntityQuery AreaQuery;
 	FMassEntityQuery EnemyQuery;
-	FMassEntityQuery GlobalAreaQuery;
+	FMassEntityQuery GlobalUpdateQuery;
 
 	float ExecutionInterval = 3.f;
 	float ProcessingTime = 0.f;

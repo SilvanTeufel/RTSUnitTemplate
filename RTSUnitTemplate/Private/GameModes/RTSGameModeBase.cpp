@@ -38,6 +38,10 @@
 #include "Mass/States/ChaseStateProcessor.h"
 #include "System/MapSwitchSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "MassEntitySubsystem.h"
+#include "MassEntityManager.h"
+#include "MassExecutionContext.h"
+#include "Mass/UnitMassTag.h"
 
 
 void ARTSGameModeBase::BeginPlay()
@@ -79,6 +83,9 @@ void ARTSGameModeBase::BeginPlay()
 
 			// Trigger for local host immediately
 			GS->OnRep_LoadingWidgetConfig();
+
+			FTimerHandle ReleaseEffectAreasTimer;
+			GetWorldTimerManager().SetTimer(ReleaseEffectAreasTimer, this, &ARTSGameModeBase::ReleaseEffectAreas, WidgetDuration, false);
 		}
 		else
 		{
@@ -95,6 +102,36 @@ void ARTSGameModeBase::BeginPlay()
 	GetWorldTimerManager().SetTimer(TimerHandleStartDataTable, this, &ARTSGameModeBase::DataTableTimerStart, GatherControllerTimer+5.f+DelaySpawnTableTime, false);
 
 	GetWorldTimerManager().SetTimer(WinLoseTimerHandle, this, &ARTSGameModeBase::CheckWinLoseConditionTimer, 1.0f, true);
+}
+
+void ARTSGameModeBase::ReleaseEffectAreas()
+{
+	if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+	{
+		FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+		FMassEntityQuery ReleaseQuery(EntityManager.AsShared());
+		ReleaseQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::All);
+
+		TArray<FMassEntityHandle> EntitiesToRelease;
+		FMassExecutionContext Context(EntityManager);
+		ReleaseQuery.ForEachEntityChunk(EntityManager, Context, [&EntitiesToRelease](FMassExecutionContext& ChunkContext)
+		{
+			const int32 NumEntities = ChunkContext.GetNumEntities();
+			for (int32 i = 0; i < NumEntities; ++i)
+			{
+				EntitiesToRelease.Add(ChunkContext.GetEntity(i));
+			}
+		});
+
+		if (EntitiesToRelease.Num() > 0)
+		{
+			for (const FMassEntityHandle& Entity : EntitiesToRelease)
+			{
+				EntityManager.RemoveTagFromEntity(Entity, FMassEffectAreaLoadingTag::StaticStruct());
+			}
+			UE_LOG(LogTemp, Log, TEXT("ARTSGameModeBase: Loading phase ended, %d EffectAreas released for processing."), EntitiesToRelease.Num());
+		}
+	}
 }
 
 void ARTSGameModeBase::InitializeWinLoseConfigActors()

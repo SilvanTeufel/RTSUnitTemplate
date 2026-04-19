@@ -149,6 +149,8 @@ public:
 	
 	virtual void BeginPlay() override;
 
+	void ReleaseEffectAreas();
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void DataTableTimerStart();
 	

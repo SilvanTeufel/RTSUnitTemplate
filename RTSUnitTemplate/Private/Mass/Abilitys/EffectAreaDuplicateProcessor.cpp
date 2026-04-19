@@ -40,6 +40,7 @@ void UMassEffectAreaDuplicateProcessor::ConfigureQueries(const TSharedRef<FMassE
 	AreaQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	AreaQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddTagRequirement<FMassEffectAreaDuplicateTag>(EMassFragmentPresence::All);
+	AreaQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
 	AreaQuery.RegisterWithProcessor(*this);
 
 	EnemyQuery.Initialize(EntityManager);
@@ -47,9 +48,11 @@ void UMassEffectAreaDuplicateProcessor::ConfigureQueries(const TSharedRef<FMassE
 	EnemyQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	EnemyQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 
-	GlobalAreaQuery.Initialize(EntityManager);
-	GlobalAreaQuery.AddRequirement<FEffectAreaDuplicateFragment>(EMassFragmentAccess::ReadOnly);
-	GlobalAreaQuery.AddTagRequirement<FMassEffectAreaDuplicateTag>(EMassFragmentPresence::All);
+	GlobalUpdateQuery.Initialize(EntityManager);
+	GlobalUpdateQuery.AddRequirement<FEffectAreaDuplicateFragment>(EMassFragmentAccess::ReadWrite);
+	GlobalUpdateQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	GlobalUpdateQuery.AddTagRequirement<FMassEffectAreaDuplicateTag>(EMassFragmentPresence::All);
+	GlobalUpdateQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
 }
 
 void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -61,8 +64,9 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 	{
 		// 1. Global population count per ID
 		TMap<int32, int32> IdCounts;
-		FMassExecutionContext GlobalCountContext(EntityManager);
-		GlobalAreaQuery.ForEachEntityChunk(EntityManager, GlobalCountContext, [&IdCounts](FMassExecutionContext& ChunkContext)
+		FMassExecutionContext GlobalContext(EntityManager);
+
+		GlobalUpdateQuery.ForEachEntityChunk(EntityManager, GlobalContext, [&IdCounts](FMassExecutionContext& ChunkContext)
 		{
 			auto DuplicateList = ChunkContext.GetFragmentView<FEffectAreaDuplicateFragment>();
 			for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
@@ -79,14 +83,14 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 			UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Population ID=%d, Count=%d"), Pair.Key, Pair.Value);
 		}
 
-		AreaQuery.ForEachEntityChunk(Context, [this, &IdCounts](FMassExecutionContext& ChunkContext)
+		UMassSignalSubsystem* SignalSubsystem = Context.GetWorld() ? Context.GetWorld()->GetSubsystem<UMassSignalSubsystem>() : nullptr;
+		if (!SignalSubsystem) return;
+
+		GlobalUpdateQuery.ForEachEntityChunk(EntityManager, GlobalContext, [this, &IdCounts, SignalSubsystem](FMassExecutionContext& ChunkContext)
 		{
 			const int32 NumEntities = ChunkContext.GetNumEntities();
 			TArrayView<FEffectAreaDuplicateFragment> DuplicateList = ChunkContext.GetMutableFragmentView<FEffectAreaDuplicateFragment>();
 			TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
-
-			UMassSignalSubsystem* SignalSubsystem = ChunkContext.GetWorld() ? ChunkContext.GetWorld()->GetSubsystem<UMassSignalSubsystem>() : nullptr;
-			if (!SignalSubsystem) return;
 
 			for (int32 i = 0; i < NumEntities; ++i)
 			{
@@ -209,7 +213,7 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 	// 2. Global population count per ID for the signal phase
 	TMap<int32, int32> IdCounts;
 	FMassExecutionContext GlobalCountContext(EntityManager);
-	GlobalAreaQuery.ForEachEntityChunk(EntityManager, GlobalCountContext, [&IdCounts](FMassExecutionContext& ChunkContext)
+	GlobalUpdateQuery.ForEachEntityChunk(EntityManager, GlobalCountContext, [&IdCounts](FMassExecutionContext& ChunkContext)
 	{
 		auto DuplicateList = ChunkContext.GetFragmentView<FEffectAreaDuplicateFragment>();
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)

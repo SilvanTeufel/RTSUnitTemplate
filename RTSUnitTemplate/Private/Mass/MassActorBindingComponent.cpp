@@ -421,6 +421,17 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FragmentsAndTags.Add(FMassEffectAreaDuplicateTag::StaticStruct());
 		}
 
+		if (UWorld* World = Owner->GetWorld())
+		{
+			if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
+			{
+				if (GS->MatchStartTime > 0 && GS->GetServerWorldTimeSeconds() < GS->MatchStartTime)
+				{
+					FragmentsAndTags.Add(FMassEffectAreaLoadingTag::StaticStruct());
+				}
+			}
+		}
+
 		FMassArchetypeCreationParams Params;
 		Params.ChunkMemorySize = 0;
 		Params.DebugName = FName("UMassActorBindingComponent_EffectArea");
@@ -1290,32 +1301,35 @@ struct FMassSetupEffectAreaCommand : public FMassBatchedCommand
 
 	void Add(UMassActorBindingComponent& InComponent)
 	{
-		Component = &InComponent;
+		Components.Add(&InComponent);
 		bHasWork = true;
 	}
 
 	virtual void Run(FMassEntityManager& EntityManager) override
 	{
-		if (Component.IsValid())
+		for (auto& ComponentPtr : Components)
 		{
-			Component->CreateAndLinkEffectAreaToMassEntity();
+			if (ComponentPtr.IsValid())
+			{
+				ComponentPtr->CreateAndLinkEffectAreaToMassEntity();
+			}
 		}
 	}
 
 	virtual SIZE_T GetAllocatedSize() const override
 	{
-		return sizeof(*this);
+		return sizeof(*this) + Components.GetAllocatedSize();
 	}
 
 #if CSV_PROFILER_STATS || WITH_MASSENTITY_DEBUG
 	virtual int32 GetNumOperationsStat() const override
 	{
-		return bHasWork ? 1 : 0;
+		return Components.Num();
 	}
 #endif
 
 private:
-	TWeakObjectPtr<UMassActorBindingComponent> Component;
+	TArray<TWeakObjectPtr<UMassActorBindingComponent>> Components;
 };
 
 void UMassActorBindingComponent::SetupMassOnEffectArea()
@@ -1452,10 +1466,11 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	{
 		// Wir haben eine NetID, aber die Bubble-Daten fehlen noch
 		static double LastLogTime = 0;
-		if (bDebugLogs && MyWorld->GetTimeSeconds() - LastLogTime > 1.0) // Verhindere Frame-Spam
+		const double CurrentTime = MyWorld->GetTimeSeconds();
+		if (bDebugLogs && (CurrentTime - LastLogTime > 1.0)) // Verhindere Frame-Spam
 		{
 			UE_LOG(LogTemp, Log, TEXT("[MassLink] %s: Waiting for Bubble data (NetID: %u)"), *OwnerName, RegItem->NetID.GetValue());
-			LastLogTime = MyWorld->GetTimeSeconds();
+			LastLogTime = CurrentTime;
 		}
 		return false;
 	}

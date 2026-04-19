@@ -1355,6 +1355,12 @@ struct FMassEffectAreaDuplicateTag : public FMassTag
 };
 
 USTRUCT()
+struct FMassEffectAreaLoadingTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+USTRUCT()
 struct FEffectAreaDuplicateFragment : public FMassFragment
 {
 	GENERATED_BODY()
