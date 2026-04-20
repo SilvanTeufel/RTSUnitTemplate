@@ -8,8 +8,6 @@
 #include "Actors/WorkArea.h"
 #include "Actors/WinLoseConfigActor.h"
 #include "Characters/Unit/BuildingBase.h"
-#include "Controller/AIController/BuildingControllerBase.h"
-#include "Controller/AIController/WorkerUnitControllerBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/UnrealNetwork.h"
@@ -915,13 +913,9 @@ void AResourceGameMode::SetAllCurrentWorkers(int TeamId)
 		if (Worker && Worker->ResourcePlace && Worker->TeamId == TeamId)
 		{
 			// Cast the Controller property to AWorkingUnitController
-			AWorkerUnitControllerBase* WorkerController = Cast<AWorkerUnitControllerBase>(Worker->GetController());
-			if (WorkerController)
-			{
 				EResourceType ResourceType = ConvertToResourceType(Worker->ResourcePlace->Type);
 				// SAVE WORKERCOUNT DEPENDING ON RESOURCETYPE
 				WorkerCountPerType.FindOrAdd(ResourceType)++;
-			}
 		}
 	}
 	// Setting current workers for each resource type

@@ -76,7 +76,7 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
         if (!bAlreadyInList)
         {
             // We must fetch its data directly from the EntityManager to build the FTargetUnitInfo struct.
-            if (EntityManager.IsEntityValid(CurrentTargetEntity) && !DoesEntityHaveTag(EntityManager, CurrentTargetEntity, FMassStopUnitDetectionTag::StaticStruct()))
+            if (EntityManager.IsEntityActive(CurrentTargetEntity) && !DoesEntityHaveTag(EntityManager, CurrentTargetEntity, FMassStopUnitDetectionTag::StaticStruct()))
             {
                 FTransformFragment* TgtTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(CurrentTargetEntity);
                 FMassAIStateFragment* TgtState = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CurrentTargetEntity);
@@ -149,7 +149,7 @@ void UDetectionProcessor::Execute(
     
     for (const FMassEntityHandle& TgtEntity : PotentialTargets)
     {
-        if (!EntityManager.IsEntityValid(TgtEntity) || DoesEntityHaveTag(EntityManager, TgtEntity, FMassStopUnitDetectionTag::StaticStruct())) continue;
+        if (!EntityManager.IsEntityActive(TgtEntity) || DoesEntityHaveTag(EntityManager, TgtEntity, FMassStopUnitDetectionTag::StaticStruct())) continue;
 
         // Fetch all required fragments for this target
         FTransformFragment* TgtTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TgtEntity);
@@ -292,7 +292,7 @@ void UDetectionProcessor::Execute(
                 const FMassEntityHandle SquadTarget = Mate.TargetFrag->TargetEntity;
 
                 // Validate basic target conditions (alive and enemy). Range does not matter here.
-                if (!EntityManager.IsEntityValid(SquadTarget)) continue;
+                if (!EntityManager.IsEntityActive(SquadTarget)) continue;
                 const FMassCombatStatsFragment* SquadTgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SquadTarget);
                 if (!SquadTgtStats || DoesEntityHaveTag(EntityManager, SquadTarget, FMassStopUnitDetectionTag::StaticStruct())) continue;
                 if (SquadTgtStats->TeamId == Det.Stats->TeamId) continue;

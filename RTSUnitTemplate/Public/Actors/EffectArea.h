@@ -7,10 +7,13 @@
 #include "Characters/Unit/UnitBase.h"
 #include "TimerManager.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/MassVisibilityInterface.h"
 #include "EffectArea.generated.h"
 
 class UMassActorBindingComponent;
 class UInstancedStaticMeshComponent;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnEffectAreaDead);
 
 UCLASS()
 class RTSUNITTEMPLATE_API AEffectArea : public AActor, public IMassVisibilityInterface
@@ -39,6 +42,20 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_A;
+	
+	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|Events")
+	FOnEffectAreaDead OnEffectAreaDead;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float Health = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Effects")
+	class UNiagaraSystem* DeathVFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Effects")
+	class USoundBase* DeathSound;
+
+	void HandleDeath(bool bIsVisible);
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	float LifeTime = 0.f;
@@ -94,6 +111,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Duplication")
 	int32 MaxDuplicationCount = 0;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float CapsuleHeight = 50.f;
+
+	UFUNCTION(Server, Reliable)
+	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride = -1.f);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Duplication")
 	int32 DuplicationId = 0;
 
@@ -102,6 +125,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
 	class UNiagaraSystem* ImpactVFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
+	class USoundBase* ImpactSound;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
 	bool bImpactVFXTriggered = false;

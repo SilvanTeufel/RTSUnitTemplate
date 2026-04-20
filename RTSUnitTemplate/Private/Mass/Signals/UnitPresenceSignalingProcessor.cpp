@@ -21,7 +21,6 @@ void UUnitPresenceSignalingProcessor::ConfigureQueries(const TSharedRef<FMassEnt
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     
     EntityQuery.RegisterWithProcessor(*this);
 }
@@ -51,11 +50,16 @@ void UUnitPresenceSignalingProcessor::Execute(FMassEntityManager& EntityManager,
     EntityQuery.ForEachEntityChunk(Context, 
         [&AllUnits](FMassExecutionContext& ChunkContext)
     {
-        // CORRECTED LINE: Use 'auto' to correctly deduce the type TConstArrayView<FMassEntityHandle>
         const auto Entities = ChunkContext.GetEntities();
-        // Get the AIStateFragment and then StateFrag.CanDetect
-        // This line works perfectly with a TConstArrayView
-        AllUnits.Append(Entities.GetData(), Entities.Num());
+        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+
+        for (int32 i = 0; i < Entities.Num(); ++i)
+        {
+            if (StatsList[i].Health > 0.f)
+            {
+                AllUnits.Add(Entities[i]);
+            }
+        }
     });
 
     if (!AllUnits.IsEmpty())

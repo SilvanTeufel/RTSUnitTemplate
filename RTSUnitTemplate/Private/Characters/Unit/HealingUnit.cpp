@@ -21,7 +21,7 @@ void AHealingUnit::SpawnHealActor(AActor* Target) // FVector TargetLocation
 		if (MyHealActor != nullptr)
 		{
 		
-			MyHealActor->Init(UnitToChase, this);
+			MyHealActor->Init(Cast<AUnitBase>(UnitToChase), this);
 			UGameplayStatics::FinishSpawningActor(MyHealActor, Transform);
 		}
 	}
@@ -49,8 +49,9 @@ bool AHealingUnit::SetNextUnitToChaseHeal()
 {
 
 	// Entferne alle Einheiten, die ungültig, tot oder außerhalb der Sichtweite sind.
-	UnitsToChase.RemoveAll([this](const AUnitBase* Unit) -> bool {
-		return !IsValid(Unit) || Unit->GetUnitState() == UnitData::Dead || GetDistanceTo(Unit) > MassActorBindingComponent->SightRadius;
+	UnitsToChase.RemoveAll([this](const AActor* Actor) -> bool {
+		const AUnitBase* Unit = Cast<AUnitBase>(Actor);
+		return !Unit || Unit->GetUnitState() == UnitData::Dead || GetDistanceTo(Unit) > MassActorBindingComponent->SightRadius;
 	});
 	
 	if (UnitsToChase.IsEmpty()) return false;
@@ -61,7 +62,7 @@ bool AHealingUnit::SetNextUnitToChaseHeal()
 	// Use an iterator loop to be able to remove elements while iterating
 	for (auto It = UnitsToChase.CreateIterator(); It; ++It)
 	{
-		AUnitBase* CurrentUnit = *It;
+		AUnitBase* CurrentUnit = Cast<AUnitBase>(*It);
 		if (CurrentUnit)
 		{
 			if (CurrentUnit->GetUnitState() == UnitData::Dead)

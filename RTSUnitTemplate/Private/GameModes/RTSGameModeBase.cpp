@@ -20,7 +20,6 @@
 #include "Actors/Waypoint.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
-#include "Controller/AIController/BuildingControllerBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "System/PlayerTeamSubsystem.h"

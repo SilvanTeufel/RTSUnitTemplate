@@ -13,7 +13,6 @@
 #include "Engine/Engine.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/EffectArea.h"
-#include "Controller/AIController/UnitControllerBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 #include "Widgets/UnitBaseHealthBar.h"
@@ -1513,11 +1512,11 @@ void AProjectile::SetBackBouncing(AUnitBase* ShootingUnit)
 	}
 }
 
-void AProjectile::SetNextBouncing(AUnitBase* ShootingUnit, AUnitBase* UnitToHit)
+void AProjectile::SetNextBouncing(AUnitBase* ShootingUnit, AActor* UnitToHit)
 {
 	if(IsBouncingNext)
 	{
-		AUnitBase* NewTarget = GetNextUnitInRange(ShootingUnit, UnitToHit);
+		AActor* NewTarget = GetNextUnitInRange(ShootingUnit, UnitToHit);
 
 		if(!NewTarget)
 		{
@@ -1530,11 +1529,11 @@ void AProjectile::SetNextBouncing(AUnitBase* ShootingUnit, AUnitBase* UnitToHit)
 	}
 }
 
-AUnitBase* AProjectile::GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* UnitToHit)
+AActor* AProjectile::GetNextUnitInRange(AUnitBase* ShootingUnit, AActor* UnitToHit)
 {
 	float Range = 9999999.f;
-	AUnitBase* RUnit = nullptr; 
-	for (AUnitBase* Unit : ShootingUnit->UnitsToChase)
+	AActor* RUnit = nullptr; 
+	for (AActor* Unit : ShootingUnit->UnitsToChase)
 	{
 		if (Unit && Unit != UnitToHit)
 		{

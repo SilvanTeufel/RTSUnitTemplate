@@ -195,10 +195,10 @@ public:
 public:
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "UnitToChase", Keywords = "RTSUnitTemplate UnitToChase"), Category = RTSUnitTemplate)
-	AUnitBase* UnitToChase = nullptr;
+	AActor* UnitToChase = nullptr;
 
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "UnitsToChase", Keywords = "RTSUnitTemplate UnitsToChase"), Category = RTSUnitTemplate)
-	TArray <AUnitBase*> UnitsToChase;
+	TArray <AActor*> UnitsToChase;
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetNextUnitToChase", Keywords = "RTSUnitTemplate SetNextUnitToChase"), Category = RTSUnitTemplate)
 	bool SetNextUnitToChase();

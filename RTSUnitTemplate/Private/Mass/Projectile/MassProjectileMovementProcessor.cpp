@@ -123,7 +123,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			
 			if (Projectile.LifeTime < DeltaTime && EntityManager.GetWorld())
 			{
-				if (Projectile.TargetEntity.IsValid())
+				if (EntityManager.IsEntityActive(Projectile.TargetEntity))
 				{
 					if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Projectile.TargetEntity))
 					{
@@ -149,7 +149,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			{
 				// NEW: Check if target is flying or if it was an arc projectile
 				bool bTargetIsFlying = false;
-				if (Projectile.TargetEntity.IsValid())
+				if (EntityManager.IsEntityActive(Projectile.TargetEntity))
 				{
 					if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Projectile.TargetEntity))
 					{

@@ -172,7 +172,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 							const FMassAITargetFragment& TargetFrag = TargetList[i];
 							if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
 							{
-								if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
+								if (EntityManager.IsEntityActive(TargetFrag.TargetEntity))
 								{
 									if (const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity))
 									{

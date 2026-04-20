@@ -50,6 +50,7 @@
 #include "InstancedStruct.h"
 #include "Mass/Signals/MySignals.h"
 #include "Actors/Projectile.h"
+#include "Actors/EffectArea.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "EngineUtils.h"
 #include "MassReplicationFragments.h"
@@ -469,8 +470,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                 if (IsValid(Actor)) 
                 {
                     AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
+                    AEffectArea* EffectArea = Cast<AEffectArea>(Actor);
             
-                	
                     if (UnitBase)
                     {
                         // *** Mass Tag Modifications MUST be inside the Game Thread Task ***
@@ -771,6 +772,18 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 
                     	//FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
                     	//State->StateTimer = 0.f;
+                    }
+                    else if (EffectArea)
+                    {
+                        if (SignalName == UnitSignals::Dead)
+                        {
+                            if (FMassVisibilityFragment* Visibility = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(Entity))
+                            {
+                                bool bIsVisible = !Visibility->bAffectedByFogOfWar || Visibility->bIsMyTeam || Visibility->bIsVisibleEnemy;
+                                EffectArea->HandleDeath(bIsVisible);
+                            }
+                            EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity);
+                        }
                     }
                     // ... rest of your else logs for invalid casts/actors ...
                 }
@@ -1588,41 +1601,47 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                 // 2. PREPARE ASYNC DATA
                 // We capture VALUES (HealthDamage, ShieldDamage), not pointers to fragments.
                 TWeakObjectPtr<AUnitBase> WeakAttacker(UnitBase);
-                TWeakObjectPtr<AUnitBase> WeakTarget(UnitBase->UnitToChase);
+                TWeakObjectPtr<AActor> WeakTarget(UnitBase->UnitToChase);
+                int32 TargetTeamId = TargetStatsFrag->TeamId;
                 
                 // Capture Tag requirement logic as a bool or ID, don't pass the StateFragment pointer
                 bool bShouldApplyRootReduction = false; // Logic for this needs to stay on game thread or be pre-calculated
                 // Note: Updating StateTimer is complex across threads. It's safer to defer a Command or use a Signal.
 
                 // 3. DISPATCH GAME THREAD TASK (Visuals & Actor Updates only)
-                AsyncTask(ENamedThreads::GameThread, [WeakAttacker, WeakTarget, HealthDamage, ShieldDamage]()
+                AsyncTask(ENamedThreads::GameThread, [WeakAttacker, WeakTarget, HealthDamage, ShieldDamage, TargetTeamId]()
                 {
                     AUnitBase* StrongAttacker = WeakAttacker.Get();
-                    AUnitBase* StrongTarget = WeakTarget.Get();
+                    AActor* StrongTarget = WeakTarget.Get();
 
                     if (StrongAttacker && StrongTarget)
                     {
+                        AUnitBase* TargetUnit = Cast<AUnitBase>(StrongTarget);
+
                         // Update Actor specific attributes (Syncing Mass data to Actor)
-                        if (ShieldDamage > 0)
+                        if (TargetUnit)
                         {
-                            StrongTarget->SetShield_Implementation(StrongTarget->Attributes->GetShield() - ShieldDamage);
-                        }
-                        if (HealthDamage > 0)
-                        {
-                            StrongTarget->SetHealth_Implementation(StrongTarget->Attributes->GetHealth() - HealthDamage);
-                        }
-
-                        // UI Update
-                        if(StrongTarget->HealthWidgetComp)
-                        {
-                            if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(StrongTarget->HealthWidgetComp->GetUserWidgetObject()))
+                            if (ShieldDamage > 0)
                             {
-                                HealthBarWidget->UpdateWidget();
+                                TargetUnit->SetShield_Implementation(TargetUnit->Attributes->GetShield() - ShieldDamage);
                             }
-                        }
+                            if (HealthDamage > 0)
+                            {
+                                TargetUnit->SetHealth_Implementation(TargetUnit->Attributes->GetHealth() - HealthDamage);
+                            }
 
-                        // Notify Blueprint
-                        StrongTarget->Attacked(StrongAttacker);
+                            // UI Update
+                            if(TargetUnit->HealthWidgetComp)
+                            {
+                                if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(TargetUnit->HealthWidgetComp->GetUserWidgetObject()))
+                                {
+                                    HealthBarWidget->UpdateWidget();
+                                }
+                            }
+
+                            // Notify Blueprint
+                            TargetUnit->Attacked(StrongAttacker);
+                        }
 
                         // GAS / Abilities
                         StrongAttacker->ServerStartAttackEvent_Implementation();
@@ -1636,7 +1655,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                         
                         StrongAttacker->ServerMeeleImpactEvent();
 
-                        if (StrongAttacker->TeamId != StrongTarget->TeamId)
+                        if (StrongAttacker->TeamId != TargetTeamId)
                         {
                             StrongAttacker->IncreaseExperience();
                         }
@@ -1750,7 +1769,7 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // 4. CAPTURE DATA FOR ASYNC
                 // We know we are in range and valid. Capture what we need for the Visuals/Gameplay.
                 TWeakObjectPtr<AUnitBase> WeakAttacker(AttackerUnitBase);
-                TWeakObjectPtr<AUnitBase> WeakTarget(AttackerUnitBase->UnitToChase); // Explicitly use the Actor we verified
+                TWeakObjectPtr<AActor> WeakTarget(AttackerUnitBase->UnitToChase); // Explicitly use the Actor we verified
                 
                 // Capture IDs by value (safer than checking StrongTarget->ID inside the lambda)
                 EGASAbilityInputID AttackAbilityID = AttackerUnitBase->AttackAbilityID;
@@ -1775,15 +1794,16 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                     if (!EntitySubsystem) return; // Safety Check
 
                     AUnitBase* StrongAttacker = WeakAttacker.Get();
-                    AUnitBase* StrongTarget = WeakTarget.Get();
+                    AActor* StrongTarget = WeakTarget.Get();
                     
                     if (StrongAttacker && StrongTarget)
                     {
+                        AUnitBase* TargetUnit = Cast<AUnitBase>(StrongTarget);
 
                         // UI Update
-                        if(StrongTarget->HealthWidgetComp)
+                        if(TargetUnit && TargetUnit->HealthWidgetComp)
                         {
-                            if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(StrongTarget->HealthWidgetComp->GetUserWidgetObject()))
+                            if (UUnitBaseHealthBar* HealthBarWidget = Cast<UUnitBaseHealthBar>(TargetUnit->HealthWidgetComp->GetUserWidgetObject()))
                             {
                                 HealthBarWidget->UpdateWidget();
                             }
@@ -1792,9 +1812,9 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                         // --- Core Actor Actions ---
                         StrongAttacker->ServerStartAttackEvent_Implementation();
                         
-                        if (IsValid(StrongTarget))
+                        if (TargetUnit && IsValid(TargetUnit))
                         {
-                            StrongTarget->Attacked(StrongAttacker);
+                            TargetUnit->Attacked(StrongAttacker);
                         }
 
                         bool bIsActivated = false;
@@ -1862,7 +1882,7 @@ void UUnitStateProcessor::SetUnitToChase(FName SignalName, TArray<FMassEntityHan
         // Target Fragment is read-only here, so GetFragmentDataPtr (const) is fine
         const FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(DetectorEntity);
 
-        AUnitBase* TargetUnitBase = nullptr; // Assume no valid target initially
+        AActor* TargetActorToChase = nullptr; // Assume no valid target initially
 
         // Check if fragment exists and indicates a valid target entity
         if (TargetFrag && TargetFrag->bHasValidTarget && TargetFrag->TargetEntity.IsSet())
@@ -1879,17 +1899,15 @@ void UUnitStateProcessor::SetUnitToChase(FName SignalName, TArray<FMassEntityHan
 
                 if (IsValid(TargetActor) && TargetActor != DetectorUnitBase)
                 {
-                    // Attempt to cast target actor to AUnitBase
-                    TargetUnitBase = Cast<AUnitBase>(TargetActor);
-                    // If cast fails, TargetUnitBase will be nullptr, correctly clearing the chase target.
+                    TargetActorToChase = TargetActor;
                 }
             }
-            // If TargetEntity is invalid, TargetActorFrag is null, or TargetActor is invalid/self, TargetUnitBase remains nullptr.
+            // If TargetEntity is invalid, TargetActorFrag is null, or TargetActor is invalid/self, TargetActorToChase remains nullptr.
         }
 
-        if (DetectorUnitBase->UnitToChase != TargetUnitBase)
+        if (DetectorUnitBase->UnitToChase != TargetActorToChase)
         {
-            DetectorUnitBase->UnitToChase = TargetUnitBase;
+            DetectorUnitBase->UnitToChase = TargetActorToChase;
         }
     }
 }
@@ -2032,14 +2050,17 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
                 AActor* Actor = ActorFragPtr->GetMutable(); 
                 if (IsValid(Actor)) 
                 {
-                    AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-                    if (UnitBase)
+                    if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
                     {
                     	
                     		if (UnitBase->DestroyAfterDeath)
                     		{
                     			UnitBase->Destroy(true, false);
 							}
+                    }
+                    else if (AEffectArea* EffectArea = Cast<AEffectArea>(Actor))
+                    {
+                        EffectArea->Destroy();
                     }
                 }
             }

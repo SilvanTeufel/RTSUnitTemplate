@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/UnitBase.h"
+#include "Actors/EffectArea.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Actors/Waypoint.h"
@@ -14,7 +15,6 @@
 #include "Actors/Projectile.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Controller/AIController/BuildingControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -1315,32 +1315,53 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 bool AUnitBase::SetNextUnitToChase()
 {
 	// Entferne alle Einheiten, die ungültig, tot oder außerhalb der Sichtweite sind.
-	UnitsToChase.RemoveAll([this](const AUnitBase* Unit) -> bool {
-		return !IsValid(Unit) || Unit->GetUnitState() == UnitData::Dead || GetDistanceTo(Unit) > MassActorBindingComponent->SightRadius;
+	UnitsToChase.RemoveAll([this](const AActor* Actor) -> bool {
+		if (!IsValid(Actor)) return true;
+
+		if (const AUnitBase* Unit = Cast<AUnitBase>(Actor))
+		{
+			return Unit->GetUnitState() == UnitData::Dead || GetDistanceTo(Unit) > MassActorBindingComponent->SightRadius;
+		}
+
+		if (const AEffectArea* EffectArea = Cast<AEffectArea>(Actor))
+		{
+			return GetDistanceTo(EffectArea) > MassActorBindingComponent->SightRadius;
+		}
+
+		return GetDistanceTo(Actor) > MassActorBindingComponent->SightRadius;
 	});
 	
 	if (UnitsToChase.IsEmpty()) return false;
     
 	float ShortestDistance = TNumericLimits<float>::Max();
-	AUnitBase* ClosestUnit = nullptr;
+	AActor* ClosestActor = nullptr;
 
-	for (auto& Unit : UnitsToChase)
+	for (auto& Actor : UnitsToChase)
 	{
-		if (Unit && Unit->GetUnitState() != UnitData::Dead)
+		if (Actor)
 		{
-			float Distance = GetDistanceTo(Unit);
-			if (Distance < ShortestDistance)
+			bool bIsDead = false;
+			if (const AUnitBase* Unit = Cast<AUnitBase>(Actor))
 			{
-				ShortestDistance = Distance;
-				ClosestUnit = Unit;
+				bIsDead = (Unit->GetUnitState() == UnitData::Dead);
+			}
+
+			if (!bIsDead)
+			{
+				float Distance = GetDistanceTo(Actor);
+				if (Distance < ShortestDistance)
+				{
+					ShortestDistance = Distance;
+					ClosestActor = Actor;
+				}
 			}
 		}
 	}
 
 	// Set the closest living unit as the target, if any.
-	if (ClosestUnit)
+	if (ClosestActor)
 	{
-		UnitToChase = ClosestUnit;
+		UnitToChase = ClosestActor;
 		return true;
 	}
 
@@ -1873,45 +1894,55 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
         return;
     }
 
+    if (GetUnitState() == UnitData::Dead)
+    {
+        return;
+    }
+
     // Cast the incoming actor to AUnitBase (the detected unit)
     AUnitBase* DetectedUnit = Cast<AUnitBase>(OtherActor);
-    if (!DetectedUnit)
+    AEffectArea* DetectedEffectArea = Cast<AEffectArea>(OtherActor);
+
+    if (!DetectedUnit && !DetectedEffectArea)
     {
         return;
     }
 
+    if (DetectedUnit)
+    {
+        // Only add the unit if it is alive.
+        if (DetectedUnit->GetUnitState() == UnitData::Dead)
+        {
+            return;
+        }
 
-    
-    // Only add the unit if it is alive.
-    if (DetectedUnit->GetUnitState() == UnitData::Dead || GetUnitState() == UnitData::Dead)
-    {
-        return;
+        // Invisible detection:
+        if (DetectedUnit->bIsInvisible && !CanDetectInvisible)
+        {
+            return;
+        }
+
+        // Ground/Flying detection restrictions:
+        if (CanOnlyAttackGround)
+        {
+            if (DetectedUnit->IsFlying) return;
+        }
+        if (CanOnlyAttackFlying)
+        {
+            if (!DetectedUnit->IsFlying) return;
+        }
     }
 
-    // Invisible detection:
-    if (DetectedUnit->bIsInvisible && !CanDetectInvisible)
-    {
-        return;
-    }
-
-    // Ground/Flying detection restrictions:
-    if (CanOnlyAttackGround)
-    {
-        if (DetectedUnit->IsFlying) return;
-    }
-    if (CanOnlyAttackFlying)
-    {
-        if (!DetectedUnit->IsFlying) return;
-    }
-    
     // Now check team relationships:
-    // If detecting friendly units, only add friendly ones.
-    // Otherwise, only add enemy units.
-    bool isFriendlyUnit = DetectedUnit->TeamId == TeamId;
+    int32 OtherTeamId = -1;
+    if (DetectedUnit) OtherTeamId = DetectedUnit->TeamId;
+    else if (DetectedEffectArea) OtherTeamId = DetectedEffectArea->TeamId;
+
+    bool isFriendlyUnit = (OtherTeamId == TeamId);
     if ((DetectFriendlyUnits && isFriendlyUnit) || (!DetectFriendlyUnits && !isFriendlyUnit))
     {
         // Add the detected unit to the UnitsToChase array
-        UnitsToChase.Emplace(DetectedUnit);
+        UnitsToChase.Emplace(OtherActor);
     }
     
     // Retrieve the detection toggle state
@@ -1936,16 +1967,25 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
             float DistanceToTarget = FVector::Dist(GetActorLocation(), UnitToChase->GetActorLocation());
             float AttackRange =Attributes->GetRange(); // Assuming this function exists
 
+            AUnitBase* TargetUnit = Cast<AUnitBase>(UnitToChase);
+
             // For friendly units, only chase if the current target's health is below max.
             bool shouldChase = canChangeState &&
-                               UnitToChase &&
-                               UnitToChase->Attributes->GetHealth() < UnitToChase->Attributes->GetMaxHealth();
+                               TargetUnit &&
+                               TargetUnit->Attributes->GetHealth() < TargetUnit->Attributes->GetMaxHealth();
             
             // Adjust the state based on whether we're detecting friendly units
             if (DistanceToTarget <= AttackRange)
             {
                 // If the target is within attack range, set state to Attack
-                if (shouldChase) SetUnitState(UnitData::Attack);
+                if (DetectFriendlyUnits)
+                {
+                    if (shouldChase) SetUnitState(UnitData::Attack);
+                }
+                else if (canChangeState)
+                {
+                    SetUnitState(UnitData::Attack);
+                }
             }
             else if (DetectFriendlyUnits)
             {

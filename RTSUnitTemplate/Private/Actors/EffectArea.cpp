@@ -1,9 +1,15 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/EffectArea.h"
+#include "MassEntityManager.h"
+#include "MassEntityUtils.h"
+#include "MassCommonFragments.h"
+#include "Actors/Projectile.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Characters/Unit/BuildingBase.h"
@@ -57,6 +63,8 @@ AEffectArea::AEffectArea()
 	SpawnVerticalOffset = 0.f;
 	SpawnRandomOffsetMin = 0.f;
 	SpawnRandomOffsetMax = 0.f;
+	Health = 0.f;
+	CapsuleHeight = 50.f;
 
 	if (HasAuthority())
 	{
@@ -227,4 +235,44 @@ void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 			ImpactEvent(UnitToHit);
 		}
 	}
+}
+
+void AEffectArea::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride)
+{
+	float AppliedDamage = DamageOverride;
+	if (AppliedDamage < 0.f && ProjectileClass) {
+		if (AProjectile* ProjCDO = ProjectileClass->GetDefaultObject<AProjectile>())
+			AppliedDamage = ProjCDO->Damage;
+	}
+
+	FMassEntityHandle Entity = MassBindingComponent ? MassBindingComponent->GetEntityHandle() : FMassEntityHandle();
+	if (Entity.IsValid()) {
+		FMassEntityManager& EM = UE::Mass::Utils::GetEntityManagerChecked(*GetWorld());
+		if (FMassCombatStatsFragment* Stats = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity)) {
+			Stats->Health -= AppliedDamage;
+		}
+	}
+
+	if (ImpactVFX) UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, ImpactLocation);
+	if (ImpactSound) UGameplayStatics::PlaySoundAtLocation(this, ImpactSound, ImpactLocation);
+}
+
+void AEffectArea::HandleDeath(bool bIsVisible)
+{
+	OnEffectAreaDead.Broadcast();
+
+	if (bIsVisible)
+	{
+		if (DeathVFX)
+		{
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), DeathVFX, GetActorLocation());
+		}
+
+		if (DeathSound)
+		{
+			UGameplayStatics::PlaySoundAtLocation(this, DeathSound, GetActorLocation());
+		}
+	}
+
+	OnEffectAreaDestructionStarted();
 }

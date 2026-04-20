@@ -7,10 +7,10 @@
 #include "GameplayEffect.h"
 #include "NiagaraComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
-#include "Projectile.generated.h"
-
 class AUnitBase;
 class AEffectArea;
+
+#include "Projectile.generated.h"
 
 UCLASS()
 class RTSUNITTEMPLATE_API AProjectile : public AActor
@@ -298,10 +298,10 @@ public:
 	void SetBackBouncing(AUnitBase* ShootingUnit);
 	
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
-	void SetNextBouncing(AUnitBase* ShootingUnit, AUnitBase* UnitToHit);
+	void SetNextBouncing(AUnitBase* ShootingUnit, AActor* UnitToHit);
 	
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
-	AUnitBase* GetNextUnitInRange(AUnitBase* ShootingUnit, AUnitBase* UnitToHit);
+	AActor* GetNextUnitInRange(AUnitBase* ShootingUnit, AActor* UnitToHit);
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SetVisibility(bool Visible);

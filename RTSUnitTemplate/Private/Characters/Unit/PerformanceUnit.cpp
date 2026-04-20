@@ -13,7 +13,6 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
-#include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/SkeletalMesh.h" // For USkeletalMesh

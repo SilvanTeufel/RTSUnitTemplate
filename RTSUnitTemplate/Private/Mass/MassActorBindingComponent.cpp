@@ -401,14 +401,21 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		TArray<const UScriptStruct*> FragmentsAndTags = {
 			FTransformFragment::StaticStruct(),
 			FMassActorFragment::StaticStruct(),
-			FMassCombatStatsFragment::StaticStruct(),
 			FMassVisibilityFragment::StaticStruct(),
 			FEffectAreaTag::StaticStruct(),
-			FMassSightFragment::StaticStruct(),
-			FMassAgentCharacteristicsFragment::StaticStruct(),
 			FMassIsEffectAreaTag::StaticStruct(),
-			FMassBeaconFragment::StaticStruct()
+			FMassBeaconFragment::StaticStruct(),
+			FMassSightFragment::StaticStruct(),
+			FMassCombatStatsFragment::StaticStruct(),
+			FMassAIStateFragment::StaticStruct(),
+			FMassAgentCharacteristicsFragment::StaticStruct(),
+			FMassVelocityFragment::StaticStruct()
 		};
+
+		if (EffectArea && EffectArea->Health <= 0.f)
+		{
+			FragmentsAndTags.Add(FMassStopUnitDetectionTag::StaticStruct());
+		}
 
 		if (EffectArea && EffectArea->FindComponentByClass<UAreaDecalComponent>())
 		{
@@ -876,13 +883,27 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				CombatStatsFrag->LoseSightRadius = LoseSightRadius;
 				CombatStatsFrag->LoseSightRadiusFaktor = LoseSightRadiusFaktor;
 				CombatStatsFrag->LoseSightRadiusFaktorTimer = LoseSightRadiusFaktorTimer;
-			
+				CombatStatsFrag->Health = EffectArea->Health;
+				CombatStatsFrag->MaxHealth = EffectArea->Health;
 			}
 			if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
 			{
 				CharFrag->bCanBeInvisible = EffectArea->bCanBeInvisible;
 				CharFrag->bIsInvisible = EffectArea->bIsInvisible;
 				CharFrag->bCanDetectInvisible = false;
+				CharFrag->CapsuleRadius = EffectArea->BaseRadius;
+				CharFrag->CapsuleHeight = EffectArea->CapsuleHeight;
+				CharFrag->bIsFlying = false;
+				CharFrag->HideActorTime = EffectArea->HideOnDestructionDelay;
+				CharFrag->DespawnTime = EffectArea->DestroyOnDestructionDelay;
+			}
+			if (FMassAIStateFragment* AIStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+			{
+				if (UWorld* World = EffectArea->GetWorld())
+				{
+					AIStateFrag->BirthTime = World->GetTimeSeconds();
+				}
+				AIStateFrag->CanAttack = false;
 			}
 			if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
 			{

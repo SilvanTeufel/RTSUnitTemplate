@@ -9,6 +9,7 @@
 #include "Core/CollisionUtils.h"
 #include "MassCommands.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Actors/EffectArea.h"
 
 #include "LandscapeProxy.h"
 #include "Actors/Projectile.h"
@@ -37,7 +38,8 @@ void UMassProjectileImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	UnitQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	UnitQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	UnitQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
-	UnitQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
+	UnitQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::Optional);
+	UnitQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::Optional);
 	UnitQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
 	UnitQuery.RegisterWithProcessor(*this);
 }
@@ -250,9 +252,14 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 										FVector PreciseImpactPos = FCollisionUtils::ComputeImpactSurfaceXY(ShooterActor, TargetActor, ProjPos);
 										TargetUnit->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
 									}
+									else if (AEffectArea* EffectArea = Cast<AEffectArea>(TargetActor))
+									{
+										FVector PreciseImpactPos = FCollisionUtils::ComputeImpactSurfaceXY(ShooterActor, TargetActor, ProjPos);
+										EffectArea->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
+									}
 									else
 									{
-										UE_LOG(LogTemp, Error, TEXT("[SERVER] TargetActor is not AUnitBase!"));
+										UE_LOG(LogTemp, Error, TEXT("[SERVER] TargetActor is not AUnitBase or AEffectArea!"));
 									}
 								}
 								else

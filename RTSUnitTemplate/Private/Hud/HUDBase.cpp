@@ -6,6 +6,7 @@
 
 // Engine Headers
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "CollisionQueryParams.h"
 #include "Blueprint/UserWidget.h"
 #include "DrawDebugHelpers.h"
@@ -22,7 +23,6 @@
 // Project-Specific Headers
 #include "Characters/Unit/HealingUnit.h"
 #include "Elements/Actor/ActorElementData.h"
-#include "Controller/AIController/UnitControllerBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Characters/Unit/BuildingBase.h"

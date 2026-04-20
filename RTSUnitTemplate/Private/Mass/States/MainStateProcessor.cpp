@@ -24,7 +24,7 @@ void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite); // Eigene Stats lesen/schreiben
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
     
 	EntityQuery.RegisterWithProcessor(*this);
 }

@@ -2263,7 +2263,7 @@ void AMassUnitBase::StaticMeshYawFollow_Step()
 
 		// Use UnitToChase from AUnitBase if available
 		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
-		AUnitBase* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
+		AActor* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
 		float DesiredWorldYaw = FRotator::NormalizeAxis(GetActorRotation().Yaw + Data.OffsetDegrees);
 
 		if (IsValid(TargetUnit))
