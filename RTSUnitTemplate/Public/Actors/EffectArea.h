@@ -176,6 +176,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsHealing = false;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, Replicated)
+	float BeaconRange = 0.f;
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetBeaconRange(float NewRange);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsInBeaconRange() const;
+
+	// Returns true if the location is within range of any Beacon (Building or EffectArea)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate, meta = (WorldContext = "World"))
+	static bool IsLocationInBeaconRange(UWorld* World, const FVector& Location);
+
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	UMassActorBindingComponent* MassBindingComponent;
 

@@ -14,6 +14,7 @@
 #include "VT/RuntimeVirtualTextureEnum.h"
 #include "Kismet/GameplayStatics.h"
 #include "Actors/RSVirtualTextureActor.h"
+#include "Actors/EffectArea.h"
 #include "Mass/Abilitys/DecalScalingFragments.h"
 #include "MassEntityManager.h"
 #include "Mass/MassActorBindingComponent.h"
@@ -469,6 +470,10 @@ void UAreaDecalComponent::Multicast_ScaleDecalToRadius_Implementation(float EndR
 			if (ABuildingBase* Building = Cast<ABuildingBase>(GetOwner()))
 			{
 				Building->SetBeaconRange(EndRadius);
+			}
+			else if (AEffectArea* EffectArea = Cast<AEffectArea>(GetOwner()))
+			{
+				EffectArea->SetBeaconRange(EndRadius);
 			}
 		}
 		return;

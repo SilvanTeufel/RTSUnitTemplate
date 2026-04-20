@@ -26,7 +26,6 @@ void UGamePlayEffectProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
     CasterQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     CasterQuery.AddTagRequirement<FMassStopGameplayEffectTag>(EMassFragmentPresence::None);
-    CasterQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     CasterQuery.RegisterWithProcessor(*this);
 
     // Query 2: Find all entities that could potentially be a target for these effects.

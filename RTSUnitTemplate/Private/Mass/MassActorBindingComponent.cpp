@@ -33,7 +33,9 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/MassUnitBase.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Actors/EffectArea.h"
+#include "Actors/AreaDecalComponent.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Subsystems/UnitVisualManager.h"
 #include "Subsystems/ResourceVisualManager.h"
@@ -404,8 +406,14 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FEffectAreaTag::StaticStruct(),
 			FMassSightFragment::StaticStruct(),
 			FMassAgentCharacteristicsFragment::StaticStruct(),
-			FMassIsEffectAreaTag::StaticStruct()
+			FMassIsEffectAreaTag::StaticStruct(),
+			FMassBeaconFragment::StaticStruct()
 		};
+
+		if (EffectArea && EffectArea->FindComponentByClass<UAreaDecalComponent>())
+		{
+			FragmentsAndTags.Add(FMassGameplayEffectFragment::StaticStruct());
+		}
 
 		if (EffectArea && EffectArea->bUseEffectAreaImpactProcessor)
 		{
@@ -471,6 +479,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassGhostLocationFragment::StaticStruct(),
 		FMassNavigationEdgesFragment::StaticStruct(),
 		FUnitMassTag::StaticStruct(),                   // Your custom tag
+		FMassBeaconFragment::StaticStruct(),
 		FMassPatrolFragment::StaticStruct(), 
 		FUnitNavigationPathFragment::StaticStruct(),    // ** REQUIRED: Used by your UnitMovementProcessor for path state **
     	FMassUnitPathFragment::StaticStruct(), 
@@ -958,6 +967,22 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					DuplicateFrag->MaxDuplicationCount, DuplicateFrag->DuplicationId);
 			}
 
+			if (FMassBeaconFragment* BeaconFrag = EntityManager.GetFragmentDataPtr<FMassBeaconFragment>(EntityHandle))
+			{
+				BeaconFrag->BeaconRange = EffectArea->BeaconRange;
+			}
+
+			if (FMassGameplayEffectFragment* GameplayEffectFrag = EntityManager.GetFragmentDataPtr<FMassGameplayEffectFragment>(EntityHandle))
+			{
+				// Initial values for EffectArea caster
+				GameplayEffectFrag->EffectRadius = EffectArea->BeaconRange;
+				if (UAreaDecalComponent* DecalComp = EffectArea->FindComponentByClass<UAreaDecalComponent>())
+				{
+					GameplayEffectFrag->FriendlyEffect = DecalComp->GetFriendlyEffect();
+					GameplayEffectFrag->EnemyEffect = DecalComp->GetEnemyEffect();
+				}
+			}
+
 			return;
 		}
 	}
@@ -1252,6 +1277,14 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		if (UnitOwner)
 		{
 			VisualFrag->bUseSkeletalMovement = UnitOwner->bUseSkeletalMovement;
+		}
+	}
+
+	if (FMassBeaconFragment* BeaconFrag = EntityManager.GetFragmentDataPtr<FMassBeaconFragment>(EntityHandle))
+	{
+		if (ABuildingBase* Building = Cast<ABuildingBase>(OwnerActor))
+		{
+			BeaconFrag->BeaconRange = Building->BeaconRange;
 		}
 	}
 }

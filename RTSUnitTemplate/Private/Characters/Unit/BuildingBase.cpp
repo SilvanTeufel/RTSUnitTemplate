@@ -11,6 +11,7 @@
 #include "Math/RotationMatrix.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "EngineUtils.h"
+#include "System/RTSBeaconSubsystem.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -591,25 +592,9 @@ bool ABuildingBase::IsInBeaconRange() const
 
 bool ABuildingBase::IsLocationInBeaconRange(UWorld* World, const FVector& Location)
 {
-	if (!World)
+	if (URTSBeaconSubsystem* BeaconSubsystem = World ? World->GetSubsystem<URTSBeaconSubsystem>() : nullptr)
 	{
-		return false;
-	}
-	for (TActorIterator<ABuildingBase> It(World); It; ++It)
-	{
-		ABuildingBase* Beacon = *It;
-		if (!Beacon)
-		{
-			continue;
-		}
-		if (Beacon->BeaconRange > 0.f)
-		{
-			const float Dist2D = FVector::Dist2D(Beacon->GetActorLocation(), Location);
-			if (Dist2D <= Beacon->BeaconRange)
-			{
-				return true;
-			}
-		}
+		return BeaconSubsystem->IsLocationInBeaconRange(Location);
 	}
 	return false;
 }

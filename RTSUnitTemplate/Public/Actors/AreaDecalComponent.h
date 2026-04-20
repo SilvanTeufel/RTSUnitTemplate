@@ -22,6 +22,9 @@ class RTSUNITTEMPLATE_API UAreaDecalComponent : public UDecalComponent
 public:
 	UAreaDecalComponent();
 
+	TSubclassOf<UGameplayEffect> GetFriendlyEffect() const { return FriendlyEffect; }
+	TSubclassOf<UGameplayEffect> GetEnemyEffect() const { return EnemyEffect; }
+
 	// Required function to register replicated properties.
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

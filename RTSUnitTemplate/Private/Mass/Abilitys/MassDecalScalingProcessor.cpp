@@ -9,6 +9,7 @@
 #include "Actors/AreaDecalComponent.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Actors/EffectArea.h"
 #include "Mass/Abilitys/DecalScalingFragments.h"
 
 UMassDecalScalingProcessor::UMassDecalScalingProcessor()
@@ -24,8 +25,8 @@ void UMassDecalScalingProcessor::ConfigureQueries(const TSharedRef<FMassEntityMa
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassGameplayEffectFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassBeaconFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassDecalScalingTag>(EMassFragmentPresence::All);
-	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -45,7 +46,9 @@ void UMassDecalScalingProcessor::Execute(FMassEntityManager& EntityManager, FMas
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 		TArrayView<FMassGameplayEffectFragment> EffectList = ChunkContext.GetMutableFragmentView<FMassGameplayEffectFragment>();
+		TArrayView<FMassBeaconFragment> BeaconList = ChunkContext.GetMutableFragmentView<FMassBeaconFragment>();
 		const bool bHasEffectFragment = EffectList.Num() > 0;
+		const bool bHasBeaconFragment = BeaconList.Num() > 0;
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
@@ -71,6 +74,15 @@ void UMassDecalScalingProcessor::Execute(FMassEntityManager& EntityManager, FMas
 							if (ABuildingBase* Building = Cast<ABuildingBase>(Actor))
 							{
 								Building->SetBeaconRange(NewRadius);
+							}
+							else if (AEffectArea* EffectArea = Cast<AEffectArea>(Actor))
+							{
+								EffectArea->SetBeaconRange(NewRadius);
+							}
+
+							if (bHasBeaconFragment)
+							{
+								BeaconList[i].BeaconRange = NewRadius;
 							}
 						}
 					}

@@ -6,6 +6,8 @@
 #include "NiagaraComponent.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "System/RTSBeaconSubsystem.h"
 
 // Sets default values
 AEffectArea::AEffectArea()
@@ -109,6 +111,27 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, bIsScalingAfterImpact);
 	DOREPLIFETIME(AEffectArea, bImpactScaleTriggered);
 	DOREPLIFETIME(AEffectArea, bPendingDestructionRep);
+	DOREPLIFETIME(AEffectArea, BeaconRange);
+}
+
+void AEffectArea::SetBeaconRange(float NewRange)
+{
+	BeaconRange = FMath::Max(0.f, NewRange);
+}
+
+bool AEffectArea::IsInBeaconRange() const
+{
+	UWorld* World = GetWorld();
+	return World ? AEffectArea::IsLocationInBeaconRange(World, GetActorLocation()) : false;
+}
+
+bool AEffectArea::IsLocationInBeaconRange(UWorld* World, const FVector& Location)
+{
+	if (URTSBeaconSubsystem* BeaconSubsystem = World ? World->GetSubsystem<URTSBeaconSubsystem>() : nullptr)
+	{
+		return BeaconSubsystem->IsLocationInBeaconRange(Location);
+	}
+	return false;
 }
 
 void AEffectArea::SetActorVisibility(bool bVisible)

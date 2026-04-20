@@ -230,6 +230,15 @@ struct FMassGameplayEffectFragment : public FMassFragment
 };
 
 USTRUCT()
+struct FMassBeaconFragment : public FMassFragment
+{
+	GENERATED_BODY()
+	
+	UPROPERTY()
+	float BeaconRange = 0.f;
+};
+
+USTRUCT()
 struct FMassGameplayEffectTargetFragment : public FMassFragment
 {
 	GENERATED_BODY()
