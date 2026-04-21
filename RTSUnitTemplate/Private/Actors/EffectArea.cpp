@@ -57,8 +57,6 @@ AEffectArea::AEffectArea()
 	RandomAngleRange = 360.f;
 	MaxDuplicationCount = 0;
 	DuplicationId = 0;
-	bIsScalingAfterImpact = false;
-	bPendingDestructionRep = false;
 	EarlySpawnTime = 1.0f;
 	SpawnCountOnDestruction = 1;
 	bSpawnDoGroundTrace = true;
@@ -118,10 +116,6 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, AreaEffectTwo);
 	DOREPLIFETIME(AEffectArea, AreaEffectThree);
 	DOREPLIFETIME(AEffectArea, Niagara_A);
-	DOREPLIFETIME(AEffectArea, bImpactVFXTriggered);
-	DOREPLIFETIME(AEffectArea, bIsScalingAfterImpact);
-	DOREPLIFETIME(AEffectArea, bImpactScaleTriggered);
-	DOREPLIFETIME(AEffectArea, bPendingDestructionRep);
 	DOREPLIFETIME(AEffectArea, BeaconRange);
 }
 

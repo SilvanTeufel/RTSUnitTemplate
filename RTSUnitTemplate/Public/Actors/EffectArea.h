@@ -132,15 +132,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
 	class USoundBase* ImpactSound;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
-	bool bImpactVFXTriggered = false;
-
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
-	bool bIsScalingAfterImpact = false;
-
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
-	bool bImpactScaleTriggered = false;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
 	TSubclassOf<class AUnitBase> SpawnClassOnDestruction = nullptr;
 
@@ -162,9 +153,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
 	float EarlySpawnTime = 1.0f;
-
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Shutdown")
-	bool bPendingDestructionRep = false;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
 	void OnEffectAreaDestructionStarted();

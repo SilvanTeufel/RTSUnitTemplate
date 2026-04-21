@@ -418,6 +418,15 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.VE_OscillationCyclesPerSecond = VE->OscillationCyclesPerSecond;
         }
 
+        // Fill EffectArea Impact Fragment
+        if (const FEffectAreaImpactFragment* Impact = EntityManager.GetFragmentDataPtr<FEffectAreaImpactFragment>(Entity))
+        {
+            NewItem.EA_bImpactVFXTriggered = Impact->bImpactVFXTriggered;
+            NewItem.EA_bIsScalingAfterImpact = Impact->bIsScalingAfterImpact;
+            NewItem.EA_bImpactScaleTriggered = Impact->bImpactScaleTriggered;
+            NewItem.EA_bPendingDestruction = Impact->bPendingDestruction;
+        }
+
         if (RepLogLevel() >= 2)
         {
             //UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Add): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
@@ -837,6 +846,15 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.VE_OscillationOffsetB = VE->OscillationOffsetB;
                             NewItem.VE_OscillationCyclesPerSecond = VE->OscillationCyclesPerSecond;
                         }
+
+                        // Fill EffectArea Impact Fragment
+                        if (const FEffectAreaImpactFragment* Impact = EM->GetFragmentDataPtr<FEffectAreaImpactFragment>(EH))
+                        {
+                            NewItem.EA_bImpactVFXTriggered = Impact->bImpactVFXTriggered;
+                            NewItem.EA_bIsScalingAfterImpact = Impact->bIsScalingAfterImpact;
+                            NewItem.EA_bImpactScaleTriggered = Impact->bImpactScaleTriggered;
+                            NewItem.EA_bPendingDestruction = Impact->bPendingDestruction;
+                        }
                     }
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
                     BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
@@ -1131,6 +1149,15 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (!Item->VE_OscillationOffsetA.Equals(VE->OscillationOffsetA, 0.1f)) { Item->VE_OscillationOffsetA = VE->OscillationOffsetA; bDirty = true; }
                             if (!Item->VE_OscillationOffsetB.Equals(VE->OscillationOffsetB, 0.1f)) { Item->VE_OscillationOffsetB = VE->OscillationOffsetB; bDirty = true; }
                             if (!FMath::IsNearlyEqual(Item->VE_OscillationCyclesPerSecond, VE->OscillationCyclesPerSecond, 0.01f)) { Item->VE_OscillationCyclesPerSecond = VE->OscillationCyclesPerSecond; bDirty = true; }
+                        }
+
+                        // Update EffectArea Impact Fragment
+                        if (const FEffectAreaImpactFragment* Impact = EM->GetFragmentDataPtr<FEffectAreaImpactFragment>(EH))
+                        {
+                            if (Item->EA_bImpactVFXTriggered != Impact->bImpactVFXTriggered) { Item->EA_bImpactVFXTriggered = Impact->bImpactVFXTriggered; bDirty = true; }
+                            if (Item->EA_bIsScalingAfterImpact != Impact->bIsScalingAfterImpact) { Item->EA_bIsScalingAfterImpact = Impact->bIsScalingAfterImpact; bDirty = true; }
+                            if (Item->EA_bImpactScaleTriggered != Impact->bImpactScaleTriggered) { Item->EA_bImpactScaleTriggered = Impact->bImpactScaleTriggered; bDirty = true; }
+                            if (Item->EA_bPendingDestruction != Impact->bPendingDestruction) { Item->EA_bPendingDestruction = Impact->bPendingDestruction; bDirty = true; }
                         }
 
                         if (RepLogLevel() >= 2)

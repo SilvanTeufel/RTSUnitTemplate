@@ -226,6 +226,12 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() FVector_NetQuantize10 VE_OscillationOffsetB = FVector::ZeroVector;
 	UPROPERTY() float VE_OscillationCyclesPerSecond = 0.f;
 
+	// --- FEffectAreaImpactFragment replication ---
+	UPROPERTY() bool EA_bImpactVFXTriggered = false;
+	UPROPERTY() bool EA_bIsScalingAfterImpact = false;
+	UPROPERTY() bool EA_bImpactScaleTriggered = false;
+	UPROPERTY() bool EA_bPendingDestruction = false;
+
 	// Default Constructor
 	FUnitReplicationItem()
 		: NetID()
@@ -250,6 +256,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, PredictedPendingShots(0)
 		, PredictionTimer(0.f)
 		, bPredictedLatch(false)
+		, EA_bImpactVFXTriggered(false)
+		, EA_bIsScalingAfterImpact(false)
+		, EA_bImpactScaleTriggered(false)
+		, EA_bPendingDestruction(false)
 	{
 	}
 

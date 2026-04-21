@@ -143,11 +143,10 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			ImpactFrag.bPendingDestruction = true;
 			ImpactFrag.PostImpactTimer = 0.f;
 
-			// Replicate the start to clients
-			if (EffectAreaPtr)
+			// Server calls the hook immediately; Client will call it via replication sync
+			if (bIsServer && EffectAreaPtr)
 			{
-				EffectAreaPtr->bPendingDestructionRep = true;
-				EffectAreaPtr->OnEffectAreaDestructionStarted(); // Blueprint hook
+				EffectAreaPtr->OnEffectAreaDestructionStarted();
 			}
 		};
 
@@ -160,24 +159,14 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 			Impact.ElapsedTime += DeltaTime;
 
-			// Synchronize bIsScalingAfterImpact from Actor (for Clients)
-			if (EffectArea && EffectArea->bIsScalingAfterImpact && !Impact.bIsScalingAfterImpact)
+			// Trigger OnEffectAreaDestructionStarted on client when bPendingDestruction replicates
+			if (!bIsServer && Impact.bPendingDestruction && !Impact.bClientDestructionStarted)
 			{
-				Impact.bIsScalingAfterImpact = true;
-				Impact.ImpactScalingElapsedTime = 0.f;
-				Impact.RadiusAtImpactStart = Impact.CurrentRadius;
-			}
-
-			if (EffectArea && EffectArea->bImpactScaleTriggered && !Impact.bImpactScaleTriggered)
-			{
-				Impact.bImpactScaleTriggered = true;
-			}
-
-			// Synchronize bPendingDestructionRep from Actor (for Clients)
-			if (EffectArea && EffectArea->bPendingDestructionRep && !Impact.bPendingDestruction)
-			{
-				Impact.bPendingDestruction = true;
-				Impact.PostImpactTimer = 0.f;
+				Impact.bClientDestructionStarted = true;
+				if (EffectArea)
+				{
+					EffectArea->OnEffectAreaDestructionStarted();
+				}
 			}
 
 			if (Impact.bPendingDestruction)
@@ -236,18 +225,10 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				if (Alpha >= 1.f)
 				{
 					Impact.bIsScalingAfterImpact = false;
-					if (EffectArea)
-					{
-						EffectArea->bIsScalingAfterImpact = false;
-					}
 
 					if (bIsServer)
 					{
 						Impact.bImpactVFXTriggered = true;
-						if (EffectArea)
-						{
-							EffectArea->bImpactVFXTriggered = true;
-						}
 
 						if (Impact.bDestroyOnImpact)
 						{
@@ -354,20 +335,11 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 						Impact.bIsScalingAfterImpact = true;
 						Impact.ImpactScalingElapsedTime = 0.f;
 						Impact.RadiusAtImpactStart = Impact.CurrentRadius;
-						if (EffectArea)
-						{
-							EffectArea->bIsScalingAfterImpact = true;
-							EffectArea->bImpactScaleTriggered = true;
-						}
 					}
 					else if (!Impact.bScaleOnImpact)
 					{
 						// Immediate VFX if no scaling
 						Impact.bImpactVFXTriggered = true;
-						if (EffectArea)
-						{
-							EffectArea->bImpactVFXTriggered = true;
-						}
 					}
 
 					if (Impact.bDestroyOnImpact && !Impact.bScaleOnImpact)

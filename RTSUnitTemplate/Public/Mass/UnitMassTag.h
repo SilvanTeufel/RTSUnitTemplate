@@ -1323,6 +1323,7 @@ struct FEffectAreaImpactFragment : public FMassFragment
         
 	// Destruction pipeline (hide -> destroy)
 	bool  bPendingDestruction = false;      // set when destruction begins
+	bool  bClientDestructionStarted = false; // Trigger for OnEffectAreaDestructionStarted on client
 	float PostImpactTimer = 0.f;        // accumulates once pending
 	float HideActorTime = 0.f;   // copied from actor
 	float DespawnTime = 0.5f;  // copied from actor

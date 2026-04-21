@@ -95,16 +95,12 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
             }
 
             // Handle Impact VFX
-            bool bTriggerVFX = Impact.bImpactVFXTriggered || (EffectArea && EffectArea->bImpactVFXTriggered);
+            bool bTriggerVFX = Impact.bImpactVFXTriggered;
 
             if (bTriggerVFX && bIsVisibleByFog && EffectArea && EffectArea->ImpactVFX)
             {
                 UNiagaraFunctionLibrary::SpawnSystemAtLocation(VisualContext.GetWorld(), EffectArea->ImpactVFX, EntityTransform.GetLocation());
                 Impact.bImpactVFXTriggered = false;
-                if (VisualContext.GetWorld()->GetNetMode() != NM_Client && EffectArea)
-                {
-                    EffectArea->bImpactVFXTriggered = false;
-                }
             }
 		}
 	});

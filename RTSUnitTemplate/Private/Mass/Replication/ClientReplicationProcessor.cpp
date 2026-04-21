@@ -104,6 +104,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassRotateToMouseFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FRunAnimationFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	// Prediction fragment so we can skip reconciliation while client-side prediction is active
@@ -468,6 +469,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
 			TArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetMutableFragmentView<FMassWorkerStatsFragment>();
 			TArrayView<FMassRotateToMouseFragment> RotateToMouseList = Context.GetMutableFragmentView<FMassRotateToMouseFragment>();
+			TArrayView<FEffectAreaImpactFragment> EffectAreaImpactList = Context.GetMutableFragmentView<FEffectAreaImpactFragment>();
 			TArrayView<FRunAnimationFragment> RunAnimList = Context.GetMutableFragmentView<FRunAnimationFragment>();
 			// Prediction fragment view (mutable)
 			TArrayView<FMassClientPredictionFragment> PredList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
@@ -750,10 +752,18 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								AIS.DeathTime = TagItem->AIS_DeathTime;
 								AIS.IsInitialized = TagItem->AIS_IsInitialized;
 							}
-							if (WorkerStatsList.IsValidIndex(EntityIdx))
-							{
-								WorkerStatsList[EntityIdx].BuildAreaPosition = FVector(TagItem->Worker_BuildAreaPosition);
-							}
+								if (WorkerStatsList.IsValidIndex(EntityIdx))
+								{
+									WorkerStatsList[EntityIdx].BuildAreaPosition = FVector(TagItem->Worker_BuildAreaPosition);
+								}
+								if (EffectAreaImpactList.IsValidIndex(EntityIdx))
+								{
+									FEffectAreaImpactFragment& Impact = EffectAreaImpactList[EntityIdx];
+									Impact.bImpactVFXTriggered = TagItem->EA_bImpactVFXTriggered;
+									Impact.bIsScalingAfterImpact = TagItem->EA_bIsScalingAfterImpact;
+									Impact.bImpactScaleTriggered = TagItem->EA_bImpactScaleTriggered;
+									Impact.bPendingDestruction = TagItem->EA_bPendingDestruction;
+								}
 								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
 								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
 								{
