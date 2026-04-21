@@ -7,6 +7,7 @@
 // Forward declarations
 class UMassUnitSpawnerSubsystem;
 class AUnitBase;
+class AEffectArea;
 
 UCLASS()
 class RTSUNITTEMPLATE_API UUnitSignalingProcessor : public UMassProcessor
@@ -44,6 +45,9 @@ private:
 	// Persistent queue for units waiting for validation
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<AUnitBase>> PendingRetryQueue;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<AEffectArea>> PendingEffectAreaRetryQueue;
 
 	// Budget parameter (could also be controlled via CVAR)
 	UPROPERTY(EditAnywhere, Category = "Mass|FlowControl")

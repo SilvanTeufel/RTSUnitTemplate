@@ -87,9 +87,11 @@ void UMassEffectAreaImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	AreaQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	AreaQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	AreaQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddTagRequirement<FMassEffectAreaImpactTag>(EMassFragmentPresence::All);
 	AreaQuery.AddTagRequirement<FMassEffectAreaActiveTag>(EMassFragmentPresence::All);
 	AreaQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
+	AreaQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
 	AreaQuery.RegisterWithProcessor(*this);
 
 	UnitQuery.Initialize(EntityManager);
@@ -127,9 +129,11 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 		TArrayView<FEffectAreaImpactFragment> ImpactList = AreaContext.GetMutableFragmentView<FEffectAreaImpactFragment>();
 		TConstArrayView<FTransformFragment> TransformList = AreaContext.GetFragmentView<FTransformFragment>();
 		TArrayView<FMassActorFragment> ActorList = AreaContext.GetMutableFragmentView<FMassActorFragment>();
+		TArrayView<FMassAIStateFragment> AIStateList = AreaContext.GetMutableFragmentView<FMassAIStateFragment>();
 
 		float DeltaTime = AreaContext.GetDeltaTimeSeconds();
 		bool bIsServer = AreaContext.GetWorld()->GetNetMode() != NM_Client;
+		bool bIsDead = AreaContext.DoesArchetypeHaveTag<FMassStateDeadTag>();
 
 		auto BeginDestruction = [&](FEffectAreaImpactFragment& ImpactFrag, AEffectArea* EffectAreaPtr, const FVector& SpawnLocation)
 		{
@@ -183,7 +187,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				// Spawn-on-destruction (server-only, once)
 				if (bIsServer && !Impact.bHasSpawnedOnDestruction && EffectArea && EffectArea->SpawnClassOnDestruction)
 				{
-					float SpawnTriggerTime = FMath::Max(0.f, Impact.DestroyOnDestructionDelay - Impact.EarlySpawnTime);
+					float SpawnTriggerTime = FMath::Max(0.f, Impact.DespawnTime - Impact.EarlySpawnTime);
 					if (Impact.PostImpactTimer >= SpawnTriggerTime)
 					{
 						Impact.bHasSpawnedOnDestruction = true;
@@ -191,7 +195,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					}
 				}
 
-				if (bIsServer && Impact.PostImpactTimer >= Impact.DestroyOnDestructionDelay)
+				if (Impact.PostImpactTimer >= Impact.DespawnTime)
 				{
 					AreaContext.Defer().RemoveTag<FMassEffectAreaActiveTag>(AreaContext.GetEntity(i));
 					continue;
@@ -316,7 +320,8 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 								{
 									if (AUnitBase* UnitBase = Cast<AUnitBase>(UnitActor))
 									{
-										if (UnitBase->GetUnitState() != UnitData::Dead)
+										// Apply effects (Damage/Healing) only if Area is NOT dead
+										 //if (!bIsDead)
 										{
 											UnitBase->ApplyInvestmentEffect(Impact.AreaEffectOne);
 											UnitBase->ApplyInvestmentEffect(Impact.AreaEffectTwo);
@@ -325,14 +330,14 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 											{
 												EffectArea->ImpactEvent(UnitBase);
 											}
-										    
-											// Add to hit entities
-											if (Impact.HitCount < FEffectAreaImpactFragment::MaxHitCount)
-											{
-												Impact.HitEntities[Impact.HitCount++] = UnitEntity;
-											}
-											bHitAny = true;
 										}
+									    
+										// Add to hit entities (always, to trigger scaling even if dead)
+										if (Impact.HitCount < FEffectAreaImpactFragment::MaxHitCount)
+										{
+											Impact.HitEntities[Impact.HitCount++] = UnitEntity;
+										}
+										bHitAny = true;
 									}
 								}
 							}
@@ -340,7 +345,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					}
 				}
 
-				if (bHitAny)
+				if (bHitAny || bIsDead)
 				{
 					// Start post-impact scale if configured
 					if (Impact.bScaleOnImpact && !Impact.bImpactScaleTriggered)

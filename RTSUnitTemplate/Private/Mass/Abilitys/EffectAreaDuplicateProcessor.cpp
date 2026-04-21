@@ -41,6 +41,7 @@ void UMassEffectAreaDuplicateProcessor::ConfigureQueries(const TSharedRef<FMassE
 	AreaQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddTagRequirement<FMassEffectAreaDuplicateTag>(EMassFragmentPresence::All);
 	AreaQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
+	AreaQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	AreaQuery.RegisterWithProcessor(*this);
 
 	EnemyQuery.Initialize(EntityManager);
@@ -53,6 +54,7 @@ void UMassEffectAreaDuplicateProcessor::ConfigureQueries(const TSharedRef<FMassE
 	GlobalUpdateQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	GlobalUpdateQuery.AddTagRequirement<FMassEffectAreaDuplicateTag>(EMassFragmentPresence::All);
 	GlobalUpdateQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
+	GlobalUpdateQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 }
 
 void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -78,10 +80,10 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 			}
 		});
 
-		for (auto& Pair : IdCounts)
-		{
-			UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Population ID=%d, Count=%d"), Pair.Key, Pair.Value);
-		}
+		//for (auto& Pair : IdCounts)
+		//{
+			//UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Population ID=%d, Count=%d"), Pair.Key, Pair.Value);
+		//}
 
 		UMassSignalSubsystem* SignalSubsystem = Context.GetWorld() ? Context.GetWorld()->GetSubsystem<UMassSignalSubsystem>() : nullptr;
 		if (!SignalSubsystem) return;
@@ -111,7 +113,7 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 							Area->DuplicationId = DuplicateFrag.DuplicationId;
 						}
 					}
-					UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Assigned New Root ID=%d to Entity=%d"), DuplicateFrag.DuplicationId, Entity.Index);
+					//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Assigned New Root ID=%d to Entity=%d"), DuplicateFrag.DuplicationId, Entity.Index);
 				}
 
 				// Case 1: Valid Child exists - check if it has a Mass entity
@@ -128,7 +130,7 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 
 					if (bChildIsActiveInMass)
 					{
-						UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) has valid child in Mass, skipping timer."), Entity.Index, DuplicateFrag.DuplicationId);
+						//UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) has valid child in Mass, skipping timer."), Entity.Index, DuplicateFrag.DuplicationId);
 						DuplicateFrag.ChildMassWaitTimer = 0.f; // Reset wait timer
 						continue;
 					}
@@ -138,14 +140,14 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 						DuplicateFrag.ChildMassWaitTimer += ProcessingTime;
 						if (DuplicateFrag.ChildMassWaitTimer < 10.0f)
 						{
-							UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) child %s exists but not yet in Mass. Waiting (%.2fs)..."), 
-								Entity.Index, DuplicateFrag.DuplicationId, *DuplicateFrag.SpawnedChild->GetName(), DuplicateFrag.ChildMassWaitTimer);
+							//UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) child %s exists but not yet in Mass. Waiting (%.2fs)..."), 
+								//Entity.Index, DuplicateFrag.DuplicationId, *DuplicateFrag.SpawnedChild->GetName(), DuplicateFrag.ChildMassWaitTimer);
 							continue;
 						}
 						else
 						{
-							UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) child %s failed to get Mass after 10s. Resetting child to try again."), 
-								Entity.Index, DuplicateFrag.DuplicationId, *DuplicateFrag.SpawnedChild->GetName());
+							//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) child %s failed to get Mass after 10s. Resetting child to try again."), 
+								//Entity.Index, DuplicateFrag.DuplicationId, *DuplicateFrag.SpawnedChild->GetName());
 							DuplicateFrag.SpawnedChild.Reset();
 							DuplicateFrag.ChildMassWaitTimer = 0.f;
 							DuplicateFrag.DuplicationTimer = 0.f;
@@ -156,7 +158,7 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 				// Case 2: Child was destroyed - Reset Timer and clear child
 				if (DuplicateFrag.SpawnedChild.IsStale())
 				{
-					UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) child is stale, resetting timer."), Entity.Index, DuplicateFrag.DuplicationId);
+					//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) child is stale, resetting timer."), Entity.Index, DuplicateFrag.DuplicationId);
 					DuplicateFrag.DuplicationTimer = 0.f;
 					DuplicateFrag.SpawnedChild.Reset();
 				}
@@ -165,20 +167,20 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 				int32 CurrentCount = IdCounts.FindRef(DuplicateFrag.DuplicationId);
 				if (DuplicateFrag.MaxDuplicationCount > 0 && CurrentCount >= DuplicateFrag.MaxDuplicationCount)
 				{
-					UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) reached Limit (%d/%d), skipping timer."), 
-						Entity.Index, DuplicateFrag.DuplicationId, CurrentCount, DuplicateFrag.MaxDuplicationCount);
+					//UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) reached Limit (%d/%d), skipping timer."), 
+						//Entity.Index, DuplicateFrag.DuplicationId, CurrentCount, DuplicateFrag.MaxDuplicationCount);
 					continue;
 				}
 
 				// Case 4: No child and under limit - Increment Timer
 				DuplicateFrag.DuplicationTimer += ProcessingTime; 
 				
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) Timer=%.2f/%.2f (Pop=%d/%d)"), 
-					Entity.Index, DuplicateFrag.DuplicationId, DuplicateFrag.DuplicationTimer, DuplicateFrag.DuplicationTime, CurrentCount, DuplicateFrag.MaxDuplicationCount);
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) Timer=%.2f/%.2f (Pop=%d/%d)"), 
+					//Entity.Index, DuplicateFrag.DuplicationId, DuplicateFrag.DuplicationTimer, DuplicateFrag.DuplicationTime, CurrentCount, DuplicateFrag.MaxDuplicationCount);
 
 				if (DuplicateFrag.DuplicationTimer >= DuplicateFrag.DuplicationTime)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) Sending Signal!"), Entity.Index, DuplicateFrag.DuplicationId);
+					//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d (ID=%d) Sending Signal!"), Entity.Index, DuplicateFrag.DuplicationId);
 					SignalSubsystem->SignalEntity(UnitSignals::DuplicateEffectArea, Entity);
 				}
 			}
@@ -224,13 +226,9 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 			}
 		}
 	});
+	
 
-	for (auto& Pair : IdCounts)
-	{
-		UE_LOG(LogTemp, Log, TEXT("EffectAreaDuplicate: Signal Population ID=%d, Count=%d"), Pair.Key, Pair.Value);
-	}
-
-	UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Found %d potential units in world."), EnemyLocations.Num());
+	//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Found %d potential units in world."), EnemyLocations.Num());
 	
 	AreaQuery.ForEachEntityChunk(Context, [this, &EnemyLocations, &EnemyTeams, &EntitySignals, &IdCounts, &EntityManager](FMassExecutionContext& ChunkContext)
 	{
@@ -266,26 +264,26 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 						}
 					}
 				}
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Signal phase assigned New Root ID=%d to Entity=%d"), DuplicateFrag.DuplicationId, Entity.Index);
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Signal phase assigned New Root ID=%d to Entity=%d"), DuplicateFrag.DuplicationId, Entity.Index);
 			}
 
 			// Final Population Limit Check before spawn
 			int32 CurrentCount = IdCounts.FindRef(DuplicateFrag.DuplicationId);
 			if (DuplicateFrag.SpawnedChild.IsValid())
 			{
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Signal received for Entity=%d (ID=%d) but already has valid child! Skipping."), Entity.Index, DuplicateFrag.DuplicationId);
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Signal received for Entity=%d (ID=%d) but already has valid child! Skipping."), Entity.Index, DuplicateFrag.DuplicationId);
 				continue;
 			}
 
 			if (DuplicateFrag.MaxDuplicationCount > 0 && CurrentCount >= DuplicateFrag.MaxDuplicationCount)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Signal received for Entity=%d (ID=%d) but Limit reached (%d/%d)! Skipping."), 
-					Entity.Index, DuplicateFrag.DuplicationId, CurrentCount, DuplicateFrag.MaxDuplicationCount);
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Signal received for Entity=%d (ID=%d) but Limit reached (%d/%d)! Skipping."), 
+					//Entity.Index, DuplicateFrag.DuplicationId, CurrentCount, DuplicateFrag.MaxDuplicationCount);
 				continue;
 			}
 
-			UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Processing Spawn for Entity=%d (ID=%d, Pop=%d/%d)"), 
-				Entity.Index, DuplicateFrag.DuplicationId, CurrentCount, DuplicateFrag.MaxDuplicationCount);
+			//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Processing Spawn for Entity=%d (ID=%d, Pop=%d/%d)"), 
+				//Entity.Index, DuplicateFrag.DuplicationId, CurrentCount, DuplicateFrag.MaxDuplicationCount);
 
 			FVector CurrentLoc = TransformList[i].GetTransform().GetLocation();
 			FVector AvgEnemyLoc = FVector::ZeroVector;
@@ -317,13 +315,13 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 				if ((DistToEnemy < DuplicateFrag.DuplicationRadius || DotProduct < 0.f) && !DuplicateFrag.LastDirection.IsNearlyZero())
 				{
 					Direction = DuplicateFrag.LastDirection;
-					UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Close to enemy (Dist=%.2f) or Reverse Detected (Dot=%.2f), maintaining LastDirection"), DistToEnemy, DotProduct);
+					//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Close to enemy (Dist=%.2f) or Reverse Detected (Dot=%.2f), maintaining LastDirection"), DistToEnemy, DotProduct);
 				}
 				else
 				{
 					Direction = NewTargetDir;
-					UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d, CurrentLoc=%s, AvgEnemyLoc=%s, EnemyCount=%d, BaseDirection=%s"), 
-						Entity.Index, *CurrentLoc.ToString(), *AvgEnemyLoc.ToString(), EnemyCount, *Direction.ToString());
+					//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Entity=%d, CurrentLoc=%s, AvgEnemyLoc=%s, EnemyCount=%d, BaseDirection=%s"), 
+						//Entity.Index, *CurrentLoc.ToString(), *AvgEnemyLoc.ToString(), EnemyCount, *Direction.ToString());
 				}
 
 				if (Direction.IsNearlyZero())
@@ -336,18 +334,18 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 					{
 						Direction = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f).GetSafeNormal2D();
 					}
-					UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Direction was zero, using fallback: %s"), *Direction.ToString());
+					//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Direction was zero, using fallback: %s"), *Direction.ToString());
 				}
 			}
 			else if (!DuplicateFrag.LastDirection.IsNearlyZero())
 			{
 				Direction = DuplicateFrag.LastDirection;
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: No enemies found, maintaining LastDirection: %s"), *Direction.ToString());
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: No enemies found, maintaining LastDirection: %s"), *Direction.ToString());
 			}
 			else
 			{
 				Direction = FVector(FMath::FRandRange(-1.f, 1.f), FMath::FRandRange(-1.f, 1.f), 0.f).GetSafeNormal2D();
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: No enemies found, using random direction: %s"), *Direction.ToString());
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: No enemies found, using random direction: %s"), *Direction.ToString());
 			}
 
 			// Apply random rotation
@@ -356,12 +354,12 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 				float HalfRange = DuplicateFrag.RandomAngleRange * 0.5f;
 				float RandomAngle = FMath::FRandRange(-HalfRange, HalfRange);
 				Direction = Direction.RotateAngleAxis(RandomAngle, FVector::UpVector);
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: RotatedDirection=%s (RandomAngle=%.2f, Range=%.2f)"), 
-					*Direction.ToString(), RandomAngle, DuplicateFrag.RandomAngleRange);
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: RotatedDirection=%s (RandomAngle=%.2f, Range=%.2f)"), 
+					//*Direction.ToString(), RandomAngle, DuplicateFrag.RandomAngleRange);
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: FinalDirection=%s (RandomAngleRange is 0)"), *Direction.ToString());
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: FinalDirection=%s (RandomAngleRange is 0)"), *Direction.ToString());
 			}
 
 			UWorld* World = ChunkContext.GetWorld();
@@ -408,24 +406,24 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 							// Update local count for this frame to prevent over-spawning
 							IdCounts.FindOrAdd(DuplicateFrag.DuplicationId)++;
 
-							UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Attempt %d successful at %s on Landscape %s (ID=%d, Population=%d/%d)"), 
-								Attempt, *SpawnLocation.ToString(), *HitActor->GetName(), DuplicateFrag.DuplicationId, IdCounts[DuplicateFrag.DuplicationId], DuplicateFrag.MaxDuplicationCount);
+							//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Attempt %d successful at %s on Landscape %s (ID=%d, Population=%d/%d)"), 
+								//Attempt, *SpawnLocation.ToString(), *HitActor->GetName(), DuplicateFrag.DuplicationId, IdCounts[DuplicateFrag.DuplicationId], DuplicateFrag.MaxDuplicationCount);
 							break;
 						}
 					}
 					else
 					{
-						UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Attempt %d failed. Hit actor: %s (not a landscape)"), Attempt, HitActor ? *HitActor->GetName() : TEXT("None"));
+						//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Attempt %d failed. Hit actor: %s (not a landscape)"), Attempt, HitActor ? *HitActor->GetName() : TEXT("None"));
 					}
 				}
 				else
 				{
-					UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Attempt %d failed. No hit."), Attempt);
+					//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Attempt %d failed. No hit."), Attempt);
 				}
 				
 				// If not landscape or trace failed, rotate direction for next attempt
 				Direction = Direction.RotateAngleAxis(RotationIncrement, FVector::UpVector);
-				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Rotating for next attempt. New Direction: %s"), *Direction.ToString());
+				//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Rotating for next attempt. New Direction: %s"), *Direction.ToString());
 			}
 		}
 	});

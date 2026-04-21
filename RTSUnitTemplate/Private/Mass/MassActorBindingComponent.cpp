@@ -414,7 +414,19 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FMassCombatStatsFragment::StaticStruct(),
 			FMassAIStateFragment::StaticStruct(),
 			FMassAgentCharacteristicsFragment::StaticStruct(),
-			FMassVelocityFragment::StaticStruct()
+			FMassVelocityFragment::StaticStruct(),
+
+			// NEW: Fragments required for Mass Replication
+			FMassNetworkIDFragment::StaticStruct(),
+			FMassReplicatedAgentFragment::StaticStruct(),
+			FMassReplicationViewerInfoFragment::StaticStruct(),
+			FMassReplicationLODFragment::StaticStruct(),
+			FMassReplicationGridCellLocationFragment::StaticStruct(),
+			FMassInReplicationGridTag::StaticStruct(),
+			FUnitReplicatedTransformFragment::StaticStruct(),
+			FMassClientPredictionFragment::StaticStruct(),
+			FMassMoveTargetFragment::StaticStruct(),
+			FMassVisualEffectFragment::StaticStruct()
 		};
 
 		if (EffectArea && EffectArea->Health <= 0.f)
@@ -899,8 +911,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				CharFrag->CapsuleRadius = EffectArea->BaseRadius;
 				CharFrag->CapsuleHeight = EffectArea->CapsuleHeight;
 				CharFrag->bIsFlying = false;
-				CharFrag->HideActorTime = EffectArea->HideOnDestructionDelay;
-				CharFrag->DespawnTime = EffectArea->DestroyOnDestructionDelay;
+				CharFrag->HideActorTime = HideActorTime;
+				CharFrag->DespawnTime = DespawnTime;
 			}
 			if (FMassAIStateFragment* AIStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
 			{
@@ -963,8 +975,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 					ImpactFrag->bPendingDestruction = false;
 					ImpactFrag->PostImpactTimer = 0.f;
-					ImpactFrag->HideOnDestructionDelay = EffectArea->HideOnDestructionDelay;
-					ImpactFrag->DestroyOnDestructionDelay = EffectArea->DestroyOnDestructionDelay;
+					ImpactFrag->HideActorTime = HideActorTime;
+					ImpactFrag->DespawnTime = DespawnTime;
 					ImpactFrag->EarlySpawnTime = EffectArea->EarlySpawnTime;
 					// Copy random spawn offset range from actor
 					ImpactFrag->SpawnRandomOffsetMin = EffectArea->SpawnRandomOffsetMin;
@@ -1008,8 +1020,6 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					GameplayEffectFrag->EnemyEffect = DecalComp->GetEnemyEffect();
 				}
 			}
-
-			return;
 		}
 	}
 
@@ -1067,6 +1077,13 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CombatStatsFrag->MinRange = MinRange;
             //CalculatedAgentRadius = CombatStatsFrag->AgentRadius; // Use the value from stats
         }
+    	else if (AEffectArea* EffectArea = Cast<AEffectArea>(OwnerActor))
+    	{
+    		CombatStatsFrag->MaxHealth = EffectArea->Health;
+    		CombatStatsFrag->Health = EffectArea->Health;
+    		CombatStatsFrag->TeamId = EffectArea->TeamId;
+    		CombatStatsFrag->IsInitialized = true;
+    	}
         else // Use default values
         {
             *CombatStatsFrag = FMassCombatStatsFragment(); // Initialize with struct defaults
@@ -1077,6 +1094,16 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     // 2. Agent Characteristics Fragment
     if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
     {
+    	// Initialize with component values first (shared between Units and EffectAreas)
+    	CharFrag->HideActorTime = HideActorTime;
+    	CharFrag->DespawnTime = DespawnTime;
+    	CharFrag->CanManipulateNavMesh = CanManipulateNavMesh;
+    	CharFrag->RotatesToMovement = RotatesToMovement;
+    	CharFrag->RotatesToEnemy = RotatesToEnemy;
+    	CharFrag->RotationSpeed = RotationSpeed;
+    	CharFrag->VerticalDeathRotationMultiplier = VerticalDeathRotationMultiplier;
+    	CharFrag->GroundAlignment = GroundAlignment;
+    	
         if (UnitOwner) // Use data from Actor if available
         {
             // <<< REPLACE Properties/Getters with your actual variable names/functions >>>
@@ -1087,12 +1114,6 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             CharFrag->bIsInvisible = UnitOwner->bIsInvisible;
         	CharFrag->bCanBeInvisible = UnitOwner->bCanBeInvisible;
             CharFrag->bCanDetectInvisible = UnitOwner->CanDetectInvisible;
-        	CharFrag->CanManipulateNavMesh = CanManipulateNavMesh;
-        	CharFrag->DespawnTime = DespawnTime;
-			CharFrag->HideActorTime = HideActorTime;
-			CharFrag->RotatesToMovement = RotatesToMovement;
-        	CharFrag->RotatesToEnemy = RotatesToEnemy;
-        	CharFrag->RotationSpeed = RotationSpeed;
         	CharFrag->PositionedTransform = UnitOwner->GetActorTransform();
         	CharFrag->CapsuleHeight = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         	CharFrag->CapsuleRadius = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius()+AdditionalCapsuleRadius;
@@ -1107,9 +1128,6 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				CharFrag->BoxExtent = FVector::ZeroVector;
 			}
 			
-        	CharFrag->VerticalDeathRotationMultiplier = VerticalDeathRotationMultiplier;
-        	CharFrag->GroundAlignment = GroundAlignment;
-
             // Only for buildings! (units handle this in the movement processor)
             if (!UnitOwner->CanMove)
             {
@@ -1133,6 +1151,15 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
                 }
             }
         }
+    	else if (AEffectArea* EffectArea = Cast<AEffectArea>(OwnerActor))
+    	{
+    		CharFrag->PositionedTransform = EffectArea->GetActorTransform();
+    		CharFrag->CapsuleHeight = EffectArea->CapsuleHeight;
+    		CharFrag->CapsuleRadius = 0.f;
+    		CharFrag->bUseBoxComponent = false;
+    		CharFrag->bIsInvisible = EffectArea->bIsInvisible;
+    		CharFrag->bCanBeInvisible = EffectArea->bCanBeInvisible;
+    	}
         else // Use default values
         {
              *CharFrag = FMassAgentCharacteristicsFragment(); // Initialize with struct defaults
@@ -1186,6 +1213,11 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             break;
         }
 		}
+		else
+		{
+			StateFragment->StateTimer = 0.f;
+			StateFragment->PlaceholderSignal = UnitSignals::Idle;
+		}
 	}
 	
     // 3. Patrol Fragment
@@ -1216,20 +1248,30 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     // (Moved here as it depends on CombatStats)
     if(FAgentRadiusFragment* RadiusFrag = EntityManager.GetFragmentDataPtr<FAgentRadiusFragment>(EntityHandle))
     {
-       RadiusFrag->Radius = UnitOwner->GetCapsuleComponent()->GetUnscaledCapsuleRadius() + AdditionalCapsuleRadius;
+		if (UnitOwner)
+		{
+			RadiusFrag->Radius = UnitOwner->GetCapsuleComponent()->GetUnscaledCapsuleRadius() + AdditionalCapsuleRadius;
+		}
+		else
+		{
+			RadiusFrag->Radius = AdditionalCapsuleRadius;
+		}
     }
 
     if(FMassAvoidanceColliderFragment* AvoidanceFrag = EntityManager.GetFragmentDataPtr<FMassAvoidanceColliderFragment>(EntityHandle))
     {
-       // Make sure collider type matches expectations (Circle assumed here)
-       *AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius() + AdditionalCapsuleRadius));
+		if (UnitOwner)
+		{
+			// Make sure collider type matches expectations (Circle assumed here)
+			*AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius() + AdditionalCapsuleRadius));
+		}
     }
 
 		if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
 		{
 			// Determine if it's my team to avoid flickering in FOW
 			int32 LocalTeamId = -1;
-			if (UWorld* World = UnitOwner->GetWorld())
+			if (UWorld* World = OwnerActor->GetWorld())
 			{
 				if (APlayerController* PC = World->GetFirstPlayerController())
 				{
@@ -1240,9 +1282,19 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				}
 			}
 
+			int32 OwnerTeamId = 0;
+			if (UnitOwner)
+			{
+				OwnerTeamId = UnitOwner->TeamId;
+			}
+			else if (AEffectArea* EffectArea = Cast<AEffectArea>(OwnerActor))
+			{
+				OwnerTeamId = EffectArea->TeamId;
+			}
+
 			if (APerformanceUnit* PerfUnit = Cast<APerformanceUnit>(UnitOwner))
 			{
-				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == UnitOwner->TeamId) || LocalTeamId == 0;
+				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == OwnerTeamId) || LocalTeamId == 0;
 				VisibilityFrag->bIsOnViewport = true;
 				VisibilityFrag->bIsVisibleEnemy = false;
 				VisibilityFrag->VisibilityOffset = PerfUnit->VisibilityOffset;
@@ -1253,8 +1305,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 			}
 			else
 			{
-				// Buildings and other units
-				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == UnitOwner->TeamId) || LocalTeamId == 0;
+				// Buildings, EffectAreas and other units
+				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == OwnerTeamId) || LocalTeamId == 0;
 				VisibilityFrag->bIsOnViewport = true;
 				VisibilityFrag->bIsVisibleEnemy = false;
 				VisibilityFrag->VisibilityOffset = 150.f; // Default for non-performance units
@@ -1340,6 +1392,31 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 		FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
 		ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
 
+		if (World->GetNetMode() != NM_Client)
+		{
+			if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+			{
+				if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
+				{
+					const uint32 NewID = Reg->GetNextNetID();
+					NetFrag->NetID = FMassNetworkID(NewID);
+
+					// Use OwnerName (stable) to register
+					const FName OwnerName = GetOwner() ? GetOwner()->GetFName() : NAME_None;
+					FUnitRegistryItem* Existing = Reg->Registry.FindByOwner(OwnerName);
+					if (!Existing) {
+						int32 NewIdx = Reg->Registry.Items.AddDefaulted();
+						Existing = &Reg->Registry.Items[NewIdx];
+					}
+					Existing->OwnerName = OwnerName;
+					Existing->NetID = NetFrag->NetID;
+					Reg->Registry.MarkItemDirty(*Existing);
+					Reg->Registry.MarkArrayDirty();
+					Reg->ForceNetUpdate();
+				}
+			}
+		}
+
 		if (AEffectArea* EffectAreaActor = Cast<AEffectArea>(GetOwner()))
 		{
 			if (UEffectAreaVisualManager* VisualManager = World->GetSubsystem<UEffectAreaVisualManager>())
@@ -1398,6 +1475,13 @@ void UMassActorBindingComponent::SetupMassOnEffectArea()
 	UWorld* World = GetWorld();
 	MyOwner = GetOwner();
 	if (!World) return;
+
+	if (World->GetNetMode() == NM_Client)
+	{
+		RequestClientMassLink();
+		return;
+	}
+
 	if (!MassEntitySubsystemCache) MassEntitySubsystemCache = World->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassEntityHandle.IsValid() && MassEntitySubsystemCache)
 	{
@@ -1452,6 +1536,18 @@ void UMassActorBindingComponent::RequestClientMassLink()
 			// SetVisualFreeze(true); // Deaktiviert auf Wunsch des Nutzers
 		}
 	}
+	else if (AEffectArea* Area = Cast<AEffectArea>(OwnerActor))
+	{
+		if (bDebugLogs)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[MassLink] RequestClientMassLink for EffectArea: %s"), *OwnerName);
+		}
+
+		if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
+		{
+			SpawnerSubsystem->RegisterEffectAreaForMassCreation(Area);
+		}
+	}
 	else
 	{
 		if (bDebugLogs)
@@ -1492,7 +1588,8 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	{
 		RegItem = Registry->Registry.FindByUnitIndex(Unit->UnitIndex);
 	}
-	else if (OwnerActor)
+	
+	if (!RegItem && OwnerActor)
 	{
 		RegItem = Registry->Registry.FindByOwner(OwnerActor->GetFName());
 	}
@@ -1668,6 +1765,9 @@ void UMassActorBindingComponent::CleanupMassEntity()
 					}
 					if (UResourceVisualManager* RV = World->GetSubsystem<UResourceVisualManager>()) {
 						RV->RemoveResource(MassEntityHandle);
+					}
+					if (UEffectAreaVisualManager* EV = World->GetSubsystem<UEffectAreaVisualManager>()) {
+						EV->RemoveVisualInstance(MassEntityHandle);
 					}
 				}
 

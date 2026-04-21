@@ -113,3 +113,21 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
         EffectAreaActor->ISMTemplate = nullptr;
     }
 }
+
+void UEffectAreaVisualManager::RemoveVisualInstance(FMassEntityHandle EntityHandle)
+{
+    if (!EntityHandle.IsValid()) return;
+
+    UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+    if (!EntitySubsystem) return;
+
+    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+    FEffectAreaVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FEffectAreaVisualFragment>(EntityHandle);
+    
+    if (VisualFrag && VisualFrag->ISMComponent.IsValid() && VisualFrag->InstanceIndex != INDEX_NONE)
+    {
+        // Hide instance by setting scale to zero
+        VisualFrag->ISMComponent->UpdateInstanceTransform(VisualFrag->InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+        VisualFrag->InstanceIndex = INDEX_NONE;
+    }
+}

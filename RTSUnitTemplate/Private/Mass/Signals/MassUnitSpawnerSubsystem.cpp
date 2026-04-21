@@ -17,3 +17,23 @@ void UMassUnitSpawnerSubsystem::GetAndClearPendingUnits(TArray<AUnitBase*>& OutP
 	}
 	PendingUnits.Empty();
 }
+
+void UMassUnitSpawnerSubsystem::RegisterEffectAreaForMassCreation(AEffectArea* NewArea)
+{
+	if (NewArea) { PendingEffectAreas.Add(NewArea); }
+}
+
+void UMassUnitSpawnerSubsystem::GetAndClearPendingEffectAreas(TArray<AEffectArea*>& OutPendingAreas)
+{
+	for (TObjectPtr<AEffectArea>& AreaPtr : PendingEffectAreas)
+	{
+		if (AreaPtr.Get()) { OutPendingAreas.Add(AreaPtr.Get()); }
+	}
+	PendingEffectAreas.Empty();
+}
+
+void UMassUnitSpawnerSubsystem::ResetSystem()
+{
+	PendingUnits.Empty();
+	PendingEffectAreas.Empty();
+}

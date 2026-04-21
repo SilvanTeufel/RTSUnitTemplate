@@ -5,6 +5,7 @@
 #include "MassEntityManager.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Actors/EffectArea.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Mass/Replication/ReplicationSettings.h"
@@ -142,6 +143,24 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         }
     }
 
+    TArray<AEffectArea*> PendingAreas;
+    SpawnerSubsystem->GetAndClearPendingEffectAreas(PendingAreas);
+
+    if (!PendingAreas.IsEmpty())
+    {
+        for (AEffectArea* Area : PendingAreas)
+        {
+            if (IsValid(Area))
+            {
+                if (bDebugLogs)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor received EffectArea: %s. Adding to PendingEffectAreaRetryQueue."), *Area->GetName());
+                }
+                PendingEffectAreaRetryQueue.AddUnique(Area);
+            }
+        }
+    }
+
     // Client-side proactive registry reconciliation for Mass replication mode
     const bool bIsClient = World->GetNetMode() == NM_Client;
 
@@ -244,7 +263,9 @@ static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_MaxRegistrationsPerFram
 void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 {
     UWorld* World = GetWorld();
-    if (!World || PendingRetryQueue.IsEmpty()) return;
+    if (!World) return;
+    
+    if (PendingRetryQueue.IsEmpty() && PendingEffectAreaRetryQueue.IsEmpty()) return;
     
     const float Now = World->GetTimeSeconds();
 
@@ -339,6 +360,44 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
         else
         {
             // Data not yet there -> Remains in PendingRetryQueue for next tick
+        }
+    }
+
+    // Process EffectAreas
+    for (int32 i = PendingEffectAreaRetryQueue.Num() - 1; i >= 0; --i)
+    {
+        AEffectArea* Area = PendingEffectAreaRetryQueue[i];
+        if (!IsValid(Area))
+        {
+            PendingEffectAreaRetryQueue.RemoveAt(i);
+            continue;
+        }
+
+        UMassActorBindingComponent* BindingComp = Area->MassBindingComponent;
+        if (!BindingComp || BindingComp->GetMassEntityHandle().IsValid())
+        {
+            PendingEffectAreaRetryQueue.RemoveAt(i);
+            continue;
+        }
+
+        if (bIsClient && RegistrationsThisFrame >= Budget)
+        {
+            break;
+        }
+
+        if (BindingComp->IsReadyForClientMassLink())
+        {
+            if (bDebugLogs)
+            {
+                UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor initializing validated EffectArea: %s"), *Area->GetName());
+            }
+            BindingComp->CreateAndLinkEffectAreaToMassEntity();
+
+            if (BindingComp->GetMassEntityHandle().IsValid())
+            {
+                PendingEffectAreaRetryQueue.RemoveAt(i);
+                RegistrationsThisFrame++;
+            }
         }
     }
 }

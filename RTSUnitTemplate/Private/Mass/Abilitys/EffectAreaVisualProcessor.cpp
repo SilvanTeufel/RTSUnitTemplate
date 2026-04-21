@@ -61,13 +61,13 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 			bool bIsVisibleByFog = !Visibility.bAffectedByFogOfWar || Visibility.bIsMyTeam || Visibility.bIsVisibleEnemy;
 
 			// If pending destruction and hide delay elapsed, hide once
-			bool bIsHiddenByDestruction = Impact.bPendingDestruction && Impact.PostImpactTimer >= Impact.HideOnDestructionDelay;
+			bool bIsHiddenByDestruction = Impact.bPendingDestruction && Impact.PostImpactTimer >= Impact.HideActorTime;
 			if (bIsHiddenByDestruction && !Impact.bHasHiddenVisual)
 			{
 				Impact.bHasHiddenVisual = true;
 			}
 
-			bool bShouldShow = bIsVisibleByFog && Visibility.bIsOnViewport && !bIsHiddenByDestruction;
+			bool bShouldShow = bIsVisibleByFog && Visibility.bIsOnViewport && !bIsHiddenByDestruction && !Impact.bHasHiddenVisual && (!AreaActor || !AreaActor->IsHidden());
 
 			if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 			{

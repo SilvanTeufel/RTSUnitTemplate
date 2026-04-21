@@ -101,7 +101,10 @@ public:
 // Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 	
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Visuals")
+	virtual void SetDeathVisualState(bool bShouldHide);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FRotator ServerMeshRotation = FRotator(0.f, -90.f, 0.f);
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, ReplicatedUsing=OnRep_MeshAssetPath, Category = RTSUnitTemplate)

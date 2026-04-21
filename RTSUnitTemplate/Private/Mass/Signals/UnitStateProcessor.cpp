@@ -561,44 +561,6 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                          					}
                             	}
                             }
-
-                        	/*
-                            // Unregister from Mass replication when the unit dies (server only)
-                            if (World && !World->IsNetMode(NM_Client))
-                            {
-                                // 1) Remove from client bubble replication list by NetID
-                                const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(Entity);
-                                if (NetIDFrag)
-                                {
-                                    const FMassNetworkID NetID = NetIDFrag->NetID;
-                                    for (TActorIterator<AUnitClientBubbleInfo> It(World); It; ++It)
-                                    {
-                                        AUnitClientBubbleInfo* Bubble = *It;
-                                        if (Bubble && Bubble->Agents.RemoveItemByNetID(NetID))
-                                        {
-                                            Bubble->Agents.MarkArrayDirty();
-                                            Bubble->ForceNetUpdate();
-                                        }
-                                    }
-                                }
-
-                                // 2) Remove from the authoritative UnitRegistry so new clients do not link this unit
-                                if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
-                                {
-                                    bool bRemoved = false;
-                                    if (UnitBase->UnitIndex != INDEX_NONE)
-                                    {
-                                        bRemoved |= Reg->Registry.RemoveByUnitIndex(UnitBase->UnitIndex);
-                                    }
-                                    bRemoved |= Reg->Registry.RemoveByOwner(UnitBase->GetFName());
-                                    if (bRemoved)
-                                    {
-                                        Reg->Registry.MarkArrayDirty();
-                                        Reg->ForceNetUpdate();
-                                    }
-                                }
-                            }
-                            */
                         }
                         else if (SignalName == UnitSignals::PatrolIdle)
                         {
@@ -2005,6 +1967,10 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                                 Worker->BuildArea = nullptr;
                             }
                         }
+                    }
+                    else if (AEffectArea* Area = Cast<AEffectArea>(Actor))
+                    {
+                        Area->HandleDeath(Area->ComputeLocalVisibility());
                     }
                 }
             }

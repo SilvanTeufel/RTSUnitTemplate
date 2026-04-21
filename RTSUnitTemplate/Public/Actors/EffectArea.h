@@ -160,12 +160,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn", meta=(ClampMin="0.0"))
 	float SpawnRandomOffsetMax = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Shutdown")
-	float HideOnDestructionDelay = 0.0f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Shutdown")
-	float DestroyOnDestructionDelay = 0.5f;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
 	float EarlySpawnTime = 1.0f;
 
@@ -174,6 +168,9 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
 	void OnEffectAreaDestructionStarted();
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Visuals")
+	virtual void SetDeathVisualState(bool bShouldHide);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visibility")
 	float VisibilityOffset = 150.f;
@@ -193,8 +190,7 @@ public:
 	UPROPERTY(Transient)
 	bool bIsVisibleByFog = false;
 
-	UPROPERTY(Replicated, Transient)
-	bool bDeathEffectsExecuted = false;
+	bool bLocalDeathEffectsExecuted = false;
 
 	UPROPERTY()
 	UNiagaraComponent* DeathNiagaraComp = nullptr;

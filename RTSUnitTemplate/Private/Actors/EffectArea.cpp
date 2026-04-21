@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/EffectArea.h"
+#include "Actors/AreaDecalComponent.h"
 #include "MassEntityManager.h"
 #include "MassEntityUtils.h"
 #include "MassCommonFragments.h"
@@ -38,6 +39,8 @@ AEffectArea::AEffectArea()
 	Niagara_A->SetVisibility(false); // Hide initially to avoid flickering before processor update
 	
 	MassBindingComponent = CreateDefaultSubobject<UMassActorBindingComponent>(TEXT("MassBindingComponent"));
+	MassBindingComponent->HideActorTime = 0.0f;
+	MassBindingComponent->DespawnTime = 0.5f;
 
 	bUseEffectAreaImpactProcessor = false;
 	StartRadius = 100.f;
@@ -56,8 +59,6 @@ AEffectArea::AEffectArea()
 	DuplicationId = 0;
 	bIsScalingAfterImpact = false;
 	bPendingDestructionRep = false;
-	HideOnDestructionDelay = 0.0f;
-	DestroyOnDestructionDelay = 0.5f;
 	EarlySpawnTime = 1.0f;
 	SpawnCountOnDestruction = 1;
 	bSpawnDoGroundTrace = true;
@@ -66,7 +67,7 @@ AEffectArea::AEffectArea()
 	SpawnRandomOffsetMax = 0.f;
 	Health = 0.f;
 	CapsuleHeight = 50.f;
-	bDeathEffectsExecuted = false;
+	bLocalDeathEffectsExecuted = false;
 
 	if (HasAuthority())
 	{
@@ -122,7 +123,6 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, bImpactScaleTriggered);
 	DOREPLIFETIME(AEffectArea, bPendingDestructionRep);
 	DOREPLIFETIME(AEffectArea, BeaconRange);
-	DOREPLIFETIME(AEffectArea, bDeathEffectsExecuted);
 }
 
 void AEffectArea::SetBeaconRange(float NewRange)
@@ -253,6 +253,14 @@ void AEffectArea::HandleProjectileImpact_Implementation(AActor* Shooter, const F
 		FMassEntityManager& EM = UE::Mass::Utils::GetEntityManagerChecked(*GetWorld());
 		if (FMassCombatStatsFragment* Stats = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity)) {
 			Stats->Health -= AppliedDamage;
+			if (HasAuthority() && Stats->Health <= 0.f)
+			{
+				EM.Defer().AddTag<FMassStateDeadTag>(Entity);
+				if (FMassAIStateFragment* StateFrag = EM.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+				{
+					StateFrag->StateTimer = 0.f;
+				}
+			}
 		}
 	}
 
@@ -268,10 +276,49 @@ void AEffectArea::HandleProjectileImpact_Implementation(AActor* Shooter, const F
 	}
 }
 
+void AEffectArea::SetDeathVisualState(bool bShouldHide)
+{
+	if (bShouldHide)
+	{
+		if (Niagara_A) Niagara_A->SetVisibility(false);
+		if (ISMTemplate) ISMTemplate->SetHiddenInGame(true);
+
+		TArray<USceneComponent*> Components;
+		GetComponents<USceneComponent>(Components);
+		for (USceneComponent* Comp : Components)
+		{
+			if (Comp && Comp != GetRootComponent() && !Comp->IsA<UAreaDecalComponent>())
+			{
+				// Keep the RVT writer of the decal
+				if (Comp->GetName().Contains(TEXT("RVTWriterMesh")))
+				{
+					continue;
+				}
+				Comp->SetHiddenInGame(true);
+			}
+		}
+	}
+	else
+	{
+		if (Niagara_A) Niagara_A->SetVisibility(true);
+		if (ISMTemplate) ISMTemplate->SetHiddenInGame(false);
+
+		TArray<USceneComponent*> Components;
+		GetComponents<USceneComponent>(Components);
+		for (USceneComponent* Comp : Components)
+		{
+			if (Comp)
+			{
+				Comp->SetHiddenInGame(false);
+			}
+		}
+	}
+}
+
 void AEffectArea::HandleDeath(bool bIsVisible)
 {
-	if (bDeathEffectsExecuted) return;
-	bDeathEffectsExecuted = true;
+	if (bLocalDeathEffectsExecuted) return;
+	bLocalDeathEffectsExecuted = true;
 
 	if (Niagara_A)
 	{

@@ -2,6 +2,7 @@
 
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/EffectArea.h"
+#include "Actors/AreaDecalComponent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Actors/Waypoint.h"
@@ -330,6 +331,51 @@ void AUnitBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
 
+}
+
+void AUnitBase::SetDeathVisualState(bool bShouldHide)
+{
+	if (bShouldHide)
+	{
+		// 1. Hide the Skeletal Mesh
+		if (GetMesh()) GetMesh()->SetHiddenInGame(true);
+
+		// 2. Hide the Health Bar Widget
+		if (HealthWidgetComp) HealthWidgetComp->SetVisibility(false);
+
+		// 3. Hide all other visual components EXCEPT the AreaDecalComponent
+		TArray<USceneComponent*> Components;
+		GetComponents<USceneComponent>(Components);
+		for (USceneComponent* Comp : Components)
+		{
+			// We keep the RootComponent and any AreaDecalComponent visible
+			if (Comp && Comp != GetRootComponent() && !Comp->IsA<UAreaDecalComponent>())
+			{
+				// Prevent flickering of texture painting (RVT)
+				if (Comp->GetName().Contains(TEXT("RVTWriterMesh")))
+				{
+					continue;
+				}
+				Comp->SetHiddenInGame(true);
+			}
+		}
+	}
+	else
+	{
+		// Restore if needed (not typically used in this flow)
+		if (GetMesh()) GetMesh()->SetHiddenInGame(false);
+		if (HealthWidgetComp) HealthWidgetComp->SetVisibility(true);
+		
+		TArray<USceneComponent*> Components;
+		GetComponents<USceneComponent>(Components);
+		for (USceneComponent* Comp : Components)
+		{
+			if (Comp)
+			{
+				Comp->SetHiddenInGame(false);
+			}
+		}
+	}
 }
 
 void AUnitBase::OnRep_MeshAssetPath()

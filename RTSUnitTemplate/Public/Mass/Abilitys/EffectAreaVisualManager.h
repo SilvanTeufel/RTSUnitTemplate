@@ -31,6 +31,9 @@ public:
     /** Registers a visual instance for an effect area entity */
     void AddVisualInstance(FMassEntityHandle EntityHandle, AEffectArea* EffectAreaActor);
 
+    /** Removes a visual instance for an effect area entity */
+    void RemoveVisualInstance(FMassEntityHandle EntityHandle);
+
 private:
     UPROPERTY()
     TMap<FMeshMaterialKey, UInstancedStaticMeshComponent*> ISMPool;

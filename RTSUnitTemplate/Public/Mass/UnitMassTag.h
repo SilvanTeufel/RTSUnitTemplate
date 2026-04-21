@@ -1324,8 +1324,8 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	// Destruction pipeline (hide -> destroy)
 	bool  bPendingDestruction = false;      // set when destruction begins
 	float PostImpactTimer = 0.f;        // accumulates once pending
-	float HideOnDestructionDelay = 0.f;   // copied from actor
-	float DestroyOnDestructionDelay = 0.5f;  // copied from actor
+	float HideActorTime = 0.f;   // copied from actor
+	float DespawnTime = 0.5f;  // copied from actor
 	float EarlySpawnTime = 1.0f; // copied from actor
 	// Random spawn offset (radius range in cm) copied from actor
 	float SpawnRandomOffsetMin = 0.f;
@@ -1571,6 +1571,16 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	}
 	if (!(bClientHasDead && bHealthNonPositive))
 	{
+		// Special handling for Dead tag to reset timer on first arrival on client
+		const bool bShouldHaveDead = (Bits & UnitTagBits::Dead) != 0;
+		if (bShouldHaveDead && !bClientHasDead)
+		{
+			if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+			{
+				StateFrag->StateTimer = 0.f;
+			}
+		}
+
 		SetTag(UnitTagBits::Dead,                FMassStateDeadTag());
 		SetTag(UnitTagBits::Rooted,              FMassStateRootedTag());
 		SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
