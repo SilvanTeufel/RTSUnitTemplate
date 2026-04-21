@@ -234,6 +234,11 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 		MassUnit->bIsMassUnit = true;
 		MassUnit->OnMassRegistrationFinished();
 	}
+
+	if (AEffectArea* EffectArea = Cast<AEffectArea>(MyOwner))
+	{
+		EffectArea->OnMassRegistrationFinished();
+	}
 }
 
 FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
@@ -1341,6 +1346,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 			{
 				VisualManager->AddVisualInstance(MassEntityHandle, EffectAreaActor);
 			}
+			EffectAreaActor->OnMassRegistrationFinished();
 		}
 	}
 	return MassEntityHandle;

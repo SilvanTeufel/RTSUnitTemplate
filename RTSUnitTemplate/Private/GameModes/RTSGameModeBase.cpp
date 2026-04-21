@@ -113,7 +113,7 @@ void ARTSGameModeBase::ReleaseEffectAreas()
 
 		TArray<FMassEntityHandle> EntitiesToRelease;
 		FMassExecutionContext Context(EntityManager);
-		ReleaseQuery.ForEachEntityChunk(EntityManager, Context, [&EntitiesToRelease](FMassExecutionContext& ChunkContext)
+		ReleaseQuery.ForEachEntityChunk(Context, [&EntitiesToRelease](FMassExecutionContext& ChunkContext)
 		{
 			const int32 NumEntities = ChunkContext.GetNumEntities();
 			for (int32 i = 0; i < NumEntities; ++i)

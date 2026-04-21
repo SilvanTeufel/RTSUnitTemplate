@@ -76,7 +76,7 @@ void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor
 {
 	const int32 Segments = 16;
 	const float AngleStep = 2.0f * PI / Segments;
-	FVector2D PrevScreenPoint;
+	FVector2D PrevScreenPoint = FVector2D::ZeroVector;
 	bool bPrevPointValid = false;
 
 	float ThicknessToUse = (Thickness < 0.f) ? ClickIndicatorThickness : Thickness;

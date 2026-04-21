@@ -46,6 +46,9 @@ public:
 	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|Events")
 	FOnEffectAreaDead OnEffectAreaDead;
 
+	UFUNCTION(BlueprintImplementableEvent, Category = "Mass")
+	void OnMassRegistrationFinished();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Health = 0.f;
 
@@ -189,6 +192,12 @@ public:
 
 	UPROPERTY(Transient)
 	bool bIsVisibleByFog = false;
+
+	UPROPERTY(Replicated, Transient)
+	bool bDeathEffectsExecuted = false;
+
+	UPROPERTY()
+	UNiagaraComponent* DeathNiagaraComp = nullptr;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffectOne;

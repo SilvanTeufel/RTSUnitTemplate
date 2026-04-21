@@ -2531,7 +2531,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 	{
 		// Wir versuchen, das Mesh zu holen (falls vorhanden),
 		// um dessen Bounds und Höhe zu bestimmen
-		FBoxSphereBounds MeshBounds;
+		FBoxSphereBounds MeshBounds = FBoxSphereBounds(FVector::ZeroVector, FVector::ZeroVector, 0.0f);
 		bool bBoundsFound = false;
 
 		if (BuildArea && IsValid(BuildArea) && BuildArea->Mesh)

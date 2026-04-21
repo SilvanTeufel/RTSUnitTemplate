@@ -66,7 +66,7 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 		TMap<int32, int32> IdCounts;
 		FMassExecutionContext GlobalContext(EntityManager);
 
-		GlobalUpdateQuery.ForEachEntityChunk(EntityManager, GlobalContext, [&IdCounts](FMassExecutionContext& ChunkContext)
+		GlobalUpdateQuery.ForEachEntityChunk(GlobalContext, [&IdCounts](FMassExecutionContext& ChunkContext)
 		{
 			auto DuplicateList = ChunkContext.GetFragmentView<FEffectAreaDuplicateFragment>();
 			for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
@@ -86,7 +86,7 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 		UMassSignalSubsystem* SignalSubsystem = Context.GetWorld() ? Context.GetWorld()->GetSubsystem<UMassSignalSubsystem>() : nullptr;
 		if (!SignalSubsystem) return;
 
-		GlobalUpdateQuery.ForEachEntityChunk(EntityManager, GlobalContext, [this, &IdCounts, SignalSubsystem](FMassExecutionContext& ChunkContext)
+		GlobalUpdateQuery.ForEachEntityChunk(GlobalContext, [this, &IdCounts, SignalSubsystem](FMassExecutionContext& ChunkContext)
 		{
 			const int32 NumEntities = ChunkContext.GetNumEntities();
 			TArrayView<FEffectAreaDuplicateFragment> DuplicateList = ChunkContext.GetMutableFragmentView<FEffectAreaDuplicateFragment>();
@@ -197,7 +197,7 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 	TArray<int32> EnemyTeams;
 	
 	FMassExecutionContext GlobalContext(EntityManager);
-	EnemyQuery.ForEachEntityChunk(EntityManager, GlobalContext, [&EnemyLocations, &EnemyTeams](FMassExecutionContext& ChunkContext)
+	EnemyQuery.ForEachEntityChunk(GlobalContext, [&EnemyLocations, &EnemyTeams](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
@@ -213,7 +213,7 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 	// 2. Global population count per ID for the signal phase
 	TMap<int32, int32> IdCounts;
 	FMassExecutionContext GlobalCountContext(EntityManager);
-	GlobalUpdateQuery.ForEachEntityChunk(EntityManager, GlobalCountContext, [&IdCounts](FMassExecutionContext& ChunkContext)
+	GlobalUpdateQuery.ForEachEntityChunk(GlobalCountContext, [&IdCounts](FMassExecutionContext& ChunkContext)
 	{
 		auto DuplicateList = ChunkContext.GetFragmentView<FEffectAreaDuplicateFragment>();
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)

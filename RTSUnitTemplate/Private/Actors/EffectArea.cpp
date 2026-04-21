@@ -13,6 +13,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/PerformanceUnit.h"
 #include "System/RTSBeaconSubsystem.h"
 
 // Sets default values
@@ -65,6 +66,7 @@ AEffectArea::AEffectArea()
 	SpawnRandomOffsetMax = 0.f;
 	Health = 0.f;
 	CapsuleHeight = 50.f;
+	bDeathEffectsExecuted = false;
 
 	if (HasAuthority())
 	{
@@ -120,6 +122,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, bImpactScaleTriggered);
 	DOREPLIFETIME(AEffectArea, bPendingDestructionRep);
 	DOREPLIFETIME(AEffectArea, BeaconRange);
+	DOREPLIFETIME(AEffectArea, bDeathEffectsExecuted);
 }
 
 void AEffectArea::SetBeaconRange(float NewRange)
@@ -253,19 +256,36 @@ void AEffectArea::HandleProjectileImpact_Implementation(AActor* Shooter, const F
 		}
 	}
 
-	if (ImpactVFX) UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, ImpactLocation);
-	if (ImpactSound) UGameplayStatics::PlaySoundAtLocation(this, ImpactSound, ImpactLocation);
+	// Projectile effects via Shooter (like units)
+	if (ProjectileClass && Shooter) {
+		if (const AProjectile* CDO = ProjectileClass->GetDefaultObject<AProjectile>()) {
+			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(Shooter)) {
+				const FVector FromLoc = PerfShooter->GetActorLocation();
+				const FRotator FaceRot = (ImpactLocation - FromLoc).Rotation();
+				PerfShooter->FireEffectsAtLocation(CDO->ImpactVFX, CDO->ImpactSound, CDO->ScaleImpactVFX, CDO->ScaleImpactSound, ImpactLocation, 2.0f, FaceRot);
+			}
+		}
+	}
 }
 
 void AEffectArea::HandleDeath(bool bIsVisible)
 {
+	if (bDeathEffectsExecuted) return;
+	bDeathEffectsExecuted = true;
+
+	if (Niagara_A)
+	{
+		Niagara_A->Deactivate();
+		Niagara_A->SetVisibility(false);
+	}
+
 	OnEffectAreaDead.Broadcast();
 
-	if (bIsVisible)
+	if (bIsVisible && GetNetMode() != NM_DedicatedServer)
 	{
 		if (DeathVFX)
 		{
-			UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), DeathVFX, GetActorLocation());
+			DeathNiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), DeathVFX, GetActorLocation());
 		}
 
 		if (DeathSound)
