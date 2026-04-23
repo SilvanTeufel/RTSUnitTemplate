@@ -425,6 +425,8 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.EA_bIsScalingAfterImpact = Impact->bIsScalingAfterImpact;
             NewItem.EA_bImpactScaleTriggered = Impact->bImpactScaleTriggered;
             NewItem.EA_bPendingDestruction = Impact->bPendingDestruction;
+            NewItem.EA_StartScaleTime = Impact->StartScaleTime;
+            NewItem.EA_VisualRotationOffset = Impact->VisualRotationOffset;
         }
 
         if (RepLogLevel() >= 2)
@@ -854,6 +856,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.EA_bIsScalingAfterImpact = Impact->bIsScalingAfterImpact;
                             NewItem.EA_bImpactScaleTriggered = Impact->bImpactScaleTriggered;
                             NewItem.EA_bPendingDestruction = Impact->bPendingDestruction;
+                            NewItem.EA_StartScaleTime = Impact->StartScaleTime;
+                            NewItem.EA_VisualRotationOffset = Impact->VisualRotationOffset;
                         }
                     }
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
@@ -1158,6 +1162,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->EA_bIsScalingAfterImpact != Impact->bIsScalingAfterImpact) { Item->EA_bIsScalingAfterImpact = Impact->bIsScalingAfterImpact; bDirty = true; }
                             if (Item->EA_bImpactScaleTriggered != Impact->bImpactScaleTriggered) { Item->EA_bImpactScaleTriggered = Impact->bImpactScaleTriggered; bDirty = true; }
                             if (Item->EA_bPendingDestruction != Impact->bPendingDestruction) { Item->EA_bPendingDestruction = Impact->bPendingDestruction; bDirty = true; }
+                            if (Item->EA_StartScaleTime != Impact->StartScaleTime) { Item->EA_StartScaleTime = Impact->StartScaleTime; bDirty = true; }
+                            if (Item->EA_VisualRotationOffset != Impact->VisualRotationOffset) { Item->EA_VisualRotationOffset = Impact->VisualRotationOffset; bDirty = true; }
                         }
 
                         if (RepLogLevel() >= 2)

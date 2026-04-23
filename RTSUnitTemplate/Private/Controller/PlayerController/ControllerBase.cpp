@@ -1273,9 +1273,27 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 {
 	if (!EAClass) return;
 	
+	FQuat VisualRotationOffset = FQuat::Identity;
+	FVector AreaSpawnLocation = Location;
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		FHitResult HitResult;
+		FVector TraceStart = Location + FVector(0, 0, 1000);
+		FVector TraceEnd = Location - FVector(0, 0, 1000);
+		FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(EffectAreaTrace), true);
+
+		if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+		{
+			AreaSpawnLocation.Z = HitResult.ImpactPoint.Z;
+			VisualRotationOffset = AEffectArea::CalculateGroundRotationOffset(HitResult.ImpactNormal, FVector::ForwardVector);
+		}
+	}
+
 	FTransform Transform;
-	Transform.SetLocation(Location);
-	Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
+	Transform.SetLocation(AreaSpawnLocation);
+	Transform.SetRotation(FQuat::Identity);
 
 		
 	const auto MyEffectArea = Cast<AEffectArea>
@@ -1285,8 +1303,7 @@ void AControllerBase::SpawnEffectArea(int TeamId, FVector Location, FVector Scal
 	if (MyEffectArea != nullptr)
 	{
 		MyEffectArea->TeamId = TeamId;
-		// Overlap handling removed: EffectArea now uses Mass-based processors for impact
-		// Visual scaling is handled by the VisualProcessor (ISM instances)
+		MyEffectArea->VisualRotationOffset = VisualRotationOffset;
 
 		if(ActorToLockOn)
 		{

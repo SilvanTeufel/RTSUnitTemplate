@@ -198,7 +198,12 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			}
 
 			// 2. Radius Calculation
-			if (Impact.bIsScalingAfterImpact)
+			if (Impact.StartScaleTime > 0.f && Impact.ElapsedTime < Impact.StartScaleTime)
+			{
+				float Alpha = FMath::Clamp(Impact.ElapsedTime / Impact.StartScaleTime, 0.f, 1.f);
+				Impact.CurrentRadius = FMath::Lerp(0.f, Impact.BaseRadius, Alpha);
+			}
+			else if (Impact.bIsScalingAfterImpact)
 			{
 				Impact.ImpactScalingElapsedTime += DeltaTime;
 				float Alpha = (Impact.TimeToEndRadius > 0.f)

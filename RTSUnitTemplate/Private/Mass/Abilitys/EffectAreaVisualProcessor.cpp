@@ -5,6 +5,7 @@
 #include "MassActorSubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Actors/EffectArea.h"
+#include "Kismet/GameplayStatics.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -99,9 +100,31 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 
             if (bTriggerVFX && bIsVisibleByFog && EffectArea && EffectArea->ImpactVFX)
             {
-                UNiagaraFunctionLibrary::SpawnSystemAtLocation(VisualContext.GetWorld(), EffectArea->ImpactVFX, EntityTransform.GetLocation());
+                UWorld* World = VisualContext.GetWorld();
+                if (World && World->GetNetMode() != NM_DedicatedServer)
+                {
+                    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->ImpactVFX, EntityTransform.GetLocation());
+                }
                 Impact.bImpactVFXTriggered = false;
             }
+
+			// Handle Spawn VFX / Sound
+			if (!Impact.bSpawnEffectsTriggered && bIsVisibleByFog && EffectArea)
+			{
+                UWorld* World = VisualContext.GetWorld();
+                if (World && World->GetNetMode() != NM_DedicatedServer)
+                {
+				    if (EffectArea->SpawnVFX)
+				    {
+					    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->SpawnVFX, EntityTransform.GetLocation());
+				    }
+				    if (EffectArea->SpawnSound)
+				    {
+					    UGameplayStatics::PlaySoundAtLocation(World, EffectArea->SpawnSound, EntityTransform.GetLocation());
+				    }
+                }
+				Impact.bSpawnEffectsTriggered = true;
+			}
 		}
 	});
 

@@ -331,6 +331,9 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
    	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride = -1.f);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Spawn")
+	void SpawnEffectArea(int InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn);
 	
 	/** 
 	 * Returns the world location for spawning projectiles.

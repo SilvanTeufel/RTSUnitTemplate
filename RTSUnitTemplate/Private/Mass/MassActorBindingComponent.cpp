@@ -972,6 +972,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					ImpactFrag->RadiusAtImpactStart = 0.f;
 					ImpactFrag->bImpactScaleTriggered = false;
 					ImpactFrag->bImpactVFXTriggered = false;
+					ImpactFrag->bSpawnEffectsTriggered = false;
+					ImpactFrag->StartScaleTime = EffectArea->StartScaleTime;
+					ImpactFrag->VisualRotationOffset = EffectArea->VisualRotationOffset;
 
 					ImpactFrag->bPendingDestruction = false;
 					ImpactFrag->PostImpactTimer = 0.f;

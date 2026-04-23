@@ -1775,6 +1775,51 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 	}
 }
 
+void AUnitBase::SpawnEffectArea(int InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn)
+{
+	if (!EAClass) return;
+	
+	FQuat VisualRotationOffset = FQuat::Identity;
+	FVector SpawnLocation = Location;
+
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		FHitResult HitResult;
+		FVector TraceStart = Location + FVector(0, 0, 1000);
+		FVector TraceEnd = Location - FVector(0, 0, 1000);
+		FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(EffectAreaTrace), true);
+
+		if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+		{
+			SpawnLocation.Z = HitResult.ImpactPoint.Z;
+			VisualRotationOffset = AEffectArea::CalculateGroundRotationOffset(HitResult.ImpactNormal, FVector::ForwardVector);
+		}
+	}
+
+	FTransform Transform;
+	Transform.SetLocation(SpawnLocation);
+	Transform.SetRotation(FQuat::Identity);
+	Transform.SetScale3D(Scale);
+		
+	const auto MyEffectArea = Cast<AEffectArea>
+						(UGameplayStatics::BeginDeferredActorSpawnFromClass
+						(this, EAClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+	
+	if (MyEffectArea != nullptr)
+	{
+		MyEffectArea->TeamId = InTeamId;
+		MyEffectArea->VisualRotationOffset = VisualRotationOffset;
+
+		if(ActorToLockOn)
+		{
+			MyEffectArea->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("rootSocket"));
+		}
+		
+		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
+	}
+}
+
 void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity)
 {
     // Note: ProjectileBaseClass is available via inheritance from APerformanceUnit

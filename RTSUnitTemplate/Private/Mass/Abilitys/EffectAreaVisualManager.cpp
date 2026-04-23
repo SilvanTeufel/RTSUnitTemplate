@@ -96,13 +96,15 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
     VisualFrag->ISMComponent = ISM;
     // Add instance with zero scale to avoid flickering before the first processor update
     VisualFrag->InstanceIndex = ISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector));
-    VisualFrag->VisualRelativeTransform = EffectAreaActor->ISMTemplate ? EffectAreaActor->ISMTemplate->GetRelativeTransform() : FTransform::Identity;
+    FTransform VisualOffsetTransform(EffectAreaActor->VisualRotationOffset);
+
+    VisualFrag->VisualRelativeTransform = (EffectAreaActor->ISMTemplate ? EffectAreaActor->ISMTemplate->GetRelativeTransform() : FTransform::Identity) * VisualOffsetTransform;
     VisualFrag->BaseMeshRadius = Mesh->GetBounds().BoxExtent.X;
     
     if (EffectAreaActor->Niagara_A)
     {
         VisualFrag->Niagara_A = EffectAreaActor->Niagara_A;
-        VisualFrag->Niagara_A_RelativeTransform = EffectAreaActor->Niagara_A->GetRelativeTransform();
+        VisualFrag->Niagara_A_RelativeTransform = EffectAreaActor->Niagara_A->GetRelativeTransform() * VisualOffsetTransform;
     }
 
     // Clear the template after registering the visual instance

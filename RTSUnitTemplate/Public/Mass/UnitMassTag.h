@@ -1320,6 +1320,9 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	float RadiusAtImpactStart = 0.f;      // lerp from this to EndRadius
 	bool bImpactScaleTriggered = false;   // guard to trigger only once per area
 	bool bImpactVFXTriggered = false; // Replikations-Hilfe fr Clients
+	bool bSpawnEffectsTriggered = false;
+	float StartScaleTime = 0.f;
+	FQuat VisualRotationOffset = FQuat::Identity;
         
 	// Destruction pipeline (hide -> destroy)
 	bool  bPendingDestruction = false;      // set when destruction begins

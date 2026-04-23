@@ -64,6 +64,7 @@ AEffectArea::AEffectArea()
 	SpawnRandomOffsetMin = 0.f;
 	SpawnRandomOffsetMax = 0.f;
 	Health = 0.f;
+	StartScaleTime = 0.f;
 	CapsuleHeight = 50.f;
 	bLocalDeathEffectsExecuted = false;
 
@@ -117,6 +118,41 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, AreaEffectThree);
 	DOREPLIFETIME(AEffectArea, Niagara_A);
 	DOREPLIFETIME(AEffectArea, BeaconRange);
+	DOREPLIFETIME(AEffectArea, VisualRotationOffset);
+}
+
+FQuat AEffectArea::CalculateGroundRotationOffset(const FVector& Normal, const FVector& Forward)
+{
+	FVector SafeForward = Forward.GetSafeNormal();
+	if (SafeForward.IsNearlyZero()) SafeForward = FVector::ForwardVector;
+
+	FVector Right = FVector::CrossProduct(Normal, SafeForward).GetSafeNormal();
+	if (Right.IsNearlyZero())
+	{
+		// Wenn Normal und Forward parallel sind, nehmen wir ein alternatives Right
+		FVector Up = FMath::Abs(Normal.Z) < 0.999f ? FVector::UpVector : FVector::ForwardVector;
+		Right = FVector::CrossProduct(Normal, Up).GetSafeNormal();
+	}
+
+	FVector AdjustedForward = FVector::CrossProduct(Right, Normal).GetSafeNormal();
+	FQuat TargetWorldRotation = FRotationMatrix::MakeFromXY(AdjustedForward, Right).ToQuat();
+    
+	// Aktuelle Actor-Rotation: Nur Yaw basierend auf Forward (auf XY-Ebene)
+	FVector YawForward = SafeForward;
+	YawForward.Z = 0.f;
+	if (YawForward.IsNearlyZero())
+	{
+		YawForward = FVector::ForwardVector;
+	}
+	else
+	{
+		YawForward.Normalize();
+	}
+
+	FQuat CurrentActorRotation = FRotationMatrix::MakeFromX(YawForward).ToQuat();
+    
+	// Der Offset ist das, was man auf den Actor anwenden muss, um TargetWorldRotation zu erhalten
+	return TargetWorldRotation * CurrentActorRotation.Inverse();
 }
 
 void AEffectArea::SetBeaconRange(float NewRange)

@@ -132,6 +132,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
 	class USoundBase* ImpactSound;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
+	class UNiagaraSystem* SpawnVFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
+	class USoundBase* SpawnSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
+	float StartScaleTime = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Spawn")
 	TSubclassOf<class AUnitBase> SpawnClassOnDestruction = nullptr;
 
@@ -191,6 +200,11 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffectThree;
+
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Visuals")
+	FQuat VisualRotationOffset = FQuat::Identity;
+
+	static FQuat CalculateGroundRotationOffset(const FVector& GroundNormal, const FVector& ActorForward);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsHealing = false;

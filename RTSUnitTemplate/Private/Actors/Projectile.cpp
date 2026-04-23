@@ -1620,9 +1620,26 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 	UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Spawning EffectArea of class %s at %s. World: %s"), 
 		*EAClass->GetName(), *Location.ToString(), World ? TEXT("Valid") : TEXT("Null"));
 
+	FQuat VisualRotationOffset = FQuat::Identity;
+	FVector SpawnLocation = Location;
+
+	if (World)
+	{
+		FHitResult HitResult;
+		FVector TraceStart = Location + FVector(0, 0, 1000);
+		FVector TraceEnd = Location - FVector(0, 0, 1000);
+		FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(EffectAreaTrace), true);
+
+		if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
+		{
+			SpawnLocation.Z = HitResult.ImpactPoint.Z;
+			VisualRotationOffset = AEffectArea::CalculateGroundRotationOffset(HitResult.ImpactNormal, FVector::ForwardVector);
+		}
+	}
+
 	FTransform Transform;
-	Transform.SetLocation(Location);
-	Transform.SetRotation(FQuat(FRotator::ZeroRotator));
+	Transform.SetLocation(SpawnLocation);
+	Transform.SetRotation(FQuat::Identity);
 	Transform.SetScale3D(Scale);
 		
 	const auto MyEffectArea = Cast<AEffectArea>
@@ -1633,6 +1650,7 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 	{
 		UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Successfully created MyEffectArea (Deferred)"));
 		MyEffectArea->TeamId = InTeamId;
+		MyEffectArea->VisualRotationOffset = VisualRotationOffset;
 
 		if(ActorToLockOn)
 		{

@@ -384,8 +384,11 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 					if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
 					{
 						SpawnLocation.Z = HitResult.ImpactPoint.Z;
+
+						FQuat ActorYawRotation = FRotationMatrix::MakeFromX(Direction).ToQuat();
+						FQuat VisualRotationOffset = AEffectArea::CalculateGroundRotationOffset(HitResult.ImpactNormal, Direction);
 						
-						AEffectArea* NewArea = World->SpawnActorDeferred<AEffectArea>(DuplicateFrag.EffectAreaClass, FTransform(SpawnLocation), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+						AEffectArea* NewArea = World->SpawnActorDeferred<AEffectArea>(DuplicateFrag.EffectAreaClass, FTransform(ActorYawRotation, SpawnLocation), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 						if (NewArea)
 						{
 							// Transfer properties
@@ -396,6 +399,7 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 							NewArea->LastDuplicationDirection = Direction;
 							NewArea->MaxDuplicationCount = DuplicateFrag.MaxDuplicationCount;
 							NewArea->DuplicationId = DuplicateFrag.DuplicationId;
+							NewArea->VisualRotationOffset = VisualRotationOffset;
 							
 							UGameplayStatics::FinishSpawningActor(NewArea, FTransform(SpawnLocation));
 							DuplicateFrag.SpawnedChild = NewArea;
