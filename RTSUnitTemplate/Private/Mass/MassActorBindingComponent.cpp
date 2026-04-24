@@ -792,6 +792,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 			
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
+			InitStats(EM, NewMassEntityHandle, MyOwner);
 
 			if (StopSeparation || Cast<AConstructionUnit>(MyOwner))
 			{
@@ -1152,6 +1153,18 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
                 {
                     CharFrag->LastGroundLocation = ActorLoc.Z; // Fallback to current Z
                 }
+
+                // FIX: Set visual position for buildings (static)
+                FVector FinalLoc = UnitOwner->GetActorLocation();
+                FinalLoc.Z = CharFrag->LastGroundLocation + CharFrag->CapsuleHeight;
+                CharFrag->PositionedTransform.SetLocation(FinalLoc);
+                CharFrag->bTransformDirty = true;
+
+                // IMPORTANT: Update TransformFragment so the value replicates to the client
+                if (FTransformFragment* TFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(EntityHandle))
+                {
+                    TFrag->GetMutableTransform().SetLocation(FinalLoc);
+                }
             }
         }
     	else if (AEffectArea* EffectArea = Cast<AEffectArea>(OwnerActor))
@@ -1358,6 +1371,10 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		if (UnitOwner)
 		{
 			VisualFrag->bUseSkeletalMovement = UnitOwner->bUseSkeletalMovement;
+			if (UnitOwner->bUseSkeletalMovement)
+			{
+				EntityManager.Defer().AddTag<FMassUseSkeletalMovementTag>(EntityHandle);
+			}
 		}
 	}
 

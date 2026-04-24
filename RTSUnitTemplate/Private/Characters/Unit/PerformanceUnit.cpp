@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/BuildingBase.h"
 
 #include "Components/WidgetComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -12,6 +13,8 @@
 #include "Widgets/UnitTimerWidget.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
+#include "Subsystems/UnitVisualManager.h"
+#include "Mass/MassActorBindingComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
@@ -121,10 +124,17 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 			SkelMesh->bPauseAnims = !desiredVisibility;
 		}
 
-	if (ISMComponent && !bUseSkeletalMovement)
+	if (!bUseSkeletalMovement)
 	{
-		ISMComponent->SetVisibility(desiredVisibility, true);
-		ISMComponent->SetHiddenInGame(!desiredVisibility);
+		UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>();
+		if (VisualManager && MassActorBindingComponent)
+		{
+			FMassEntityHandle Entity = MassActorBindingComponent->GetEntityHandle();
+			if (Entity.IsValid())
+			{
+				VisualManager->SetUnitVisualVisible(Entity, desiredVisibility);
+			}
+		}
 	}
 }
 

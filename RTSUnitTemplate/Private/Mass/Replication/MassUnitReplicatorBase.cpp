@@ -129,6 +129,10 @@ void UMassUnitReplicatorBase::AddRequirements(FMassEntityQuery& EntityQuery)
     // Keep requirements minimal to avoid excluding entities that lack optional fragments.
     // UMassReplicatorBase already requires FMassNetworkIDFragment; only add Transform here.
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    
+    // Add AgentCharacteristics as optional to read visual position when available
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+
     // Do NOT add optional fragments as hard requirements; we read them conditionally during serialization.
 }
 
@@ -182,6 +186,10 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     const FMassNetworkID& NetID = NetIDFrag->NetID;
     const FTransform& Xf = TransformFrag->GetTransform();
 
+    // Prefer visual position from AgentCharacteristics if available and valid
+    const FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+    const FTransform& VisualXf = (CharFrag && !CharFrag->PositionedTransform.Equals(FTransform::Identity)) ? CharFrag->PositionedTransform : Xf;
+
     // 1) Ensure presence/update in replicated bubble array for clients
     FUnitReplicationItem* Item = BubbleInfo->Agents.FindItemByNetID(NetID);
     if (!Item)
@@ -223,18 +231,18 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 }
             }
         }
-        NewItem.Location = Xf.GetLocation();
+        NewItem.Location = VisualXf.GetLocation();
 
         auto QuantizeAngle = [](float AngleDeg)->uint16
         {
             const float Norm = FMath::Fmod(AngleDeg + 360.0f, 360.0f);
             return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
         };
-        const FRotator Rot = Xf.Rotator();
+        const FRotator Rot = VisualXf.Rotator();
         NewItem.PitchQuantized = QuantizeAngle(Rot.Pitch);
         NewItem.YawQuantized = QuantizeAngle(Rot.Yaw);
         NewItem.RollQuantized = QuantizeAngle(Rot.Roll);
-        NewItem.Scale = Xf.GetScale3D();
+        NewItem.Scale = VisualXf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
 
         
@@ -637,6 +645,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
 
         const TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
         const TConstArrayView<FMassNetworkIDFragment> NetIDList = Context.GetFragmentView<FMassNetworkIDFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         // Build a quick lookup from NetID->(OwnerName,UnitIndex) using the authoritative registry for logging
         TMap<uint32, TPair<FName,int32>> ByID;
@@ -664,9 +673,14 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                 // Dead state will be carried in TagBits and consumers can react accordingly.
 
                 const FTransform& Xf = TransformList[Idx].GetTransform();
-                const FVector Loc = Xf.GetLocation();
-                const FRotator Rot = Xf.Rotator();
-                const FVector Sca = Xf.GetScale3D();
+
+                // Prefer visual position from AgentCharacteristics if available and valid
+                const bool bHasChar = CharList.Num() > 0;
+                const FTransform& VisualXf = (bHasChar && !CharList[Idx].PositionedTransform.Equals(FTransform::Identity)) ? CharList[Idx].PositionedTransform : Xf;
+
+                const FVector Loc = VisualXf.GetLocation();
+                const FRotator Rot = VisualXf.Rotator();
+                const FVector Sca = VisualXf.GetScale3D();
 
                 // Detailed server log for diagnostics: which NetID/transform we are replicating with identity from registry
                 FName OwnerName = NAME_None;

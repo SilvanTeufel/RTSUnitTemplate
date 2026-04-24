@@ -6,6 +6,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Characters/Unit/WorkingUnitBase.h"

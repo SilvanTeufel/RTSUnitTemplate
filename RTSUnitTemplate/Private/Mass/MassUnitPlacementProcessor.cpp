@@ -21,12 +21,13 @@ UMassUnitPlacementProcessor::UMassUnitPlacementProcessor() {
 void UMassUnitPlacementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) {
     EntityQuery.Initialize(EntityManager);
     EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
-    EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
+    EntityQuery.AddTagRequirement<FMassUseSkeletalMovementTag>(EMassFragmentPresence::None);
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -42,24 +43,73 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
     // Batch-Update: collect updates per ISM component instead of calling UpdateInstanceTransform individually
     TMap<UInstancedStaticMeshComponent*, TArray<FISMInstanceUpdate>> BatchedUpdates;
 
-        EntityQuery.ForEachEntityChunk(Context, ([&EntityManager, &BatchedUpdates](FMassExecutionContext& Context) {
+    const double CurrentTime = FPlatformTime::Seconds();
+    const bool bShouldLog = (CurrentTime - LastGlobalLogTime > 2.0);
+    if (bShouldLog)
+    {
+        LastGlobalLogTime = CurrentTime;
+    }
+
+    int32 TotalEntities = 0;
+
+    EntityQuery.ForEachEntityChunk(Context, ([&BatchedUpdates, bShouldLog, &TotalEntities](FMassExecutionContext& Context) {
+        TotalEntities += Context.GetNumEntities();
         TArrayView<FMassUnitVisualFragment> VisualList = Context.GetMutableFragmentView<FMassUnitVisualFragment>();
         TConstArrayView<FMassVisualEffectFragment> EffectList = Context.GetFragmentView<FMassVisualEffectFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
         TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         TConstArrayView<FMassRepresentationLODFragment> LODFragments = Context.GetFragmentView<FMassRepresentationLODFragment>();
 
+        const bool bHasEffect = !EffectList.IsEmpty();
+        const bool bHasVisibility = !VisibilityList.IsEmpty();
+        const bool bHasLOD = !LODFragments.IsEmpty();
+
         const bool bChunkIsStopped = Context.DoesArchetypeHaveTag<FMassStateStopMovementTag>();
         const bool bChunkIsDead = Context.DoesArchetypeHaveTag<FMassStateDeadTag>();
+        const bool bIsEffectArea = Context.DoesArchetypeHaveTag<FMassIsEffectAreaTag>();
 
+        if (bShouldLog)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[PlacementProcessor] Chunk: NumEntities=%d, Stopped=%d, Dead=%d, EffectArea=%d"), 
+                Context.GetNumEntities(), bChunkIsStopped, bChunkIsDead, bIsEffectArea);
+        }
+            
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassUnitVisualFragment& VisualFrag = VisualList[i];
-            const FMassVisualEffectFragment& EffectFrag = EffectList[i];
-            const FMassVisibilityFragment& Vis = VisibilityList[i];
             FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
 
+            bool bForceHidden = false;
+            if (bHasEffect)
+            {
+                bForceHidden = EffectList[i].bForceHidden;
+            }
+
+            if (bShouldLog && i < 3) // Log first 3 entities per chunk
+            {
+                const bool bIsServer = (Context.GetWorld()->GetNetMode() != NM_Client);
+                const FVector Pos = CharFrag.PositionedTransform.GetLocation();
+                const bool bIsIdentity = CharFrag.PositionedTransform.Equals(FTransform::Identity);
+                
+                FString TemplateName = TEXT("None");
+                if (VisualFrag.VisualInstances.Num() > 0 && VisualFrag.VisualInstances[0].TemplateISM.IsValid())
+                {
+                    TemplateName = VisualFrag.VisualInstances[0].TemplateISM->GetName();
+                }
+
+                UE_LOG(LogTemp, Warning, TEXT("  [Entity %d] [%s] [%s] Height=%.2f, PosZ=%.2f, Flying=%d, Identity=%d, Pos=(%.1f, %.1f, %.1f)"), 
+                    i, bIsServer ? TEXT("Server") : TEXT("Client"), *TemplateName,
+                    CharFrag.CapsuleHeight, Pos.Z, CharFrag.bIsFlying, bIsIdentity, Pos.X, Pos.Y, Pos.Z);
+
+                for (int32 j = 0; j < VisualFrag.VisualInstances.Num(); ++j)
+                {
+                    const auto& Instance = VisualFrag.VisualInstances[j];
+                    UE_LOG(LogTemp, Warning, TEXT("    - Instance %d: BaseOffsetZ=%.2f, CurrOffsetZ=%.2f"), 
+                        j, Instance.BaseOffset.GetLocation().Z, Instance.CurrentRelativeTransform.GetLocation().Z);
+                }
+            }
+
             // LOD-Skip: Entities with LOD::Off get their ISMs hidden and are skipped
-            if (LODFragments[i].LOD == EMassLOD::Off)
+            if (bHasLOD && LODFragments[i].LOD == EMassLOD::Off)
             {
                 for (FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances)
                 {
@@ -73,12 +123,6 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
                         Instance.bWasVisible = false;
                     }
                 }
-                continue;
-            }
-
-            // Wunsch Punkt 1: "setzen skippen", wenn FMassStateStopMovementTag aktiv ist (außer bei Tod für den Spin)
-            if (bChunkIsStopped && !bChunkIsDead && !CharFrag.bTransformDirty)
-            {
                 continue;
             }
 
@@ -137,7 +181,16 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 }
             }
 
-            bool bVisible = Vis.bIsVisibleEnemy && Vis.bIsOnViewport && !EffectFrag.bForceHidden;
+            bool bVisible = true;
+            if (bHasVisibility)
+            {
+                const FMassVisibilityFragment& Vis = VisibilityList[i];
+                bVisible = Vis.bIsVisibleEnemy && Vis.bIsOnViewport && !bForceHidden;
+            }
+            else
+            {
+                bVisible = !bForceHidden;
+            }
 
             // Dirty-Flag check: skip entities whose transform hasn't changed and whose visibility is unchanged
             if (!CharFrag.bTransformDirty && !VisualFrag.bUseSkeletalMovement)
@@ -196,6 +249,13 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
             }
         }
     }));
+
+    if (bShouldLog)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[PlacementProcessor] [%s] Execution Complete. Total Entities: %d, Batched Updates for %d ISMs"), 
+            (Context.GetWorld()->GetNetMode() != NM_Client) ? TEXT("Server") : TEXT("Client"),
+            TotalEntities, BatchedUpdates.Num());
+    }
 
     // Batched dispatch: sort by index for cache-friendliness, use BatchUpdateInstancesTransforms when contiguous
     for (auto& [ISM, Updates] : BatchedUpdates)

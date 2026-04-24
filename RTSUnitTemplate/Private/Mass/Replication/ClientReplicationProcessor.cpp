@@ -700,7 +700,15 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								const float LPitch = (static_cast<float>(TagItem->PitchQuantized) / 65535.0f) * 360.0f;
     								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
     								const float LRoll  = (static_cast<float>(TagItem->RollQuantized)  / 65535.0f) * 360.0f;
-    								// AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(TagItem->Location), FVector(TagItem->Scale));
+    								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
+    								{
+    									AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(TagItem->Location), FVector(TagItem->Scale));
+    									AC.bTransformDirty = true;
+    									if (TransformList.IsValidIndex(EntityIdx))
+    									{
+    										TransformList[EntityIdx].GetMutableTransform() = AC.PositionedTransform;
+    									}
+    								}
     								AC.CapsuleHeight = TagItem->AC_CapsuleHeight;
     								AC.CapsuleRadius = TagItem->AC_CapsuleRadius;
     							}
@@ -987,7 +995,15 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								const float LPitch = (static_cast<float>(UseItem->PitchQuantized) / 65535.0f) * 360.0f;
  								const float LYaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
  								const float LRoll  = (static_cast<float>(UseItem->RollQuantized)  / 65535.0f) * 360.0f;
- 								// AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(UseItem->Location), FVector(UseItem->Scale));
+ 								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
+ 								{
+ 									AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(UseItem->Location), FVector(UseItem->Scale));
+ 									AC.bTransformDirty = true;
+ 									if (TransformList.IsValidIndex(EntityIdx))
+ 									{
+ 										TransformList[EntityIdx].GetMutableTransform() = AC.PositionedTransform;
+ 									}
+ 								}
  								AC.CapsuleHeight = UseItem->AC_CapsuleHeight;
  								AC.CapsuleRadius = UseItem->AC_CapsuleRadius;
  							}
@@ -1183,6 +1199,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					}
 
 					ClientXf = FinalXf;
+
+					if (CharList.IsValidIndex(EntityIdx))
+					{
+						if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
+						{
+							CharList[EntityIdx].PositionedTransform = FinalXf;
+							CharList[EntityIdx].bTransformDirty = true;
+						}
+					}
+
 					// Also zero out steering/force to prevent drift from movement systems this tick
 					TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
 					TArrayView<FMassSteeringFragment> SteeringList = Context.GetMutableFragmentView<FMassSteeringFragment>();
@@ -1240,6 +1266,14 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						{
 							FTransform& ClientXfSnap = TransformList[EntityIdx].GetMutableTransform();
 							ClientXfSnap = FinalXf;
+							if (CharList.IsValidIndex(EntityIdx))
+							{
+								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
+								{
+									CharList[EntityIdx].PositionedTransform = FinalXf;
+									CharList[EntityIdx].bTransformDirty = true;
+								}
+							}
 							// Zero force/steering this tick to avoid overshoot
 							TArrayView<FMassForceFragment> ForceListSnap = Context.GetMutableFragmentView<FMassForceFragment>();
 							TArrayView<FMassSteeringFragment> SteeringListSnap = Context.GetMutableFragmentView<FMassSteeringFragment>();

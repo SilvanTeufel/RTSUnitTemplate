@@ -72,6 +72,7 @@ USTRUCT() struct FMassStateEvasionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRootedTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateCastingTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateIsAttackedTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassUseSkeletalMovementTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassTransportTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassTransportProcessorActiveTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassSoftAvoidanceTag : public FMassTag { GENERATED_BODY() };
