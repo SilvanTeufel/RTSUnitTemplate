@@ -765,6 +765,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									Impact.bPendingDestruction = TagItem->EA_bPendingDestruction;
 									Impact.StartScaleTime = TagItem->EA_StartScaleTime;
 									Impact.VisualRotationOffset = TagItem->EA_VisualRotationOffset;
+									Impact.RadiusAtImpactStart = TagItem->EA_RadiusAtImpactStart;
 								}
 								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
 								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)

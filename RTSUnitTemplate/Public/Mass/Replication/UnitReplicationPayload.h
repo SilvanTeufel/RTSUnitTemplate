@@ -233,6 +233,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() bool EA_bPendingDestruction = false;
 	UPROPERTY() float EA_StartScaleTime = 0.f;
 	UPROPERTY() FQuat EA_VisualRotationOffset = FQuat::Identity;
+	UPROPERTY() float EA_RadiusAtImpactStart = 0.f;
 
 	// Default Constructor
 	FUnitReplicationItem()
@@ -264,6 +265,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, EA_bPendingDestruction(false)
 		, EA_StartScaleTime(0.f)
 		, EA_VisualRotationOffset(FQuat::Identity)
+		, EA_RadiusAtImpactStart(0.f)
 	{
 	}
 

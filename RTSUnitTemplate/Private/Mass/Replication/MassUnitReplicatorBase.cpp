@@ -427,6 +427,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             NewItem.EA_bPendingDestruction = Impact->bPendingDestruction;
             NewItem.EA_StartScaleTime = Impact->StartScaleTime;
             NewItem.EA_VisualRotationOffset = Impact->VisualRotationOffset;
+            NewItem.EA_RadiusAtImpactStart = Impact->RadiusAtImpactStart;
         }
 
         if (RepLogLevel() >= 2)
@@ -858,6 +859,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.EA_bPendingDestruction = Impact->bPendingDestruction;
                             NewItem.EA_StartScaleTime = Impact->StartScaleTime;
                             NewItem.EA_VisualRotationOffset = Impact->VisualRotationOffset;
+                            NewItem.EA_RadiusAtImpactStart = Impact->RadiusAtImpactStart;
                         }
                     }
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
@@ -1164,6 +1166,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (Item->EA_bPendingDestruction != Impact->bPendingDestruction) { Item->EA_bPendingDestruction = Impact->bPendingDestruction; bDirty = true; }
                             if (Item->EA_StartScaleTime != Impact->StartScaleTime) { Item->EA_StartScaleTime = Impact->StartScaleTime; bDirty = true; }
                             if (Item->EA_VisualRotationOffset != Impact->VisualRotationOffset) { Item->EA_VisualRotationOffset = Impact->VisualRotationOffset; bDirty = true; }
+                            if (Item->EA_RadiusAtImpactStart != Impact->RadiusAtImpactStart) { Item->EA_RadiusAtImpactStart = Impact->RadiusAtImpactStart; bDirty = true; }
                         }
 
                         if (RepLogLevel() >= 2)

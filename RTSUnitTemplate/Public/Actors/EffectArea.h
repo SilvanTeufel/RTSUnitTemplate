@@ -201,10 +201,13 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffectThree;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visuals")
+	bool bAddRandomZRotation = false;
+
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Visuals")
 	FQuat VisualRotationOffset = FQuat::Identity;
 
-	static FQuat CalculateGroundRotationOffset(const FVector& GroundNormal, const FVector& ActorForward);
+	static FQuat CalculateGroundRotationOffset(const FVector& GroundNormal, const FVector& ActorForward, float RandomZRotation = 0.f);
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsHealing = false;

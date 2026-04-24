@@ -121,7 +121,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, VisualRotationOffset);
 }
 
-FQuat AEffectArea::CalculateGroundRotationOffset(const FVector& Normal, const FVector& Forward)
+FQuat AEffectArea::CalculateGroundRotationOffset(const FVector& Normal, const FVector& Forward, float RandomZRotation)
 {
 	FVector SafeForward = Forward.GetSafeNormal();
 	if (SafeForward.IsNearlyZero()) SafeForward = FVector::ForwardVector;
@@ -137,6 +137,12 @@ FQuat AEffectArea::CalculateGroundRotationOffset(const FVector& Normal, const FV
 	FVector AdjustedForward = FVector::CrossProduct(Right, Normal).GetSafeNormal();
 	FQuat TargetWorldRotation = FRotationMatrix::MakeFromXY(AdjustedForward, Right).ToQuat();
     
+	if (RandomZRotation != 0.f)
+	{
+		FQuat RandomRot = FQuat(Normal, FMath::DegreesToRadians(RandomZRotation));
+		TargetWorldRotation = RandomRot * TargetWorldRotation;
+	}
+
 	// Aktuelle Actor-Rotation: Nur Yaw basierend auf Forward (auf XY-Ebene)
 	FVector YawForward = SafeForward;
 	YawForward.Z = 0.f;
