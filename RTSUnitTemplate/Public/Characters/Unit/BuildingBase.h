@@ -130,8 +130,6 @@ public:
 	void DespawnWorkResource(AWorkResource* ResourceToDespawn);
 
 
-	virtual void MulticastSetEnemyVisibility_Implementation(AActor* DetectingActor, bool bVisible);
-
 	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) override;
 
 	// Returns true if this building's location is within range of any Beacon (any BuildingBase with BeaconRange > 0)

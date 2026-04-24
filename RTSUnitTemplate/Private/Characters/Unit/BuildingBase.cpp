@@ -546,11 +546,6 @@ void ABuildingBase::DespawnWorkResource(AWorkResource* ResourceToDespawn)
 	}
 }
 
-void ABuildingBase::MulticastSetEnemyVisibility_Implementation(AActor* DetectingActor, bool bVisible)
-{
-	if (!CanMove && bVisible == false) return;
-	Super::MulticastSetEnemyVisibility_Implementation(DetectingActor, bVisible);
-}
 
 void ABuildingBase::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 {

@@ -667,11 +667,6 @@ void APerformanceUnit::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 	}
 }
 
-void APerformanceUnit::MulticastSetEnemyVisibility_Implementation(AActor* DetectingActor, bool bVisible)
-{
-	SetEnemyVisibility(DetectingActor, bVisible);
-}
-
 
 bool APerformanceUnit::ComputeLocalVisibility() const
 {

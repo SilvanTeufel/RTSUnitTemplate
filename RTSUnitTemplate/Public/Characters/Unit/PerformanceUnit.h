@@ -206,10 +206,6 @@ public:
 	APlayerController* OwningPlayerController;
 	
 	
-	UFUNCTION(NetMulticast, Unreliable)
-	void MulticastSetEnemyVisibility(AActor* DetectingActor, bool bVisible);
-	
-	virtual void MulticastSetEnemyVisibility_Implementation(AActor* DetectingActor, bool bVisible);
 	// IMassVisibilityInterface
 	virtual void SetActorVisibility(bool bVisible) override { SetCharacterVisibility(bVisible); }
 	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) override;

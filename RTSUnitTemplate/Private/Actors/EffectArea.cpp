@@ -72,6 +72,11 @@ AEffectArea::AEffectArea()
 	{
 		bReplicates = true;
 	}
+	
+	bReplicates = true;
+	SetReplicates(true);
+	SetNetUpdateFrequency(2);
+	SetMinNetUpdateFrequency(1);
 }
 
 // Called when the game starts or when spawned
