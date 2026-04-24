@@ -106,14 +106,6 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 	const float CurrentTime = World->GetTimeSeconds();
 
-	static float LastLogTime = 0.f;
-	bool bDoDiagnosticLog = false;
-	if (CurrentTime - LastLogTime > 2.0f)
-	{
-		bDoDiagnosticLog = true;
-		LastLogTime = CurrentTime;
-	}
-
 	EntityQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkCtx)
 	{
 		const int32 N = ChunkCtx.GetNumEntities();

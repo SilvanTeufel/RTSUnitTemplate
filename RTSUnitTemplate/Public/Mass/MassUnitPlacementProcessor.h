@@ -18,5 +18,4 @@ protected:
 
 private:
     FMassEntityQuery EntityQuery;
-    double LastGlobalLogTime = 0.0;
 };

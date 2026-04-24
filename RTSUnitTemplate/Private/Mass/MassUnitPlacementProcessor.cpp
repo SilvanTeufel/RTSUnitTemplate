@@ -43,17 +43,7 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
     // Batch-Update: collect updates per ISM component instead of calling UpdateInstanceTransform individually
     TMap<UInstancedStaticMeshComponent*, TArray<FISMInstanceUpdate>> BatchedUpdates;
 
-    const double CurrentTime = FPlatformTime::Seconds();
-    const bool bShouldLog = (CurrentTime - LastGlobalLogTime > 2.0);
-    if (bShouldLog)
-    {
-        LastGlobalLogTime = CurrentTime;
-    }
-
-    int32 TotalEntities = 0;
-
-    EntityQuery.ForEachEntityChunk(Context, ([&BatchedUpdates, bShouldLog, &TotalEntities](FMassExecutionContext& Context) {
-        TotalEntities += Context.GetNumEntities();
+    EntityQuery.ForEachEntityChunk(Context, ([&BatchedUpdates](FMassExecutionContext& Context) {
         TArrayView<FMassUnitVisualFragment> VisualList = Context.GetMutableFragmentView<FMassUnitVisualFragment>();
         TConstArrayView<FMassVisualEffectFragment> EffectList = Context.GetFragmentView<FMassVisualEffectFragment>();
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
@@ -66,13 +56,7 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
         const bool bChunkIsStopped = Context.DoesArchetypeHaveTag<FMassStateStopMovementTag>();
         const bool bChunkIsDead = Context.DoesArchetypeHaveTag<FMassStateDeadTag>();
-        const bool bIsEffectArea = Context.DoesArchetypeHaveTag<FMassIsEffectAreaTag>();
 
-        if (bShouldLog)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("[PlacementProcessor] Chunk: NumEntities=%d, Stopped=%d, Dead=%d, EffectArea=%d"), 
-                Context.GetNumEntities(), bChunkIsStopped, bChunkIsDead, bIsEffectArea);
-        }
             
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassUnitVisualFragment& VisualFrag = VisualList[i];
@@ -84,29 +68,6 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 bForceHidden = EffectList[i].bForceHidden;
             }
 
-            if (bShouldLog && i < 3) // Log first 3 entities per chunk
-            {
-                const bool bIsServer = (Context.GetWorld()->GetNetMode() != NM_Client);
-                const FVector Pos = CharFrag.PositionedTransform.GetLocation();
-                const bool bIsIdentity = CharFrag.PositionedTransform.Equals(FTransform::Identity);
-                
-                FString TemplateName = TEXT("None");
-                if (VisualFrag.VisualInstances.Num() > 0 && VisualFrag.VisualInstances[0].TemplateISM.IsValid())
-                {
-                    TemplateName = VisualFrag.VisualInstances[0].TemplateISM->GetName();
-                }
-
-                UE_LOG(LogTemp, Warning, TEXT("  [Entity %d] [%s] [%s] Height=%.2f, PosZ=%.2f, Flying=%d, Identity=%d, Pos=(%.1f, %.1f, %.1f)"), 
-                    i, bIsServer ? TEXT("Server") : TEXT("Client"), *TemplateName,
-                    CharFrag.CapsuleHeight, Pos.Z, CharFrag.bIsFlying, bIsIdentity, Pos.X, Pos.Y, Pos.Z);
-
-                for (int32 j = 0; j < VisualFrag.VisualInstances.Num(); ++j)
-                {
-                    const auto& Instance = VisualFrag.VisualInstances[j];
-                    UE_LOG(LogTemp, Warning, TEXT("    - Instance %d: BaseOffsetZ=%.2f, CurrOffsetZ=%.2f"), 
-                        j, Instance.BaseOffset.GetLocation().Z, Instance.CurrentRelativeTransform.GetLocation().Z);
-                }
-            }
 
             // LOD-Skip: Entities with LOD::Off get their ISMs hidden and are skipped
             if (bHasLOD && LODFragments[i].LOD == EMassLOD::Off)
@@ -249,13 +210,6 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
             }
         }
     }));
-
-    if (bShouldLog)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("[PlacementProcessor] [%s] Execution Complete. Total Entities: %d, Batched Updates for %d ISMs"), 
-            (Context.GetWorld()->GetNetMode() != NM_Client) ? TEXT("Server") : TEXT("Client"),
-            TotalEntities, BatchedUpdates.Num());
-    }
 
     // Batched dispatch: sort by index for cache-friendliness, use BatchUpdateInstancesTransforms when contiguous
     for (auto& [ISM, Updates] : BatchedUpdates)
