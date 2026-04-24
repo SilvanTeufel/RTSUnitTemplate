@@ -70,13 +70,12 @@ AEffectArea::AEffectArea()
 
 	if (HasAuthority())
 	{
-		bReplicates = true;
+		bReplicates = false;
 	}
 	
-	bReplicates = true;
 	SetReplicates(true);
-	SetNetUpdateFrequency(0);
-	SetMinNetUpdateFrequency(0);
+	SetNetUpdateFrequency(0.f);
+	SetMinNetUpdateFrequency(0.f);
 }
 
 // Called when the game starts or when spawned
@@ -118,9 +117,9 @@ void AEffectArea::OnConstruction(const FTransform& Transform)
 void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AEffectArea, AreaEffectOne);
-	DOREPLIFETIME(AEffectArea, AreaEffectTwo);
-	DOREPLIFETIME(AEffectArea, AreaEffectThree);
+	//DOREPLIFETIME(AEffectArea, AreaEffectOne);
+	//DOREPLIFETIME(AEffectArea, AreaEffectTwo);
+	//DOREPLIFETIME(AEffectArea, AreaEffectThree);
 	DOREPLIFETIME(AEffectArea, Niagara_A);
 	DOREPLIFETIME(AEffectArea, BeaconRange);
 	DOREPLIFETIME(AEffectArea, VisualRotationOffset);
