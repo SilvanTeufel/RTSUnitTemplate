@@ -75,8 +75,8 @@ AEffectArea::AEffectArea()
 	
 	bReplicates = true;
 	SetReplicates(true);
-	SetNetUpdateFrequency(2);
-	SetMinNetUpdateFrequency(1);
+	SetNetUpdateFrequency(0);
+	SetMinNetUpdateFrequency(0);
 }
 
 // Called when the game starts or when spawned
