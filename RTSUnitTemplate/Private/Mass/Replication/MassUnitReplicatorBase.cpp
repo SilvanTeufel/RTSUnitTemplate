@@ -270,30 +270,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 NewItem.OwnerName = Ow->GetFName();
                 if (AUnitBase* UnitActor = Cast<AUnitBase>(Ow))
                 {
-                    NewItem.AIS_ProjectileClass = UnitActor->ProjectileBaseClass;
-                    
-                    // Populate predicted projectile spawn offset
-                    FVector BaseOffset = UnitActor->ProjectileSpawnOffset;
-                    if (UnitActor->Attributes)
-                    {
-                        BaseOffset.X += UnitActor->Attributes->GetProjectileScaleActorDirectionOffset();
-                        NewItem.AIS_ProjectileSpeed = UnitActor->Attributes->GetProjectileSpeed();
-                    }
-                    
-                    // If a component with the "ProjectileSpawn" tag exists, use its relative location as the base offset.
-                    // This allows predicted projectiles to match units with custom muzzle components.
-                    const TArray<UActorComponent*> SpawnComps = UnitActor->GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
-                    if (SpawnComps.Num() > 0)
-                    {
-                        if (const USceneComponent* SpawnComp = Cast<USceneComponent>(SpawnComps[0]))
-                        {
-                            // Correctly calculate relative offset from Actor Root (Ground/Feet)
-                            FVector SpawnOffset = UnitActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
-                            SpawnOffset.Z += UnitActor->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-                            BaseOffset = SpawnOffset;
-                        }
-                    }
-                    NewItem.AIS_ProjectileSpawnOffset = BaseOffset;
+                    // Projectile data is now handled locally on client via UnitBase
                 }
             }
         }
@@ -360,7 +337,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         {
             NewItem.CS_Health = CS->Health;
             NewItem.CS_Shield = CS->Shield;
-            NewItem.CS_TeamId = CS->TeamId;
+            NewItem.CS_TeamId = (uint8)CS->TeamId;
         }
         if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
         {
@@ -370,8 +347,6 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         {
             NewItem.AIS_StateTimer = AIS->StateTimer;
             NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
-            NewItem.AIS_ProjectileClass = AIS->LastProjectileClass;
-            NewItem.AIS_ProjectileSpeed = AIS->LastProjectileSpeed;
             NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
             NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
         }
@@ -734,7 +709,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         {
                             NewItem.CS_Health = CS->Health;
                             NewItem.CS_Shield = CS->Shield;
-                            NewItem.CS_TeamId = CS->TeamId;
+                            NewItem.CS_TeamId = (uint8)CS->TeamId;
                         }
                         if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
                         {
@@ -744,8 +719,6 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         {
                             NewItem.AIS_StateTimer = AIS->StateTimer;
                             NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
-                            NewItem.AIS_ProjectileClass = AIS->LastProjectileClass;
-                            NewItem.AIS_ProjectileSpeed = AIS->LastProjectileSpeed;
                             NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
                             NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
                         }
@@ -913,8 +886,6 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (bDirty)
                             {
                                 Item->AIS_LastTargetNetID = AIS->LastTargetNetID;
-                                Item->AIS_ProjectileClass = AIS->LastProjectileClass;
-                                Item->AIS_ProjectileSpeed = AIS->LastProjectileSpeed;
                                 Item->AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
                             }
                         }

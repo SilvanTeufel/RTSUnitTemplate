@@ -103,7 +103,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	 // --- FMassCombatStatsFragment (subset) ---
 	UPROPERTY() float CS_Health = 0.f;
 	UPROPERTY() float CS_Shield = 0.f;
-	UPROPERTY() int32 CS_TeamId = 0;
+	UPROPERTY() uint8 CS_TeamId = 0;
 
 	// --- FMassAgentCharacteristicsFragment (subset) ---
 	UPROPERTY() float AC_FlyHeight = 0.f;
@@ -123,9 +123,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// --- FMassAIStateFragment (subset) ---
 	UPROPERTY() float AIS_StateTimer = 0.f;
 	UPROPERTY() uint8 AIS_ProjectileFireCounter = 0;
-	UPROPERTY() TSubclassOf<class AProjectile> AIS_ProjectileClass;
-	UPROPERTY() FVector_NetQuantize10 AIS_ProjectileSpawnOffset = FVector::ZeroVector;
-	UPROPERTY() float AIS_ProjectileSpeed = 0.f;
 	
 	UPROPERTY()
 	uint32 AIS_LastTargetNetID = 0u;
@@ -180,8 +177,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, AITargetLastKnownLocation(FVector::ZeroVector)
 		, AbilityTargetLocation(FVector::ZeroVector)
 		, AIS_ProjectileFireCounter(0)
-		, AIS_ProjectileSpawnOffset(FVector::ZeroVector)
-		, AIS_ProjectileSpeed(0.f)
 		, AIS_LastTargetNetID(0u)
 		, EA_StartScaleTime(0.f)
 		, EA_VisualRotationOffset(FQuat::Identity)

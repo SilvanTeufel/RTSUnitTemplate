@@ -43,6 +43,7 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -80,12 +81,13 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         auto TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             if (bIsClient)
             {
-                ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i);
+                ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i, ActorList[i].GetMutable());
             }
             else
             {
@@ -220,7 +222,7 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
 
 void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
     const FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
-    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx)
+    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor)
 {
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
@@ -277,7 +279,43 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 
                     const float AttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
 
-                    if (bIsTargetActive && Dist <= AttackRange && Item->AIS_ProjectileClass)
+                    // Projectile data is now handled locally from the Actor on the client
+                    TSubclassOf<AProjectile> ProjectileClass = nullptr;
+                    float ProjectileSpeed = 0.f;
+                    FVector ProjectileSpawnOffset = FVector::ZeroVector;
+
+                    if (AUnitBase* MyActor = Cast<AUnitBase>(Actor))
+                    {
+                        ProjectileClass = MyActor->ProjectileBaseClass;
+                        ProjectileSpawnOffset = MyActor->ProjectileSpawnOffset;
+
+                        if (MyActor->Attributes)
+                        {
+                            ProjectileSpawnOffset.X += MyActor->Attributes->GetProjectileScaleActorDirectionOffset();
+                            ProjectileSpeed = MyActor->Attributes->GetProjectileSpeed();
+                        }
+                        else if (ProjectileClass)
+                        {
+                            if (const AProjectile* ProjCDO = Cast<AProjectile>(ProjectileClass->GetDefaultObject()))
+                            {
+                                ProjectileSpeed = ProjCDO->MovementSpeed;
+                            }
+                        }
+
+                        // Check for ProjectileSpawn component
+                        const TArray<UActorComponent*> SpawnComps = MyActor->GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
+                        if (SpawnComps.Num() > 0)
+                        {
+                            if (const USceneComponent* SpawnComp = Cast<USceneComponent>(SpawnComps[0]))
+                            {
+                                FVector SpawnOffset = MyActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+                                SpawnOffset.Z += MyActor->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+                                ProjectileSpawnOffset = SpawnOffset;
+                            }
+                        }
+                    }
+
+                    if (bIsTargetActive && Dist <= AttackRange && ProjectileClass)
                     {
                         if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
                         {
@@ -287,7 +325,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                             GroundLoc.Z = CharFrag.LastGroundLocation;
                             SpawnXf.SetLocation(GroundLoc);
 
-                            const FVector SpawnPos = SpawnXf.TransformPosition(Item->AIS_ProjectileSpawnOffset);
+                            const FVector SpawnPos = SpawnXf.TransformPosition(ProjectileSpawnOffset);
                             SpawnXf.SetLocation(SpawnPos);
 
                             FVector TargetLoc = TargetFrag.LastKnownLocation;
@@ -298,13 +336,13 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                             }
 
                             VisualManager->SpawnMassProjectile(
-                                Item->AIS_ProjectileClass,
+                                ProjectileClass,
                                 SpawnXf,
                                 nullptr, nullptr,
                                 TargetLoc,
                                 Entity,
                                 TargetFrag.TargetEntity,
-                                Item->AIS_ProjectileSpeed,
+                                ProjectileSpeed,
                                 Stats.TeamId,
                                 Stats.bUseProjectile,
                                 0.f,

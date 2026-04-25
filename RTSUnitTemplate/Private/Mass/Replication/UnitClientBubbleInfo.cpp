@@ -43,20 +43,6 @@ void FUnitReplicationItem::PostReplicatedAdd(const FUnitReplicationArray& InArra
 		const FTransform Xf = BuildTransformFromItem(*this);
 		UnitReplicationCache::SetLatest(NetID, Xf);
 
-		if (UWorld* World = InArraySerializer.OwnerBubble->GetWorld())
-		{
-			if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
-			{
-				if (UMassActorBindingComponent* MyBind = Cache->FindBindingByMassNetID(NetID.GetValue()))
-				{
-					if (AUnitBase* MyActor = Cast<AUnitBase>(MyBind->GetOwner()))
-					{
-						MyActor->ProjectileSpawnOffset = AIS_ProjectileSpawnOffset;
-					}
-				}
-			}
-		}
-
 		// Synchronize fire counter to avoid spawning on join/initial replication
 		LastServerProjectileFireCounter = AIS_ProjectileFireCounter;
 		PredictedPendingShots = 0;
@@ -77,17 +63,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 		{
 			if (UWorld* World = InArraySerializer.OwnerBubble->GetWorld())
 			{
-				if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
-				{
-					if (UMassActorBindingComponent* MyBind = Cache->FindBindingByMassNetID(NetID.GetValue()))
-					{
-						if (AUnitBase* MyActor = Cast<AUnitBase>(MyBind->GetOwner()))
-						{
-							// Sync the replicated muzzle offset to the actor so predicted/multicast shots use the correct position
-							MyActor->ProjectileSpawnOffset = AIS_ProjectileSpawnOffset;
-						}
-					}
-				}
+				// Projectile data is now retrieved locally from the actor in the spawn block below
 			}
 
 			// Ring-safe delta for 8-bit counter
@@ -110,9 +86,8 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 			if (UseDelta > 0)
 			{
-				UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] PostReplicatedChange: NetID=%u, RawDelta=%d, Used=%d, Spawning=%d, PendingAfter=%d, Class=%s"), 
-					NetID.GetValue(), RawDelta, UsedFromPending, UseDelta, PredictedPendingShots, 
-					AIS_ProjectileClass ? *AIS_ProjectileClass->GetName() : TEXT("None"));
+				UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] PostReplicatedChange: NetID=%u, RawDelta=%d, Used=%d, Spawning=%d, PendingAfter=%d"), 
+					NetID.GetValue(), RawDelta, UsedFromPending, UseDelta, PredictedPendingShots);
 			}
 
 			LastServerProjectileFireCounter = AIS_ProjectileFireCounter;
@@ -120,29 +95,76 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 			bPredictedLatch = false;
 			PredictionTimer = 0.f;
 
-			if (UseDelta > 0 && AIS_ProjectileClass)
+			if (UseDelta > 0)
 			{
 				if (UWorld* World = InArraySerializer.OwnerBubble->GetWorld())
 				{
+					TSubclassOf<AProjectile> ProjectileClass = nullptr;
+					float ProjectileSpeed = 0.f;
+					FVector ProjectileSpawnOffset = FVector::ZeroVector;
+
+					if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+					{
+						if (UMassActorBindingComponent* MyBind = Cache->FindBindingByMassNetID(NetID.GetValue()))
+						{
+							if (AUnitBase* MyActor = Cast<AUnitBase>(MyBind->GetOwner()))
+							{
+								ProjectileClass = MyActor->ProjectileBaseClass;
+								ProjectileSpawnOffset = MyActor->ProjectileSpawnOffset;
+
+								if (MyActor->Attributes)
+								{
+									ProjectileSpawnOffset.X += MyActor->Attributes->GetProjectileScaleActorDirectionOffset();
+									ProjectileSpeed = MyActor->Attributes->GetProjectileSpeed();
+								}
+								else if (ProjectileClass)
+								{
+									if (const AProjectile* ProjCDO = Cast<AProjectile>(ProjectileClass->GetDefaultObject()))
+									{
+										ProjectileSpeed = ProjCDO->MovementSpeed;
+									}
+								}
+
+								// Check for ProjectileSpawn component
+								const TArray<UActorComponent*> SpawnComps = MyActor->GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
+								if (SpawnComps.Num() > 0)
+								{
+									if (const USceneComponent* SpawnComp = Cast<USceneComponent>(SpawnComps[0]))
+									{
+										FVector SpawnOffset = MyActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+										SpawnOffset.Z += MyActor->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+										ProjectileSpawnOffset = SpawnOffset;
+									}
+								}
+							}
+						}
+					}
+
+					if (!ProjectileClass)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[CLIENT] PostReplicatedChange: ProjectileClass could not be resolved locally for NetID=%u"), NetID.GetValue());
+						return;
+					}
+
 					if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
 					{
 						// Resolve target location
 						FVector TargetLoc = AIS_ProjectileTargetLocation;
- 					if (TargetLoc.IsZero())
- 					{
- 						TargetLoc = AITargetLastKnownLocation;
- 					}
+						if (TargetLoc.IsZero())
+						{
+							TargetLoc = AITargetLastKnownLocation;
+						}
 
- 					// Startup/validation gates: skip visual spawn if unit target invalid
- 					if (TargetLoc.IsNearlyZero())
- 					{
- 						UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] Skipping projectile spawn (NetID=%u): Invalid TargetLoc"), NetID.GetValue());
- 						return;
- 					}
+						// Startup/validation gates: skip visual spawn if unit target invalid
+						if (TargetLoc.IsNearlyZero())
+						{
+							UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] Skipping projectile spawn (NetID=%u): Invalid TargetLoc"), NetID.GetValue());
+							return;
+						}
 
 						// Calculate spawn location (roughly from the shooter's position)
 						FTransform SpawnXf = BuildTransformFromItem(*this);
-						const FVector SpawnPos = SpawnXf.TransformPosition(AIS_ProjectileSpawnOffset);
+						const FVector SpawnPos = SpawnXf.TransformPosition(ProjectileSpawnOffset);
 						SpawnXf.SetLocation(SpawnPos);
 
 						// Re-orient SpawnXf towards TargetLoc for non-homing or initial direction
@@ -178,7 +200,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 							float LocalInitialAngle = 0.f;
 							float LocalRotSpeed = 360.f;
 							float LocalMaxRadius = 0.f;
-                            FTransform LocalSpawnXf = SpawnXf;
+							FTransform LocalSpawnXf = SpawnXf;
 							FVector LocalTargetLoc = TargetLoc;
 
 							const bool bIsFollowTarget = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0;
@@ -190,18 +212,16 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 								LocalRotSpeed *= FMath::RandRange(0.9f, 1.1f);
 								LocalMaxRadius *= FMath::RandRange(0.9f, 1.1f);
 
-                                if (UseDelta > 1)
-                                {
-                                    // Spatial jitter for bursts
-                                    FVector Jitter = FMath::VRand() * 20.f;
-                                    LocalSpawnXf.AddToTranslation(Jitter);
-                                }
+								if (UseDelta > 1)
+								{
+									// Spatial jitter for bursts
+									FVector Jitter = FMath::VRand() * 20.f;
+									LocalSpawnXf.AddToTranslation(Jitter);
+								}
 							}
 
 							// Local copies for capture (if deferred)
-							TSubclassOf<AProjectile> ProjectileClass = AIS_ProjectileClass;
-							float Speed = AIS_ProjectileSpeed;
-							int32 TeamId = CS_TeamId;
+							int32 TeamId = (int32)CS_TeamId;
 							bool bFollow = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0;
 							float Interp = 2.f;
 							FVector LocalScale = FVector::OneVector;
@@ -214,7 +234,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 								LocalTargetLoc,
 								FMassEntityHandle(),
 								TargetHandle,
-								Speed,
+								ProjectileSpeed,
 								TeamId,
 								bFollow,
 								LocalInitialAngle,
@@ -229,10 +249,6 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 						}
 					}
 				}
-			}
-			else if (UseDelta > 0 && !AIS_ProjectileClass)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[CLIENT] PostReplicatedChange: ProjectileClass is null for NetID=%u"), NetID.GetValue());
 			}
 		}
 	}
