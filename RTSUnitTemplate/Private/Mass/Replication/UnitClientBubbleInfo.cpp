@@ -133,12 +133,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
  						TargetLoc = AITargetLastKnownLocation;
  					}
 
- 					// Startup/validation gates: skip visual spawn if unit not yet initialized or target invalid
- 					if (!CS_IsInitialized)
- 					{
- 						UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] Skipping projectile spawn (NetID=%u): CS_IsInitialized=false"), NetID.GetValue());
- 						return;
- 					}
+ 					// Startup/validation gates: skip visual spawn if unit target invalid
  					if (TargetLoc.IsNearlyZero())
  					{
  						UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] Skipping projectile spawn (NetID=%u): Invalid TargetLoc"), NetID.GetValue());
@@ -147,11 +142,6 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 						// Calculate spawn location (roughly from the shooter's position)
 						FTransform SpawnXf = BuildTransformFromItem(*this);
-						// Use AC_LastGroundLocation as a stable Z-anchor on clients.
-						FVector GroundLoc = SpawnXf.GetLocation();
-						GroundLoc.Z = AC_LastGroundLocation;
-						SpawnXf.SetLocation(GroundLoc);
-
 						const FVector SpawnPos = SpawnXf.TransformPosition(AIS_ProjectileSpawnOffset);
 						SpawnXf.SetLocation(SpawnPos);
 
@@ -185,9 +175,9 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 						for (int32 i = 0; i < UseDelta; ++i)
 						{
 							// Add some local variation for multi-shot projectiles so they don't perfectly overlap
-							float LocalInitialAngle = AIS_HomingInitialAngle;
-							float LocalRotSpeed = AIS_HomingRotationSpeed;
-							float LocalMaxRadius = AIS_HomingMaxSpiralRadius;
+							float LocalInitialAngle = 0.f;
+							float LocalRotSpeed = 360.f;
+							float LocalMaxRadius = 0.f;
                             FTransform LocalSpawnXf = SpawnXf;
 							FVector LocalTargetLoc = TargetLoc;
 
@@ -205,14 +195,6 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
                                     // Spatial jitter for bursts
                                     FVector Jitter = FMath::VRand() * 20.f;
                                     LocalSpawnXf.AddToTranslation(Jitter);
-
-									// Apply spread to target location if multiple shots
-									if (AIS_ProjectileSpread > 0.f)
-									{
-										const int32 MultiAngle = (i == 0) ? 0 : ((i & 1) ? 1 : -1);
-										FVector SideDir = FVector::CrossProduct(FVector::UpVector, ShootDir).GetSafeNormal();
-										LocalTargetLoc += SideDir * AIS_ProjectileSpread * MultiAngle;
-									}
                                 }
 							}
 
@@ -221,8 +203,8 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 							float Speed = AIS_ProjectileSpeed;
 							int32 TeamId = CS_TeamId;
 							bool bFollow = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0;
-							float Interp = AIS_HomingInterpSpeed;
-							FVector LocalScale = AIS_ProjectileScale;
+							float Interp = 2.f;
+							FVector LocalScale = FVector::OneVector;
 
 							// Direct call to VisualManager - it handles deferral internally now
 							VisualManager->SpawnMassProjectile(
@@ -241,8 +223,8 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 								Interp,
 								nullptr,
 								LocalScale,
-								AIS_ProjectileDamage,
-								AIS_ProjectileMaxPiercedTargets
+								0.f,
+								1
 							);
 						}
 					}
@@ -281,7 +263,7 @@ AUnitClientBubbleInfo::AUnitClientBubbleInfo(const FObjectInitializer& ObjectIni
 
 	// Aktiviere Replikation für diesen Actor
 	bReplicates = true;
-	bAlwaysRelevant = true;
+	bAlwaysRelevant = false;
 	NetPriority = 0.5f; // Lower priority to allow important RPCs (like work area updates) to pass through first
 	// Read desired replication rate (Hz) from CVAR; default 5
 	float Hz = CVarRTS_Bubble_NetUpdateHz.GetValueOnGameThread();

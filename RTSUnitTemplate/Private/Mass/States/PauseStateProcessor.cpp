@@ -307,14 +307,14 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                                 Item->AIS_ProjectileSpeed,
                                 Stats.TeamId,
                                 Stats.bUseProjectile,
-                                Item->AIS_HomingInitialAngle,
-                                Item->AIS_HomingRotationSpeed,
-                                Item->AIS_HomingMaxSpiralRadius,
-                                Item->AIS_HomingInterpSpeed,
+                                0.f,
+                                360.f,
+                                0.f,
+                                2.f,
                                 &Context.Defer(),
-                                Item->AIS_ProjectileScale,
-                                Item->AIS_ProjectileDamage,
-                                Item->AIS_ProjectileMaxPiercedTargets
+                                FVector::OneVector,
+                                0.f,
+                                1
                             );
                             
                             Context.Defer().AddTag<FMassStateAttackTag>(Entity);

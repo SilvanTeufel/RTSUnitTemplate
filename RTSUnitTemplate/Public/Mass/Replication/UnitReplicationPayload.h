@@ -100,31 +100,13 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	FVector_NetQuantize10 AbilityTargetLocation;
 
-	 // --- FMassCombatStatsFragment (full) ---
+	 // --- FMassCombatStatsFragment (subset) ---
 	UPROPERTY() float CS_Health = 0.f;
-	UPROPERTY() float CS_MaxHealth = 0.f;
-	UPROPERTY() float CS_RunSpeed = 0.f;
-	UPROPERTY() int32 CS_TeamId = 0;
-	UPROPERTY() float CS_AttackRange = 0.f;
-	UPROPERTY() float CS_AttackDamage = 0.f;
-	UPROPERTY() float CS_AttackDuration = 0.f;
-	UPROPERTY() float CS_IsAttackedDuration = 0.f;
-	UPROPERTY() float CS_CastTime = 0.f;
-	UPROPERTY() bool CS_IsInitialized = true;
-	UPROPERTY() float CS_RotationSpeed = 0.f;
-	UPROPERTY() float CS_Armor = 0.f;
-	UPROPERTY() float CS_MagicResistance = 0.f;
 	UPROPERTY() float CS_Shield = 0.f;
-	UPROPERTY() float CS_MaxShield = 0.f;
-	UPROPERTY() float CS_SightRadius = 0.f;
-	UPROPERTY() float CS_LoseSightRadius = 0.f;
-	UPROPERTY() float CS_PauseDuration = 0.f;
+	UPROPERTY() int32 CS_TeamId = 0;
 
 	// --- FMassAgentCharacteristicsFragment (subset) ---
 	UPROPERTY() float AC_FlyHeight = 0.f;
-	// Extended AgentCharacteristics (full)
-	UPROPERTY() float AC_LastGroundLocation = 0.f;
-	UPROPERTY() float AC_DespawnTime = 0.f;
 
 	// --- FMassRotateToMouseFragment ---
 	UPROPERTY()
@@ -138,64 +120,28 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	uint8 RunAnimation_AnimationState = 0; // Use uint8 for EState
 
-	UPROPERTY() float AC_RotationSpeed = 0.f;
-	// REMOVED redundant PositionedTransform fields to save bandwidth
-	UPROPERTY() float AC_CapsuleHeight = 0.f;
-	UPROPERTY() float AC_CapsuleRadius = 0.f;
-
-	// --- FMassAIStateFragment (full) ---
+	// --- FMassAIStateFragment (subset) ---
 	UPROPERTY() float AIS_StateTimer = 0.f;
-	UPROPERTY() FName AIS_PlaceholderSignal = NAME_None;
-	UPROPERTY() FVector_NetQuantize10 AIS_StoredLocation = FVector::ZeroVector;
-	UPROPERTY() float AIS_BirthTime = 0.f;
-	UPROPERTY() float AIS_DeathTime = 0.f;
 	UPROPERTY() uint8 AIS_ProjectileFireCounter = 0;
 	UPROPERTY() TSubclassOf<class AProjectile> AIS_ProjectileClass;
 	UPROPERTY() FVector_NetQuantize10 AIS_ProjectileSpawnOffset = FVector::ZeroVector;
 	UPROPERTY() float AIS_ProjectileSpeed = 0.f;
-	UPROPERTY() float AIS_HomingInitialAngle = 0.f;
-	UPROPERTY() float AIS_HomingRotationSpeed = 0.f;
-	UPROPERTY() float AIS_HomingMaxSpiralRadius = 0.f;
-	UPROPERTY() float AIS_HomingInterpSpeed = 2.f;
 	
 	UPROPERTY()
 	uint32 AIS_LastTargetNetID = 0u;
 
-	// --- Worker and Friendly Target replication ---
-	// NetID of the current AI friendly target entity (0 if none/invalid)
-	UPROPERTY()
-	uint32 AIFriendlyTargetNetID = 0u;
-
-	// Last known location of the friendly target
-	UPROPERTY()
-	FVector_NetQuantize AIFriendlyTargetLastKnownLocation;
-
-	// Build area position for worker state
-	UPROPERTY()
-	FVector_NetQuantize Worker_BuildAreaPosition;
-
 	UPROPERTY()
 	FVector_NetQuantize10 AIS_ProjectileTargetLocation = FVector::ZeroVector;
 
+	// --- Worker and Friendly Target replication ---
 	UPROPERTY()
-	float AIS_ProjectileSpread = 0.f;
+	uint32 AIFriendlyTargetNetID = 0u;
 
 	UPROPERTY()
-	FVector_NetQuantize10 AIS_ProjectileScale = FVector::OneVector;
+	FVector_NetQuantize AIFriendlyTargetLastKnownLocation;
 
 	UPROPERTY()
-	float AIS_ProjectileDamage = 0.f;
-
-	UPROPERTY()
-	int32 AIS_ProjectileMaxPiercedTargets = 1;
-
-	uint8 LastProjectileFireCounter = 0; // Legacy / will remove later if unused
-	
-	// Client-side reconciliation
-	uint8 LastServerProjectileFireCounter = 0;
-	uint8 PredictedPendingShots = 0;
-	float PredictionTimer = 0.f;
-	bool bPredictedLatch = false;
+	FVector_NetQuantize Worker_BuildAreaPosition;
 
 	// --- FMassMoveTargetFragment (subset + versioning) ---
 	UPROPERTY() FVector_NetQuantize10 Move_Center = FVector::ZeroVector;
@@ -203,13 +149,8 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float Move_DesiredSpeed = 0.f;
 	UPROPERTY() uint8 Move_IntentAtGoal = 0; // EMassMovementAction
 	UPROPERTY() float Move_DistanceToGoal = 0.f;
-	// Versioning/ordering to resolve race conditions on client apply
-	// Current movement action ID (from FMassMoveTargetFragment::GetCurrentActionID). 0 means unknown/legacy
 	UPROPERTY() uint16 Move_ActionID = 0;
-	// Server time when the action started (quantized to float). Used as tiebreaker when IDs are equal
 	UPROPERTY() float Move_ServerStartTime = 0.f;
-	// Current movement action enum (from GetCurrentAction). Informational; can help client-side decision making
-	UPROPERTY() uint8 Move_CurrentAction = 0; // EMassMovementAction
 
 	// --- FMassVisualEffectFragment replication ---
 	UPROPERTY() uint8 VE_ActiveEffects = 0; // Bitmask: bit0=Pulsate, bit1=Rotation, bit2=Oscillation
@@ -219,19 +160,16 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() FVector_NetQuantize10 VE_PulsateMaxScale = FVector::OneVector;
 	UPROPERTY() float VE_PulsateHalfPeriod = 0.f;
 
-	// Rotation
-	UPROPERTY() FVector_NetQuantize10 VE_RotationAxis = FVector::UpVector;
-	UPROPERTY() float VE_RotationDegreesPerSecond = 0.f;
-
-	// Oscillation
-	UPROPERTY() FVector_NetQuantize10 VE_OscillationOffsetA = FVector::ZeroVector;
-	UPROPERTY() FVector_NetQuantize10 VE_OscillationOffsetB = FVector::ZeroVector;
-	UPROPERTY() float VE_OscillationCyclesPerSecond = 0.f;
-
 	// --- FEffectAreaImpactFragment replication ---
 	UPROPERTY() float EA_StartScaleTime = 0.f;
 	UPROPERTY() FQuat EA_VisualRotationOffset = FQuat::Identity;
 	UPROPERTY() float EA_RadiusAtImpactStart = 0.f;
+
+	// Client-side reconciliation (NOT replicated)
+	uint8 LastServerProjectileFireCounter = 0;
+	uint8 PredictedPendingShots = 0;
+	float PredictionTimer = 0.f;
+	bool bPredictedLatch = false;
 
 	// Default Constructor
 	FUnitReplicationItem()
@@ -245,14 +183,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, AIS_ProjectileSpawnOffset(FVector::ZeroVector)
 		, AIS_ProjectileSpeed(0.f)
 		, AIS_LastTargetNetID(0u)
-		, AIS_ProjectileScale(FVector::OneVector)
-		, AIS_ProjectileDamage(0.f)
-		, AIS_ProjectileMaxPiercedTargets(1)
-		, LastProjectileFireCounter(0)
-		, LastServerProjectileFireCounter(0)
-		, PredictedPendingShots(0)
-		, PredictionTimer(0.f)
-		, bPredictedLatch(false)
 		, EA_StartScaleTime(0.f)
 		, EA_VisualRotationOffset(FQuat::Identity)
 		, EA_RadiusAtImpactStart(0.f)

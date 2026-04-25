@@ -513,11 +513,11 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 
 	// Fire Blueprint event when crossing 25% or 50% thresholds (up or down)
 	{
-		const float MaxHealth = Attributes->GetMaxHealth();
-		if (MaxHealth > 0.f && OldHealth != NewHealth)
+		const float LocalMaxHealth = Attributes->GetMaxHealth();
+		if (LocalMaxHealth > 0.f && OldHealth != NewHealth)
 		{
-			const float OldPct = OldHealth / MaxHealth;
-			const float NewPct = NewHealth / MaxHealth;
+			const float OldPct = OldHealth / LocalMaxHealth;
+			const float NewPct = NewHealth / LocalMaxHealth;
 
 			auto Fire = [this, NewHealth](bool bIncrease, bool bLow, bool bHigh)
 			{
@@ -1753,7 +1753,7 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
             SetShield_Implementation(CurrentAttributes->GetShield() - NewDamage);
 
         // Grant Experience - FIX: Added team check to prevent XP on friendly fire
-        if (ShootingUnit && ShootingUnit->TeamId != TeamId)
+        if (ShootingUnit && (ShootingUnit->TeamId != TeamId))
         {
             ShootingUnit->IncreaseExperience();
         }
@@ -2056,7 +2056,7 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
         if (UnitToChase) // Ensure UnitToChase is valid
         {
             float DistanceToTarget = FVector::Dist(GetActorLocation(), UnitToChase->GetActorLocation());
-            float AttackRange =Attributes->GetRange(); // Assuming this function exists
+            float LocalAttackRange =Attributes->GetRange(); // Assuming this function exists
 
             AUnitBase* TargetUnit = Cast<AUnitBase>(UnitToChase);
 
@@ -2066,7 +2066,7 @@ void AUnitBase::AddUnitToChase_Implementation(AActor* OtherActor)
                                TargetUnit->Attributes->GetHealth() < TargetUnit->Attributes->GetMaxHealth();
             
             // Adjust the state based on whether we're detecting friendly units
-            if (DistanceToTarget <= AttackRange)
+            if (DistanceToTarget <= LocalAttackRange)
             {
                 // If the target is within attack range, set state to Attack
                 if (DetectFriendlyUnits)

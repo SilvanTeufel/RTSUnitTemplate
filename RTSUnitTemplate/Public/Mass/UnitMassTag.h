@@ -657,6 +657,9 @@ struct FMassCombatStatsFragment : public FMassFragment
 	bool IsInitialized = true;
 	
     UPROPERTY(EditAnywhere, Category = "Stats")
+    bool bIsInitializedOnClient = false;
+
+    UPROPERTY(EditAnywhere, Category = "Stats")
     float RunSpeed = 600.f;
 
 	UPROPERTY(EditAnywhere, Category = "Stats")

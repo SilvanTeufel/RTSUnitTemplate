@@ -644,43 +644,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 											{
     								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
     								CS.Health = TagItem->CS_Health;
-    								CS.MaxHealth = TagItem->CS_MaxHealth;
-    								CS.RunSpeed = TagItem->CS_RunSpeed;
-    								CS.TeamId = TagItem->CS_TeamId;
-    								// Extended combat stats
-    								CS.AttackRange = TagItem->CS_AttackRange;
-    								CS.AttackDamage = TagItem->CS_AttackDamage;
-    								CS.AttackDuration = TagItem->CS_AttackDuration;
-    								CS.IsAttackedDuration = TagItem->CS_IsAttackedDuration;
-    								CS.CastTime = TagItem->CS_CastTime;
-    								CS.IsInitialized = HasBit(UnitReplicationBits::CS_IsInitialized);
-    								CS.RotationSpeed = TagItem->CS_RotationSpeed;
-    								CS.Armor = TagItem->CS_Armor;
-    								CS.MagicResistance = TagItem->CS_MagicResistance;
     								CS.Shield = TagItem->CS_Shield;
-    								CS.MaxShield = TagItem->CS_MaxShield;
-    								CS.SightRadius = TagItem->CS_SightRadius;
-    								CS.LoseSightRadius = TagItem->CS_LoseSightRadius;
-    								CS.PauseDuration = TagItem->CS_PauseDuration;
-    								CS.bUseProjectile = HasBit(UnitReplicationBits::CS_bUseProjectile);
-    								CS.bCanMoveWhileAttacking = HasBit(UnitReplicationBits::CS_bCanMoveWhileAttacking);
-    								CS.bRotatesToMovementIfMoveWhileAttacking = HasBit(UnitReplicationBits::CS_bRotatesToMovementIfMoveWhileAttacking);
+    								CS.TeamId = TagItem->CS_TeamId;
     							}
     							if (CharList.IsValidIndex(EntityIdx))
     							{
     								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-    								AC.bIsFlying = HasBit(UnitReplicationBits::AC_bIsFlying);
-    								AC.bIsInvisible = HasBit(UnitReplicationBits::AC_bIsInvisible);
     								AC.FlyHeight = TagItem->AC_FlyHeight;
-    								AC.bCanOnlyAttackFlying = HasBit(UnitReplicationBits::AC_bCanOnlyAttackFlying);
-    								AC.bCanOnlyAttackGround = HasBit(UnitReplicationBits::AC_bCanOnlyAttackGround);
-    								AC.bCanBeInvisible = HasBit(UnitReplicationBits::AC_bCanBeInvisible);
-    								AC.bCanDetectInvisible = HasBit(UnitReplicationBits::AC_bCanDetectInvisible);
-    								AC.LastGroundLocation = TagItem->AC_LastGroundLocation;
-    								AC.DespawnTime = TagItem->AC_DespawnTime;
-    								AC.RotatesToMovement = HasBit(UnitReplicationBits::AC_RotatesToMovement);
-    								AC.RotatesToEnemy = HasBit(UnitReplicationBits::AC_RotatesToEnemy);
-    								AC.RotationSpeed = TagItem->AC_RotationSpeed;
     								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
     								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
     								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
@@ -692,8 +662,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     										TransformList[EntityIdx].GetMutableTransform() = AC.PositionedTransform;
     									}
     								}
-    								AC.CapsuleHeight = TagItem->AC_CapsuleHeight;
-    								AC.CapsuleRadius = TagItem->AC_CapsuleRadius;
     							}
 								if (RotateToMouseList.IsValidIndex(EntityIdx))
 								{
@@ -736,11 +704,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								AIS.CanMove = HasBit(UnitReplicationBits::AIS_CanMove);
 								AIS.HoldPosition = HasBit(UnitReplicationBits::AIS_HoldPosition);
 								AIS.HasAttacked = HasBit(UnitReplicationBits::AIS_HasAttacked);
-								AIS.PlaceholderSignal = TagItem->AIS_PlaceholderSignal;
-								AIS.StoredLocation = FVector(TagItem->AIS_StoredLocation);
 								AIS.SwitchingState = HasBit(UnitReplicationBits::AIS_SwitchingState);
-								AIS.BirthTime = TagItem->AIS_BirthTime;
-								AIS.DeathTime = TagItem->AIS_DeathTime;
 								AIS.IsInitialized = HasBit(UnitReplicationBits::AIS_IsInitialized);
 							}
 								if (WorkerStatsList.IsValidIndex(EntityIdx))
@@ -922,47 +886,18 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 										AITFrag.TargetEntity.Reset();
 									}
 								}
-								// Also apply replicated CombatStats/Characteristics/AIState from bubble item to ensure full data on client
+								// Also apply replicated CombatStats/Characteristics/AIState from bubble item to ensure subset data on client
  							if (CombatList.IsValidIndex(EntityIdx))
  							{
  								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
  								CS.Health = UseItem->CS_Health;
- 								CS.MaxHealth = UseItem->CS_MaxHealth;
- 								CS.RunSpeed = UseItem->CS_RunSpeed;
- 								CS.TeamId = UseItem->CS_TeamId;
- 								CS.AttackRange = UseItem->CS_AttackRange;
- 								CS.AttackDamage = UseItem->CS_AttackDamage;
- 								CS.AttackDuration = UseItem->CS_AttackDuration;
- 								CS.IsAttackedDuration = UseItem->CS_IsAttackedDuration;
- 								CS.CastTime = UseItem->CS_CastTime;
- 								CS.IsInitialized = UseItem->CS_IsInitialized;
- 								CS.RotationSpeed = UseItem->CS_RotationSpeed;
- 								CS.Armor = UseItem->CS_Armor;
- 								CS.MagicResistance = UseItem->CS_MagicResistance;
  								CS.Shield = UseItem->CS_Shield;
- 								CS.MaxShield = UseItem->CS_MaxShield;
- 								CS.SightRadius = UseItem->CS_SightRadius;
- 								CS.LoseSightRadius = UseItem->CS_LoseSightRadius;
- 								CS.PauseDuration = UseItem->CS_PauseDuration;
- 								CS.bUseProjectile = HasBit2(UnitReplicationBits::CS_bUseProjectile);
- 								CS.bCanMoveWhileAttacking = HasBit2(UnitReplicationBits::CS_bCanMoveWhileAttacking);
- 								CS.bRotatesToMovementIfMoveWhileAttacking = HasBit2(UnitReplicationBits::CS_bRotatesToMovementIfMoveWhileAttacking);
+ 								CS.TeamId = UseItem->CS_TeamId;
  							}
  							if (CharList.IsValidIndex(EntityIdx))
  							{
  								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
- 								AC.bIsFlying = HasBit2(UnitReplicationBits::AC_bIsFlying);
- 								AC.bIsInvisible = HasBit2(UnitReplicationBits::AC_bIsInvisible);
  								AC.FlyHeight = UseItem->AC_FlyHeight;
- 								AC.bCanOnlyAttackFlying = HasBit2(UnitReplicationBits::AC_bCanOnlyAttackFlying);
- 								AC.bCanOnlyAttackGround = HasBit2(UnitReplicationBits::AC_bCanOnlyAttackGround);
- 								AC.bCanBeInvisible = HasBit2(UnitReplicationBits::AC_bCanBeInvisible);
- 								AC.bCanDetectInvisible = HasBit2(UnitReplicationBits::AC_bCanDetectInvisible);
- 								AC.LastGroundLocation = UseItem->AC_LastGroundLocation;
- 								AC.DespawnTime = UseItem->AC_DespawnTime;
- 								AC.RotatesToMovement = HasBit2(UnitReplicationBits::AC_RotatesToMovement);
- 								AC.RotatesToEnemy = HasBit2(UnitReplicationBits::AC_RotatesToEnemy);
- 								AC.RotationSpeed = UseItem->AC_RotationSpeed;
  								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
  								const float LYaw_Inner = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
  								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
@@ -974,8 +909,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  										TransformList[EntityIdx].GetMutableTransform() = AC.PositionedTransform;
  									}
  								}
- 								AC.CapsuleHeight = UseItem->AC_CapsuleHeight;
- 								AC.CapsuleRadius = UseItem->AC_CapsuleRadius;
  							}
  							if (AIStateList.IsValidIndex(EntityIdx))
  							{
@@ -990,11 +923,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								AIS.CanMove = HasBit2(UnitReplicationBits::AIS_CanMove);
  								AIS.HoldPosition = HasBit2(UnitReplicationBits::AIS_HoldPosition);
  								AIS.HasAttacked = HasBit2(UnitReplicationBits::AIS_HasAttacked);
- 								AIS.PlaceholderSignal = UseItem->AIS_PlaceholderSignal;
- 								AIS.StoredLocation = FVector(UseItem->AIS_StoredLocation);
  								AIS.SwitchingState = HasBit2(UnitReplicationBits::AIS_SwitchingState);
- 								AIS.BirthTime = UseItem->AIS_BirthTime;
- 								AIS.DeathTime = UseItem->AIS_DeathTime;
  								AIS.IsInitialized = HasBit2(UnitReplicationBits::AIS_IsInitialized);
  							}
 
@@ -1027,15 +956,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								bool bNewRotation = (UseItem->VE_ActiveEffects & (1 << 1)) != 0;
 								if (bNewRotation && !Effect.bRotationEnabled) Effect.RotationElapsed = 0.f;
 								Effect.bRotationEnabled = bNewRotation;
-								Effect.RotationAxis = FVector(UseItem->VE_RotationAxis);
-								Effect.RotationDegreesPerSecond = UseItem->VE_RotationDegreesPerSecond;
 
 								bool bNewOscillation = (UseItem->VE_ActiveEffects & (1 << 2)) != 0;
 								if (bNewOscillation && !Effect.bOscillationEnabled) Effect.OscillationElapsed = 0.f;
 								Effect.bOscillationEnabled = bNewOscillation;
-								Effect.OscillationOffsetA = FVector(UseItem->VE_OscillationOffsetA);
-								Effect.OscillationOffsetB = FVector(UseItem->VE_OscillationOffsetB);
-								Effect.OscillationCyclesPerSecond = UseItem->VE_OscillationCyclesPerSecond;
 
 								// Resolve ISMs if null
 								if (AMassUnitBase* UnitBase = Cast<AMassUnitBase>(ActorList[EntityIdx].GetMutable()))
