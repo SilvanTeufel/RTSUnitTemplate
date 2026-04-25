@@ -28,12 +28,10 @@ static TAutoConsoleVariable<float> CVarRTS_Bubble_NetUpdateHz(
 // Implementierung der Fast Array Item Callbacks
 static FTransform BuildTransformFromItem(const FUnitReplicationItem& Item)
 {
-	const float Pitch = (static_cast<float>(Item.PitchQuantized) / 65535.0f) * 360.0f;
 	const float Yaw = (static_cast<float>(Item.YawQuantized) / 65535.0f) * 360.0f;
-	const float Roll = (static_cast<float>(Item.RollQuantized) / 65535.0f) * 360.0f;
 	FTransform Xf;
 	Xf.SetLocation(Item.Location);
-	Xf.SetRotation(FQuat(FRotator(Pitch, Yaw, Roll)));
+	Xf.SetRotation(FQuat(FRotator(0.f, Yaw, 0.f)));
 	Xf.SetScale3D(Item.Scale);
 	return Xf;
 }
@@ -193,7 +191,8 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
                             FTransform LocalSpawnXf = SpawnXf;
 							FVector LocalTargetLoc = TargetLoc;
 
-							if (UseDelta > 1 || AIS_bFollowTarget)
+							const bool bIsFollowTarget = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0;
+							if (UseDelta > 1 || bIsFollowTarget)
 							{
 								LocalInitialAngle += (i * (360.f / FMath::Max(1, (int32)UseDelta)));
 								// Add a bit of random jitter
@@ -221,7 +220,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 							TSubclassOf<AProjectile> ProjectileClass = AIS_ProjectileClass;
 							float Speed = AIS_ProjectileSpeed;
 							int32 TeamId = CS_TeamId;
-							bool bFollow = AIS_bFollowTarget;
+							bool bFollow = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0;
 							float Interp = AIS_HomingInterpSpeed;
 							FVector LocalScale = AIS_ProjectileScale;
 

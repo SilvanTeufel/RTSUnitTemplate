@@ -600,6 +600,9 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 											const uint32 BitsBeforeSync = BuildReplicatedTagBits(EMgr, EH);
 											ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
 											const bool bStateChanged = (BitsBeforeSync != TagItem->TagBits);
+
+											auto HasBit = [TagItem](uint32 Bit) { return (TagItem->ReplicationBits & Bit) != 0; };
+
 											// Apply AI target replication to FMassAITargetFragment regardless of transform source
     							if (AITargetList.IsValidIndex(EntityIdx))
     							{
@@ -635,24 +638,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									{
 										AITFrag.FriendlyTargetEntity.Reset();
 									}
-
-    								// Rebuild seen sets from replicated NetID arrays
-    								AITFrag.PreviouslySeen.Reset();
-    								for (const uint32 SeenID : TagItem->AITargetPrevSeenIDs)
-    								{
-    									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(SeenID))
-    									{
-    										AITFrag.PreviouslySeen.Add(*Found);
-    									}
-    								}
-    								AITFrag.CurrentlySeen.Reset();
-    								for (const uint32 SeenID : TagItem->AITargetCurrSeenIDs)
-    								{
-    									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(SeenID))
-    									{
-    										AITFrag.CurrentlySeen.Add(*Found);
-    									}
-    								}
     							}
     							// Apply replicated Combat/Characteristics/AIState subsets
 											if (CombatList.IsValidIndex(EntityIdx))
@@ -668,7 +653,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								CS.AttackDuration = TagItem->CS_AttackDuration;
     								CS.IsAttackedDuration = TagItem->CS_IsAttackedDuration;
     								CS.CastTime = TagItem->CS_CastTime;
-    								CS.IsInitialized = TagItem->CS_IsInitialized;
+    								CS.IsInitialized = HasBit(UnitReplicationBits::CS_IsInitialized);
     								CS.RotationSpeed = TagItem->CS_RotationSpeed;
     								CS.Armor = TagItem->CS_Armor;
     								CS.MagicResistance = TagItem->CS_MagicResistance;
@@ -677,32 +662,30 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								CS.SightRadius = TagItem->CS_SightRadius;
     								CS.LoseSightRadius = TagItem->CS_LoseSightRadius;
     								CS.PauseDuration = TagItem->CS_PauseDuration;
-    								CS.bUseProjectile = TagItem->CS_bUseProjectile;
-    								CS.bCanMoveWhileAttacking = TagItem->CS_bCanMoveWhileAttacking;
-    								CS.bRotatesToMovementIfMoveWhileAttacking = TagItem->CS_bRotatesToMovementIfMoveWhileAttacking;
+    								CS.bUseProjectile = HasBit(UnitReplicationBits::CS_bUseProjectile);
+    								CS.bCanMoveWhileAttacking = HasBit(UnitReplicationBits::CS_bCanMoveWhileAttacking);
+    								CS.bRotatesToMovementIfMoveWhileAttacking = HasBit(UnitReplicationBits::CS_bRotatesToMovementIfMoveWhileAttacking);
     							}
     							if (CharList.IsValidIndex(EntityIdx))
     							{
     								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-    								AC.bIsFlying = TagItem->AC_bIsFlying;
-    								AC.bIsInvisible = TagItem->AC_bIsInvisible;
+    								AC.bIsFlying = HasBit(UnitReplicationBits::AC_bIsFlying);
+    								AC.bIsInvisible = HasBit(UnitReplicationBits::AC_bIsInvisible);
     								AC.FlyHeight = TagItem->AC_FlyHeight;
-    								AC.bCanOnlyAttackFlying = TagItem->AC_bCanOnlyAttackFlying;
-    								AC.bCanOnlyAttackGround = TagItem->AC_bCanOnlyAttackGround;
-    								AC.bCanBeInvisible = TagItem->AC_bCanBeInvisible;
-    								AC.bCanDetectInvisible = TagItem->AC_bCanDetectInvisible;
+    								AC.bCanOnlyAttackFlying = HasBit(UnitReplicationBits::AC_bCanOnlyAttackFlying);
+    								AC.bCanOnlyAttackGround = HasBit(UnitReplicationBits::AC_bCanOnlyAttackGround);
+    								AC.bCanBeInvisible = HasBit(UnitReplicationBits::AC_bCanBeInvisible);
+    								AC.bCanDetectInvisible = HasBit(UnitReplicationBits::AC_bCanDetectInvisible);
     								AC.LastGroundLocation = TagItem->AC_LastGroundLocation;
     								AC.DespawnTime = TagItem->AC_DespawnTime;
-    								AC.RotatesToMovement = TagItem->AC_RotatesToMovement;
-    								AC.RotatesToEnemy = TagItem->AC_RotatesToEnemy;
+    								AC.RotatesToMovement = HasBit(UnitReplicationBits::AC_RotatesToMovement);
+    								AC.RotatesToEnemy = HasBit(UnitReplicationBits::AC_RotatesToEnemy);
     								AC.RotationSpeed = TagItem->AC_RotationSpeed;
     								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
-    								const float LPitch = (static_cast<float>(TagItem->PitchQuantized) / 65535.0f) * 360.0f;
     								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
-    								const float LRoll  = (static_cast<float>(TagItem->RollQuantized)  / 65535.0f) * 360.0f;
     								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
     								{
-    									AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(TagItem->Location), FVector(TagItem->Scale));
+    									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(TagItem->Location), FVector(TagItem->Scale));
     									AC.bTransformDirty = true;
     									if (TransformList.IsValidIndex(EntityIdx))
     									{
@@ -749,16 +732,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								{
 									AIS.StateTimer = TagItem->AIS_StateTimer;
 								}
-								AIS.CanAttack = TagItem->AIS_CanAttack;
-								AIS.CanMove = TagItem->AIS_CanMove;
-								AIS.HoldPosition = TagItem->AIS_HoldPosition;
-								AIS.HasAttacked = TagItem->AIS_HasAttacked;
+								AIS.CanAttack = HasBit(UnitReplicationBits::AIS_CanAttack);
+								AIS.CanMove = HasBit(UnitReplicationBits::AIS_CanMove);
+								AIS.HoldPosition = HasBit(UnitReplicationBits::AIS_HoldPosition);
+								AIS.HasAttacked = HasBit(UnitReplicationBits::AIS_HasAttacked);
 								AIS.PlaceholderSignal = TagItem->AIS_PlaceholderSignal;
 								AIS.StoredLocation = FVector(TagItem->AIS_StoredLocation);
-								AIS.SwitchingState = TagItem->AIS_SwitchingState;
+								AIS.SwitchingState = HasBit(UnitReplicationBits::AIS_SwitchingState);
 								AIS.BirthTime = TagItem->AIS_BirthTime;
 								AIS.DeathTime = TagItem->AIS_DeathTime;
-								AIS.IsInitialized = TagItem->AIS_IsInitialized;
+								AIS.IsInitialized = HasBit(UnitReplicationBits::AIS_IsInitialized);
 							}
 								if (WorkerStatsList.IsValidIndex(EntityIdx))
 								{
@@ -767,16 +750,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								if (EffectAreaImpactList.IsValidIndex(EntityIdx))
 								{
 									FEffectAreaImpactFragment& Impact = EffectAreaImpactList[EntityIdx];
-									Impact.bImpactVFXTriggered = TagItem->EA_bImpactVFXTriggered;
-									Impact.bIsScalingAfterImpact = TagItem->EA_bIsScalingAfterImpact;
-									Impact.bImpactScaleTriggered = TagItem->EA_bImpactScaleTriggered;
-									Impact.bPendingDestruction = TagItem->EA_bPendingDestruction;
+									Impact.bImpactVFXTriggered = HasBit(UnitReplicationBits::EA_bImpactVFXTriggered);
+									Impact.bIsScalingAfterImpact = HasBit(UnitReplicationBits::EA_bIsScalingAfterImpact);
+									Impact.bImpactScaleTriggered = HasBit(UnitReplicationBits::EA_bImpactScaleTriggered);
+									Impact.bPendingDestruction = HasBit(UnitReplicationBits::EA_bPendingDestruction);
 									Impact.StartScaleTime = TagItem->EA_StartScaleTime;
 									Impact.VisualRotationOffset = TagItem->EA_VisualRotationOffset;
 									Impact.RadiusAtImpactStart = TagItem->EA_RadiusAtImpactStart;
 								}
 								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
-								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && TagItem->Move_bHasTarget)
+								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && HasBit(UnitReplicationBits::Move_bHasTarget))
 								{
 									FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
 									// Decide if incoming payload is newer than local fragment using ActionID first, then ServerStartTime
@@ -843,18 +826,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								}
 											if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
 											{
- 											UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits);
- 											UE_LOG(LogTemp, Log, TEXT("ClientBubble AITarget: NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetNetID=%u"),
- 												NetIDList[EntityIdx].NetID.GetValue(),
- 												(TagItem->AITargetFlags & 1u)?1:0,
- 												(TagItem->AITargetFlags & 2u)?1:0,
- 												*FVector(TagItem->AITargetLastKnownLocation).ToString(),
- 												*FVector(TagItem->AbilityTargetLocation).ToString(),
- 												TagItem->AITargetNetID);
- 											UE_LOG(LogTemp, Log, TEXT("ClientRep Frags: Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
- 												TagItem->CS_Health, TagItem->CS_MaxHealth, TagItem->CS_RunSpeed, TagItem->CS_TeamId,
- 												TagItem->AC_bIsFlying?1:0, TagItem->AC_bIsInvisible?1:0, TagItem->AC_FlyHeight,
- 												TagItem->AIS_StateTimer, TagItem->AIS_CanAttack?1:0, TagItem->AIS_CanMove?1:0, TagItem->AIS_HoldPosition?1:0);
+												UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x Status=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits, TagItem->ReplicationBits);
 											}
 									}
 								}
@@ -898,11 +870,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							
 							if (UseItem)
 							{
+								auto HasBit2 = [UseItem](uint32 Bit) { return (UseItem->ReplicationBits & Bit) != 0; };
+
 								// Dequantize rotation and build transform
-								const float Pitch = (static_cast<float>(UseItem->PitchQuantized) / 65535.0f) * 360.0f;
-								const float Yaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
-								const float Roll  = (static_cast<float>(UseItem->RollQuantized)  / 65535.0f) * 360.0f;
-								FinalXf = FTransform(FQuat(FRotator(Pitch, Yaw, Roll)), FVector(UseItem->Location), FVector(UseItem->Scale));
+								const float LYaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
+								FinalXf = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(UseItem->Location), FVector(UseItem->Scale));
 								bFromBubble = true;
    							// Apply replicated tag bits to this entity on the client
 							if (UMassEntitySubsystem* ES = World->GetSubsystem<UMassEntitySubsystem>())
@@ -972,32 +944,30 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								CS.SightRadius = UseItem->CS_SightRadius;
  								CS.LoseSightRadius = UseItem->CS_LoseSightRadius;
  								CS.PauseDuration = UseItem->CS_PauseDuration;
- 								CS.bUseProjectile = UseItem->CS_bUseProjectile;
- 								CS.bCanMoveWhileAttacking = UseItem->CS_bCanMoveWhileAttacking;
- 								CS.bRotatesToMovementIfMoveWhileAttacking = UseItem->CS_bRotatesToMovementIfMoveWhileAttacking;
+ 								CS.bUseProjectile = HasBit2(UnitReplicationBits::CS_bUseProjectile);
+ 								CS.bCanMoveWhileAttacking = HasBit2(UnitReplicationBits::CS_bCanMoveWhileAttacking);
+ 								CS.bRotatesToMovementIfMoveWhileAttacking = HasBit2(UnitReplicationBits::CS_bRotatesToMovementIfMoveWhileAttacking);
  							}
  							if (CharList.IsValidIndex(EntityIdx))
  							{
  								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
- 								AC.bIsFlying = UseItem->AC_bIsFlying;
- 								AC.bIsInvisible = UseItem->AC_bIsInvisible;
+ 								AC.bIsFlying = HasBit2(UnitReplicationBits::AC_bIsFlying);
+ 								AC.bIsInvisible = HasBit2(UnitReplicationBits::AC_bIsInvisible);
  								AC.FlyHeight = UseItem->AC_FlyHeight;
- 								AC.bCanOnlyAttackFlying = UseItem->AC_bCanOnlyAttackFlying;
- 								AC.bCanOnlyAttackGround = UseItem->AC_bCanOnlyAttackGround;
- 								AC.bCanBeInvisible = UseItem->AC_bCanBeInvisible;
- 								AC.bCanDetectInvisible = UseItem->AC_bCanDetectInvisible;
+ 								AC.bCanOnlyAttackFlying = HasBit2(UnitReplicationBits::AC_bCanOnlyAttackFlying);
+ 								AC.bCanOnlyAttackGround = HasBit2(UnitReplicationBits::AC_bCanOnlyAttackGround);
+ 								AC.bCanBeInvisible = HasBit2(UnitReplicationBits::AC_bCanBeInvisible);
+ 								AC.bCanDetectInvisible = HasBit2(UnitReplicationBits::AC_bCanDetectInvisible);
  								AC.LastGroundLocation = UseItem->AC_LastGroundLocation;
  								AC.DespawnTime = UseItem->AC_DespawnTime;
- 								AC.RotatesToMovement = UseItem->AC_RotatesToMovement;
- 								AC.RotatesToEnemy = UseItem->AC_RotatesToEnemy;
+ 								AC.RotatesToMovement = HasBit2(UnitReplicationBits::AC_RotatesToMovement);
+ 								AC.RotatesToEnemy = HasBit2(UnitReplicationBits::AC_RotatesToEnemy);
  								AC.RotationSpeed = UseItem->AC_RotationSpeed;
  								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
- 								const float LPitch = (static_cast<float>(UseItem->PitchQuantized) / 65535.0f) * 360.0f;
- 								const float LYaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
- 								const float LRoll  = (static_cast<float>(UseItem->RollQuantized)  / 65535.0f) * 360.0f;
+ 								const float LYaw_Inner = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
  								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
  								{
- 									AC.PositionedTransform = FTransform(FQuat(FRotator(LPitch, LYaw, LRoll)), FVector(UseItem->Location), FVector(UseItem->Scale));
+ 									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw_Inner, 0.f)), FVector(UseItem->Location), FVector(UseItem->Scale));
  									AC.bTransformDirty = true;
  									if (TransformList.IsValidIndex(EntityIdx))
  									{
@@ -1016,16 +986,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								{
  									AIS.StateTimer = UseItem->AIS_StateTimer;
  								}
- 								AIS.CanAttack = UseItem->AIS_CanAttack;
- 								AIS.CanMove = UseItem->AIS_CanMove;
- 								AIS.HoldPosition = UseItem->AIS_HoldPosition;
- 								AIS.HasAttacked = UseItem->AIS_HasAttacked;
+ 								AIS.CanAttack = HasBit2(UnitReplicationBits::AIS_CanAttack);
+ 								AIS.CanMove = HasBit2(UnitReplicationBits::AIS_CanMove);
+ 								AIS.HoldPosition = HasBit2(UnitReplicationBits::AIS_HoldPosition);
+ 								AIS.HasAttacked = HasBit2(UnitReplicationBits::AIS_HasAttacked);
  								AIS.PlaceholderSignal = UseItem->AIS_PlaceholderSignal;
  								AIS.StoredLocation = FVector(UseItem->AIS_StoredLocation);
- 								AIS.SwitchingState = UseItem->AIS_SwitchingState;
+ 								AIS.SwitchingState = HasBit2(UnitReplicationBits::AIS_SwitchingState);
  								AIS.BirthTime = UseItem->AIS_BirthTime;
  								AIS.DeathTime = UseItem->AIS_DeathTime;
- 								AIS.IsInitialized = UseItem->AIS_IsInitialized;
+ 								AIS.IsInitialized = HasBit2(UnitReplicationBits::AIS_IsInitialized);
  							}
 
  							if (RunAnimList.IsValidIndex(EntityIdx))
@@ -1036,17 +1006,18 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  							}
 							
  							if (EffectList.IsValidIndex(EntityIdx))
-							{
-								FMassVisualEffectFragment& Effect = EffectList[EntityIdx];
+ 							{
+ 								FMassVisualEffectFragment& Effect = EffectList[EntityIdx];
+								const bool bNewForceHidden = HasBit2(UnitReplicationBits::VE_bForceHidden);
 
-								if (Effect.bForceHidden != UseItem->VE_bForceHidden)
-								{
-									UE_LOG(LogTemp, Log, TEXT("[ClientRep] Visibility changed for NetID=%u: %s"), 
-										UseItem->NetID.GetValue(), UseItem->VE_bForceHidden ? TEXT("HIDDEN") : TEXT("VISIBLE"));
-								}
-								Effect.bForceHidden = UseItem->VE_bForceHidden;
-								
-								bool bNewPulsate = (UseItem->VE_ActiveEffects & (1 << 0)) != 0;
+ 								if (Effect.bForceHidden != bNewForceHidden)
+ 								{
+ 									UE_LOG(LogTemp, Log, TEXT("[ClientRep] Visibility changed for NetID=%u: %s"), 
+ 										UseItem->NetID.GetValue(), bNewForceHidden ? TEXT("HIDDEN") : TEXT("VISIBLE"));
+ 								}
+ 								Effect.bForceHidden = bNewForceHidden;
+ 								
+ 								bool bNewPulsate = (UseItem->VE_ActiveEffects & (1 << 0)) != 0;
 								if (bNewPulsate && !Effect.bPulsateEnabled) Effect.PulsateElapsed = 0.f;
 								Effect.bPulsateEnabled = bNewPulsate;
 								Effect.PulsateMinScale = FVector(UseItem->VE_PulsateMinScale);
@@ -1082,7 +1053,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							}
 
  								// Apply MoveTarget if present (guarded by bStopMovementReplication)
- 		           if (UseItem->Move_bHasTarget)
+ 		           if (HasBit2(UnitReplicationBits::Move_bHasTarget))
  	       {
  	           if (bStopMovementReplication)
  	           {

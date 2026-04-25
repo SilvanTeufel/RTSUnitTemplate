@@ -24,7 +24,8 @@ public class RTSUnitTemplate : ModuleRules
             "MassNavigation",
             "MassMovement",
             "NavigationSystem",
-            "XRBase"
+            "XRBase",
+            "FunctionalTesting"
         });
 
         // Private: implementation-only dependencies

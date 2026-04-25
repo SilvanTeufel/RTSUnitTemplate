@@ -23,6 +23,35 @@
 // Forward Declarations
 struct FUnitReplicationArray;
 
+namespace UnitReplicationBits
+{
+	static constexpr uint32 CS_IsInitialized = 1u << 0;
+	static constexpr uint32 CS_bUseProjectile = 1u << 1;
+	static constexpr uint32 CS_bCanMoveWhileAttacking = 1u << 2;
+	static constexpr uint32 CS_bRotatesToMovementIfMoveWhileAttacking = 1u << 3;
+	static constexpr uint32 AC_bIsFlying = 1u << 4;
+	static constexpr uint32 AC_bIsInvisible = 1u << 5;
+	static constexpr uint32 AC_bCanOnlyAttackFlying = 1u << 6;
+	static constexpr uint32 AC_bCanOnlyAttackGround = 1u << 7;
+	static constexpr uint32 AC_bCanBeInvisible = 1u << 8;
+	static constexpr uint32 AC_bCanDetectInvisible = 1u << 9;
+	static constexpr uint32 AC_RotatesToMovement = 1u << 10;
+	static constexpr uint32 AC_RotatesToEnemy = 1u << 11;
+	static constexpr uint32 AIS_CanAttack = 1u << 12;
+	static constexpr uint32 AIS_CanMove = 1u << 13;
+	static constexpr uint32 AIS_HoldPosition = 1u << 14;
+	static constexpr uint32 AIS_HasAttacked = 1u << 15;
+	static constexpr uint32 AIS_SwitchingState = 1u << 16;
+	static constexpr uint32 AIS_IsInitialized = 1u << 17;
+	static constexpr uint32 AIS_bFollowTarget = 1u << 18;
+	static constexpr uint32 Move_bHasTarget = 1u << 19;
+	static constexpr uint32 VE_bForceHidden = 1u << 20;
+	static constexpr uint32 EA_bImpactVFXTriggered = 1u << 21;
+	static constexpr uint32 EA_bIsScalingAfterImpact = 1u << 22;
+	static constexpr uint32 EA_bImpactScaleTriggered = 1u << 23;
+	static constexpr uint32 EA_bPendingDestruction = 1u << 24;
+}
+
 // Fast Array Item für Mass Entity Replikation
 USTRUCT()
 struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerItem
@@ -43,11 +72,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 
 	// Rotation (quantisiert: 0-360° -> 0-65535)
 	UPROPERTY()
-	uint16 PitchQuantized = 0;
-	UPROPERTY()
 	uint16 YawQuantized = 0;
-	UPROPERTY()
-	uint16 RollQuantized = 0;
 
 	// Scale
 	UPROPERTY()
@@ -56,6 +81,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// Bitfield of replicated Mass state tags (subset used for client-side state/UI)
 	UPROPERTY()
 	uint32 TagBits = 0u;
+
+	// Packed booleans for various fragments to save bandwidth
+	UPROPERTY()
+	uint32 ReplicationBits = 0u;
 
 	// --- AI Target replication ---
 	// NetID of the current AI target entity (0 if none/invalid)
@@ -70,12 +99,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// Ability target location (coarse precision is fine)
 	UPROPERTY()
 	FVector_NetQuantize10 AbilityTargetLocation;
-	// Replicate seen sets as NetID arrays (bounded on server)
-	UPROPERTY()
-	TArray<uint32> AITargetPrevSeenIDs;
-	
-	UPROPERTY()
-	TArray<uint32> AITargetCurrSeenIDs;
 
 	 // --- FMassCombatStatsFragment (full) ---
 	UPROPERTY() float CS_Health = 0.f;
@@ -96,19 +119,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float CS_SightRadius = 0.f;
 	UPROPERTY() float CS_LoseSightRadius = 0.f;
 	UPROPERTY() float CS_PauseDuration = 0.f;
-	UPROPERTY() bool CS_bUseProjectile = false;
-	UPROPERTY() bool CS_bCanMoveWhileAttacking = false;
-	UPROPERTY() bool CS_bRotatesToMovementIfMoveWhileAttacking = false;
 
 	// --- FMassAgentCharacteristicsFragment (subset) ---
-	UPROPERTY() bool AC_bIsFlying = false;
-	UPROPERTY() bool AC_bIsInvisible = false;
 	UPROPERTY() float AC_FlyHeight = 0.f;
 	// Extended AgentCharacteristics (full)
-	UPROPERTY() bool AC_bCanOnlyAttackFlying = true;
-	UPROPERTY() bool AC_bCanOnlyAttackGround = true;
-	UPROPERTY() bool AC_bCanBeInvisible = false;
-	UPROPERTY() bool AC_bCanDetectInvisible = false;
 	UPROPERTY() float AC_LastGroundLocation = 0.f;
 	UPROPERTY() float AC_DespawnTime = 0.f;
 
@@ -124,8 +138,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	uint8 RunAnimation_AnimationState = 0; // Use uint8 for EState
 
-	UPROPERTY() bool AC_RotatesToMovement = true;
-	UPROPERTY() bool AC_RotatesToEnemy = true;
 	UPROPERTY() float AC_RotationSpeed = 0.f;
 	// REMOVED redundant PositionedTransform fields to save bandwidth
 	UPROPERTY() float AC_CapsuleHeight = 0.f;
@@ -133,16 +145,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 
 	// --- FMassAIStateFragment (full) ---
 	UPROPERTY() float AIS_StateTimer = 0.f;
-	UPROPERTY() bool AIS_CanAttack = true;
-	UPROPERTY() bool AIS_CanMove = true;
-	UPROPERTY() bool AIS_HoldPosition = false;
-	UPROPERTY() bool AIS_HasAttacked = false;
 	UPROPERTY() FName AIS_PlaceholderSignal = NAME_None;
 	UPROPERTY() FVector_NetQuantize10 AIS_StoredLocation = FVector::ZeroVector;
-	UPROPERTY() bool AIS_SwitchingState = false;
 	UPROPERTY() float AIS_BirthTime = 0.f;
 	UPROPERTY() float AIS_DeathTime = 0.f;
-	UPROPERTY() bool AIS_IsInitialized = true;
 	UPROPERTY() uint8 AIS_ProjectileFireCounter = 0;
 	UPROPERTY() TSubclassOf<class AProjectile> AIS_ProjectileClass;
 	UPROPERTY() FVector_NetQuantize10 AIS_ProjectileSpawnOffset = FVector::ZeroVector;
@@ -151,8 +157,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float AIS_HomingRotationSpeed = 0.f;
 	UPROPERTY() float AIS_HomingMaxSpiralRadius = 0.f;
 	UPROPERTY() float AIS_HomingInterpSpeed = 2.f;
-	UPROPERTY()
-	bool AIS_bFollowTarget = false;
 	
 	UPROPERTY()
 	uint32 AIS_LastTargetNetID = 0u;
@@ -194,7 +198,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	bool bPredictedLatch = false;
 
 	// --- FMassMoveTargetFragment (subset + versioning) ---
-	UPROPERTY() bool Move_bHasTarget = false;
 	UPROPERTY() FVector_NetQuantize10 Move_Center = FVector::ZeroVector;
 	UPROPERTY() float Move_SlackRadius = 0.f;
 	UPROPERTY() float Move_DesiredSpeed = 0.f;
@@ -210,7 +213,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 
 	// --- FMassVisualEffectFragment replication ---
 	UPROPERTY() uint8 VE_ActiveEffects = 0; // Bitmask: bit0=Pulsate, bit1=Rotation, bit2=Oscillation
-	UPROPERTY() bool VE_bForceHidden = false;
 
 	// Pulsate
 	UPROPERTY() FVector_NetQuantize10 VE_PulsateMinScale = FVector::OneVector;
@@ -227,10 +229,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY() float VE_OscillationCyclesPerSecond = 0.f;
 
 	// --- FEffectAreaImpactFragment replication ---
-	UPROPERTY() bool EA_bImpactVFXTriggered = false;
-	UPROPERTY() bool EA_bIsScalingAfterImpact = false;
-	UPROPERTY() bool EA_bImpactScaleTriggered = false;
-	UPROPERTY() bool EA_bPendingDestruction = false;
 	UPROPERTY() float EA_StartScaleTime = 0.f;
 	UPROPERTY() FQuat EA_VisualRotationOffset = FQuat::Identity;
 	UPROPERTY() float EA_RadiusAtImpactStart = 0.f;
@@ -239,14 +237,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	FUnitReplicationItem()
 		: NetID()
 		, Location(FVector::ZeroVector)
-		, PitchQuantized(0)
 		, YawQuantized(0)
-		, RollQuantized(0)
 		, Scale(FVector(1.0f, 1.0f, 1.0f))
 		, AITargetLastKnownLocation(FVector::ZeroVector)
 		, AbilityTargetLocation(FVector::ZeroVector)
-		, CS_bCanMoveWhileAttacking(false)
-		, CS_bRotatesToMovementIfMoveWhileAttacking(false)
 		, AIS_ProjectileFireCounter(0)
 		, AIS_ProjectileSpawnOffset(FVector::ZeroVector)
 		, AIS_ProjectileSpeed(0.f)
@@ -259,10 +253,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		, PredictedPendingShots(0)
 		, PredictionTimer(0.f)
 		, bPredictedLatch(false)
-		, EA_bImpactVFXTriggered(false)
-		, EA_bIsScalingAfterImpact(false)
-		, EA_bImpactScaleTriggered(false)
-		, EA_bPendingDestruction(false)
 		, EA_StartScaleTime(0.f)
 		, EA_VisualRotationOffset(FQuat::Identity)
 		, EA_RadiusAtImpactStart(0.f)

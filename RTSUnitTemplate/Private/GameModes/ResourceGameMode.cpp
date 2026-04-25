@@ -391,7 +391,7 @@ void AResourceGameMode::AssignWorkAreasToWorkers()
 void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 {
 	
-	if (!Worker) return;
+	if (!Worker || !Worker->IsWorker) return;
 
 	// Assign the closest base
 	Worker->Base = GetClosestBaseFromArray(Worker, WorkAreaGroups.BaseAreas);
