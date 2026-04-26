@@ -85,6 +85,32 @@ struct FProjectileStyle
 	}
 };
 
+USTRUCT()
+struct FPlayerMouseData
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 PlayerId = -1;
+
+	UPROPERTY()
+	FVector_NetQuantize MouseLocation = FVector::ZeroVector;
+
+	FPlayerMouseData() {}
+	FPlayerMouseData(int32 InPlayerId, const FVector& InLocation)
+		: PlayerId(InPlayerId), MouseLocation(InLocation) {}
+
+	bool operator==(const FPlayerMouseData& Other) const
+	{
+		return PlayerId == Other.PlayerId && MouseLocation.Equals(Other.MouseLocation, 1.0f);
+	}
+
+	bool operator!=(const FPlayerMouseData& Other) const
+	{
+		return !(*this == Other);
+	}
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AUnitClientBubbleInfo : public AMassClientBubbleInfoBase
 {
@@ -102,6 +128,9 @@ public:
 
 	UPROPERTY(Replicated)
 	TArray<FProjectileStyle> ProjectileStyleRegistry;
+
+	UPROPERTY(Replicated)
+	TArray<FPlayerMouseData> PlayerMouseDatas;
 
 	uint8 GetOrCreateStyleIndex(const FProjectileStyle& InStyle);
 

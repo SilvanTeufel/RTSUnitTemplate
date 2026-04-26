@@ -478,4 +478,11 @@ public:
 	UFUNCTION(Server, Unreliable, Category = RTSUnitTemplate)
 	void Server_UpdateMouseLocation(FVector NewLocation);
 	
+	void UpdateMouseLocationWithThrottling(FVector NewLocation);
+
+	UPROPERTY(Transient)
+	float LastMouseRPCTime = 0.f;
+
+	UPROPERTY(Transient)
+	FVector LastSentMouseLocation = FVector::ZeroVector;
 };

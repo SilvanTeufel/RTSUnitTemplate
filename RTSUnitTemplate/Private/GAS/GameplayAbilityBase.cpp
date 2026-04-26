@@ -21,6 +21,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Characters/Unit/SpawnerUnit.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/GASUnit.h"
 #include "Actors/AbilityIndicator.h"
@@ -153,10 +154,23 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 	if (bRotateUnitsToMouse)
 	{
+		UE_LOG(LogTemp, Log, TEXT("[Ability] Activating RotateToMouse for unit %s (Authority: %d)"), 
+			*ActorInfo->OwnerActor->GetName(), ActorInfo->IsNetAuthority() ? 1 : 0);
 		if (ActorInfo && ActorInfo->IsNetAuthority())
 		{
 			if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
 			{
+				if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(Unit))
+				{
+					if (APlayerController* PC = ActorInfo->PlayerController.Get())
+					{
+						if (PC->PlayerState)
+						{
+							SpawnerUnit->ActiveRotationPlayerId = PC->PlayerState->GetPlayerId();
+						}
+					}
+				}
+				
 				if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 				{
 					if (Unit->MassActorBindingComponent)
@@ -165,6 +179,13 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 						if (Entity.IsValid())
 						{
 							FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+							// Ensure the tag and fragment for the processor are present
+							EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
+							if (EntityManager.GetFragmentDataPtr<FMassRotateToMouseFragment>(Entity) == nullptr)
+							{
+								EntityManager.Defer().AddFragment<FMassRotateToMouseFragment>(Entity);
+							}
 
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{
@@ -221,6 +242,11 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 		{
 			if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
 			{
+				if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(Unit))
+				{
+					SpawnerUnit->ActiveRotationPlayerId = -1;
+				}
+				
 				if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 				{
 					if (Unit->MassActorBindingComponent)
@@ -230,6 +256,10 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 						{
 							FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager(); 
 	
+							// Ensure the tag and fragment for the processor are removed
+							EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+							EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
+
 							if (!bWasCancelled) AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, AnimTimeOnRotateFinished, UnitAnimOnRotateFinished);
 
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))

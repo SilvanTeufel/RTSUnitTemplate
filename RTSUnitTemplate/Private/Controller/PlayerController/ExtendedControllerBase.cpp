@@ -192,6 +192,20 @@ void AExtendedControllerBase::Server_UpdateMouseLocation_Implementation(FVector 
 	ReplicatedMouseLocation = NewLocation;
 }
 
+void AExtendedControllerBase::UpdateMouseLocationWithThrottling(FVector NewLocation)
+{
+	const float CurrentTime = GetWorld()->GetTimeSeconds();
+	const float DeltaTime = CurrentTime - LastMouseRPCTime;
+	const float DistSq = FVector::DistSquared(NewLocation, LastSentMouseLocation);
+
+	if (DeltaTime >= 0.05f || DistSq >= 225.f) // 20Hz or > 15 units movement
+	{
+		Server_UpdateMouseLocation(NewLocation);
+		LastMouseRPCTime = CurrentTime;
+		LastSentMouseLocation = NewLocation;
+	}
+}
+
 void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd)
 {
 	UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
@@ -212,15 +226,22 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 			{
 				if (bAdd)
 				{
+					if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(Unit))
+					{
+						SpawnerUnit->ActiveRotationPlayerId = CurrentPlayerId;
+					}
+
 					EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
 					
 					FMassRotateToMouseFragment RTM;
-					RTM.PlayerId = CurrentPlayerId;
-					RTM.TargetLocation = FVector::ZeroVector;
 					EntityManager.Defer().PushCommand<FMassCommandAddFragmentInstances<FMassRotateToMouseFragment>>(Entity, RTM);
 				}
 				else
 				{
+					if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(Unit))
+					{
+						SpawnerUnit->ActiveRotationPlayerId = -1;
+					}
 					EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
 					EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 				}
@@ -281,6 +302,14 @@ void AExtendedControllerBase::ApplyRunAnimationTag(FMassEntityManager& EntityMan
 	// 1. Transition: Remove RotateToMouse
 	EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
 	EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
+
+	if (FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity))
+	{
+		if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(ActorFrag->GetMutable()))
+		{
+			SpawnerUnit->ActiveRotationPlayerId = -1;
+		}
+	}
 
 	// 2. Add RunAnimation
 	EntityManager.Defer().AddTag<FRunAnimationTag>(Entity);

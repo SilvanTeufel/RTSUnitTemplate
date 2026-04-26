@@ -47,6 +47,9 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
 #include "Mass/UnitMassTag.h"
 #include "Mass/MassUnitVisualFragments.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/SpawnerUnit.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "GameFramework/PlayerState.h"
 #include "Mass/Replication/UnitReplicationPayload.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
@@ -149,6 +152,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		return;
 	}
 	GExecCount++;
+	AExtendedControllerBase* LocalPC = Cast<AExtendedControllerBase>(World->GetFirstPlayerController());
 	// Update global replication mode from CVAR each tick for runtime switching
 	if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2 && GExecCount <= 60)
 	{
@@ -449,7 +453,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Budget exhausted this tick (Actions=%d, Max=%d). Some link/unlink may be deferred."), Actions, MaxActionsPerTick);
 		}
 		
-		 EntityQuery.ForEachEntityChunk(Context, [this, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity](FMassExecutionContext& Context)
+		 EntityQuery.ForEachEntityChunk(Context, [this, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC](FMassExecutionContext& Context)
 		{
 			// Track zero NetID streaks per actor to trigger self-heal retries
 			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
@@ -668,34 +672,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     									}
     								}
     							}
-								if (RotateToMouseList.IsValidIndex(EntityIdx))
-								{
-									FMassRotateToMouseFragment& RTM = RotateToMouseList[EntityIdx];
-									const bool bHasRotateTag = (TagItem->TagBits & UnitTagBits::RotateToMouse) != 0;
-									if (bHasRotateTag)
-									{
-										RTM.TargetLocation = FVector(TagItem->RotateToMouse_TargetLocation);
-										RTM.PlayerId = TagItem->RotateToMouse_PlayerId;
-										// Diagnostic Log: 1s Throttled
-										static float LastLogTimeSync = 0.f;
-										if ((WorldForTags->GetTimeSeconds() - LastLogTimeSync) > 1.0f)
-										{
-											LastLogTimeSync = WorldForTags->GetTimeSeconds();
-											UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: Syncing RotateToMouse_TargetLocation=%s PlayerId=%d for Entity NetID=%u"), 
-												*RTM.TargetLocation.ToString(), RTM.PlayerId, NetIDList[EntityIdx].NetID.GetValue());
-										}
-									}
-								}
-								else if ((TagItem->TagBits & UnitTagBits::RotateToMouse) != 0)
-								{
-									// Diagnostic Warning: Missing Fragment for Tag
-									static float LastLogTimeWarn = 0.f;
-									if ((WorldForTags->GetTimeSeconds() - LastLogTimeWarn) > 1.0f)
-									{
-										LastLogTimeWarn = WorldForTags->GetTimeSeconds();
-										UE_LOG(LogTemp, Warning, TEXT("ClientReplicationProcessor: Entity NetID=%u has RotateToMouse bit but NO fragment locally! Archetype mismatch?"), NetIDList[EntityIdx].NetID.GetValue());
-									}
-								}
        							if (AIStateList.IsValidIndex(EntityIdx))
 							{
 								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
@@ -1090,12 +1066,26 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
 					
 					// If rotating to mouse, preserve current Yaw to avoid fighting with UMassRotateToMouseProcessor
+					// BUT ONLY for the local owner. Remote clients should follow server yaw.
 					if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassRotateToMouseTag::StaticStruct()))
 					{
-						FRotator FinalRot = FinalXf.Rotator();
-						FRotator CurrentRot = ClientXf.Rotator();
-						FinalRot.Yaw = CurrentRot.Yaw;
-						FinalXf.SetRotation(FinalRot.Quaternion());
+						bool bIsLocalRotator = false;
+						if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(ActorList[EntityIdx].GetMutable()))
+						{
+							int32 LocalPlayerId = (LocalPC && LocalPC->PlayerState) ? LocalPC->PlayerState->GetPlayerId() : -2;
+							if (SpawnerUnit->ActiveRotationPlayerId == LocalPlayerId)
+							{
+								bIsLocalRotator = true;
+							}
+						}
+
+						if (bIsLocalRotator)
+						{
+							FRotator FinalRot = FinalXf.Rotator();
+							FRotator CurrentRot = ClientXf.Rotator();
+							FinalRot.Yaw = CurrentRot.Yaw;
+							FinalXf.SetRotation(FinalRot.Quaternion());
+						}
 					}
 
 					ClientXf = FinalXf;
@@ -1233,6 +1223,34 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					if (bEnableRotationReconciliation)
 					{
 						const float Dt = Context.GetDeltaTimeSeconds();
+						
+						// Special handling for RotateToMouse: if we are NOT the local rotator, snap to server rotation
+						bool bHasRTMTag = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassRotateToMouseTag::StaticStruct());
+						bool bIsLocalRotator = false;
+
+						if (bHasRTMTag)
+						{
+							if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(ActorList[EntityIdx].GetMutable()))
+							{
+								int32 LocalPlayerId = (LocalPC && LocalPC->PlayerState) ? LocalPC->PlayerState->GetPlayerId() : -2;
+								if (SpawnerUnit->ActiveRotationPlayerId == LocalPlayerId)
+								{
+									bIsLocalRotator = true;
+								}
+							}
+						}
+
+						if (bHasRTMTag && !bIsLocalRotator)
+						{
+							ClientXf.SetRotation(FinalXf.GetRotation());
+							if (CharList.IsValidIndex(EntityIdx))
+							{
+								CharList[EntityIdx].PositionedTransform.SetRotation(FinalXf.GetRotation());
+								CharList[EntityIdx].bTransformDirty = true;
+							}
+							continue; // Skip gentle reconciliation
+						}
+
 						// Extract current and target rotations
 						const FRotator CurrRot = ClientXf.GetRotation().Rotator();
 						const FRotator TgtRot = FinalXf.GetRotation().Rotator();

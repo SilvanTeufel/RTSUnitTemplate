@@ -334,27 +334,40 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	// Perform the synchronization kick for all collected units
 	if (UnitsToKick.Num() > 0)
 	{
-		TArray<FVector> NewTargetLocations;
-		TArray<float> DesiredSpeeds;
-		TArray<float> BatchRadii;
-
-		for (AUnitBase* Unit : UnitsToKick)
+		const int32 MaxBatchSize = 200;
+		for (int32 i = 0; i < UnitsToKick.Num(); i += MaxBatchSize)
 		{
-			NewTargetLocations.Add(Unit->GetMassActorLocation());
-			DesiredSpeeds.Add(Unit->RunSpeed);
-			BatchRadii.Add(50.f);
-		}
+			int32 CurrentBatchNum = FMath::Min(MaxBatchSize, UnitsToKick.Num() - i);
+			TArray<AUnitBase*> BatchUnits;
+			TArray<FVector> BatchLocations;
+			TArray<float> BatchSpeeds;
+			TArray<float> BatchRadii;
 
-		ACustomControllerBase* AnyController = nullptr;
-		for (TActorIterator<ACustomControllerBase> It(World); It; ++It)
-		{
-			AnyController = *It;
-			break;
-		}
+			BatchUnits.Reserve(CurrentBatchNum);
+			BatchLocations.Reserve(CurrentBatchNum);
+			BatchSpeeds.Reserve(CurrentBatchNum);
+			BatchRadii.Reserve(CurrentBatchNum);
 
-		if (AnyController)
-		{
-			AnyController->Server_Batch_CorrectSetUnitMoveTargets(World, UnitsToKick, NewTargetLocations, DesiredSpeeds, BatchRadii, false, false);
+			for (int32 j = 0; j < CurrentBatchNum; ++j)
+			{
+				AUnitBase* Unit = UnitsToKick[i + j];
+				BatchUnits.Add(Unit);
+				BatchLocations.Add(Unit->GetMassActorLocation());
+				BatchSpeeds.Add(Unit->RunSpeed);
+				BatchRadii.Add(50.f);
+			}
+
+			ACustomControllerBase* AnyController = nullptr;
+			for (TActorIterator<ACustomControllerBase> It(World); It; ++It)
+			{
+				AnyController = *It;
+				break;
+			}
+
+			if (AnyController)
+			{
+				AnyController->Server_Batch_CorrectSetUnitMoveTargets(World, BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, false, false);
+			}
 		}
 	}
 

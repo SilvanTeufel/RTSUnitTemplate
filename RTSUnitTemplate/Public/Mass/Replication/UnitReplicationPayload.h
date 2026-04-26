@@ -111,12 +111,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// --- FMassAgentCharacteristicsFragment (subset) ---
 	UPROPERTY() float AC_FlyHeight = 0.f;
 
-	// --- FMassRotateToMouseFragment ---
-	UPROPERTY()
-	FVector_NetQuantize10 RotateToMouse_TargetLocation = FVector::ZeroVector;
-	UPROPERTY()
-	int32 RotateToMouse_PlayerId = -1;
-
 	// --- FRunAnimationFragment ---
 	UPROPERTY()
 	float RunAnimation_Duration = 1.0f;

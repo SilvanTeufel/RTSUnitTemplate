@@ -649,15 +649,39 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
 	if (UWorld* PCWorld = GetWorld())
 	{
-		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+		const int32 MaxBatchSize = 200;
+		for (int32 i = 0; i < Units.Num(); i += MaxBatchSize)
 		{
-			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+			int32 CurrentBatchNum = FMath::Min(MaxBatchSize, Units.Num() - i);
+			
+			TArray<AUnitBase*> BatchUnits;
+			TArray<FVector> BatchLocations;
+			TArray<float> BatchSpeeds;
+			TArray<float> BatchRadii;
+
+			BatchUnits.Reserve(CurrentBatchNum);
+			BatchLocations.Reserve(CurrentBatchNum);
+			BatchSpeeds.Reserve(CurrentBatchNum);
+			BatchRadii.Reserve(CurrentBatchNum);
+			
+			for (int32 j = 0; j < CurrentBatchNum; ++j)
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT, bResetHoldPosition);
+				int32 GlobalIdx = i + j;
+				BatchUnits.Add(Units[GlobalIdx]);
+				BatchLocations.Add(NewTargetLocations[GlobalIdx]);
+				BatchSpeeds.Add(DesiredSpeeds[GlobalIdx]);
+				BatchRadii.Add(AcceptanceRadii[GlobalIdx]);
+			}
+
+			for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+			{
+				if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+				{
+					PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, AttackT, bResetHoldPosition);
+				}
 			}
 		}
 	}
-	
 }
 
 void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Implementation(

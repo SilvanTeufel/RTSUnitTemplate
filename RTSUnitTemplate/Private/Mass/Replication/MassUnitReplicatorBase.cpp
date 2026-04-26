@@ -48,6 +48,8 @@ namespace ReplicationSliceControl
 #include "Mass/UnitMassTag.h"
 #include "Mass/MassUnitVisualFragments.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "GameFramework/PlayerState.h"
 
 // CVAR to control server-side MassUnitReplicatorBase logging
 static TAutoConsoleVariable<int32> CVarRTS_ServerReplicator_LogLevel(
@@ -415,19 +417,6 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         }
 
         // Fill Worker Stats
-        if (const FMassWorkerStatsFragment* WS = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(Entity))
-        {
-            NewItem.Worker_BuildAreaPosition = WS->BuildAreaPosition;
-        }
-
-        // Fill RotateToMouse target location
-        if (const FMassRotateToMouseFragment* RTM = EntityManager.GetFragmentDataPtr<FMassRotateToMouseFragment>(Entity))
-        {
-            NewItem.RotateToMouse_TargetLocation = RTM->TargetLocation;
-            NewItem.RotateToMouse_PlayerId = RTM->PlayerId;
-        }
-
-        // Fill Visual Effect Fragment
         if (const FMassVisualEffectFragment* VE = EntityManager.GetFragmentDataPtr<FMassVisualEffectFragment>(Entity))
         {
             uint8 ActiveBits = 0;
@@ -670,9 +659,45 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
         UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
         FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
 
+        // Collect current mouse locations for all players (for shared rotation replication)
+        TArray<FPlayerMouseData> CurrentMouseDatas;
+        for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+        {
+            if (AExtendedControllerBase* PC = Cast<AExtendedControllerBase>(It->Get()))
+            {
+                if (PC->PlayerState)
+                {
+                    CurrentMouseDatas.Add(FPlayerMouseData(PC->PlayerState->GetPlayerId(), PC->ReplicatedMouseLocation));
+                }
+            }
+        }
+
+        // Check if any unit in this chunk needs mouse data for rotation
+        bool bChunkNeedsMouse = false;
+        if (EM)
+        {
+            for (int32 Idx = LoopStart; Idx < LoopEnd; ++Idx)
+            {
+                if (DoesEntityHaveTag(*EM, Context.GetEntity(Idx), FMassRotateToMouseTag::StaticStruct()))
+                {
+                    bChunkNeedsMouse = true;
+                    break;
+                }
+            }
+        }
+
         // Update every bubble we found so clients receive replicated items
         for (AUnitClientBubbleInfo* BubbleInfo : Bubbles)
         {
+            // Sync mouse data once per bubble, but only if actually needed by units in this chunk
+            if (bChunkNeedsMouse)
+            {
+                if (BubbleInfo->PlayerMouseDatas != CurrentMouseDatas)
+                {
+                    BubbleInfo->PlayerMouseDatas = CurrentMouseDatas;
+                }
+            }
+
             bool bAnyDirty = false;
             for (int32 Idx = LoopStart; Idx < LoopEnd; ++Idx)
             {
@@ -784,12 +809,6 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
                             NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
                             NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
-                        }
-
-                        // Fill RotateToMouse target location
-                        if (const FMassRotateToMouseFragment* RTM = EM->GetFragmentDataPtr<FMassRotateToMouseFragment>(EH))
-                        {
-                            NewItem.RotateToMouse_TargetLocation = RTM->TargetLocation;
                         }
 
                         // Fill RunAnimation fragment data

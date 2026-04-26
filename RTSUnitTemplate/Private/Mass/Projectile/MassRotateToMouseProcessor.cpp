@@ -8,8 +8,11 @@
 #include "Mass/Signals/MySignals.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "Characters/Unit/SpawnerUnit.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
+#include "Mass/Replication/RTSWorldCacheSubsystem.h"
+#include "Mass/Replication/UnitClientBubbleInfo.h"
 
 UMassRotateToMouseProcessor::UMassRotateToMouseProcessor()
 {
@@ -52,7 +55,6 @@ void UMassRotateToMouseProcessor::HandleMouseUpdateSignal(FName SignalName, TCon
 
 void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	// Performance optimization: skip execution if no units require rotation
 	if (EntityQuery.GetNumMatchingEntities() == 0)
 	{
 		return;
@@ -62,6 +64,8 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	if (!World) return;
 
 	AExtendedControllerBase* LocalPC = Cast<AExtendedControllerBase>(World->GetFirstPlayerController());
+	const bool bHasAuthority = (World->GetNetMode() != NM_Client);
+	
 	FVector CurrentMouseHit = FVector::ZeroVector;
 	bool bIsLocalUpdateNeeded = false;
 
@@ -72,7 +76,7 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		{
 			CurrentMouseHit = Hit.Location;
 			bIsLocalUpdateNeeded = true;
-			LocalPC->Server_UpdateMouseLocation(CurrentMouseHit);
+			LocalPC->UpdateMouseLocationWithThrottling(CurrentMouseHit);
 		}
 	}
 
@@ -81,7 +85,7 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 	// Cache PlayerId to PC for server-side logic
 	TMap<int32, AExtendedControllerBase*> PlayerIdToPC;
-	if (World->GetNetMode() != NM_Client)
+	if (bHasAuthority)
 	{
 		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 		{
@@ -95,47 +99,73 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 
+	// Throttling for Server and Logs
+	static float LastLogTime = 0.0f;
+	static float LastServerTickTime = 0.0f;
+	const float CurrentTime = World->GetTimeSeconds();
+	const bool bShouldLog = (CurrentTime - LastLogTime > 1.0f);
+	const bool bIsServerTick = (CurrentTime - LastServerTickTime > 0.05f);
+
+	if (bShouldLog) LastLogTime = CurrentTime;
+	if (bIsServerTick && bHasAuthority) LastServerTickTime = CurrentTime;
+
 	EntityQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ChunkContext)
 	{
 		const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();
 		auto Transforms = ChunkContext.GetMutableFragmentView<FTransformFragment>();
-		auto MouseFrags = ChunkContext.GetMutableFragmentView<FMassRotateToMouseFragment>();
-		auto CombatStats = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 		auto Actors = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 		auto Characteristics = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
 		{
+			AActor* Actor = Actors[i].GetMutable();
+			ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(Actor);
+			int32 RotatorId = SpawnerUnit ? SpawnerUnit->ActiveRotationPlayerId : -1;
+
 			FVector TargetLocation = FVector::ZeroVector;
 			bool bFoundTarget = false;
 
-			// 1. If this unit belongs to our PlayerId, use our local mouse hit
-			if (MouseFrags[i].PlayerId == LocalPlayerId && bIsLocalUpdateNeeded)
+			// 1. Local Owner: Use immediate local mouse position
+			if (RotatorId == LocalPlayerId && bIsLocalUpdateNeeded)
 			{
 				TargetLocation = CurrentMouseHit;
 				bFoundTarget = true;
-				// Update fragment so server/others see it
-				MouseFrags[i].TargetLocation = TargetLocation;
 			}
-			else if (World->GetNetMode() != NM_Client)
+			// 2. Server (Authority): Use replicated mouse location from Controller
+			else if (bHasAuthority && bIsServerTick)
 			{
-				// 2. On Server, if we found a PC for this unit's PlayerId, use its replicated mouse location
-				if (AExtendedControllerBase** PCPtr = PlayerIdToPC.Find(MouseFrags[i].PlayerId))
+				if (AExtendedControllerBase** PCPtr = PlayerIdToPC.Find(RotatorId))
 				{
 					TargetLocation = (*PCPtr)->ReplicatedMouseLocation;
 					bFoundTarget = true;
-					MouseFrags[i].TargetLocation = TargetLocation;
+				}
+			}
+			// 3. Remote Client: Use shared mouse data from BubbleInfo
+			else if (!bHasAuthority && RotatorId != -1 && RotatorId != LocalPlayerId)
+			{
+				if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
+				{
+					if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
+					{
+						for (const FPlayerMouseData& Data : Bubble->PlayerMouseDatas)
+						{
+							if (Data.PlayerId == RotatorId)
+							{
+								TargetLocation = Data.MouseLocation;
+								bFoundTarget = true;
+								break;
+							}
+						}
+					}
 				}
 			}
 
-			// 3. Fallback to replicated fragment location
-			if (!bFoundTarget)
+			if (bShouldLog && i == 0) // Throttled Log (Once per second, first unit in chunk)
 			{
-				TargetLocation = MouseFrags[i].TargetLocation;
-				if (!TargetLocation.IsNearlyZero())
-				{
-					bFoundTarget = true;
-				}
+				UE_LOG(LogTemp, Log, TEXT("[%s] RTM - Unit: %s, Rotator: %d, Local: %d, Target: %s"), 
+					(bHasAuthority ? TEXT("Server") : TEXT("Client")), 
+					Actor ? *Actor->GetName() : TEXT("None"), 
+					RotatorId, LocalPlayerId, *TargetLocation.ToString());
 			}
 
 			if (bFoundTarget)
@@ -151,12 +181,13 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					float RotSpeed = Characteristics[i].RotationSpeed;
 					if (RotSpeed <= 0.01f) { RotSpeed = 15.0f; }
 
+					// Smooth rotation
 					FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * RotSpeed, 0.f, 1.f));
 					MassTransform.SetRotation(NewQuat);
 
 					Characteristics[i].PositionedTransform = MassTransform;
 					Characteristics[i].bTransformDirty = true;
-					if (AActor* Actor = Actors[i].GetMutable())
+					if (Actor)
 					{
 						Actor->SetActorRotation(NewQuat);
 					}

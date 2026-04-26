@@ -113,8 +113,6 @@ USTRUCT()
 struct FMassRotateToMouseFragment : public FMassFragment
 {
 	GENERATED_BODY()
-	FVector TargetLocation = FVector::ZeroVector;
-	int32 PlayerId = -1;
 };
 
 USTRUCT()

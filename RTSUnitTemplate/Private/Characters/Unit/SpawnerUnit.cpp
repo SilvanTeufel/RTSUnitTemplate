@@ -29,6 +29,7 @@ void ASpawnerUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutL
 	DOREPLIFETIME(ASpawnerUnit, UnitTags);
 	DOREPLIFETIME(ASpawnerUnit, AbilitySelectionTag);
 	DOREPLIFETIME(ASpawnerUnit, TalentTag);
+	DOREPLIFETIME(ASpawnerUnit, ActiveRotationPlayerId);
 
 }
 

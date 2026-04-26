@@ -363,6 +363,7 @@ void AUnitClientBubbleInfo::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 
 	DOREPLIFETIME(AUnitClientBubbleInfo, Agents);
 	DOREPLIFETIME(AUnitClientBubbleInfo, ProjectileStyleRegistry);
+	DOREPLIFETIME(AUnitClientBubbleInfo, PlayerMouseDatas);
 }
 
 void AUnitClientBubbleInfo::OnRep_Agents()
