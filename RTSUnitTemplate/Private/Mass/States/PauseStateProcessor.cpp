@@ -383,8 +383,9 @@ void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityMana
     float ProjectileSpeed = (UnitActor->Attributes && UnitActor->Attributes->GetProjectileSpeed() > 0.f) ? UnitActor->Attributes->GetProjectileSpeed() : ProjCDO->MovementSpeed;
 
     // Logging ohne Throttling für den Spawn auf dem Client
-    UE_LOG(LogTemp, Log, TEXT("[CLIENT] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, PosZ=%.2f"),
-        *UnitActor->ProjectileBaseClass->GetName(), ProjectileSpeed, ProjCDO->MaxPiercedTargets, ProjCDO->Damage, SpawnLocation.Z);
+    UE_LOG(LogTemp, Log, TEXT("[CLIENT] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, PosZ=%.2f, Homing=%s, TwinDist=%.1f, HomingCount=%d"),
+        *UnitActor->ProjectileBaseClass->GetName(), ProjectileSpeed, ProjCDO->MaxPiercedTargets, ProjCDO->Damage, SpawnLocation.Z,
+        ProjCDO->HomingMissleCount > 0 ? TEXT("YES") : TEXT("NO"), ProjCDO->TwinProjectileDistance, ProjCDO->HomingMissleCount);
 
     for (const FVector& Pos : SpawnPositions)
     {
@@ -395,9 +396,36 @@ void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityMana
             
             FVector TargetLoc = TargetF->LastKnownLocation;
             FVector Direction = (TargetLoc - Pos).GetSafeNormal();
-            float InitialAngle = (HomingCount > 1) ? (360.0f / BaseCount) * i : 0.f;
+            float InitialAngle = 0.f;
+            float RotSpeed = ProjCDO->HomingRotationSpeed;
+            float MaxRadius = ProjCDO->HomingMaxSpiralRadius;
+            float FinalSpeed = ProjectileSpeed;
+
+            if (HomingCount > 0)
+            {
+                // Richtungs-Jitter für fächerförmigen Start (Identisch zum Server)
+                if (BaseCount > 1)
+                {
+                    float JitterAngle = (360.0f / BaseCount) * i;
+                    FVector Right, Up;
+                    Direction.FindBestAxisVectors(Right, Up);
+                    Direction = (Direction + (Right * FMath::Cos(FMath::DegreesToRadians(JitterAngle)) + Up * FMath::Sin(FMath::DegreesToRadians(JitterAngle))) * 0.1f).GetSafeNormal();
+                }
+                InitialAngle = FMath::RandRange(0.f, 360.f);
+                RotSpeed *= FMath::RandRange(0.9f, 1.4f);
+                if (FMath::RandBool()) RotSpeed *= -1.f;
+                MaxRadius *= FMath::RandRange(0.8f, 1.2f);
+                FinalSpeed += FMath::RandRange(-ProjCDO->HomingSpeedVariation, ProjCDO->HomingSpeedVariation);
+            }
+            else
+            {
+                InitialAngle = (HomingCount > 1) ? (360.0f / BaseCount) * i : 0.f;
+            }
 
             if (!Direction.IsNearlyZero()) FinalSpawnXf.SetRotation(FQuat(Direction.Rotation()));
+
+            bool bFinalFollowTarget = ProjCDO->FollowTarget;
+            if (HomingCount > 0) bFinalFollowTarget = true; // FIX: Konsistenz mit Server erzwingen
 
             VisualManager->SpawnMassProjectile(
                 UnitActor->ProjectileBaseClass,
@@ -406,12 +434,12 @@ void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityMana
                 TargetLoc,
                 Entity,
                 TargetF->TargetEntity,
-                ProjectileSpeed,
+                FinalSpeed,
                 StatsF->TeamId,
-                ProjCDO->FollowTarget,
+                bFinalFollowTarget, // FIX: bIsHoming wird dadurch im Fragment TRUE
                 InitialAngle,
-                ProjCDO->HomingRotationSpeed,
-                ProjCDO->HomingMaxSpiralRadius,
+                RotSpeed,
+                MaxRadius,
                 ProjCDO->HomingInterpSpeed,
                 nullptr, // Keine Deferral hier nötig, da wir im Signal-Handler sind (Game Thread)
                 UnitActor->ProjectileScale,

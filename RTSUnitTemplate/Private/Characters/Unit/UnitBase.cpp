@@ -1960,8 +1960,19 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
                     // Identisches Log-Format wie auf dem Client für einfachen Vergleich
-                    UE_LOG(LogTemp, Log, TEXT("[SERVER] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, PosZ=%.2f"),
-                        *ProjectileBaseClass->GetName(), FinalSpeed, ProjectileCDO->MaxPiercedTargets, ProjectileCDO->Damage, Transform.GetLocation().Z);
+                    UE_LOG(LogTemp, Log, TEXT("[SERVER] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, CDO_MaxPierced=%d, PosZ=%.2f, Homing=%s, Angle=%.1f, Rot=%.1f, Rad=%.1f, TwinDist=%.1f, HomingCount=%d"),
+                        *ProjectileBaseClass->GetName(), 
+                        FinalSpeed, 
+                        ProjectileCDO->MaxPiercedTargets, 
+                        ProjectileCDO->Damage, 
+                        ProjectileCDO->MaxPiercedTargets, // CDO_MaxPierced (identisch auf Server)
+                        Transform.GetLocation().Z,
+                        bFollow ? TEXT("YES") : TEXT("NO"),
+                        InitialAngle,
+                        RotSpeed,
+                        MaxRadius,
+                        ProjectileCDO->TwinProjectileDistance,
+                        ProjectileCDO->HomingMissleCount);
 
                     VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets);
                 }

@@ -284,12 +284,11 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.IsHealing = CDO->IsHealing;
 	ProjectileFragment.MaxPiercedTargets = (MaxPiercedTargets >= 0) ? MaxPiercedTargets : CDO->MaxPiercedTargets;
 
-	// Diagnose-Log für die initiale Fragment-Erstellung auf dem Client
-	if (bIsClient)
-	{
-		UE_LOG(LogTemp, Log, TEXT("[CLIENT] Fragment Initialized: Class=%s, MaxPierced=%d, Damage=%.2f, CDO_MaxPierced=%d"), 
-			*ProjectileClass->GetName(), ProjectileFragment.MaxPiercedTargets, ProjectileFragment.Damage, CDO ? CDO->MaxPiercedTargets : -1);
-	}
+	ProjectileFragment.bIsHoming = bFollowTarget && CDO->HomingMissleCount > 0;
+	ProjectileFragment.HomingInitialAngle = HomingInitialAngle;
+	ProjectileFragment.HomingRotationSpeed = HomingRotationSpeed;
+	ProjectileFragment.HomingMaxSpiralRadius = HomingMaxSpiralRadius;
+	ProjectileFragment.HomingInterpSpeed = HomingInterpSpeed;
 
     ProjectileFragment.ProjectileScale = Scale;
     ProjectileFragment.bContinueAfterTarget = CDO->bContinueAfterTarget;
@@ -299,12 +298,16 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
         ProjectileFragment.FlightDirection = Transform.GetRotation().GetForwardVector();
     }
 
-	// Homing and Rotation parameters from server
-	ProjectileFragment.bIsHoming = bFollowTarget && CDO->HomingMissleCount > 0;
-	ProjectileFragment.HomingInitialAngle = HomingInitialAngle;
-	ProjectileFragment.HomingRotationSpeed = HomingRotationSpeed;
-	ProjectileFragment.HomingMaxSpiralRadius = HomingMaxSpiralRadius;
-	ProjectileFragment.HomingInterpSpeed = HomingInterpSpeed;
+	// Diagnose-Log für die initiale Fragment-Erstellung auf dem Client
+	if (bIsClient)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[CLIENT] Fragment Initialized: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, CDO_MaxPierced=%d, PosZ=%.2f, Homing=%s, Angle=%.1f, Rot=%.1f, Rad=%.1f, TwinDist=%.1f, HomingCount=%d"), 
+			*ProjectileClass->GetName(), ProjectileSpeed, ProjectileFragment.MaxPiercedTargets, ProjectileFragment.Damage, CDO ? CDO->MaxPiercedTargets : -1,
+			Transform.GetLocation().Z,
+			ProjectileFragment.bIsHoming ? TEXT("YES") : TEXT("NO"),
+			HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius,
+			CDO ? CDO->TwinProjectileDistance : 0.f, CDO ? CDO->HomingMissleCount : 0);
+	}
 
 	ProjectileFragment.RotationOffset = CDO->RotationOffset;
 	ProjectileFragment.RotationSpeed = CDO->RotationSpeed;

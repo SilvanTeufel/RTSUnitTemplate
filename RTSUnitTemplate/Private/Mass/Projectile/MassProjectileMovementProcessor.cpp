@@ -74,15 +74,10 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					Projectile.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
 					Projectile.ArcHeight = CDO->ArcHeight;
 
-					// Synchronisation von MaxPiercedTargets
-					if (CDO->MaxPiercedTargets > 1 || Projectile.MaxPiercedTargets <= 1)
+					// Strikte Synchronisation von MaxPiercedTargets
+					if (Projectile.MaxPiercedTargets != CDO->MaxPiercedTargets)
 					{
-						if (Projectile.MaxPiercedTargets != CDO->MaxPiercedTargets)
-						{
-							// UE_LOG(LogTemp, Log, TEXT("[CLIENT] CDO Sync MaxPierced: %d -> %d for %s"), 
-							//	Projectile.MaxPiercedTargets, CDO->MaxPiercedTargets, *Projectile.ProjectileClass->GetName());
-							Projectile.MaxPiercedTargets = CDO->MaxPiercedTargets;
-						}
+						Projectile.MaxPiercedTargets = CDO->MaxPiercedTargets;
 					}
 					Projectile.CollisionRadius = CDO->CollisionRadius;
 

@@ -191,25 +191,51 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 							}
 						}
 
+						const AProjectile* ProjCDO = VisualManager->GetProjectileCDO(ProjectileClass);
+
 						for (int32 i = 0; i < UseDelta; ++i)
 						{
 							// Add some local variation for multi-shot projectiles so they don't perfectly overlap
 							float LocalInitialAngle = 0.f;
-							float LocalRotSpeed = 360.f;
-							float LocalMaxRadius = 0.f;
+							float LocalRotSpeed = ProjCDO ? ProjCDO->HomingRotationSpeed : 360.f;
+							float LocalMaxRadius = ProjCDO ? ProjCDO->HomingMaxSpiralRadius : 0.f;
+							float Interp = ProjCDO ? ProjCDO->HomingInterpSpeed : 2.f;
+							float FinalSpeed = ProjectileSpeed;
 							FTransform LocalSpawnXf = SpawnXf;
 							FVector LocalTargetLoc = TargetLoc;
 
-							const bool bIsFollowTarget = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0;
-							if (UseDelta > 1 || bIsFollowTarget)
+							const bool bIsFollowTarget = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0 || (ProjCDO && ProjCDO->FollowTarget);
+							bool bFinalFollow = bIsFollowTarget;
+							if (ProjCDO && ProjCDO->HomingMissleCount > 0) bFinalFollow = true; // FIX: Homing für Bubble-Projektile erzwingen
+
+							if (UseDelta > 1 || bFinalFollow)
 							{
 								LocalInitialAngle += (i * (360.f / FMath::Max(1, (int32)UseDelta)));
 								// Add a bit of random jitter
 								LocalInitialAngle += FMath::RandRange(-10.f, 10.f);
-								LocalRotSpeed *= FMath::RandRange(0.9f, 1.1f);
-								LocalMaxRadius *= FMath::RandRange(0.9f, 1.1f);
+								
+								if (ProjCDO && ProjCDO->HomingMissleCount > 0)
+								{
+									// Variationen vom Server übernehmen
+									LocalRotSpeed *= FMath::RandRange(0.9f, 1.4f);
+									if (FMath::RandBool()) LocalRotSpeed *= -1.f;
+									LocalMaxRadius *= FMath::RandRange(0.8f, 1.2f);
+									FinalSpeed += FMath::RandRange(-ProjCDO->HomingSpeedVariation, ProjCDO->HomingSpeedVariation);
+								}
+								else
+								{
+									LocalRotSpeed *= FMath::RandRange(0.9f, 1.1f);
+									LocalMaxRadius *= FMath::RandRange(0.9f, 1.1f);
+								}
 
-								if (UseDelta > 1)
+								if (ProjCDO && ProjCDO->TwinProjectileDistance >= 10.f && UseDelta > 1)
+								{
+									FVector RightVector = LocalSpawnXf.GetRotation().GetRightVector();
+									// Verschiebe jedes zweite Projektil in die entgegengesetzte Richtung
+									float OffsetMult = (i % 2 == 0) ? 1.f : -1.f;
+									LocalSpawnXf.AddToTranslation(RightVector * ProjCDO->TwinProjectileDistance * OffsetMult);
+								}
+								else if (UseDelta > 1)
 								{
 									// Spatial jitter for bursts
 									FVector Jitter = FMath::VRand() * 20.f;
@@ -219,8 +245,6 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 							// Local copies for capture (if deferred)
 							int32 TeamId = (int32)CS_TeamId;
-							bool bFollow = (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0;
-							float Interp = 2.f;
 							FVector LocalScale = FVector::OneVector;
 
 							// Direct call to VisualManager - it handles deferral internally now
@@ -231,9 +255,9 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 								LocalTargetLoc,
 								FMassEntityHandle(),
 								TargetHandle,
-								ProjectileSpeed,
+								FinalSpeed,
 								TeamId,
-								bFollow,
+								bFinalFollow, // FIX angewendet
 								LocalInitialAngle,
 								LocalRotSpeed,
 								LocalMaxRadius,
