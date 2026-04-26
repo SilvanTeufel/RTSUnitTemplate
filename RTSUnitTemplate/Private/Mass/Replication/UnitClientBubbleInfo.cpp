@@ -79,15 +79,11 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 			const uint8 MaxBurst = 32;
 			if (UseDelta > MaxBurst)
 			{
-				UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] PostReplicatedChange: NetID=%u had %d missed shots, spawning only latest (MaxBurst=%d)"), 
-					NetID.GetValue(), UseDelta, MaxBurst);
 				UseDelta = MaxBurst;
 			}
 
 			if (UseDelta > 0)
 			{
-				UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] PostReplicatedChange: NetID=%u, RawDelta=%d, Used=%d, Spawning=%d, PendingAfter=%d"), 
-					NetID.GetValue(), RawDelta, UsedFromPending, UseDelta, PredictedPendingShots);
 			}
 
 			LastServerProjectileFireCounter = AIS_ProjectileFireCounter;
@@ -111,7 +107,6 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 						// Startup/validation gates: skip visual spawn if unit target invalid
 						if (TargetLoc.IsNearlyZero())
 						{
-							UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] Skipping projectile spawn (NetID=%u): Invalid TargetLoc"), NetID.GetValue());
 							return;
 						}
 

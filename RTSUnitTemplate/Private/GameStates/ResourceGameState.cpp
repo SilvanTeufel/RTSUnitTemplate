@@ -18,16 +18,12 @@ void AResourceGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 
 void AResourceGameState::OnRep_LoadingWidgetConfig()
 {
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AResourceGameState::OnRep_LoadingWidgetConfig: TriggerId=%d, StartTime=%f, Duration=%f"), 
-		LoadingWidgetConfig.TriggerId, LoadingWidgetConfig.ServerWorldTimeStart, LoadingWidgetConfig.Duration);
-
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(It->Get()))
 		{
 			if (CameraPC->IsLocalPlayerController())
 			{
-				UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] AResourceGameState::OnRep_LoadingWidgetConfig: Calling CheckForLoadingWidget on local PC %s"), *CameraPC->GetName());
 				CameraPC->CheckForLoadingWidget();
 			}
 		}

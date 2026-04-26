@@ -72,15 +72,6 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
     
     if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
     {
-        //ExecuteRepClient(EntityManager, Context);
-        static int32 GActorSyncExecTickCounter = 0;
-        if ((++GActorSyncExecTickCounter % 60) == 0)
-        {
-            if (bShowLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[Client][URunStateProcessor] Execute tick"));
-            }
-        }
         ExecuteClient(EntityManager, Context);
     }
     else

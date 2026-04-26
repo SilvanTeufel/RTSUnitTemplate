@@ -8,7 +8,6 @@ void ULoadingWidget::SetupLoadingWidget(float InTotalDuration, float InServerWor
 {
 	TotalDuration = InTotalDuration;
 	ServerWorldTimeStart = InServerWorldTimeStart;
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget::SetupLoadingWidget: TotalDuration=%f, ServerStartTime=%f"), InTotalDuration, InServerWorldTimeStart);
 }
 
 void ULoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -33,7 +32,6 @@ void ULoadingWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 
 		if (Elapsed >= TotalDuration)
 		{
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ULoadingWidget: Total duration reached (ServerTime), removing from parent."));
 			RemoveFromParent();
 		}
 	}

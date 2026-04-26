@@ -24,7 +24,6 @@ UMassProjectileImpactProcessor::UMassProjectileImpactProcessor()
 
 void UMassProjectileImpactProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	UE_LOG(LogTemp, Log, TEXT("UMassProjectileImpactProcessor::ConfigureQueries"));
 	ProjectileQuery.Initialize(EntityManager);
 	ProjectileQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	ProjectileQuery.AddRequirement<FMassProjectileFragment>(EMassFragmentAccess::ReadWrite);
@@ -203,18 +202,9 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 					Projectile.PiercedTargets++;
 					
-					// Logge jeden einzelnen Treffer
-					UE_LOG(LogTemp, Log, TEXT("[%s] Projectile HIT: TargetEntity=%d, Pierced=%d/%d, Class=%s"), 
-						Context.GetWorld()->GetNetMode() == NM_Client ? TEXT("CLIENT") : TEXT("SERVER"),
-						Units[j].Index, Projectile.PiercedTargets, Projectile.MaxPiercedTargets, *Projectile.ProjectileClass->GetName());
 
     	if (Projectile.PiercedTargets >= Projectile.MaxPiercedTargets)
     	{
-    		// if (ImpactLogThrottle++ % 10 == 0)
-    		UE_LOG(LogTemp, Log, TEXT("[%s] Projectile DESTROYED (Limit reached): Class=%s, Pierced=%d"), 
-    			Context.GetWorld()->GetNetMode() == NM_Client ? TEXT("CLIENT") : TEXT("SERVER"), 
-    			*Projectile.ProjectileClass->GetName(), Projectile.PiercedTargets);
-
     		ProjContext.Defer().DestroyEntity(ProjEntity);
 						
 						FMassProjectileVisualFragment& Visual = VisualList[i];
@@ -267,14 +257,6 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 										FVector PreciseImpactPos = FCollisionUtils::ComputeImpactSurfaceXY(ShooterActor, TargetActor, ProjPos);
 										EffectArea->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
 									}
-									else
-									{
-										UE_LOG(LogTemp, Error, TEXT("[SERVER] TargetActor is not AUnitBase or AEffectArea!"));
-									}
-								}
-								else
-								{
-									UE_LOG(LogTemp, Error, TEXT("[SERVER] TargetActorFrag is missing for Unit %d"), Units[j].Index);
 								}
 							}
 						}

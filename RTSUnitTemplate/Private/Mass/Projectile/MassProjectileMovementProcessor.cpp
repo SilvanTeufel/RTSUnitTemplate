@@ -23,7 +23,6 @@ UMassProjectileMovementProcessor::UMassProjectileMovementProcessor()
 
 void UMassProjectileMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
-	UE_LOG(LogTemp, Log, TEXT("UMassProjectileMovementProcessor::ConfigureQueries - World: %s"), EntityManager->GetWorld() ? *EntityManager->GetWorld()->GetName() : TEXT("None"));
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassProjectileFragment>(EMassFragmentAccess::ReadWrite);
@@ -145,7 +144,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 				if (EntityManager.GetWorld()->GetNetMode() == NM_Client && Projectile.TargetLocation.IsZero())
 				{
-					UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Projectile %d started with ZERO TargetLocation!"), Context.GetEntity(i).Index);
 				}
 			}
 
@@ -196,9 +194,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			FVector TargetLocation = Projectile.TargetLocation;
 
             if (LogThrottle % 60 == 0) {
-                FString NetModeStr = (EntityManager.GetWorld()->GetNetMode() == NM_Client) ? TEXT("[CLIENT]") : TEXT("[SERVER]");
-                UE_LOG(LogTemp, Verbose, TEXT("%s Proj %d: Loc=%s, Tgt=%s, Dir=%s, bCont=%d, Speed=%.1f"), 
-                    *NetModeStr, Context.GetEntity(i).Index, *CurrentLocation.ToString(), *TargetLocation.ToString(), *Projectile.FlightDirection.ToString(), Projectile.bContinueAfterTarget, Projectile.Speed);
             }
 
 			// UE_LOG(LogTemp, Warning, TEXT("Projectile %d: Speed %f, CurrentLoc %s, TargetLoc %s, DeltaTime %f"), i, Projectile.Speed, *CurrentLocation.ToString(), *TargetLocation.ToString(), DeltaTime);
@@ -394,7 +389,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					// Trigger impact on server
 					if (EntityManager.GetWorld()->GetNetMode() < NM_Client)
 					{
-						UE_LOG(LogTemp, Warning, TEXT("[SERVER] Wall Impact Triggered for Proj %d at location %s"), Context.GetEntity(i).Index, *Projectile.WallImpactLocation.ToString());
 						AActor* WallActor = Projectile.WallActor.Get();
 						if (WallActor)
 						{

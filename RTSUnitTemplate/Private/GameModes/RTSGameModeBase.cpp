@@ -61,7 +61,6 @@ void ARTSGameModeBase::BeginPlay()
 	// Show loading widget via GameState (robust for late joiners)
 	if (LoadingWidgetClass)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: Triggering loading widget in GameState."));
 		if (AResourceGameState* GS = GetGameState<AResourceGameState>())
 		{
 			float WidgetDuration = FMath::Max(10.f, (float)GatherControllerTimer + 5.f + (AllUnits.Num() * LoadingTimePerUnit));
@@ -76,10 +75,7 @@ void ARTSGameModeBase::BeginPlay()
 			GS->LoadingWidgetConfig.TriggerId = NewTriggerId;
 			GS->LoadingWidgetConfig.ServerWorldTimeStart = GS->GetServerWorldTimeSeconds();
 			GS->MatchStartTime = GS->LoadingWidgetConfig.ServerWorldTimeStart + WidgetDuration;
-
-			UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: GameState config set. Duration: %f, TriggerId: %d, StartTime: %f, MatchStartTime: %f"), 
-				WidgetDuration, NewTriggerId, GS->LoadingWidgetConfig.ServerWorldTimeStart, GS->MatchStartTime);
-
+			
 			// Trigger for local host immediately
 			GS->OnRep_LoadingWidgetConfig();
 
@@ -88,13 +84,10 @@ void ARTSGameModeBase::BeginPlay()
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("[DEBUG_LOG] ARTSGameModeBase::BeginPlay: Failed to get AResourceGameState! Current GameState is %s"), 
-				GetWorld()->GetGameState() ? *GetWorld()->GetGameState()->GetClass()->GetName() : TEXT("Null"));
 		}
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] RTSGameModeBase: LoadingWidgetClass is not set in GameMode!"));
 	}
 
 	FTimerHandle TimerHandleStartDataTable;
@@ -126,9 +119,8 @@ void ARTSGameModeBase::ReleaseEffectAreas()
 		{
 			for (const FMassEntityHandle& Entity : EntitiesToRelease)
 			{
-				EntityManager.RemoveTagFromEntity(Entity, FMassEffectAreaLoadingTag::StaticStruct());
+ 			EntityManager.RemoveTagFromEntity(Entity, FMassEffectAreaLoadingTag::StaticStruct());
 			}
-			UE_LOG(LogTemp, Log, TEXT("ARTSGameModeBase: Loading phase ended, %d EffectAreas released for processing."), EntitiesToRelease.Num());
 		}
 	}
 }
@@ -774,12 +766,10 @@ void ARTSGameModeBase::NavInitialisation()
         }
         else
         {
-            UE_LOG(LogTemp, Warning, TEXT("Default NavData instance not found for warmup."));
         }
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("Navigation System not found for warmup."));
     }
 }
 
@@ -787,7 +777,6 @@ void ARTSGameModeBase::NavInitialisation()
 void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
-	UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::PostLogin: %s"), NewPlayer ? *NewPlayer->GetName() : TEXT("None"));
 	
 	if (NewPlayer)
 	{
@@ -830,7 +819,6 @@ void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
 
 				if (Remaining > 0.05f)
 				{
-					UE_LOG(LogTemp, Log, TEXT("[DEBUG_LOG] ARTSGameModeBase::SetupLoadingWidgetForPlayer: Triggering for %s. Remaining: %f"), *NewPlayer->GetName(), Remaining);
 					CameraPC->Client_ShowLoadingWidget(GS->LoadingWidgetConfig.WidgetClass, GS->LoadingWidgetConfig.Duration, GS->LoadingWidgetConfig.ServerWorldTimeStart, GS->LoadingWidgetConfig.TriggerId);
 				}
 			}

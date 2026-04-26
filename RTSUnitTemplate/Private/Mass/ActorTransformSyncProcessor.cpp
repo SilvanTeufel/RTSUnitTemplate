@@ -545,15 +545,6 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 {
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
 	{
-	    //ExecuteRepClient(EntityManager, Context);
-	    static int32 GActorSyncExecTickCounter = 0;
-     if ((++GActorSyncExecTickCounter % 60) == 0)
-     {
-         if (bShowLogs)
-         {
-             UE_LOG(LogTemp, Warning, TEXT("[Client][ActorTransformSync] Execute tick"));
-         }
-     }
 		ExecuteClient(EntityManager, Context);
 	}
 	else
@@ -573,15 +564,6 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
     PendingActorUpdates.Reserve(ClientEntityQuery.GetNumMatchingEntities());
-
-    static int32 GActorSyncClientEnterCounter = 0;
-    if ((++GActorSyncClientEnterCounter % 60) == 0)
-    {
-        if (bShowLogs)
-        {
-            UE_LOG(LogTemp, Warning, TEXT("[Client][ActorTransformSync] ExecuteClient enter"));
-        }
-    }
     
     ClientEntityQuery.ForEachEntityChunk(Context,
         [this, &EntityManager, ActualDeltaTime, CurrentTime, &PendingActorUpdates](FMassExecutionContext& ChunkContext)

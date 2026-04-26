@@ -123,14 +123,6 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 	
     if (World->IsNetMode(NM_Client))
     {
-        static int32 GApplyMoveExecTickCounter = 0;
-        if ((++GApplyMoveExecTickCounter % 60) == 0)
-        {
-            if (bShowLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[Client][ApplyMassMovement] Execute tick"));
-            }
-        }
         ExecuteClient(EntityManager, Context);
     }
     else
@@ -156,15 +148,6 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharacteristicsList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
-
-        static int32 GApplyMoveClientChunkCounter = 0;
-        if (((++GApplyMoveClientChunkCounter) % 60) == 0)
-        {
-            if (bShowLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[Client][ApplyMassMovement] ExecuteClient: Entities=%d"), NumEntities);
-            }
-        }
         
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {

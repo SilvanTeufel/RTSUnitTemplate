@@ -72,7 +72,6 @@ AActor* UProjectileVisualManager::GetOrCreateManagerActor()
         ManagerActor = GetWorld()->SpawnActor<AActor>();
         if (GetWorld()->GetNetMode() == NM_Client)
         {
-            UE_LOG(LogTemp, Warning, TEXT("[CLIENT] Created NEW ProjectileVisualISMManagerActor"));
         }
         ManagerActor->Tags.Add(TEXT("ProjectileVisualISMManager"));
         ManagerActor->SetFlags(RF_Transient);
@@ -125,10 +124,6 @@ UInstancedStaticMeshComponent* UProjectileVisualManager::GetOrCreatePooledISM(US
     NewISM->AttachToComponent(ManagerActor->GetRootComponent(), FAttachmentTransformRules::KeepRelativeTransform);
     NewISM->RegisterComponent();
     
-    UE_LOG(LogTemp, Log, TEXT("Created NEW pooled ISM for Mesh: %s, Material: %s on [NetMode: %d]"), 
-        Mesh ? *Mesh->GetName() : TEXT("None"), 
-        Material ? *Material->GetName() : TEXT("None"),
-        (int32)GetWorld()->GetNetMode());
 
     ISMPool.Add(Key, NewISM);
 
@@ -301,12 +296,6 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	// Diagnose-Log für die initiale Fragment-Erstellung auf dem Client
 	if (bIsClient)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[CLIENT] Fragment Initialized: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, CDO_MaxPierced=%d, PosZ=%.2f, Homing=%s, Angle=%.1f, Rot=%.1f, Rad=%.1f, TwinDist=%.1f, HomingCount=%d"), 
-			*ProjectileClass->GetName(), ProjectileSpeed, ProjectileFragment.MaxPiercedTargets, ProjectileFragment.Damage, CDO ? CDO->MaxPiercedTargets : -1,
-			Transform.GetLocation().Z,
-			ProjectileFragment.bIsHoming ? TEXT("YES") : TEXT("NO"),
-			HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius,
-			CDO ? CDO->TwinProjectileDistance : 0.f, CDO ? CDO->HomingMissleCount : 0);
 	}
 
 	ProjectileFragment.RotationOffset = CDO->RotationOffset;

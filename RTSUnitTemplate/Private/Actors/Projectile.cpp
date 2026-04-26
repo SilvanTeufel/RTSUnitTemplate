@@ -1605,7 +1605,6 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 {
 	if (!EAClass)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AProjectile::SpawnEffectArea: EAClass is null!"));
 		return;
 	}
 
@@ -1616,9 +1615,6 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 	}
 	
 	if (!World) World = GetWorld();
-
-	UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Spawning EffectArea of class %s at %s. World: %s"), 
-		*EAClass->GetName(), *Location.ToString(), World ? TEXT("Valid") : TEXT("Null"));
 
 	FQuat VisualRotationOffset = FQuat::Identity;
 	FVector SpawnLocation = Location;
@@ -1648,22 +1644,18 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 	
 	if (MyEffectArea != nullptr)
 	{
-		UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Successfully created MyEffectArea (Deferred)"));
 		MyEffectArea->TeamId = InTeamId;
 		MyEffectArea->VisualRotationOffset = VisualRotationOffset;
 
 		if(ActorToLockOn)
 		{
-			UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Attaching to ActorToLockOn: %s"), *ActorToLockOn->GetName());
 			MyEffectArea->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("rootSocket"));
 		}
 		
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
-		UE_LOG(LogTemp, Log, TEXT("AProjectile::SpawnEffectArea: Finished Spawning Actor"));
 	}
 	else
 	{
-		UE_LOG(LogTemp, Error, TEXT("AProjectile::SpawnEffectArea: Failed to spawn MyEffectArea! (MyEffectArea is null)"));
 	}
 }
 

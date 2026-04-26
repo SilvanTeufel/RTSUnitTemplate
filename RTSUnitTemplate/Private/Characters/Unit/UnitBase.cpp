@@ -138,7 +138,6 @@ void AUnitBase::BeginPlay()
 	BoxCollisionComponent = FCollisionUtils::FindTaggedBoxComponent(this);
 	if (BoxCollisionComponent)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AUnitBase::BeginPlay - CACHED BoxCollisionComponent: %s for %s"), *BoxCollisionComponent->GetName(), *GetName());
 	}
 	
 	ControllerBase = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController());
@@ -898,9 +897,6 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 			// If not attached to ISM (e.g. attached to StaticMeshComponent), just use standard component location
 			FVector MuzzleLocation = GetActorTransform().TransformPosition(GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation())) + AdditionalOffset;
 			
-			UE_LOG(LogTemp, Log, TEXT("[SERVER] GetProjectileSpawnLocation: Unit=%s, MuzzleWorldZ=%.2f, ActorZ=%.2f, HalfHeight=%.2f"),
-				*GetName(), MuzzleLocation.Z, GetActorLocation().Z, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
-
 			return MuzzleLocation;
 		}
 	}
@@ -1130,7 +1126,6 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 if (FinalSpeed <= 0.f && ProjectileCDO)
                 {
                     FinalSpeed = ProjectileCDO->MovementSpeed;
-                    UE_LOG(LogTemp, Warning, TEXT("[RTSUnitTemplate] Unit %s has ProjectileSpeed 0! Falling back to Projectile CDO Default: %.1f"), *GetName(), FinalSpeed);
                 }
 
                 float InitialAngle = 0.f;
@@ -1169,13 +1164,6 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    static uint32 ServerSpawnLogCount = 0;
-                    if (ServerSpawnLogCount++ % 10 == 0)
-                    {
-                        UE_LOG(LogTemp, Log, TEXT("[SERVER] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, Homing=%s, TargetEntity=%d"),
-                            *ProjectileClass->GetName(), FinalSpeed, MaxPiercedTargets, -1.f, 
-                            HomingCount > 0 ? TEXT("Yes") : TEXT("No"), TargetEntity.Index);
-                    }
                     VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), -1.f, MaxPiercedTargets);
                 }
             }
@@ -1341,7 +1329,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             SpawnXf.SetScale3D(ProjectileScale * Scale);
 
             // Spawn deferred so we can Init
-            UE_LOG(LogTemp, Log, TEXT("Spawning Projectile (Aim): Class=%s, bUseMass=%d"), *ProjectileClass->GetName(), ProjectileCDO ? ProjectileCDO->bUseMass : -1);
             if (ProjectileCDO && ProjectileCDO->bUseMass)
             {
                 float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
@@ -1351,7 +1338,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 if (FinalSpeed <= 0.f && ProjectileCDO)
                 {
                     FinalSpeed = ProjectileCDO->MovementSpeed;
-                    UE_LOG(LogTemp, Warning, TEXT("[RTSUnitTemplate] Unit %s has ProjectileSpeed 0! Falling back to Projectile CDO Default: %.1f"), *GetName(), FinalSpeed);
                 }
 
                 float InitialAngle = 0.f;
@@ -1754,7 +1740,6 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
 
     if (!EntityToUse.IsValid())
     {
-        UE_LOG(LogTemp, Warning, TEXT("[SERVER] IncrementMassProjectileFireCounter: Entity invalid for unit %s"), *GetName());
         return;
     }
 
@@ -2004,7 +1989,6 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 if (FinalSpeed <= 0.f && ProjectileCDO)
                 {
                     FinalSpeed = ProjectileCDO->MovementSpeed;
-                    UE_LOG(LogTemp, Warning, TEXT("[RTSUnitTemplate] Unit %s has ProjectileSpeed 0! Falling back to Projectile CDO Default: %.1f"), *GetName(), FinalSpeed);
                 }
 
                 float InitialAngle = 0.f;
@@ -2027,19 +2011,6 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
                     // Identisches Log-Format wie auf dem Client für einfachen Vergleich
-                    UE_LOG(LogTemp, Log, TEXT("[SERVER] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, CDO_MaxPierced=%d, PosZ=%.2f, Homing=%s, Angle=%.1f, Rot=%.1f, Rad=%.1f, TwinDist=%.1f, HomingCount=%d"),
-                        *ProjectileBaseClass->GetName(), 
-                        FinalSpeed, 
-                        ProjectileCDO->MaxPiercedTargets, 
-                        ProjectileCDO->Damage, 
-                        ProjectileCDO->MaxPiercedTargets, // CDO_MaxPierced (identisch auf Server)
-                        Transform.GetLocation().Z,
-                        bFollow ? TEXT("YES") : TEXT("NO"),
-                        InitialAngle,
-                        RotSpeed,
-                        MaxRadius,
-                        ProjectileCDO->TwinProjectileDistance,
-                        ProjectileCDO->HomingMissleCount);
 
                     VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets);
                 }
@@ -2258,10 +2229,8 @@ int32 AUnitBase::GetAliveUnitsInDataSet()
 
 void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 {
-	UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation for %s"), *GetName());
 	if (IsValid(NavObstacleProxy))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Proxy already exists for %s"), *GetName());
 		return;
 	}
 
@@ -2272,22 +2241,18 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 
 	if (BoxCollisionComponent) {
 		BoundsBox = BoxCollisionComponent->Bounds.GetBox();
-		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Using BoxCollisionComponent: %s, Bounds: %s"), *BoxCollisionComponent->GetName(), *BoundsBox.ToString());
 	}
 	else if (UBoxComponent* TaggedBox = FCollisionUtils::FindTaggedBoxComponent(this))
 	{
 		BoundsBox = TaggedBox->Bounds.GetBox();
-		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Using TaggedBox: %s, Bounds: %s"), *TaggedBox->GetName(), *BoundsBox.ToString());
 	}
 	else
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - BoxCollisionComponent IS NULL for %s"), *GetName());
 		// Try to find a capsule collision component first…
 		UCapsuleComponent* Capsule = FindComponentByClass<UCapsuleComponent>();
 
 		if (Capsule)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Multicast_RegisterBuildingAsObstacle_Implementation - Falling back to Capsule: %s"), *Capsule->GetName());
 			// Pull radius & half‑height (accounting for scale)
 			float Radius = Capsule->GetScaledCapsuleRadius();
 			const float HalfHeight = Capsule->GetScaledCapsuleHalfHeight();

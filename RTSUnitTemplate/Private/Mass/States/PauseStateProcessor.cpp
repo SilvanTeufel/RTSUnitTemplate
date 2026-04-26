@@ -304,9 +304,6 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                         Item->PredictedPendingShots++;
     
                         Context.Defer().AddTag<FMassStateAttackTag>(Entity);
-
-                        UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] PauseStateProcessor: Predicted shot for NetID=%u, Pending=%u"), 
-                            NetID.GetValue(), Item->PredictedPendingShots);
                     }
                 }
             }
@@ -383,10 +380,7 @@ void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityMana
     float ProjectileSpeed = (UnitActor->Attributes && UnitActor->Attributes->GetProjectileSpeed() > 0.f) ? UnitActor->Attributes->GetProjectileSpeed() : ProjCDO->MovementSpeed;
 
     // Logging ohne Throttling für den Spawn auf dem Client
-    UE_LOG(LogTemp, Log, TEXT("[CLIENT] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, PosZ=%.2f, Homing=%s, TwinDist=%.1f, HomingCount=%d"),
-        *UnitActor->ProjectileBaseClass->GetName(), ProjectileSpeed, ProjCDO->MaxPiercedTargets, ProjCDO->Damage, SpawnLocation.Z,
-        ProjCDO->HomingMissleCount > 0 ? TEXT("YES") : TEXT("NO"), ProjCDO->TwinProjectileDistance, ProjCDO->HomingMissleCount);
-
+    
     for (const FVector& Pos : SpawnPositions)
     {
         for (int32 i = 0; i < BaseCount; ++i)
