@@ -106,7 +106,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			{
 				float DistSq = FVector::DistSquared(ProjPos, Projectile.LandscapeImpactLocation);
 				// Check if we are within collision radius, accounting for speed to avoid skipping
-				float SpeedBuffer = Projectile.Speed * Context.GetDeltaTimeSeconds();
+				float SpeedBuffer = Projectile.Speed * 10.f * Context.GetDeltaTimeSeconds();
 				float CheckRadius = Projectile.CollisionRadius + SpeedBuffer + 25.f;
 
 				if (DistSq <= FMath::Square(CheckRadius))
@@ -180,7 +180,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 				// Enhanced distance check considering speed to prevent tunneling
 				float DistSq = FVector::DistSquared(ProjPos, UnitLocations[j]);
-				float SpeedFactor = Projectile.Speed * Context.GetDeltaTimeSeconds();
+				float SpeedFactor = Projectile.Speed * 10.f * Context.GetDeltaTimeSeconds();
 				float TargetCollisionRadius = UnitCharFrags[j].GetRadiusInDirection(ProjPos - UnitLocations[j], UnitRotations[j]); 
 				
 				// Be more generous on the server to ensure damage application

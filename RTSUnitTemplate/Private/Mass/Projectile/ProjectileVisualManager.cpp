@@ -357,7 +357,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 
 		FVector TraceStart = Transform.GetLocation();
 		// Trace far ahead (beyond max life time distance)
-		FVector TraceEnd = TraceStart + ProjectileFragment.FlightDirection * (ProjectileFragment.Speed * ProjectileFragment.MaxLifeTime * 1.5f);
+		FVector TraceEnd = TraceStart + ProjectileFragment.FlightDirection * (ProjectileFragment.Speed * 10.f * ProjectileFragment.MaxLifeTime * 1.5f);
 
 		if (GetWorld()->LineTraceMultiByChannel(HitResults, TraceStart, TraceEnd, ECC_WorldStatic, Params))
 		{
