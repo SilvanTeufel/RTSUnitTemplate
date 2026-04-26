@@ -103,37 +103,26 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 					float ProjectileSpeed = 0.f;
 					FVector ProjectileSpawnOffset = FVector::ZeroVector;
 
+					AUnitBase* MyActor = nullptr;
 					if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
 					{
 						if (UMassActorBindingComponent* MyBind = Cache->FindBindingByMassNetID(NetID.GetValue()))
 						{
-							if (AUnitBase* MyActor = Cast<AUnitBase>(MyBind->GetOwner()))
+							MyActor = Cast<AUnitBase>(MyBind->GetOwner());
+							if (MyActor)
 							{
 								ProjectileClass = MyActor->ProjectileBaseClass;
-								ProjectileSpawnOffset = MyActor->ProjectileSpawnOffset;
 
 								if (MyActor->Attributes)
 								{
-									ProjectileSpawnOffset.X += MyActor->Attributes->GetProjectileScaleActorDirectionOffset();
 									ProjectileSpeed = MyActor->Attributes->GetProjectileSpeed();
 								}
-								else if (ProjectileClass)
+								
+								if (ProjectileSpeed <= 0.f && ProjectileClass)
 								{
 									if (const AProjectile* ProjCDO = Cast<AProjectile>(ProjectileClass->GetDefaultObject()))
 									{
 										ProjectileSpeed = ProjCDO->MovementSpeed;
-									}
-								}
-
-								// Check for ProjectileSpawn component
-								const TArray<UActorComponent*> SpawnComps = MyActor->GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
-								if (SpawnComps.Num() > 0)
-								{
-									if (const USceneComponent* SpawnComp = Cast<USceneComponent>(SpawnComps[0]))
-									{
-										FVector SpawnOffset = MyActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
-										SpawnOffset.Z += MyActor->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-										ProjectileSpawnOffset = SpawnOffset;
 									}
 								}
 							}
@@ -164,11 +153,19 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 						// Calculate spawn location (roughly from the shooter's position)
 						FTransform SpawnXf = BuildTransformFromItem(*this);
-						const FVector SpawnPos = SpawnXf.TransformPosition(ProjectileSpawnOffset);
-						SpawnXf.SetLocation(SpawnPos);
+						if (MyActor)
+						{
+							FVector LocalSpawnPos = MyActor->GetProjectileSpawnLocation();
+							SpawnXf.SetLocation(LocalSpawnPos);
+						}
+						else
+						{
+							const FVector SpawnPos = SpawnXf.TransformPosition(ProjectileSpawnOffset);
+							SpawnXf.SetLocation(SpawnPos);
+						}
 
 						// Re-orient SpawnXf towards TargetLoc for non-homing or initial direction
-						FVector ShootDir = (TargetLoc - SpawnPos).GetSafeNormal();
+						FVector ShootDir = (TargetLoc - SpawnXf.GetLocation()).GetSafeNormal();
 						if (!ShootDir.IsNearlyZero())
 						{
 							SpawnXf.SetRotation(FQuat(ShootDir.Rotation()));
@@ -230,7 +227,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 							VisualManager->SpawnMassProjectile(
 								ProjectileClass,
 								LocalSpawnXf,
-								nullptr, nullptr,
+								MyActor, nullptr,
 								LocalTargetLoc,
 								FMassEntityHandle(),
 								TargetHandle,
@@ -243,8 +240,8 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 								Interp,
 								nullptr,
 								LocalScale,
-								0.f,
-								1
+								-1.f, // FIX: Nutze CDO-Schaden
+								-1    // FIX: Nutze CDO-MaxPiercedTargets
 							);
 						}
 					}

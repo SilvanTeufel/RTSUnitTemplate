@@ -9,6 +9,7 @@
 #include "Mass/UnitMassTag.h"
 #include "MassCommonFragments.h" // Für Transform
 #include "MassSignalSubsystem.h"
+#include "MassEntitySubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
@@ -19,6 +20,8 @@
 #include "Mass/Replication/ReplicationSettings.h"
 #include "Mass/Traits/UnitReplicationFragments.h"
 #include "MassReplicationFragments.h"
+#include "Actors/Projectile.h"
+#include "Components/CapsuleComponent.h"
 
 UPauseStateProcessor::UPauseStateProcessor(): EntityQuery()
 {
@@ -59,6 +62,14 @@ void UPauseStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<F
 {
     Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+    EntitySubsystem = UWorld::GetSubsystem<UMassEntitySubsystem>(Owner.GetWorld());
+
+    if (SignalSubsystem)
+    {
+        // Bindung der Funktion an das Signal "RangedAttack"
+        ProjectileSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::RangedAttack)
+            .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UPauseStateProcessor, OnProjectileSignalReceived));
+    }
 }
 
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -279,96 +290,134 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 
                     const float AttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
 
-                    // Projectile data is now handled locally from the Actor on the client
-                    TSubclassOf<AProjectile> ProjectileClass = nullptr;
-                    float ProjectileSpeed = 0.f;
-                    FVector ProjectileSpawnOffset = FVector::ZeroVector;
-
-                    if (AUnitBase* MyActor = Cast<AUnitBase>(Actor))
+                    if (bIsTargetActive && Dist <= AttackRange)
                     {
-                        ProjectileClass = MyActor->ProjectileBaseClass;
-                        ProjectileSpawnOffset = MyActor->ProjectileSpawnOffset;
-
-                        if (MyActor->Attributes)
+                        if (SignalSubsystem)
                         {
-                            ProjectileSpawnOffset.X += MyActor->Attributes->GetProjectileScaleActorDirectionOffset();
-                            ProjectileSpeed = MyActor->Attributes->GetProjectileSpeed();
+                            // Signal triggert verzögert den Delegate (OnProjectileSignalReceived)
+                            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
                         }
-                        else if (ProjectileClass)
-                        {
-                            if (const AProjectile* ProjCDO = Cast<AProjectile>(ProjectileClass->GetDefaultObject()))
-                            {
-                                ProjectileSpeed = ProjCDO->MovementSpeed;
-                            }
-                        }
+    
+                        // Prediction-Zustand markieren
+                        Item->bPredictedLatch = true;
+                        Item->PredictionTimer = 0.f;
+                        Item->PredictedPendingShots++;
+    
+                        Context.Defer().AddTag<FMassStateAttackTag>(Entity);
 
-                        // Check for ProjectileSpawn component
-                        const TArray<UActorComponent*> SpawnComps = MyActor->GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
-                        if (SpawnComps.Num() > 0)
-                        {
-                            if (const USceneComponent* SpawnComp = Cast<USceneComponent>(SpawnComps[0]))
-                            {
-                                FVector SpawnOffset = MyActor->GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
-                                SpawnOffset.Z += MyActor->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-                                ProjectileSpawnOffset = SpawnOffset;
-                            }
-                        }
-                    }
-
-                    if (bIsTargetActive && Dist <= AttackRange && ProjectileClass)
-                    {
-                        if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
-                        {
-                            FTransform SpawnXf = Transform;
-                            // Use LastGroundLocation as a stable Z-anchor on clients.
-                            FVector GroundLoc = SpawnXf.GetLocation();
-                            GroundLoc.Z = CharFrag.LastGroundLocation;
-                            SpawnXf.SetLocation(GroundLoc);
-
-                            const FVector SpawnPos = SpawnXf.TransformPosition(ProjectileSpawnOffset);
-                            SpawnXf.SetLocation(SpawnPos);
-
-                            FVector TargetLoc = TargetFrag.LastKnownLocation;
-                            FVector ShootDir = (TargetLoc - SpawnPos).GetSafeNormal();
-                            if (!ShootDir.IsNearlyZero())
-                            {
-                                SpawnXf.SetRotation(FQuat(ShootDir.Rotation()));
-                            }
-
-                            VisualManager->SpawnMassProjectile(
-                                ProjectileClass,
-                                SpawnXf,
-                                nullptr, nullptr,
-                                TargetLoc,
-                                Entity,
-                                TargetFrag.TargetEntity,
-                                ProjectileSpeed,
-                                Stats.TeamId,
-                                Stats.bUseProjectile,
-                                0.f,
-                                360.f,
-                                0.f,
-                                2.f,
-                                &Context.Defer(),
-                                FVector::OneVector,
-                                0.f,
-                                1
-                            );
-                            
-                            Context.Defer().AddTag<FMassStateAttackTag>(Entity);
-                            // Latch and increment pending for reconciliation
-                            Item->bPredictedLatch = true;
-                            Item->PredictedPendingShots++;
-                            
-                            // Optimization: Reset timer to avoid immediate re-fire if interval is small
-                            Item->PredictionTimer = 0.f;
-
-                            UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] PauseStateProcessor: Predicted shot for NetID=%u, Pending=%u"), 
-                                NetID.GetValue(), Item->PredictedPendingShots);
-                        }
+                        UE_LOG(LogTemp, Verbose, TEXT("[CLIENT] PauseStateProcessor: Predicted shot for NetID=%u, Pending=%u"), 
+                            NetID.GetValue(), Item->PredictedPendingShots);
                     }
                 }
             }
+        }
+    }
+}
+
+void UPauseStateProcessor::OnProjectileSignalReceived(FName SignalName, const TArray<FMassEntityHandle>& Entities)
+{
+    if (!EntitySubsystem) return;
+    
+    UWorld* World = EntitySubsystem->GetWorld();
+    if (!World || World->GetNetMode() != NM_Client) return; // FIX: Nur auf dem Client spawnen (Server spawnt via UnitBase)
+
+    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+    for (const FMassEntityHandle& Entity : Entities)
+    {
+        if (EntityManager.IsEntityValid(Entity))
+        {
+            ExecuteProjectileSpawn(EntityManager, Entity);
+        }
+    }
+}
+
+void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityManager, const FMassEntityHandle Entity)
+{
+    // 1. Daten aus Fragmenten abrufen
+    const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity);
+    const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+    FMassActorFragment* AF = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+    const FMassAITargetFragment* TargetF = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
+    const FMassCombatStatsFragment* StatsF = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
+
+    if (!TF || !AC || !AF || !TargetF || !StatsF) return;
+
+    AUnitBase* UnitActor = Cast<AUnitBase>(AF->GetMutable());
+    if (!UnitActor || !UnitActor->ProjectileBaseClass) return;
+
+    UWorld* World = UnitActor->GetWorld();
+    if (!World) return;
+    UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>();
+    if (!VisualManager) return;
+
+    const AProjectile* ProjCDO = VisualManager->GetProjectileCDO(UnitActor->ProjectileBaseClass);
+    if (!ProjCDO) return;
+
+    // 2. Positionsbestimmung: Nutze direkt die Actor-Logik für den Mündungs-Punkt
+    FVector SpawnLocation = UnitActor->GetProjectileSpawnLocation();
+    
+    FTransform BaseSpawnXf = TF->GetTransform();
+    BaseSpawnXf.SetLocation(SpawnLocation);
+
+    const FVector BaseSpawnPos = SpawnLocation;
+    
+    // 3. Multi-Shot Logik aus CDO (Twin Projectiles / Homing Salven)
+    int32 HomingCount = ProjCDO->HomingMissleCount;
+    int32 BaseCount = (HomingCount > 0) ? HomingCount : 1;
+    TArray<FVector> SpawnPositions;
+
+    if (ProjCDO->TwinProjectileDistance >= 10.f)
+    {
+        FVector DirToTarget = (TargetF->LastKnownLocation - BaseSpawnPos).GetSafeNormal2D();
+        FVector RightVector = DirToTarget.IsNearlyZero() ? UnitActor->GetActorRightVector() : FVector::CrossProduct(FVector::UpVector, DirToTarget);
+        FVector RightOffset = RightVector * ProjCDO->TwinProjectileDistance;
+        SpawnPositions.Add(BaseSpawnPos - RightOffset);
+        SpawnPositions.Add(BaseSpawnPos + RightOffset);
+    }
+    else
+    {
+        SpawnPositions.Add(BaseSpawnPos);
+    }
+
+    // 4. Finaler Spawn über VisualManager
+    float ProjectileSpeed = (UnitActor->Attributes && UnitActor->Attributes->GetProjectileSpeed() > 0.f) ? UnitActor->Attributes->GetProjectileSpeed() : ProjCDO->MovementSpeed;
+
+    // Logging ohne Throttling für den Spawn auf dem Client
+    UE_LOG(LogTemp, Log, TEXT("[CLIENT] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, PosZ=%.2f"),
+        *UnitActor->ProjectileBaseClass->GetName(), ProjectileSpeed, ProjCDO->MaxPiercedTargets, ProjCDO->Damage, SpawnLocation.Z);
+
+    for (const FVector& Pos : SpawnPositions)
+    {
+        for (int32 i = 0; i < BaseCount; ++i)
+        {
+            FTransform FinalSpawnXf = BaseSpawnXf;
+            FinalSpawnXf.SetLocation(Pos);
+            
+            FVector TargetLoc = TargetF->LastKnownLocation;
+            FVector Direction = (TargetLoc - Pos).GetSafeNormal();
+            float InitialAngle = (HomingCount > 1) ? (360.0f / BaseCount) * i : 0.f;
+
+            if (!Direction.IsNearlyZero()) FinalSpawnXf.SetRotation(FQuat(Direction.Rotation()));
+
+            VisualManager->SpawnMassProjectile(
+                UnitActor->ProjectileBaseClass,
+                FinalSpawnXf,
+                UnitActor, nullptr,
+                TargetLoc,
+                Entity,
+                TargetF->TargetEntity,
+                ProjectileSpeed,
+                StatsF->TeamId,
+                ProjCDO->FollowTarget,
+                InitialAngle,
+                ProjCDO->HomingRotationSpeed,
+                ProjCDO->HomingMaxSpiralRadius,
+                ProjCDO->HomingInterpSpeed,
+                nullptr, // Keine Deferral hier nötig, da wir im Signal-Handler sind (Game Thread)
+                UnitActor->ProjectileScale,
+                -1.f, // Nutze CDO-Schaden via Lazy-Init
+                -1    // Nutze CDO-MaxPiercedTargets via Lazy-Init (FIX!)
+            );
         }
     }
 }

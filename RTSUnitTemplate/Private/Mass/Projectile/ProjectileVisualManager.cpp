@@ -283,6 +283,14 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.TeamId = (ShooterTeamId != -1) ? ShooterTeamId : CDO->TeamId;
 	ProjectileFragment.IsHealing = CDO->IsHealing;
 	ProjectileFragment.MaxPiercedTargets = (MaxPiercedTargets >= 0) ? MaxPiercedTargets : CDO->MaxPiercedTargets;
+
+	// Diagnose-Log für die initiale Fragment-Erstellung auf dem Client
+	if (bIsClient)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[CLIENT] Fragment Initialized: Class=%s, MaxPierced=%d, Damage=%.2f, CDO_MaxPierced=%d"), 
+			*ProjectileClass->GetName(), ProjectileFragment.MaxPiercedTargets, ProjectileFragment.Damage, CDO ? CDO->MaxPiercedTargets : -1);
+	}
+
     ProjectileFragment.ProjectileScale = Scale;
     ProjectileFragment.bContinueAfterTarget = CDO->bContinueAfterTarget;
     ProjectileFragment.FlightDirection = (AdjustedTargetLocation - Transform.GetLocation()).GetSafeNormal();

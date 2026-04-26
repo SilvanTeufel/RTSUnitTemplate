@@ -225,15 +225,19 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 		}
 	}
 
-	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
-	
-    if (!EntityManager.IsEntityActive(MassEntityHandle))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is not active."), *MassEntityHandle.DebugGetDescription());
-        return;
-    }
+	if (!Unit->MassActorBindingComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CorrectSetUnitMoveTarget: Unit %s has no MassActorBindingComponent."), *GetNameSafe(Unit));
+		return;
+	}
 
-    // Do not process move if entity is marked Dead in Mass
+	FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+
+	if (!EntityManager.IsEntityActive(MassEntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is not active."), *MassEntityHandle.DebugGetDescription());
+		return;
+	}
     if (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateDeadTag::StaticStruct()))
     {
         return;
@@ -459,12 +463,14 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 
 		// Mass entity handle
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-		FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
+		
 		if (!EntityManager.IsEntityActive(MassEntityHandle))
 		{
 			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] MassEntityHandle is not active. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
+
+		FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
 
 		// Skip if Mass has Dead tag
 		if (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateDeadTag::StaticStruct()))
@@ -744,12 +750,14 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		const float DesiredSpeed = DesiredSpeeds[Index];
 		
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-		FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
+
 		if (!EntityManager.IsEntityValid(MassEntityHandle))
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] MassEntityHandle invalid. Skipping."), *GetNameSafe(Unit));
+			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] MassEntityHandle invalid. Skipping."), *NewTargetLocation.ToString());
 			continue;
 		}
+
+		FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
 
 		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 		if (!AiStatePtr)
@@ -899,15 +907,19 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 		}
 	}
 
-	FMassEntityHandle MassEntityHandle =  Unit->MassActorBindingComponent->GetMassEntityHandle();
-	
-    if (!EntityManager.IsEntityActive(MassEntityHandle))
-    {
-        UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is not active."), *MassEntityHandle.DebugGetDescription());
-        return;
-    }
+	if (!Unit->MassActorBindingComponent)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CorrectSetUnitMoveTargetForAbility: Unit %s has no MassActorBindingComponent."), *GetNameSafe(Unit));
+		return;
+	}
 
-   	// --- Access the PER-ENTITY fragment ---
+	FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+
+	if (!EntityManager.IsEntityActive(MassEntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SetUnitMoveTarget: Provided Entity Handle %s is not active."), *MassEntityHandle.DebugGetDescription());
+		return;
+	}
    	FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(MassEntityHandle);
    	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 	FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);

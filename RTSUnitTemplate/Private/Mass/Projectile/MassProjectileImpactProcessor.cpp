@@ -203,9 +203,19 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 					Projectile.PiercedTargets++;
 					
-					if (Projectile.PiercedTargets >= Projectile.MaxPiercedTargets)
-					{
-						ProjContext.Defer().DestroyEntity(ProjEntity);
+					// Logge jeden einzelnen Treffer
+					UE_LOG(LogTemp, Log, TEXT("[%s] Projectile HIT: TargetEntity=%d, Pierced=%d/%d, Class=%s"), 
+						Context.GetWorld()->GetNetMode() == NM_Client ? TEXT("CLIENT") : TEXT("SERVER"),
+						Units[j].Index, Projectile.PiercedTargets, Projectile.MaxPiercedTargets, *Projectile.ProjectileClass->GetName());
+
+    	if (Projectile.PiercedTargets >= Projectile.MaxPiercedTargets)
+    	{
+    		// if (ImpactLogThrottle++ % 10 == 0)
+    		UE_LOG(LogTemp, Log, TEXT("[%s] Projectile DESTROYED (Limit reached): Class=%s, Pierced=%d"), 
+    			Context.GetWorld()->GetNetMode() == NM_Client ? TEXT("CLIENT") : TEXT("SERVER"), 
+    			*Projectile.ProjectileClass->GetName(), Projectile.PiercedTargets);
+
+    		ProjContext.Defer().DestroyEntity(ProjEntity);
 						
 						FMassProjectileVisualFragment& Visual = VisualList[i];
 						if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)

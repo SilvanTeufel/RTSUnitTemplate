@@ -29,4 +29,5 @@ protected:
 private:
 	FMassEntityQuery EntityQuery;
 	FMassEntityQuery StartupFreezeQuery;
+	FMassEntityQuery InitialKickQuery;
 };

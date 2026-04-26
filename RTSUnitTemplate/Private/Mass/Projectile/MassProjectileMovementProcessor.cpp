@@ -68,13 +68,25 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					Projectile.bRotateMesh = CDO->RotateMesh;
 					Projectile.bDisableAnyRotation = CDO->DisableAnyRotation;
 					Projectile.MaxLifeTime = CDO->MaxLifeTime;
-                    if (Projectile.Damage >= 0.f) Projectile.Damage = CDO->Damage;
-                    Projectile.IsHealing = CDO->IsHealing;
-                    Projectile.bContinueAfterTarget = CDO->bContinueAfterTarget;
-                    if (!Projectile.bHasHitTarget) Projectile.bFollowTarget = CDO->FollowTarget;
-                    Projectile.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
-                    Projectile.ArcHeight = CDO->ArcHeight;
-					// Robust sync for Niagara
+					Projectile.IsHealing = CDO->IsHealing;
+					Projectile.bContinueAfterTarget = CDO->bContinueAfterTarget;
+					if (!Projectile.bHasHitTarget) Projectile.bFollowTarget = CDO->FollowTarget;
+					Projectile.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
+					Projectile.ArcHeight = CDO->ArcHeight;
+
+					// Synchronisation von MaxPiercedTargets
+					if (CDO->MaxPiercedTargets > 1 || Projectile.MaxPiercedTargets <= 1)
+					{
+						if (Projectile.MaxPiercedTargets != CDO->MaxPiercedTargets)
+						{
+							// UE_LOG(LogTemp, Log, TEXT("[CLIENT] CDO Sync MaxPierced: %d -> %d for %s"), 
+							//	Projectile.MaxPiercedTargets, CDO->MaxPiercedTargets, *Projectile.ProjectileClass->GetName());
+							Projectile.MaxPiercedTargets = CDO->MaxPiercedTargets;
+						}
+					}
+					Projectile.CollisionRadius = CDO->CollisionRadius;
+
+               					// Robust sync for Niagara
 					Visual.Niagara_A_RelativeTransform = (CDO->Niagara_A) ? CDO->Niagara_A->GetRelativeTransform() : CDO->Niagara_A_Start_Transform;
 					Visual.Niagara_B_RelativeTransform = (CDO->Niagara_B) ? CDO->Niagara_B->GetRelativeTransform() : CDO->Niagara_B_Start_Transform;
 					// Speed is tricky as it might be from attributes. 

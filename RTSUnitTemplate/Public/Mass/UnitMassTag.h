@@ -44,6 +44,7 @@ USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Gen
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopSeparationTag : public FMassTag { GENERATED_BODY() };
+USTRUCT() struct FMassStateNeedsInitialKickTag : public FMassTag { GENERATED_BODY() };
 
 USTRUCT() struct FMassStateFrozenTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDisableObstacleTag : public FMassTag { GENERATED_BODY() };

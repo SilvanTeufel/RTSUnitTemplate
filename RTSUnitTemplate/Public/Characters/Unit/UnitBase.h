@@ -343,6 +343,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile")
 	FVector GetProjectileSpawnLocation(const FVector& AdditionalOffset = FVector::ZeroVector) const;
 
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "UseProjectile", Keywords = "RTSUnitTemplate UseProjectile"), Category = RTSUnitTemplate)
 	bool UseProjectile = false;
 

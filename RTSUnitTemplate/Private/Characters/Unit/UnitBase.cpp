@@ -799,13 +799,12 @@ void AUnitBase::SetTimerWidgetCastingColor(FLinearColor Color)
 }
 
 
+
 FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) const
 {
-	const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
-	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this);
 	const bool bIsClient = GetWorld() && GetWorld()->GetNetMode() == NM_Client;
+	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this);
 
-	// 0. On Client, use predicted Mass transform with manual height adjustment to match PauseStateProcessor
 	if (bIsClient && MassUnit && MassUnit->MassActorBindingComponent)
 	{
 		FMassEntityHandle EntityHandle = MassUnit->MassActorBindingComponent->GetEntityHandle();
@@ -817,36 +816,59 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 				const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager();
 				const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(EntityHandle);
 				const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle);
-
-				if (TF && AC)
+				
+				if (TF)
 				{
-					FTransform PredictedXf = TF->GetTransform();
-					// Use LastGroundLocation as a stable Z-anchor on clients.
-					FVector GroundLoc = PredictedXf.GetLocation();
-					GroundLoc.Z = AC->LastGroundLocation;
-					PredictedXf.SetLocation(GroundLoc);
+					float LastGround = AC ? AC->LastGroundLocation : (TF->GetTransform().GetLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
 					
-					// On client, ProjectileSpawnOffset is synced from AIS_ProjectileSpawnOffset (authoritative ground-relative muzzle)
-					FVector OffsetFromRoot = ProjectileSpawnOffset;
+					TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
+					FVector RelativeMuzzleLocation = ProjectileSpawnOffset;
 					
-					// Fallback to component-based calculation if ProjectileSpawnOffset is not yet synced
-					if (OffsetFromRoot.IsNearlyZero())
+					if (Comps.Num() > 0 && Comps[0])
 					{
-						TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
-						if (Comps.Num() > 0)
+						if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
 						{
-							if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
+							bool bFoundInMass = false;
+							if (UInstancedStaticMeshComponent* ParentISM = Cast<UInstancedStaticMeshComponent>(SpawnComp->GetAttachParent()))
 							{
-								OffsetFromRoot = GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
+								if (const FMassUnitVisualFragment* VisualFrag = MassUnit->GetVisualFragment())
+								{
+									for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+									{
+										if (Instance.TemplateISM == ParentISM)
+										{
+											RelativeMuzzleLocation = (SpawnComp->GetRelativeTransform() * Instance.CurrentRelativeTransform).GetLocation();
+											bFoundInMass = true;
+											break;
+										}
+									}
+								}
+							}
+							
+							if (!bFoundInMass)
+							{
+								RelativeMuzzleLocation = GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation());
 							}
 						}
 					}
 					
-					return PredictedXf.TransformPosition(OffsetFromRoot) + AdditionalOffset;
+					// Z-Position: Boden + (Hälfte + OffsetZ)
+					float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+					float FinalZ = LastGround + (HalfHeight + RelativeMuzzleLocation.Z);
+					
+					// XY-Position: Predicted Transform + Rotated OffsetXY
+					FVector MuzzleXY = RelativeMuzzleLocation;
+					MuzzleXY.Z = 0.f;
+					FVector FinalPos = TF->GetTransform().TransformPosition(MuzzleXY);
+					FinalPos.Z = FinalZ;
+					
+					return FinalPos + AdditionalOffset;
 				}
 			}
 		}
 	}
+
+	const FName ProjectileSpawnTag = TEXT("ProjectileSpawn");
 
 	// 1. Try to find a component with the specific tag (Server or non-Mass Client)
 	TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
@@ -874,7 +896,12 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 			}
 			
 			// If not attached to ISM (e.g. attached to StaticMeshComponent), just use standard component location
-			return GetActorTransform().TransformPosition(GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation())) + AdditionalOffset;
+			FVector MuzzleLocation = GetActorTransform().TransformPosition(GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation())) + AdditionalOffset;
+			
+			UE_LOG(LogTemp, Log, TEXT("[SERVER] GetProjectileSpawnLocation: Unit=%s, MuzzleWorldZ=%.2f, ActorZ=%.2f, HalfHeight=%.2f"),
+				*GetName(), MuzzleLocation.Z, GetActorLocation().Z, GetCapsuleComponent()->GetScaledCapsuleHalfHeight());
+
+			return MuzzleLocation;
 		}
 	}
 
@@ -1142,6 +1169,13 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
+                    static uint32 ServerSpawnLogCount = 0;
+                    if (ServerSpawnLogCount++ % 10 == 0)
+                    {
+                        UE_LOG(LogTemp, Log, TEXT("[SERVER] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, Homing=%s, TargetEntity=%d"),
+                            *ProjectileClass->GetName(), FinalSpeed, MaxPiercedTargets, -1.f, 
+                            HomingCount > 0 ? TEXT("Yes") : TEXT("No"), TargetEntity.Index);
+                    }
                     VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), -1.f, MaxPiercedTargets);
                 }
 
@@ -1849,7 +1883,7 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
         int32 HomingCount = ProjectileCDO->HomingMissleCount;
         int32 BaseCount = (HomingCount > 0) ? HomingCount : 1;
 
-        FVector ActualSpawnPos = GetProjectileSpawnLocation();
+        FVector ActualSpawnPos = GetProjectileSpawnLocation(FVector::ZeroVector);
         FVector AimLocation = Target->GetActorLocation();
         if (AUnitBase* UnitTarget = Cast<AUnitBase>(Target))
         {
@@ -1925,6 +1959,10 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
 
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
+                    // Identisches Log-Format wie auf dem Client für einfachen Vergleich
+                    UE_LOG(LogTemp, Log, TEXT("[SERVER] Spawning Projectile: Class=%s, Speed=%.2f, MaxPierced=%d, Damage=%.2f, PosZ=%.2f"),
+                        *ProjectileBaseClass->GetName(), FinalSpeed, ProjectileCDO->MaxPiercedTargets, ProjectileCDO->Damage, Transform.GetLocation().Z);
+
                     VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets);
                 }
 

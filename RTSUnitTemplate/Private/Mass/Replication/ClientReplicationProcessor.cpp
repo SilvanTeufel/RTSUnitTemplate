@@ -493,6 +493,9 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				TSet<uint32> ClaimedIDs;
 				// Track seen NetIDs in this chunk to detect duplicates
 				TSet<uint32> SeenIDs;
+				TArray<bool> JustLinked;
+				JustLinked.Init(false, NumEntities);
+
 			for (int32 EntityIdx = 0; EntityIdx < NumEntities; ++EntityIdx)
 			{
 				// Duplicate NetID detection: ensure per-chunk uniqueness
@@ -521,6 +524,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									NetIDList[EntityIdx].NetID.GetValue(), ByIdx->GetValue());
 							}
 							NetIDList[EntityIdx].NetID = *ByIdx;
+							JustLinked[EntityIdx] = (CurrentID == 0);
 						}
 						bSet = true;
  					}
@@ -539,6 +543,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									NetIDList[EntityIdx].NetID.GetValue(), BubbleId->GetValue());
 							}
 							NetIDList[EntityIdx].NetID = *BubbleId;
+							JustLinked[EntityIdx] = (CurrentID == 0);
 						}
 						bSet = true;
 					}
@@ -1079,7 +1084,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					}
 				}
 				// Replication mode: either full replication (direct set) or reconciliation via steering/force
-				if (bUseFullReplication)
+				if (bUseFullReplication || JustLinked[EntityIdx])
 				{
 					// Disable reconciliation: directly set the Mass transform to authoritative
 					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
@@ -1097,10 +1102,14 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 					if (CharList.IsValidIndex(EntityIdx))
 					{
-						if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
+						FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
+						float DistSq = FVector::DistSquared(AC.PositionedTransform.GetLocation(), FinalXf.GetLocation());
+
+						// Wenn Einheit gestoppt ODER Abweichung zur Server-Position > 50cm ODER initialer Snap
+						if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()) || DistSq > FMath::Square(50.0f) || JustLinked[EntityIdx])
 						{
-							CharList[EntityIdx].PositionedTransform = FinalXf;
-							CharList[EntityIdx].bTransformDirty = true;
+							AC.PositionedTransform = FinalXf;
+							AC.bTransformDirty = true;
 						}
 					}
 
@@ -1163,10 +1172,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							ClientXfSnap = FinalXf;
 							if (CharList.IsValidIndex(EntityIdx))
 							{
-								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
+								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
+								float DistSq = FVector::DistSquared(AC.PositionedTransform.GetLocation(), FinalXf.GetLocation());
+
+								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()) || DistSq > FMath::Square(50.0f))
 								{
-									CharList[EntityIdx].PositionedTransform = FinalXf;
-									CharList[EntityIdx].bTransformDirty = true;
+									AC.PositionedTransform = FinalXf;
+									AC.bTransformDirty = true;
 								}
 							}
 							// Zero force/steering this tick to avoid overshoot

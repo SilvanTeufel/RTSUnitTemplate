@@ -297,10 +297,13 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			InitAIFragments(EM, NewMassEntityHandle);
 			InitRepresentation(EM, NewMassEntityHandle);
 
+			// Immer Separation stoppen beim Erstellen, um Explosion zu verhindern.
+			// Wird später entfernt wenn Bewegung startet oder StartupFreeze endet.
+			EM.Defer().AddTag<FMassStateStopSeparationTag>(NewMassEntityHandle);
+			EM.Defer().AddTag<FMassStateNeedsInitialKickTag>(NewMassEntityHandle);
+
 			if (StopSeparation || Cast<AConstructionUnit>(MyOwner))
 			{
-				EM.Defer().AddTag<FMassStateStopSeparationTag>(NewMassEntityHandle);
-				
 				if (Cast<AConstructionUnit>(MyOwner))
 				{
 					EM.Defer().AddTag<FMassDisableAvoidanceTag>(NewMassEntityHandle);
