@@ -50,6 +50,9 @@ namespace UnitReplicationBits
 	static constexpr uint32 EA_bIsScalingAfterImpact = 1u << 22;
 	static constexpr uint32 EA_bImpactScaleTriggered = 1u << 23;
 	static constexpr uint32 EA_bPendingDestruction = 1u << 24;
+
+	static constexpr uint32 AIS_StyleIndexMask = 0xFE000000; // Bits 25-31
+	static constexpr uint32 AIS_StyleIndexShift = 25;
 }
 
 // Fast Array Item für Mass Entity Replikation

@@ -1178,12 +1178,6 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                     }
                     VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), -1.f, MaxPiercedTargets);
                 }
-
-                // 2) Increment replication counter for clients
-                if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
-                {
-                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread, -1.f, MaxPiercedTargets);
-                }
             }
             else
             {
@@ -1220,6 +1214,48 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 }
             }
         }
+    }
+
+    // 2) Increment replication counter for clients once for the whole burst
+    if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
+    {
+        const AProjectile* ProjectileCDO_Inner = ProjectileClass->GetDefaultObject<AProjectile>();
+        float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
+        if (SpeedFromAttributes <= 0.f) SpeedFromAttributes = ProjectileCDO_Inner->MovementSpeed;
+
+        // Resolve Entity Handles
+        FMassEntityHandle ShooterEntity;
+        if (UMassActorBindingComponent* ShooterBind = ShootingUnit->FindComponentByClass<UMassActorBindingComponent>())
+            ShooterEntity = ShooterBind->GetEntityHandle();
+
+        FMassEntityHandle TargetEntity;
+        if (Aim)
+            if (UMassActorBindingComponent* TargetBind = Aim->FindComponentByClass<UMassActorBindingComponent>())
+                TargetEntity = TargetBind->GetEntityHandle();
+
+        IncrementMassProjectileFireCounter(
+            ProjectileClass, 
+            SpeedFromAttributes, 
+            ShooterEntity, 
+            TargetEntity, 
+            0.f, // InitialAngle (will be randomized on client if needed)
+            ProjectileCDO_Inner->HomingRotationSpeed, 
+            ProjectileCDO_Inner->HomingMaxSpiralRadius, 
+            ProjectileCDO_Inner->HomingInterpSpeed, 
+            ProjectileCDO_Inner->FollowTarget || (HomingCount > 0), 
+            AimCenter, // Pass center instead of spread location
+            ShootingUnit->ProjectileScale * Scale, 
+            Spread, 
+            -1.f, 
+            MaxPiercedTargets,
+            ProjectileCount,
+            IsBouncingNext,
+            IsBouncingBack,
+            ZOffset,
+            SpawnOffset,
+            DisableAutoZOffset,
+            TwinDistance
+        );
     }
 }
 
@@ -1350,12 +1386,6 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 {
                     VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), ProjectileCDO->Damage, MaxPiercedTargets);
                 }
-
-                // 2) Increment replication counter for clients
-                if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
-                {
-                    IncrementMassProjectileFireCounter(ProjectileClass, SpeedFromAttributes, ShooterEntity, FMassEntityHandle(), InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, LocationToShoot, SpawnXf.GetScale3D(), Spread, ProjectileCDO->Damage, MaxPiercedTargets);
-                }
             }
             else
             {
@@ -1389,6 +1419,42 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 }
             }
         }
+    }
+
+    // 2) Increment replication counter for clients once for the whole burst
+    if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
+    {
+        const AProjectile* ProjectileCDO_Inner = ProjectileClass->GetDefaultObject<AProjectile>();
+        float SpeedFromAttributes = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
+        if (SpeedFromAttributes <= 0.f) SpeedFromAttributes = ProjectileCDO_Inner->MovementSpeed;
+
+        FMassEntityHandle ShooterEntity;
+        if (UMassActorBindingComponent* ShooterBind = FindComponentByClass<UMassActorBindingComponent>())
+            ShooterEntity = ShooterBind->GetEntityHandle();
+
+        IncrementMassProjectileFireCounter(
+            ProjectileClass, 
+            SpeedFromAttributes, 
+            ShooterEntity, 
+            FMassEntityHandle(), 
+            0.f, 
+            ProjectileCDO_Inner->HomingRotationSpeed, 
+            ProjectileCDO_Inner->HomingMaxSpiralRadius, 
+            ProjectileCDO_Inner->HomingInterpSpeed, 
+            HomingCount > 0, 
+            Aim, 
+            ProjectileScale * Scale, 
+            Spread, 
+            ProjectileCDO_Inner->Damage, 
+            MaxPiercedTargets,
+            ProjectileCount,
+            IsBouncingNext,
+            IsBouncingBack,
+            ZOffset,
+            SpawnOffset,
+            false,
+            TwinDistance
+        );
     }
 }
 
@@ -1672,7 +1738,8 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 }
 
 void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity,
-    float InitialAngle, float RotSpeed, float MaxRadius, float InterpSpeed, bool bFollow, FVector TargetLocation, FVector Scale, float Spread, float Damage, int32 MaxPiercedTargets)
+    float InitialAngle, float RotSpeed, float MaxRadius, float InterpSpeed, bool bFollow, FVector TargetLocation, FVector Scale, float Spread, float Damage, int32 MaxPiercedTargets,
+    int32 ProjectileCount, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, FVector SpawnOffset, bool DisableAutoZOffset, float TwinProjectileDistance)
 {
     if (!ProjectileClass || !HasAuthority()) return;
 
@@ -1709,10 +1776,13 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
             AIS->LastProjectileSpread = Spread;
             AIS->LastProjectileDamage = Damage;
             AIS->LastProjectileMaxPiercedTargets = MaxPiercedTargets;
-            // Calculate offset relative to the ground (Feet) instead of center
-            FVector SpawnOffset = GetActorTransform().InverseTransformPosition(GetProjectileSpawnLocation());
-            SpawnOffset.Z += GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+            AIS->LastProjectileCount = ProjectileCount;
+            AIS->LastIsBouncingNext = IsBouncingNext;
+            AIS->LastIsBouncingBack = IsBouncingBack;
+            AIS->LastZOffset = ZOffset;
             AIS->LastProjectileSpawnOffset = SpawnOffset;
+            AIS->LastDisableAutoZOffset = DisableAutoZOffset;
+            AIS->LastTwinProjectileDistance = TwinProjectileDistance;
 
             // Resolve target NetID
             AIS->LastTargetNetID = 0;
@@ -1723,9 +1793,6 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
                     AIS->LastTargetNetID = NetIDFrag->NetID.GetValue();
                 }
             }
-        }
-        else
-        {
         }
     }
 }
@@ -1976,13 +2043,38 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
 
                     VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets);
                 }
-
-                // Increment replication counter for each projectile in the loop
-                if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
-                {
-                    IncrementMassProjectileFireCounter(ProjectileBaseClass, FinalSpeed, ShooterEntity, TargetEntity, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, bFollow, AimLocation, Transform.GetScale3D(), 0.f, -1.f, ProjectileCDO->MaxPiercedTargets);
-                }
             }
+        }
+
+        // Increment replication counter for clients once for the whole burst
+        if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
+        {
+            float SpeedFromAttributesInner = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
+            if (SpeedFromAttributesInner <= 0.f) SpeedFromAttributesInner = ProjectileCDO->MovementSpeed;
+
+            IncrementMassProjectileFireCounter(
+                ProjectileBaseClass, 
+                SpeedFromAttributesInner, 
+                ShooterEntity, 
+                TargetEntity, 
+                0.f, 
+                ProjectileCDO->HomingRotationSpeed, 
+                ProjectileCDO->HomingMaxSpiralRadius, 
+                ProjectileCDO->HomingInterpSpeed, 
+                ProjectileCDO->FollowTarget || (HomingCount > 0), 
+                AimLocation, 
+                ProjectileScale, 
+                0.f, 
+                -1.f, 
+                ProjectileCDO->MaxPiercedTargets,
+                (HomingCount > 0) ? HomingCount : 1, // ProjectileCount
+                false, // IsBouncingNext
+                false, // IsBouncingBack
+                0.f,   // ZOffset
+                FVector::ZeroVector, // SpawnOffset
+                false, // DisableAutoZOffset
+                TwinDistance
+            );
         }
     }
     else

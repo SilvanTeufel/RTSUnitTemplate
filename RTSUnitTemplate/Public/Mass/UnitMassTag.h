@@ -443,6 +443,24 @@ struct FMassAIStateFragment : public FMassFragment
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     float LastProjectileSpread = 0.f;
 
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    int32 LastProjectileCount = 1;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    bool LastIsBouncingNext = false;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    bool LastIsBouncingBack = false;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    float LastZOffset = 0.f;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    bool LastDisableAutoZOffset = false;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    float LastTwinProjectileDistance = 0.f;
+
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	TSubclassOf<class AProjectile> LastProjectileClass;
 

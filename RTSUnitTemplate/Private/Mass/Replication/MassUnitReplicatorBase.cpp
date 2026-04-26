@@ -132,7 +132,7 @@ static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
     return Bubble;
 }
 
-static void UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager& EM, FMassEntityHandle EH)
+static bool UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager& EM, FMassEntityHandle EH, AUnitClientBubbleInfo* BubbleInfo)
 {
     uint32 NewBits = 0u;
     auto SetBit = [&NewBits](uint32 Bit, bool bValue) { if (bValue) NewBits |= Bit; };
@@ -164,6 +164,64 @@ static void UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager
         SetBit(UnitReplicationBits::AIS_SwitchingState, AIS->SwitchingState);
         SetBit(UnitReplicationBits::AIS_IsInitialized, AIS->IsInitialized);
         SetBit(UnitReplicationBits::AIS_bFollowTarget, AIS->LastbFollowTarget);
+
+		// --- Style Index Logic ---
+		if (BubbleInfo && AIS->LastProjectileClass)
+		{
+			if (const FMassActorFragment* ActorFrag = EM.GetFragmentDataPtr<FMassActorFragment>(EH))
+			{
+				if (const AUnitBase* Unit = Cast<AUnitBase>(ActorFrag->Get()))
+				{
+					// Resolve unit's standard values for comparison
+					float StandardSpeed = Unit->Attributes ? Unit->Attributes->GetProjectileSpeed() : 0.f;
+					if (StandardSpeed <= 0.f)
+					{
+						if (const AProjectile* ProjCDO = Cast<AProjectile>(Unit->ProjectileBaseClass->GetDefaultObject()))
+							StandardSpeed = ProjCDO->MovementSpeed;
+					}
+
+					const AProjectile* UnitProjCDO = Cast<AProjectile>(Unit->ProjectileBaseClass->GetDefaultObject());
+
+					// Determine if the current shot is "Standard" or "Special"
+					bool bIsStandard = (AIS->LastProjectileClass == Unit->ProjectileBaseClass) &&
+									   FMath::IsNearlyEqual(AIS->LastProjectileSpeed, StandardSpeed, 1.0f) &&
+									   AIS->LastProjectileScale.Equals(Unit->ProjectileScale, 0.05f) &&
+									   FMath::IsNearlyEqual(AIS->LastProjectileSpread, 0.f, 0.1f) &&
+									   (AIS->LastProjectileCount == (UnitProjCDO ? (UnitProjCDO->HomingMissleCount > 0 ? UnitProjCDO->HomingMissleCount : 1) : 1)) &&
+									   (AIS->LastIsBouncingNext == false) &&
+									   (AIS->LastIsBouncingBack == false) &&
+									   FMath::IsNearlyEqual(AIS->LastZOffset, 0.f, 0.1f) &&
+									   AIS->LastProjectileSpawnOffset.IsNearlyZero(0.1f) &&
+									   (AIS->LastDisableAutoZOffset == false) &&
+									   FMath::IsNearlyEqual(AIS->LastTwinProjectileDistance, UnitProjCDO ? UnitProjCDO->TwinProjectileDistance : 0.f, 0.1f);
+
+					if (!bIsStandard)
+					{
+						FProjectileStyle Style;
+						Style.ProjectileClass = AIS->LastProjectileClass;
+						Style.Speed = AIS->LastProjectileSpeed;
+						Style.Scale = AIS->LastProjectileScale;
+						Style.Spread = AIS->LastProjectileSpread;
+						Style.ProjectileCount = AIS->LastProjectileCount;
+						Style.MaxPiercedTargets = AIS->LastProjectileMaxPiercedTargets;
+						Style.IsBouncingNext = AIS->LastIsBouncingNext;
+						Style.IsBouncingBack = AIS->LastIsBouncingBack;
+						Style.ZOffset = AIS->LastZOffset;
+						Style.SpawnOffset = AIS->LastProjectileSpawnOffset;
+						Style.DisableAutoZOffset = AIS->LastDisableAutoZOffset;
+						Style.TwinProjectileDistance = AIS->LastTwinProjectileDistance;
+						Style.HomingInitialAngle = AIS->LastHomingInitialAngle;
+						Style.HomingRotationSpeed = AIS->LastHomingRotationSpeed;
+						Style.HomingMaxSpiralRadius = AIS->LastHomingMaxSpiralRadius;
+						Style.HomingInterpSpeed = AIS->LastHomingInterpSpeed;
+						Style.bFollowTarget = AIS->LastbFollowTarget;
+
+						uint8 StyleIdx = BubbleInfo->GetOrCreateStyleIndex(Style);
+						NewBits |= (static_cast<uint32>(StyleIdx) << UnitReplicationBits::AIS_StyleIndexShift) & UnitReplicationBits::AIS_StyleIndexMask;
+					}
+				}
+			}
+		}
     }
     if (const FMassMoveTargetFragment* MT = EM.GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
     {
@@ -181,7 +239,12 @@ static void UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager
         SetBit(UnitReplicationBits::EA_bPendingDestruction, Impact->bPendingDestruction);
     }
 
-    Item.ReplicationBits = NewBits;
+    if (Item.ReplicationBits != NewBits)
+    {
+        Item.ReplicationBits = NewBits;
+        return true;
+    }
+    return false;
 }
 
 void UMassUnitReplicatorBase::AddRequirements(FMassEntityQuery& EntityQuery)
@@ -285,7 +348,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         NewItem.YawQuantized = QuantizeAngle(Rot.Yaw);
         NewItem.Scale = VisualXf.GetScale3D();
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
-        UpdateReplicationBits(NewItem, EntityManager, Entity);
+        UpdateReplicationBits(NewItem, EntityManager, Entity, BubbleInfo);
 
         
             if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
@@ -661,7 +724,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     {
                         const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
-                        UpdateReplicationBits(NewItem, *EM, EH);
+                        UpdateReplicationBits(NewItem, *EM, EH, BubbleInfo);
                         if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                         {
                             NewItem.Move_Center = MT->Center;
@@ -798,6 +861,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     if (EM)
                     {
                         if (Item->TagBits != NewBits) { Item->TagBits = NewBits; bDirty = true; }
+                        if (UpdateReplicationBits(*Item, *EM, EH, BubbleInfo)) { bDirty = true; }
                         if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
                         {
                             uint8 NewFlags = 0u;

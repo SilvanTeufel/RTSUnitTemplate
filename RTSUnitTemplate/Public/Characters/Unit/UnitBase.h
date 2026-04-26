@@ -327,7 +327,8 @@ public:
     void SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle());
 
 	void IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(),
-		float InitialAngle = 0.f, float RotSpeed = 0.f, float MaxRadius = 0.f, float InterpSpeed = 0.f, bool bFollow = false, FVector TargetLocation = FVector::ZeroVector, FVector Scale = FVector::OneVector, float Spread = 0.f, float Damage = -1.f, int32 MaxPiercedTargets = -1);
+		float InitialAngle = 0.f, float RotSpeed = 0.f, float MaxRadius = 0.f, float InterpSpeed = 0.f, bool bFollow = false, FVector TargetLocation = FVector::ZeroVector, FVector Scale = FVector::OneVector, float Spread = 0.f, float Damage = -1.f, int32 MaxPiercedTargets = -1,
+		int32 ProjectileCount = 1, bool IsBouncingNext = false, bool IsBouncingBack = false, float ZOffset = 0.f, FVector SpawnOffset = FVector::ZeroVector, bool DisableAutoZOffset = false, float TwinProjectileDistance = 0.f);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
    	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride = -1.f);
