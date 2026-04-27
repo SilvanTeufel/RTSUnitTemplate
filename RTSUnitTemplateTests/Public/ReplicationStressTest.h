@@ -9,7 +9,7 @@
  * Tests initial massive replication and burst spawning.
  */
 UCLASS()
-class RTSUNITTEMPLATE_API AReplicationStressTest : public AFunctionalTest
+class RTSUNITTEMPLATETESTS_API AReplicationStressTest : public AFunctionalTest
 {
 	GENERATED_BODY()
 

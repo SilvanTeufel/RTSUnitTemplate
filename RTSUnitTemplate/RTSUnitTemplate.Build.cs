@@ -16,6 +16,7 @@ public class RTSUnitTemplate : ModuleRules
             "CoreUObject",
             "Engine",
             "NetCore",
+            "UMG",
             "MassEntity",
             "MassCommon",
             "MassReplication",
@@ -25,34 +26,34 @@ public class RTSUnitTemplate : ModuleRules
             "MassMovement",
             "NavigationSystem",
             "XRBase",
-            "FunctionalTesting"
+            "GameplayAbilities", 
+            "GameplayTasks", 
+            "GameplayTags",
+            "Niagara"
         });
 
         // Private: implementation-only dependencies
         PrivateDependencyModuleNames.AddRange(new string[]
         {
             // Mass stack (implementation-only)
-            "MassSimulation", "MassSpawner", "MassMovement", "MassNavigation", "MassSignals",
-            "MassRepresentation", "MassAIBehavior", "MassLOD",
+            "MassSimulation", "MassSpawner", "MassSignals", "MassAIBehavior", "MassLOD",
 
             // ZoneGraph
             "ZoneGraph", "ZoneGraphAnnotations",
 
-            // Gameplay Ability System & tags
-            "GameplayAbilities", "GameplayTasks", "GameplayTags",
-
             // Navigation & AI
-            "NavigationSystem", "AIModule",
+            "AIModule",
 
             // UI
-            "UMG", "Slate", "SlateCore", "MoviePlayer",
+            "Slate", "SlateCore", "MoviePlayer",
 
             // Input & FX
-            "InputCore", "EnhancedInput", "Niagara",
+            "InputCore", "EnhancedInput",
 
             // Misc
-            "StructUtils", "Json", "JsonUtilities", "RenderCore", "XRBase", "Landscape",
+            "StructUtils", "Json", "JsonUtilities", "RenderCore", "Landscape",
             "NNE"
         });
+        
     }
 }

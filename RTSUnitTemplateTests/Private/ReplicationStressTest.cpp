@@ -1,4 +1,4 @@
-﻿#include "Tests/ReplicationStressTest.h"
+﻿#include "ReplicationStressTest.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Engine/World.h"
