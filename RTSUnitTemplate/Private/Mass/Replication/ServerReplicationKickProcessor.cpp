@@ -194,7 +194,7 @@ UServerReplicationKickProcessor::UServerReplicationKickProcessor()
 	: EntityQuery(*this)
 {
 	bAutoRegisterWithProcessingPhases = true;
-	ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+	ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone | (int32)EProcessorExecutionFlags::Client;
 	bRequiresGameThreadExecution = true;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 }
@@ -227,7 +227,6 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 {
 	if (bSkipReplication) return;
 
-		
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)
 	{
@@ -236,7 +235,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	TimeSinceLastRun = 0.f;
 
 	UWorld* World = GetWorld();
-	if (!World || World->GetNetMode() == NM_Client)
+	if (!World)
 	{
 		return;
 	}
@@ -246,7 +245,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	// Handle global startup freeze release
 	if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
 	{
-		if (!GS->bStartupFreezeReleased)
+		if (World->GetNetMode() != NM_Client && !GS->bStartupFreezeReleased)
 		{
 			// If MatchStartTime is not set (<= 0), we treat time as reached immediately.
 			// Default is -1.f, but also check for 0.f just in case.
@@ -312,24 +311,54 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				}
 			}
 		}
-	}
 
-	// Always process newly spawned units that need a kick
-	InitialKickQuery.ForEachEntityChunk(Context, [&EntityManager, &UnitsToKick](FMassExecutionContext& KickCtx)
-	{
-		const int32 Num = KickCtx.GetNumEntities();
-		TArrayView<FMassActorFragment> ActorList = KickCtx.GetMutableFragmentView<FMassActorFragment>();
-		for (int32 i = 0; i < Num; ++i)
+		// Process newly spawned units or units waiting for startup release
+		if (GS->bStartupFreezeReleased)
 		{
-			FMassEntityHandle Entity = KickCtx.GetEntity(i);
-			EntityManager.Defer().RemoveTag<FMassStateNeedsInitialKickTag>(Entity);
-
-			if (AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].GetMutable()))
+			// Handle units that were frozen but are now released (mostly server/standalone)
+			StartupFreezeQuery.ForEachEntityChunk(Context, [&EntityManager, &UnitsToKick](FMassExecutionContext& FreezeCtx)
 			{
-				UnitsToKick.Add(Unit);
-			}
+				const int32 Num = FreezeCtx.GetNumEntities();
+				TArrayView<FMassActorFragment> ActorList = FreezeCtx.GetMutableFragmentView<FMassActorFragment>();
+				for (int32 i = 0; i < Num; ++i)
+				{
+					FMassEntityHandle Entity = FreezeCtx.GetEntity(i);
+					EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(Entity);
+					EntityManager.Defer().RemoveTag<FMassStateNeedsInitialKickTag>(Entity);
+					
+					if (AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].GetMutable()))
+					{
+						UnitsToKick.Add(Unit);
+						if (Unit->MassActorBindingComponent && !Unit->MassActorBindingComponent->StopSeparation && !Cast<AConstructionUnit>(Unit))
+						{
+							EntityManager.Defer().RemoveTag<FMassStateStopSeparationTag>(Entity);
+						}
+					}
+					else
+					{
+						EntityManager.Defer().RemoveTag<FMassStateStopSeparationTag>(Entity);
+					}
+				}
+			});
+
+			// Handle newly spawned units (Server and Client)
+			InitialKickQuery.ForEachEntityChunk(Context, [&EntityManager, &UnitsToKick](FMassExecutionContext& KickCtx)
+			{
+				const int32 Num = KickCtx.GetNumEntities();
+				TArrayView<FMassActorFragment> ActorList = KickCtx.GetMutableFragmentView<FMassActorFragment>();
+				for (int32 i = 0; i < Num; ++i)
+				{
+					FMassEntityHandle Entity = KickCtx.GetEntity(i);
+					EntityManager.Defer().RemoveTag<FMassStateNeedsInitialKickTag>(Entity);
+
+					if (AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].GetMutable()))
+					{
+						UnitsToKick.Add(Unit);
+					}
+				}
+			});
 		}
-	});
+	}
 
 	// Perform the synchronization kick for all collected units
 	if (UnitsToKick.Num() > 0)
@@ -339,22 +368,11 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		{
 			int32 CurrentBatchNum = FMath::Min(MaxBatchSize, UnitsToKick.Num() - i);
 			TArray<AUnitBase*> BatchUnits;
-			TArray<FVector> BatchLocations;
-			TArray<float> BatchSpeeds;
-			TArray<float> BatchRadii;
-
 			BatchUnits.Reserve(CurrentBatchNum);
-			BatchLocations.Reserve(CurrentBatchNum);
-			BatchSpeeds.Reserve(CurrentBatchNum);
-			BatchRadii.Reserve(CurrentBatchNum);
 
 			for (int32 j = 0; j < CurrentBatchNum; ++j)
 			{
-				AUnitBase* Unit = UnitsToKick[i + j];
-				BatchUnits.Add(Unit);
-				BatchLocations.Add(Unit->GetMassActorLocation());
-				BatchSpeeds.Add(Unit->RunSpeed);
-				BatchRadii.Add(50.f);
+				BatchUnits.Add(UnitsToKick[i + j]);
 			}
 
 			ACustomControllerBase* AnyController = nullptr;
@@ -366,15 +384,16 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 
 			if (AnyController)
 			{
-				AnyController->Server_Batch_CorrectSetUnitMoveTargets(World, BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, false, false);
+				// Call Batch_KickUnits locally. If on Server, it will be authoritative. If on Client, it will update local simulation.
+				AnyController->Batch_KickUnits(BatchUnits);
 			}
 		}
 	}
 
 	// Respect global replication mode: only run in custom Mass mode
-	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass)
+	if (World->GetNetMode() == NM_Client)
 	{
-		return;
+		return; // Replication logic below is for Server only
 	}
 	if (CVarRTS_ServerKick_Enable.GetValueOnGameThread() == 0)
 	{

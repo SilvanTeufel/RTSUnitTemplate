@@ -136,6 +136,9 @@ public:
 		bool AttackT = false,
 		bool bResetHoldPosition = true);
 
+	// Batch initialization of units without formation logic, projecting each to its own position on NavMesh.
+	void Batch_KickUnits(const TArray<AUnitBase*>& Units);
+
 	// Apply owner ability-key toggle on client and refresh UI
 	UFUNCTION(Client, Reliable)
 	void Client_ApplyOwnerAbilityKeyToggle(AUnitBase* Unit, const FString& Key, bool bEnable);

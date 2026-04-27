@@ -684,6 +684,88 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	}
 }
 
+void ACustomControllerBase::Batch_KickUnits(const TArray<AUnitBase*>& Units)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!MassSubsystem) return;
+
+	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+
+	for (AUnitBase* Unit : Units)
+	{
+		if (!Unit) continue;
+
+		// On Client, we might be called before IsInitialized is true, but we still want to unfreeze.
+		// However, we MUST have a valid mass entity.
+		FMassEntityHandle EntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+		if (!EntityManager.IsEntityActive(EntityHandle)) continue;
+
+		FVector CurrentLocation = Unit->GetMassActorLocation();
+		FVector ProjectLocation = CurrentLocation;
+
+		// Ensure vertical alignment and movement state for mobile units
+		if (Unit->CanMove)
+		{
+			if (NavSys)
+			{
+				FNavLocation NavLoc;
+				// Using a larger Z-extent (500.f) to ensure units spawned above the grid are correctly snapped down.
+				if (NavSys->ProjectPointToNavigation(CurrentLocation, NavLoc, FVector(200.f, 200.f, 500.f)))
+				{
+					ProjectLocation = NavLoc.Location;
+				}
+			}
+
+			if (FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+			{
+				// Refined to work like Batch_CorrectSetUnitMoveTargets:
+				// Use UpdateMoveTarget instead of StopMovement to trigger "Move" action
+				UpdateMoveTarget(*MoveTarget, ProjectLocation, Unit->RunSpeed, World);
+				MoveTarget->DistanceToGoal = 0.f;
+				MoveTarget->SlackRadius = 50.f;
+			}
+			
+			// Re-add Run tag as it's done in Batch_CorrectSetUnitMoveTargets
+			EntityManager.Defer().AddTag<FMassStateRunTag>(EntityHandle);
+		}
+
+		// Tags Manipulation: Synchronize state between Server and Client
+		EntityManager.Defer().AddTag<FMassStateDetectTag>(EntityHandle);
+		
+		EntityManager.Defer().RemoveTag<FMassStateIdleTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateFrozenTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateNeedsInitialKickTag>(EntityHandle);
+
+		// Comprehensive tag removal to match Batch_CorrectSetUnitMoveTargets
+		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateCastingTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateRepairTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(EntityHandle);
+		
+		if (Unit->MassActorBindingComponent && !Unit->MassActorBindingComponent->StopSeparation && !Cast<AConstructionUnit>(Unit))
+		{
+			EntityManager.Defer().RemoveTag<FMassStateStopSeparationTag>(EntityHandle);
+		}
+	}
+    
+	// Crucial: Flush commands so tags are applied immediately for the next simulation tick
+	EntityManager.FlushCommands();
+}
+
 void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Implementation(
 	UObject* WorldContextObject,
 	const TArray<AUnitBase*>& Units,
