@@ -2658,7 +2658,7 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
         }
     }
 
-    if (AbilityFired && !AbilityUnSynced && bAnyAbilityWantsToKeepSelection)
+    if ((AbilityFired || AbilityUnSynced) && bAnyAbilityWantsToKeepSelection)
     {
         // Reset the flag for the client, but don't perform selection follow-up
         Client_ContinueSelectionAfterAbility(FHitResult(), false, true);
