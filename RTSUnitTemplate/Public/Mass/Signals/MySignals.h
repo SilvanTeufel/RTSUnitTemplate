@@ -47,6 +47,7 @@ namespace UnitSignals
 	const FName ClientSetToPlaceholder(TEXT("ClientSetToPlaceholder"));
 	
 	const FName SyncCastTime(TEXT("SyncCastTime"));
+	const FName SyncConstructionScale(TEXT("SyncConstructionScale"));
 	const FName EndCast(TEXT("EndCast"));
 	
 	// Repair-specific signals

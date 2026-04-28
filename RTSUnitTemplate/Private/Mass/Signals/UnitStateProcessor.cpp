@@ -1112,24 +1112,24 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		// Synchronized locally via UUnitActorToFragmentSyncProcessor
         		// CharFragment->bIsFlying = StrongUnitActor->IsFlying;
         		// CharFragment->FlyHeight = StrongUnitActor->FlyHeight;
-        		CharFragment->bCanOnlyAttackFlying = StrongUnitActor->CanOnlyAttackFlying;
-        		CharFragment->bCanOnlyAttackGround = StrongUnitActor->CanOnlyAttackGround;
-        		CharFragment->bCanDetectInvisible = StrongUnitActor->CanDetectInvisible;
+        		// CharFragment->bCanOnlyAttackFlying = StrongUnitActor->CanOnlyAttackFlying;
+        		// CharFragment->bCanOnlyAttackGround = StrongUnitActor->CanOnlyAttackGround;
+        		// CharFragment->bCanDetectInvisible = StrongUnitActor->CanDetectInvisible;
         	}
         	
         	if (StrongUnitActor && AIStateFragment && CharFragment)
         	{
-        		AIStateFragment->CanMove = StrongUnitActor->CanMove;
+        		// AIStateFragment->CanMove = StrongUnitActor->CanMove; // Synchronized locally via UUnitActorToFragmentSyncProcessor
         		bool bHasDeadTag = DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDeadTag::StaticStruct());
         		
         		if (DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateDisableNavManipulationTag::StaticStruct()) || bHasDeadTag)
         		{
         			if (StrongUnitActor->HasAuthority() && StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_UnregisterObstacle();
-        		} else if (AIStateFragment->CanMove && !bHasDeadTag)
+        		} else if (StrongUnitActor->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
         			if (StrongUnitActor->HasAuthority() && StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_UnregisterObstacle();
-        		}else if(!AIStateFragment->CanMove && !bHasDeadTag && CharFragment->CanManipulateNavMesh)
+        		}else if(!StrongUnitActor->CanMove && !bHasDeadTag && CharFragment->CanManipulateNavMesh)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
 
@@ -1138,10 +1138,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
                     
         			if (StrongUnitActor->HasAuthority() && !StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_RegisterBuildingAsObstacle();
         		}
-        		AIStateFragment->CanAttack = StrongUnitActor->CanAttack;
+        		// AIStateFragment->CanAttack = StrongUnitActor->CanAttack; // Synchronized locally via UUnitActorToFragmentSyncProcessor
         		
-        		AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
-        		AIStateFragment->HoldPosition = StrongUnitActor->bHoldPosition;
+        		// Synchronized locally via UUnitActorToFragmentSyncProcessor
+        		// AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
+        		// AIStateFragment->HoldPosition = StrongUnitActor->bHoldPosition;
         	}
         	
             if (CombatStatsFrag && AttributeSet)
@@ -1152,6 +1153,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             	// CombatStatsFrag->MaxHealth = AttributeSet->GetMaxHealth();
             	// CombatStatsFrag->MaxShield = AttributeSet->GetMaxShield();
             	
+            	/*
             	if (FMassVisibilityFragment* VisFrag = GTEntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(CapturedEntity))
             	{
 					VisFrag->LastHealth = AttributeSet->GetHealth();
@@ -1178,6 +1180,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 						CombatStatsFrag->LoseSightRadius = StrongUnitActor->MassActorBindingComponent->LoseSightRadius;
             		}
             	}
+            	*/
 
             	if (StrongUnitActor && StrongUnitActor->NextWaypoint) // Use config from Actor if available
             	{

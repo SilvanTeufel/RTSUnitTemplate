@@ -666,7 +666,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
     								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
     								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
     								{
-    									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(TagItem->Location), FVector(TagItem->Scale));
+    									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(TagItem->Location), AC.Scale);
     									AC.bTransformDirty = true;
     									if (TransformList.IsValidIndex(EntityIdx))
     									{
@@ -702,9 +702,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 									Impact.bIsScalingAfterImpact = HasBit(UnitReplicationBits::EA_bIsScalingAfterImpact);
 									Impact.bImpactScaleTriggered = HasBit(UnitReplicationBits::EA_bImpactScaleTriggered);
 									Impact.bPendingDestruction = HasBit(UnitReplicationBits::EA_bPendingDestruction);
-									Impact.StartScaleTime = TagItem->EA_StartScaleTime;
-									Impact.VisualRotationOffset = TagItem->EA_VisualRotationOffset;
-									Impact.RadiusAtImpactStart = TagItem->EA_RadiusAtImpactStart;
 								}
 								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
 								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && HasBit(UnitReplicationBits::Move_bHasTarget))
@@ -822,7 +819,12 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 								// Dequantize rotation and build transform
 								const float LYaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
-								FinalXf = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(UseItem->Location), FVector(UseItem->Scale));
+								FVector LocalScale = FVector::OneVector;
+								if (CharList.IsValidIndex(EntityIdx))
+								{
+									LocalScale = CharList[EntityIdx].Scale;
+								}
+								FinalXf = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(UseItem->Location), LocalScale);
 								bFromBubble = true;
    							// Apply replicated tag bits to this entity on the client
 							if (UMassEntitySubsystem* ES = World->GetSubsystem<UMassEntitySubsystem>())
@@ -888,7 +890,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								const float LYaw_Inner = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
  								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
  								{
- 									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw_Inner, 0.f)), FVector(UseItem->Location), FVector(UseItem->Scale));
+ 									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw_Inner, 0.f)), FVector(UseItem->Location), AC.Scale);
  									AC.bTransformDirty = true;
  									if (TransformList.IsValidIndex(EntityIdx))
  									{
@@ -936,9 +938,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								bool bNewPulsate = (UseItem->VE_ActiveEffects & (1 << 0)) != 0;
 								if (bNewPulsate && !Effect.bPulsateEnabled) Effect.PulsateElapsed = 0.f;
 								Effect.bPulsateEnabled = bNewPulsate;
-								Effect.PulsateMinScale = FVector(UseItem->VE_PulsateMinScale);
-								Effect.PulsateMaxScale = FVector(UseItem->VE_PulsateMaxScale);
-								Effect.PulsateHalfPeriod = UseItem->VE_PulsateHalfPeriod;
 
 								bool bNewRotation = (UseItem->VE_ActiveEffects & (1 << 1)) != 0;
 								if (bNewRotation && !Effect.bRotationEnabled) Effect.RotationElapsed = 0.f;
@@ -1099,6 +1098,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					if (CharList.IsValidIndex(EntityIdx))
 					{
 						FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
+						
+						// WICHTIG: Da Scale nicht repliziert wird, müssen wir hier 
+						// die lokale Skalierung (vom Actor-Sync) in die finale Transformation übernehmen.
+						FinalXf.SetScale3D(AC.Scale);
+
 						float DistSq = FVector::DistSquared(AC.PositionedTransform.GetLocation(), FinalXf.GetLocation());
 
 						// Wenn Einheit gestoppt ODER Abweichung zur Server-Position > 50cm ODER initialer Snap

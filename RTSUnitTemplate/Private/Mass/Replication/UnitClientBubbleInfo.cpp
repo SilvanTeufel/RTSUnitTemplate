@@ -32,7 +32,7 @@ static FTransform BuildTransformFromItem(const FUnitReplicationItem& Item)
 	FTransform Xf;
 	Xf.SetLocation(Item.Location);
 	Xf.SetRotation(FQuat(FRotator(0.f, Yaw, 0.f)));
-	Xf.SetScale3D(Item.Scale);
+	Xf.SetScale3D(FVector::OneVector);
 	return Xf;
 }
 
@@ -98,10 +98,10 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 					if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
 					{
 						// Resolve target location
-						FVector TargetLoc = AIS_ProjectileTargetLocation;
+						FVector TargetLoc = FVector(AIS_ProjectileTargetLocation);
 						if (TargetLoc.IsZero())
 						{
-							TargetLoc = AITargetLastKnownLocation;
+							TargetLoc = FVector(AITargetLastKnownLocation);
 						}
 
 						// Startup/validation gates: skip visual spawn if unit target invalid

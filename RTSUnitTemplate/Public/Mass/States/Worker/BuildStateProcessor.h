@@ -22,6 +22,7 @@ class RTSUNITTEMPLATE_API UBuildStateProcessor : public UMassProcessor
 public:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
+	virtual void BeginDestroy() override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 	
 	void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
@@ -40,4 +41,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
+
+	UFUNCTION()
+	void CalculateConstructionScale(FName SignalName, TArray<FMassEntityHandle>& Entities);
+
+	FDelegateHandle CalculateConstructionScaleDelegateHandle;
 };

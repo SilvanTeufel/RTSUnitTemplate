@@ -12,6 +12,10 @@
 // Your project specific includes
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "MassActorSubsystem.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Actors/WorkArea.h"
+#include "Characters/Unit/ConstructionUnit.h"
 
 // No Actor includes, no Movement includes needed
 
@@ -54,6 +58,21 @@ void UBuildStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<F
 {
     Super::InitializeInternal(Owner, EntityManager);
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
+    
+    if (SignalSubsystem)
+    {
+        CalculateConstructionScaleDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncConstructionScale).AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UBuildStateProcessor, CalculateConstructionScale));
+    }
+}
+
+void UBuildStateProcessor::BeginDestroy()
+{
+    if (SignalSubsystem && CalculateConstructionScaleDelegateHandle.IsValid())
+    {
+        auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncConstructionScale);
+        Delegate.Remove(CalculateConstructionScaleDelegateHandle);
+    }
+    Super::BeginDestroy();
 }
 
 void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -114,6 +133,7 @@ void UBuildStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     if (SignalSubsystem)
     {
         SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncCastTime, Entity);
+        SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncConstructionScale, Entity);
     }
 
     // --- Completion Check ---
@@ -141,5 +161,97 @@ void UBuildStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
 void UBuildStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
     FMassAIStateFragment& AIState, FMassWorkerStatsFragment& WorkerStats, const FMassEntityHandle Entity, const int32 EntityIdx)
 {
-    // Rotation logic on client is now handled by UActorTransformSyncProcessor
+    // 1. Lokales Hochzählen des Timers (da dieser nicht repliziert wird)
+    AIState.StateTimer += ExecutionInterval;
+    AIState.DeltaTime = ExecutionInterval;
+
+    if (SignalSubsystem)
+    {
+        SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncConstructionScale, Entity);
+    }
+}
+
+void UBuildStateProcessor::CalculateConstructionScale(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+    TArray<FMassEntityHandle> EntitiesCopy = Entities;
+
+    AsyncTask(ENamedThreads::GameThread, [this, EntitiesCopy]()
+    {
+        UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+        if (!EntitySubsystem) return;
+
+        FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+
+        for (const FMassEntityHandle& Entity : EntitiesCopy)
+        {
+            if (!EntityManager.IsEntityValid(Entity)) continue;
+
+            FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+            if (!ActorFrag) continue;
+
+            AUnitBase* UnitBase = Cast<AUnitBase>(ActorFrag->GetMutable());
+            if (!UnitBase || !UnitBase->BuildArea || !UnitBase->BuildArea->ConstructionUnit) continue;
+
+            AUnitBase* CU = UnitBase->BuildArea->ConstructionUnit;
+            AWorkArea* WA = UnitBase->BuildArea;
+
+            if (WA->Mesh)
+            {
+                // Gleiche Logik wie auf dem Server zur Berechnung der Passform
+                FBox AreaBox = WA->Mesh->CalcBounds(WA->Mesh->GetRelativeTransform()).GetBox();
+                FVector AreaSize = AreaBox.GetSize();
+                
+                // Wir nutzen die Bounds der CU, um die initiale Größe zu bestimmen
+                FBox UnitBox = CU->GetComponentsBoundingBox(true);
+                FVector CurrentScale = CU->GetActorScale3D();
+                FVector UnitSize = UnitBox.GetSize();
+
+                // Herausrechnen der aktuellen Skalierung, um die unskalierte Basis-Größe zu erhalten
+                if (!CurrentScale.IsNearlyZero())
+                {
+                    UnitSize.X /= CurrentScale.X;
+                    UnitSize.Y /= CurrentScale.Y;
+                    UnitSize.Z /= CurrentScale.Z;
+                }
+                
+                if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER)
+                {
+                    const float Margin = 0.98f;
+                    const float ScaleX = (AreaSize.X * Margin) / UnitSize.X;
+                    const float ScaleY = (AreaSize.Y * Margin) / UnitSize.Y;
+                    const float ScaleZ = (AreaSize.Z * Margin) / UnitSize.Z;
+                    const float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
+                    
+                    FVector NewScale = FVector(Uniform, Uniform, Uniform);
+                    
+                    // Falls die CU spezifische Z-Skalierung erlaubt
+                    if (AConstructionUnit* SpecCU = Cast<AConstructionUnit>(CU))
+                    {
+                        if (SpecCU->ScaleZ) NewScale.Z = ScaleZ;
+                    }
+                    
+                    FVector FinalActorScale = NewScale * 2.f * WA->ScaleConstructionUnit;
+                    CU->SetActorScale3D(FinalActorScale);
+
+                    // Update Mass Fragment
+                    if (UWorld* World = CU->GetWorld())
+                    {
+                        if (UMassActorSubsystem* ActorSubsystem = World->GetSubsystem<UMassActorSubsystem>())
+                        {
+                            FMassEntityHandle CUEntity = ActorSubsystem->GetEntityHandleFromActor(CU);
+                            if (CUEntity.IsValid())
+                            {
+                                if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(CUEntity))
+                                {
+                                    CharFrag->Scale = FinalActorScale;
+                                    CharFrag->PositionedTransform.SetScale3D(FinalActorScale);
+                                    CharFrag->bTransformDirty = true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
 }

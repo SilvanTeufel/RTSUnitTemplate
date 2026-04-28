@@ -132,6 +132,15 @@ UMassActorBindingComponent::UMassActorBindingComponent()
 {
 	PrimaryComponentTick.bCanEverTick = true;
 	SetComponentTickInterval(0.5);
+	SetIsReplicatedByDefault(true);
+}
+
+void UMassActorBindingComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(UMassActorBindingComponent, SightRadius);
+	DOREPLIFETIME(UMassActorBindingComponent, LoseSightRadius);
 }
 
 // Called when the game starts

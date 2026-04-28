@@ -77,10 +77,6 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	UPROPERTY()
 	uint16 YawQuantized = 0;
 
-	// Scale
-	UPROPERTY()
-	FVector_NetQuantize10 Scale;
-
 	// Bitfield of replicated Mass state tags (subset used for client-side state/UI)
 	UPROPERTY()
 	uint32 TagBits = 0u;
@@ -98,10 +94,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	uint8 AITargetFlags = 0u;
 	// Last known location of the target
 	UPROPERTY()
-	FVector_NetQuantize AITargetLastKnownLocation;
+	FVector3f AITargetLastKnownLocation;
 	// Ability target location (coarse precision is fine)
 	UPROPERTY()
-	FVector_NetQuantize10 AbilityTargetLocation;
+	FVector3f AbilityTargetLocation;
 
 	 // --- FMassCombatStatsFragment (subset) ---
 	// Redundant fields removed to reduce bandwidth (synchronized locally via Actor)
@@ -126,20 +122,20 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	uint32 AIS_LastTargetNetID = 0u;
 
 	UPROPERTY()
-	FVector_NetQuantize10 AIS_ProjectileTargetLocation = FVector::ZeroVector;
+	FVector3f AIS_ProjectileTargetLocation = FVector3f::ZeroVector;
 
 	// --- Worker and Friendly Target replication ---
 	UPROPERTY()
 	uint32 AIFriendlyTargetNetID = 0u;
 
 	UPROPERTY()
-	FVector_NetQuantize AIFriendlyTargetLastKnownLocation;
+	FVector3f AIFriendlyTargetLastKnownLocation;
 
 	UPROPERTY()
-	FVector_NetQuantize Worker_BuildAreaPosition;
+	FVector3f Worker_BuildAreaPosition;
 
 	// --- FMassMoveTargetFragment (subset + versioning) ---
-	UPROPERTY() FVector_NetQuantize10 Move_Center = FVector::ZeroVector;
+	UPROPERTY() FVector3f Move_Center = FVector3f::ZeroVector;
 	UPROPERTY() float Move_SlackRadius = 0.f;
 	UPROPERTY() float Move_DesiredSpeed = 0.f;
 	UPROPERTY() uint8 Move_IntentAtGoal = 0; // EMassMovementAction
@@ -150,15 +146,9 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	// --- FMassVisualEffectFragment replication ---
 	UPROPERTY() uint8 VE_ActiveEffects = 0; // Bitmask: bit0=Pulsate, bit1=Rotation, bit2=Oscillation
 
-	// Pulsate
-	UPROPERTY() FVector_NetQuantize10 VE_PulsateMinScale = FVector::OneVector;
-	UPROPERTY() FVector_NetQuantize10 VE_PulsateMaxScale = FVector::OneVector;
-	UPROPERTY() float VE_PulsateHalfPeriod = 0.f;
-
 	// --- FEffectAreaImpactFragment replication ---
-	UPROPERTY() float EA_StartScaleTime = 0.f;
-	UPROPERTY() FQuat EA_VisualRotationOffset = FQuat::Identity;
-	UPROPERTY() float EA_RadiusAtImpactStart = 0.f;
+	// Redundant fields removed to reduce bandwidth (synchronized locally via Actor)
+	// EA_StartScaleTime, EA_VisualRotationOffset, EA_RadiusAtImpactStart
 
 	// Client-side reconciliation (NOT replicated)
 	uint8 LastServerProjectileFireCounter = 0;
@@ -171,14 +161,10 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 		: NetID()
 		, Location(FVector::ZeroVector)
 		, YawQuantized(0)
-		, Scale(FVector(1.0f, 1.0f, 1.0f))
-		, AITargetLastKnownLocation(FVector::ZeroVector)
-		, AbilityTargetLocation(FVector::ZeroVector)
+		, AITargetLastKnownLocation(FVector3f::ZeroVector)
+		, AbilityTargetLocation(FVector3f::ZeroVector)
 		, AIS_ProjectileFireCounter(0)
 		, AIS_LastTargetNetID(0u)
-		, EA_StartScaleTime(0.f)
-		, EA_VisualRotationOffset(FQuat::Identity)
-		, EA_RadiusAtImpactStart(0.f)
 	{
 	}
 

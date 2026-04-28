@@ -807,6 +807,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	FVector BoxExtent = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	FVector Scale = FVector::OneVector;
+
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float VerticalDeathRotationMultiplier = 0.f;
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")

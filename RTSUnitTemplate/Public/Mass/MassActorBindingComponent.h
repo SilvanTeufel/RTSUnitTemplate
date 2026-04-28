@@ -12,6 +12,7 @@
 #include "MassEntityConfigAsset.h"
 #include "MassCommandBuffer.h"
 #include "MassEntityUtils.h" // For CreateEntityFromConfig helper
+#include "Net/UnrealNetwork.h"
 #include "MassActorBindingComponent.generated.h"
 
 
@@ -128,10 +129,12 @@ public:
 	
 	void CleanupMassEntity();
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float SightRadius = 2000.f; 
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float LoseSightRadius = 2500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
