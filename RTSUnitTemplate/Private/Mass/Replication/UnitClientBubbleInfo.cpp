@@ -153,6 +153,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 						}
 
 						AUnitBase* MyActor = nullptr;
+						uint8 TeamId_Resolved = 0;
 						if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
 						{
 							if (UMassActorBindingComponent* MyBind = Cache->FindBindingByMassNetID(NetID.GetValue()))
@@ -160,6 +161,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 								MyActor = Cast<AUnitBase>(MyBind->GetOwner());
 								if (MyActor)
 								{
+									TeamId_Resolved = MyActor->TeamId;
 									if (!ProjectileClass_Resolved)
 									{
 										ProjectileClass_Resolved = MyActor->ProjectileBaseClass;
@@ -302,7 +304,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 									ShooterHandle,
 									TargetHandle,
 									FinalSpeed,
-									CS_TeamId,
+									TeamId_Resolved,
 									bStyleFollowTarget || (StyleIdx == 0 && (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0),
 									InitialAngle,
 									RotSpeed,

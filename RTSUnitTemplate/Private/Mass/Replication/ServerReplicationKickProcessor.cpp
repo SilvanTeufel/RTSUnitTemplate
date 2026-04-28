@@ -5,6 +5,8 @@
 #include "MassCommonFragments.h"
 #include "MassEntityManager.h"
 #include "MassExecutionContext.h"
+#include "MassCommandBuffer.h"
+#include "MassCommands.h"
 #include "MassReplicationFragments.h"
 #include "MassReplicationSubsystem.h"
 #include "MassLODSubsystem.h"
@@ -359,7 +361,6 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			});
 		}
 	}
-/*
 	// Perform the synchronization kick for all collected units
 	if (UnitsToKick.Num() > 0)
 	{
@@ -384,12 +385,17 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 
 			if (AnyController)
 			{
-				// Call Batch_KickUnits locally. If on Server, it will be authoritative. If on Client, it will update local simulation.
-				AnyController->Batch_KickUnits(BatchUnits);
+				// Use Defer().PushCommand to safely call the controller outside of the Mass processing phase
+				Context.Defer().PushCommand<FMassDeferredSetCommand>([AnyController, BatchUnits](FMassEntityManager& EM)
+				{
+					if (IsValid(AnyController))
+					{
+						AnyController->Batch_KickUnits(BatchUnits);
+					}
+				});
 			}
 		}
 	}
-	*/
 	// Respect global replication mode: only run in custom Mass mode
 	if (World->GetNetMode() == NM_Client)
 	{

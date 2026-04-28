@@ -652,14 +652,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 											if (CombatList.IsValidIndex(EntityIdx))
 											{
     								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
-    								CS.Health = TagItem->CS_Health;
-    								CS.Shield = TagItem->CS_Shield;
-    								CS.TeamId = TagItem->CS_TeamId;
+    								// Synchronized locally via UUnitActorToFragmentSyncProcessor
+    								// CS.Health = TagItem->CS_Health;
+    								// CS.Shield = TagItem->CS_Shield;
+    								// CS.TeamId = TagItem->CS_TeamId;
     							}
     							if (CharList.IsValidIndex(EntityIdx))
     							{
     								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-    								AC.FlyHeight = TagItem->AC_FlyHeight;
+    								// Synchronized locally via UUnitActorToFragmentSyncProcessor
+    								// AC.FlyHeight = TagItem->AC_FlyHeight;
     								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
     								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
     								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
@@ -677,10 +679,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
 								const bool bIsDead = (TagItem->TagBits & UnitTagBits::Dead) != 0;
 								// Only sync timer if not dead, or if it's the very first death sync (timer transition)
-								if (!bIsDead || (AIS.StateTimer <= 0.001f && TagItem->AIS_StateTimer <= 0.001f))
-								{
-									AIS.StateTimer = TagItem->AIS_StateTimer;
-								}
+								// Synchronized locally via UUnitActorToFragmentSyncProcessor
+								// if (!bIsDead || (AIS.StateTimer <= 0.001f && TagItem->AIS_StateTimer <= 0.001f))
+								// {
+								// 	AIS.StateTimer = TagItem->AIS_StateTimer;
+								// }
 								AIS.CanAttack = HasBit(UnitReplicationBits::AIS_CanAttack);
 								AIS.CanMove = HasBit(UnitReplicationBits::AIS_CanMove);
 								AIS.HoldPosition = HasBit(UnitReplicationBits::AIS_HoldPosition);
@@ -871,14 +874,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  							if (CombatList.IsValidIndex(EntityIdx))
  							{
  								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
- 								CS.Health = UseItem->CS_Health;
- 								CS.Shield = UseItem->CS_Shield;
- 								CS.TeamId = UseItem->CS_TeamId;
+ 								// Synchronized locally via UUnitActorToFragmentSyncProcessor
+ 								// CS.Health = UseItem->CS_Health;
+ 								// CS.Shield = UseItem->CS_Shield;
+ 								// CS.TeamId = UseItem->CS_TeamId;
  							}
  							if (CharList.IsValidIndex(EntityIdx))
  							{
  								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
- 								AC.FlyHeight = UseItem->AC_FlyHeight;
+ 								// Synchronized locally via UUnitActorToFragmentSyncProcessor
+ 								// AC.FlyHeight = UseItem->AC_FlyHeight;
  								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
  								const float LYaw_Inner = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
  								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
@@ -896,10 +901,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
  								const bool bIsDead2 = (UseItem->TagBits & UnitTagBits::Dead) != 0;
  								// Only sync timer if not dead, or if it's the very first death sync (timer transition)
- 								if (!bIsDead2 || (AIS.StateTimer <= 0.001f && UseItem->AIS_StateTimer <= 0.001f))
- 								{
- 									AIS.StateTimer = UseItem->AIS_StateTimer;
- 								}
+ 								// Synchronized locally via UUnitActorToFragmentSyncProcessor
+ 								// if (!bIsDead2 || (AIS.StateTimer <= 0.001f && UseItem->AIS_StateTimer <= 0.001f))
+ 								// {
+ 								// 	AIS.StateTimer = UseItem->AIS_StateTimer;
+ 								// }
  								AIS.CanAttack = HasBit2(UnitReplicationBits::AIS_CanAttack);
  								AIS.CanMove = HasBit2(UnitReplicationBits::AIS_CanMove);
  								AIS.HoldPosition = HasBit2(UnitReplicationBits::AIS_HoldPosition);

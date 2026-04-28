@@ -104,12 +104,13 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	FVector_NetQuantize10 AbilityTargetLocation;
 
 	 // --- FMassCombatStatsFragment (subset) ---
-	UPROPERTY() float CS_Health = 0.f;
-	UPROPERTY() float CS_Shield = 0.f;
-	UPROPERTY() uint8 CS_TeamId = 0;
+	// Redundant fields removed to reduce bandwidth (synchronized locally via Actor)
+	// UPROPERTY() float CS_Health = 0.f;
+	// UPROPERTY() float CS_Shield = 0.f;
+	// UPROPERTY() uint8 CS_TeamId = 0;
 
 	// --- FMassAgentCharacteristicsFragment (subset) ---
-	UPROPERTY() float AC_FlyHeight = 0.f;
+	// UPROPERTY() float AC_FlyHeight = 0.f;
 
 	// --- FRunAnimationFragment ---
 	UPROPERTY()
@@ -118,7 +119,7 @@ struct RTSUNITTEMPLATE_API FUnitReplicationItem : public FFastArraySerializerIte
 	uint8 RunAnimation_AnimationState = 0; // Use uint8 for EState
 
 	// --- FMassAIStateFragment (subset) ---
-	UPROPERTY() float AIS_StateTimer = 0.f;
+	// UPROPERTY() float AIS_StateTimer = 0.f;
 	UPROPERTY() uint8 AIS_ProjectileFireCounter = 0;
 	
 	UPROPERTY()

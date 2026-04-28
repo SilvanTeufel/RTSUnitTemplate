@@ -1109,8 +1109,9 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
 
         	if (StrongUnitActor && CharFragment)
         	{
-        		CharFragment->bIsFlying = StrongUnitActor->IsFlying;
-        		CharFragment->FlyHeight = StrongUnitActor->FlyHeight;
+        		// Synchronized locally via UUnitActorToFragmentSyncProcessor
+        		// CharFragment->bIsFlying = StrongUnitActor->IsFlying;
+        		// CharFragment->FlyHeight = StrongUnitActor->FlyHeight;
         		CharFragment->bCanOnlyAttackFlying = StrongUnitActor->CanOnlyAttackFlying;
         		CharFragment->bCanOnlyAttackGround = StrongUnitActor->CanOnlyAttackGround;
         		CharFragment->bCanDetectInvisible = StrongUnitActor->CanDetectInvisible;
@@ -1145,15 +1146,16 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         	
             if (CombatStatsFrag && AttributeSet)
             {
-                CombatStatsFrag->Health = AttributeSet->GetHealth();
-                CombatStatsFrag->Shield = AttributeSet->GetShield();
-            	CombatStatsFrag->MaxHealth = AttributeSet->GetMaxHealth();
-            	CombatStatsFrag->MaxShield = AttributeSet->GetMaxShield();
+            	// Synchronized locally via UUnitActorToFragmentSyncProcessor
+                // CombatStatsFrag->Health = AttributeSet->GetHealth();
+                // CombatStatsFrag->Shield = AttributeSet->GetShield();
+            	// CombatStatsFrag->MaxHealth = AttributeSet->GetMaxHealth();
+            	// CombatStatsFrag->MaxShield = AttributeSet->GetMaxShield();
             	
             	if (FMassVisibilityFragment* VisFrag = GTEntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(CapturedEntity))
             	{
-					VisFrag->LastHealth = CombatStatsFrag->Health;
-					VisFrag->LastShield = CombatStatsFrag->Shield;
+					VisFrag->LastHealth = AttributeSet->GetHealth();
+					VisFrag->LastShield = AttributeSet->GetShield();
 				}
             	
             	CombatStatsFrag->AttackDamage = AttributeSet->GetAttackDamage();

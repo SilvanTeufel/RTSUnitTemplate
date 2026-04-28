@@ -400,17 +400,20 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         // Fill additional fragments: CombatStats, AgentCharacteristics, AIState
         if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
         {
-            NewItem.CS_Health = CS->Health;
-            NewItem.CS_Shield = CS->Shield;
-            NewItem.CS_TeamId = (uint8)CS->TeamId;
+            // CS_Health, CS_Shield, CS_TeamId are now synchronized locally to save bandwidth
+            // NewItem.CS_Health = CS->Health;
+            // NewItem.CS_Shield = CS->Shield;
+            // NewItem.CS_TeamId = (uint8)CS->TeamId;
         }
         if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
         {
-            NewItem.AC_FlyHeight = AC->FlyHeight;
+            // AC_FlyHeight is now synchronized locally
+            // NewItem.AC_FlyHeight = AC->FlyHeight;
         }
         if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
         {
-            NewItem.AIS_StateTimer = AIS->StateTimer;
+            // AIS_StateTimer is now synchronized locally
+            // NewItem.AIS_StateTimer = AIS->StateTimer;
             NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
             NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
             NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
@@ -795,17 +798,18 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         // Fill additional replicated fragments at creation time (subset)
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
                         {
-                            NewItem.CS_Health = CS->Health;
-                            NewItem.CS_Shield = CS->Shield;
-                            NewItem.CS_TeamId = (uint8)CS->TeamId;
+                            // Redundant fields synchronized locally
+                            // NewItem.CS_Health = CS->Health;
+                            // NewItem.CS_Shield = CS->Shield;
+                            // NewItem.CS_TeamId = (uint8)CS->TeamId;
                         }
                         if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
                         {
-                            NewItem.AC_FlyHeight = AC->FlyHeight;
+                            // NewItem.AC_FlyHeight = AC->FlyHeight;
                         }
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
                         {
-                            NewItem.AIS_StateTimer = AIS->StateTimer;
+                            // NewItem.AIS_StateTimer = AIS->StateTimer;
                             NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
                             NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
                             NewItem.AIS_ProjectileTargetLocation = AIS->LastProjectileTargetLocation;
@@ -941,28 +945,28 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         // Keep additional replicated fragments in sync (subset)
                         if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
                         {
-                            if (!FMath::IsNearlyEqual(Item->CS_Health, CS->Health, HealthThresh)) { Item->CS_Health = CS->Health; bDirty = true; }
-                            if (Item->CS_TeamId != CS->TeamId) { Item->CS_TeamId = CS->TeamId; bDirty = true; }
-                            if (!FMath::IsNearlyEqual(Item->CS_Shield, CS->Shield, HealthThresh)) { Item->CS_Shield = CS->Shield; bDirty = true; }
+                            // if (!FMath::IsNearlyEqual(Item->CS_Health, CS->Health, HealthThresh)) { Item->CS_Health = CS->Health; bDirty = true; }
+                            // if (Item->CS_TeamId != CS->TeamId) { Item->CS_TeamId = CS->TeamId; bDirty = true; }
+                            // if (!FMath::IsNearlyEqual(Item->CS_Shield, CS->Shield, HealthThresh)) { Item->CS_Shield = CS->Shield; bDirty = true; }
                         }
 
                         if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
                         {
-                            if (!FMath::IsNearlyEqual(Item->AC_FlyHeight, AC->FlyHeight, 0.01f)) { Item->AC_FlyHeight = AC->FlyHeight; bDirty = true; }
+                            // if (!FMath::IsNearlyEqual(Item->AC_FlyHeight, AC->FlyHeight, 0.01f)) { Item->AC_FlyHeight = AC->FlyHeight; bDirty = true; }
                         }
 
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
                         {
                             // Only replicate StateTimer if NOT dead, or if it's the first time it's dead (transition)
-                            bool bIsDeadTransition = (bIsDead && Item->AIS_StateTimer > 0.001f && AIS->StateTimer <= 0.001f);
-                            if (!bIsDead || bIsDeadTransition)
-                            {
-                                if (!FMath::IsNearlyEqual(Item->AIS_StateTimer, AIS->StateTimer, 0.001f)) 
-                                { 
-                                    Item->AIS_StateTimer = AIS->StateTimer; 
-                                    bDirty = true; 
-                                }
-                            }
+                            // bool bIsDeadTransition = (bIsDead && Item->AIS_StateTimer > 0.001f && AIS->StateTimer <= 0.001f);
+                            // if (!bIsDead || bIsDeadTransition)
+                            // {
+                            //     if (!FMath::IsNearlyEqual(Item->AIS_StateTimer, AIS->StateTimer, 0.001f)) 
+                            //     { 
+                            //         Item->AIS_StateTimer = AIS->StateTimer; 
+                            //         bDirty = true; 
+                            //     }
+                            // }
                             if (Item->AIS_ProjectileFireCounter != AIS->ProjectileFireCounter) { Item->AIS_ProjectileFireCounter = AIS->ProjectileFireCounter; bDirty = true; }
                             
                             // Also ensure Projectile details and LastTargetNetID is current if we are firing
