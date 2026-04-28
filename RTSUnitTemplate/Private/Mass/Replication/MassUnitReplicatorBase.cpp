@@ -241,9 +241,7 @@ static bool UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager
         SetBit(UnitReplicationBits::EA_bPendingDestruction, Impact->bPendingDestruction);
     }
 
-    const uint32 ProtectedMask = 0x1F000000; // Bits 24-28 (Slots + EA_bPendingDestruction is 24)
-    // EA_bPendingDestruction is Bit 24. Slots are 25, 26, 27, 28.
-    // So 0x1F000000 covers bits 24, 25, 26, 27, 28.
+    const uint32 ProtectedMask = 0u; // Slots moved to TagBits. EA_bPendingDestruction (24) is set here.
     
     const uint32 CombinedBits = (Item.ReplicationBits & ProtectedMask) | (NewBits & ~ProtectedMask);
 
@@ -362,7 +360,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         {
             // Slot 1: Target (Move)
             NewItem.TargetLoc = FVector(MT->Center);
-            NewItem.ReplicationBits |= UnitReplicationBits::Slot_TargetIsMove;
+            NewItem.TagBits |= UnitReplicationBits::Slot_TargetIsMove;
 
             // MoveData bundling
             const uint8 QSlack = (uint8)FMath::Clamp(MT->SlackRadius, 0.f, 255.f);
@@ -386,7 +384,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             if (AIT->IsFocusedOnTarget) NewPackedEnums |= UnitReplicationBits::Packed_IsFocusedOnTarget;
             
             // If Slot 1 is NOT taken by Move, use it for AI Target
-            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
+            if (!(NewItem.TagBits & UnitReplicationBits::Slot_TargetIsMove))
             {
                 NewItem.TargetLoc = FVector(AIT->LastKnownLocation);
                 uint32 TargetNetIDVal = 0u;
@@ -404,11 +402,11 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             if (AIT->AbilityTargetLocation.SizeSquared() > 0.1f)
             {
                 NewItem.ActionLoc = FVector(AIT->AbilityTargetLocation);
-                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsAbility;
+                NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsAbility;
             }
 
             // Sync friendly target (Alternative for Slot 2 if no Ability)
-            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_ActionIsAbility))
+            if (!(NewItem.TagBits & UnitReplicationBits::Slot_ActionIsAbility))
             {
                 uint32 FriendlyTargetNetIDVal = 0u;
                 if (AIT->FriendlyTargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->FriendlyTargetEntity))
@@ -422,7 +420,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 {
                     NewItem.ActionID = FriendlyTargetNetIDVal;
                     NewItem.ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
-                    NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsFriendly;
+                    NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsFriendly;
                 }
             }
         }
@@ -434,7 +432,7 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             {
                 NewItem.ActionLoc = FVector(AIS->LastProjectileTargetLocation);
                 NewItem.ActionID = AIS->LastTargetNetID;
-                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsProjectile;
+                NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsProjectile;
 
                 // AuxData: ProjectileFireCounter (Bits 16-23)
                 NewItem.AuxData |= ((uint32)AIS->ProjectileFireCounter << 16);
@@ -939,13 +937,13 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
 
                     if (EM)
                     {
-                        if (Item->TagBits != NewTagBits) { Item->TagBits = NewTagBits; bDirty = true; }
+                        uint32 RebuiltTagBits = NewTagBits; // Base from BuildReplicatedTagBits
                         if (UpdateReplicationBits(*Item, *EM, EH, BubbleInfo)) { bDirty = true; }
 
                         uint16 NewPackedEnums = (uint16)(Item->PackedBits >> 16);
                         uint32 NewMoveData = 0u; 
                         uint32 NewAuxData = 0u;
-                        uint32 NewRepBits = Item->ReplicationBits & ~UnitReplicationBits::Slot_TargetIsMove & ~UnitReplicationBits::Slot_ActionIsAbility & ~UnitReplicationBits::Slot_ActionIsProjectile & ~UnitReplicationBits::Slot_ActionIsFriendly;
+                        uint32 NewRepBits = Item->ReplicationBits; 
                         
                         // Clear slots for rebuild
                         Item->TargetLoc = FVector_NetQuantize();
@@ -956,7 +954,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                         {
                             Item->TargetLoc = FVector(MT->Center);
-                            NewRepBits |= UnitReplicationBits::Slot_TargetIsMove;
+                            RebuiltTagBits |= UnitReplicationBits::Slot_TargetIsMove;
                             
                             const uint8 QSlack = (uint8)FMath::Clamp(MT->SlackRadius, 0.f, 255.f);
                             const uint16 QSpeed = (uint16)FMath::Clamp(MT->DesiredSpeed.Get(), 0.f, 4095.f);
@@ -984,7 +982,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (AIT->IsFocusedOnTarget) Flags |= UnitReplicationBits::Packed_IsFocusedOnTarget;
                             NewPackedEnums = (NewPackedEnums & ~FlagMask) | Flags;
 
-                            if (!(NewRepBits & UnitReplicationBits::Slot_TargetIsMove))
+                            if (!(RebuiltTagBits & UnitReplicationBits::Slot_TargetIsMove))
                             {
                                 Item->TargetLoc = FVector(AIT->LastKnownLocation);
                             }
@@ -1002,7 +1000,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (AIT->AbilityTargetLocation.SizeSquared() > 0.1f)
                             {
                                 Item->ActionLoc = FVector(AIT->AbilityTargetLocation);
-                                NewRepBits |= UnitReplicationBits::Slot_ActionIsAbility;
+                                RebuiltTagBits |= UnitReplicationBits::Slot_ActionIsAbility;
                             }
                             else
                             {
@@ -1018,7 +1016,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 {
                                     Item->ActionID = FriendlyTargetNetIDVal;
                                     Item->ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
-                                    NewRepBits |= UnitReplicationBits::Slot_ActionIsFriendly;
+                                    RebuiltTagBits |= UnitReplicationBits::Slot_ActionIsFriendly;
                                 }
                             }
                         }
@@ -1029,7 +1027,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             {
                                 Item->ActionLoc = FVector(AIS->LastProjectileTargetLocation);
                                 Item->ActionID = AIS->LastTargetNetID;
-                                NewRepBits |= UnitReplicationBits::Slot_ActionIsProjectile;
+                                RebuiltTagBits |= UnitReplicationBits::Slot_ActionIsProjectile;
                                 NewAuxData |= ((uint32)AIS->ProjectileFireCounter << 16);
                             }
                         }
@@ -1056,6 +1054,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         if (Item->MoveData != NewMoveData) { Item->MoveData = NewMoveData; bDirty = true; }
                         if (Item->AuxData != NewAuxData) { Item->AuxData = NewAuxData; bDirty = true; }
                         if (Item->ReplicationBits != NewRepBits) { Item->ReplicationBits = NewRepBits; bDirty = true; }
+                        if (Item->TagBits != RebuiltTagBits) { Item->TagBits = RebuiltTagBits; bDirty = true; }
                     }
 
                     if (bDirty)

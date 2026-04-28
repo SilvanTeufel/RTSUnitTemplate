@@ -225,7 +225,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							FMassAITargetFragment& AIT = AITargetList[EntityIdx];
 							AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
 							AIT.IsFocusedOnTarget = (PE & UnitReplicationBits::Packed_IsFocusedOnTarget) != 0;
-							if (!(UseItem->ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
+							if (!(UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove))
 							{
 								AIT.LastKnownLocation = FVector(UseItem->TargetLoc);
 							}
@@ -247,8 +247,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							}
 							
 							// Action Slot 2
-							if (UseItem->ReplicationBits & UnitReplicationBits::Slot_ActionIsAbility) AIT.AbilityTargetLocation = FVector(UseItem->ActionLoc);
-							else if (UseItem->ReplicationBits & UnitReplicationBits::Slot_ActionIsFriendly)
+							if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsAbility) AIT.AbilityTargetLocation = FVector(UseItem->ActionLoc);
+							else if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsFriendly)
 							{
 								AIT.LastKnownFriendlyLocation = FVector(UseItem->ActionLoc);
 								if (UseItem->ActionID != 0)
@@ -265,10 +265,22 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							FMassAIStateFragment& AIS = AIStateList[EntityIdx];
 							AIS.CanAttack = (UseItem->ReplicationBits & UnitReplicationBits::AIS_CanAttack) != 0;
 							AIS.CanMove = (UseItem->ReplicationBits & UnitReplicationBits::AIS_CanMove) != 0;
-							if (UseItem->ReplicationBits & UnitReplicationBits::Slot_ActionIsProjectile)
+							if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsProjectile)
 							{
 								AIS.ProjectileFireCounter = (uint8)((UseItem->AuxData >> 16) & 0xFF);
 								AIS.LastProjectileTargetLocation = FVector(UseItem->ActionLoc);
+								AIS.LastTargetNetID = UseItem->ActionID;
+
+								// Resolve Projectile Style from Registry
+								uint8 StyleIdx = (uint8)((UseItem->ReplicationBits & UnitReplicationBits::AIS_StyleIndexMask) >> UnitReplicationBits::AIS_StyleIndexShift);
+								if (StyleIdx > 0 && Bubble && Bubble->ProjectileStyleRegistry.IsValidIndex(StyleIdx - 1))
+								{
+									AIS.LastProjectileClass = Bubble->ProjectileStyleRegistry[StyleIdx - 1].ProjectileClass;
+								}
+								else
+								{
+									AIS.LastProjectileClass = nullptr; // Fallback to unit default
+								}
 							}
 						}
 
@@ -290,7 +302,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						}
 
 						// Move Target
-						if (MoveTargetList.IsValidIndex(EntityIdx) && (UseItem->ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
+						if (MoveTargetList.IsValidIndex(EntityIdx) && (UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove))
 						{
 							FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
 							MT.Center = FVector(UseItem->TargetLoc);

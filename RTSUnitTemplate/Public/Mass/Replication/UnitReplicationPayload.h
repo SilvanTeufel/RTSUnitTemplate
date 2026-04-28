@@ -42,7 +42,7 @@ namespace UnitReplicationBits
 	static constexpr uint32 EA_bPendingDestruction = 1u << 24;
 
 	static constexpr uint32 AIS_StyleIndexShift = 25;
-	static constexpr uint32 AIS_StyleIndexMask = 0x7F000000;
+	static constexpr uint32 AIS_StyleIndexMask = 0xFE000000; // Bits 25-31 (7 bits)
 
 	// PackedEnums Bits (16-bit)
 	static constexpr uint16 Packed_HasValidTarget = 1u << 0;
@@ -57,11 +57,11 @@ namespace UnitReplicationBits
 	static constexpr uint16 Packed_ActiveEffectsShift = 10; // 3 bits (10-12)
 	static constexpr uint16 Packed_ActiveEffectsMask = 0x1C00;
 
-	// Slot Indicators in ReplicationBits (Starting from Bit 25)
-	static constexpr uint32 Slot_TargetIsMove = 1u << 25;
-	static constexpr uint32 Slot_ActionIsProjectile = 1u << 26;
-	static constexpr uint32 Slot_ActionIsFriendly = 1u << 27;
-	static constexpr uint32 Slot_ActionIsAbility = 1u << 28;
+	// Slot Indicators in TagBits (Starting from Bit 28)
+	static constexpr uint32 Slot_TargetIsMove = 1u << 28;
+	static constexpr uint32 Slot_ActionIsProjectile = 1u << 29;
+	static constexpr uint32 Slot_ActionIsFriendly = 1u << 30;
+	static constexpr uint32 Slot_ActionIsAbility = 1u << 31;
 }
 
 USTRUCT()

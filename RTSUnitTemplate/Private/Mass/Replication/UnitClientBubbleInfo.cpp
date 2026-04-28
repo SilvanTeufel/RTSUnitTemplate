@@ -89,8 +89,8 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 					{
 						// Resolve target location
 						FVector TgtLoc = FVector::ZeroVector;
-						if (ReplicationBits & UnitReplicationBits::Slot_ActionIsProjectile) TgtLoc = FVector(ActionLoc);
-						else if (!(ReplicationBits & UnitReplicationBits::Slot_TargetIsMove)) TgtLoc = FVector(TargetLoc);
+						if (TagBits & UnitReplicationBits::Slot_ActionIsProjectile) TgtLoc = FVector(ActionLoc);
+						else if (!(TagBits & UnitReplicationBits::Slot_TargetIsMove)) TgtLoc = FVector(TargetLoc);
 
 						// Startup/validation gates
 						if (TgtLoc.IsNearlyZero()) return;
@@ -184,7 +184,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 						// Determine HalfHeight for Auto Z-Offset
 						float HalfHeight = 0.f;
-						const uint32 TgtID = (ReplicationBits & UnitReplicationBits::Slot_ActionIsProjectile) ? ActionID : 0;
+						const uint32 TgtID = (TagBits & UnitReplicationBits::Slot_ActionIsProjectile) ? ActionID : 0;
 						if (!bDisableAutoZOffset_Resolved)
 						{
 							if (TgtID != 0)
