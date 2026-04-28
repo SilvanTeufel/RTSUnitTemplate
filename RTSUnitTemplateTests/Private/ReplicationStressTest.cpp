@@ -9,6 +9,9 @@
 #include "EngineUtils.h"
 #include "FunctionalTest.h"
 #include "Net/UnrealNetwork.h"
+#include "Engine/NetDriver.h"
+#include "Engine/NetConnection.h"
+#include "Mass/Replication/UnitClientBubbleInfo.h"
 
 AReplicationStressTest::AReplicationStressTest()
 {
@@ -24,9 +27,6 @@ AReplicationStressTest::AReplicationStressTest()
 	// Erh�he das Framework-Zeitlimit von AFunctionalTest
 	TimeLimit = 100.0f;
 	
-	// Log-Handling so früh wie möglich setzen
-	LogWarningHandling = EFunctionalTestLogHandling::OutputIgnored;
-	LogErrorHandling = EFunctionalTestLogHandling::OutputIgnored;
 }
 
 void AReplicationStressTest::PostInitializeComponents()
@@ -34,9 +34,6 @@ void AReplicationStressTest::PostInitializeComponents()
 	Super::PostInitializeComponents();
 	bReplicates = true;
 
-	// Doppelte Absicherung für das Log-Handling
-	LogWarningHandling = EFunctionalTestLogHandling::OutputIgnored;
-	LogErrorHandling = EFunctionalTestLogHandling::OutputIgnored;
 }
 
 void AReplicationStressTest::BeginPlay()
@@ -57,12 +54,6 @@ void AReplicationStressTest::PrepareTest()
 	// 1. Zeitlimit gro�z�gig setzen
 	TimeLimit = TestTimeout + 20.0f;
 
-	// 2. Log-Handling anpassen
-	// Wir sagen dem Test-Framework, dass es Log-Warnungen und Log-Fehler ignorieren soll.
-	// Dies verhindert den "Fail", wenn EOS oder Mass-Prozessoren Performance-Warnungen ausgeben.
-	LogWarningHandling = EFunctionalTestLogHandling::OutputIgnored;
-	LogErrorHandling = EFunctionalTestLogHandling::OutputIgnored;
-
 	if (HasAuthority())
 	{
 		// Wir nutzen hier Display statt Warning, um nicht selbst Warnungen zu triggern
@@ -75,6 +66,7 @@ void AReplicationStressTest::StartTest()
 {
 	Super::StartTest();
 	TimeSinceStart = 0.0f;
+	LastMonitorTime = 0.0f;
 }
 
 void AReplicationStressTest::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -94,6 +86,67 @@ void AReplicationStressTest::Tick(float DeltaSeconds)
 	if (!IsRunning() || CurrentState == ETestState::Finished) return;
 
 	TimeSinceStart += DeltaSeconds;
+
+	// --- NEU: Netzwerk- & Performance-Monitoring ---
+	if (UNetDriver* NetDriver = GetWorld()->GetNetDriver())
+	{
+		// 1. Bandbreite messen (kumuliert über alle Verbindungen)
+		uint32 TotalOutRate = NetDriver->OutBytesPerSecond;
+		float OutRateKB = TotalOutRate / 1024.0f;
+
+		// 2. Frame-Time messen (Ersatz für die EOS-Warnungen)
+		float CurrentFPS = 1.0f / (DeltaSeconds > 0.f ? DeltaSeconds : 0.001f);
+
+		// Alle 1 Sekunde einen Status-Bericht ausgeben
+		if (TimeSinceStart - LastMonitorTime >= 1.0f)
+		{
+			UE_LOG(LogTemp, Display, TEXT("STATS [%.1fs]: Net-Out: %.2f KB/s, Server-FPS: %.1f"), 
+				TimeSinceStart, OutRateKB, CurrentFPS);
+			
+			// Optional: Manueller Fail bei extremer Last (> 5 MB/s)
+			if (OutRateKB > 5000.0f) 
+			{
+				// FinishTest(EFunctionalTestResult::Failed, TEXT("Netzwerk-Last zu hoch (> 5MB/s)!"));
+			}
+			
+			LastMonitorTime = TimeSinceStart;
+		}
+
+		// 3. Performance-Warnung selbst loggen (wird im Report angezeigt)
+		if (DeltaSeconds > 0.1f) // > 100ms Frame (entspricht der EOS Warnung)
+		{
+			UE_LOG(LogTemp, Display, TEXT("PERF-WARNUNG: Schwerer Lag-Spike erkannt: %.1fms"), DeltaSeconds * 1000.0f);
+		}
+	}
+
+	// --- NEU: Bubble-Payload Monitoring ---
+	for (TActorIterator<AUnitClientBubbleInfo> It(GetWorld()); It; ++It)
+	{
+		if (AUnitClientBubbleInfo* Bubble = *It)
+		{
+			int32 AgentCount = Bubble->Agents.Items.Num();
+			
+			// Dynamische Schätzung: Nutze sizeof für mehr Präzision + 10% Overhead-Puffer
+			float ItemSize = (float)sizeof(FUnitReplicationItem);
+			float EstimatedSizeKB = (AgentCount * ItemSize * 1.1f) / 1024.0f;
+			
+			static int32 LastLoggedCount = -1;
+			if (AgentCount != LastLoggedCount && AgentCount > 0)
+			{
+				UE_LOG(LogTemp, Display, TEXT("BUBBLE STATS: Einheiten in Bubble: %d (~%.2f KB Payload)"), 
+					AgentCount, EstimatedSizeKB);
+				
+				if (EstimatedSizeKB > 60.0f)
+				{
+					FString ErrorMsg = FString::Printf(TEXT("KRITISCH: Bubble Payload zu groß! %.2f KB (Limit 64KB). Reduziere Einheiten oder Payload-Fields!"), EstimatedSizeKB);
+					FinishTest(EFunctionalTestResult::Failed, ErrorMsg);
+					CurrentState = ETestState::Finished;
+					return;
+				}
+				LastLoggedCount = AgentCount;
+			}
+		}
+	}
 
 	// 1. Suche nach dem Replicator (f�r alle zug�nglich)
 	AUnitRegistryReplicator* Reg = nullptr;

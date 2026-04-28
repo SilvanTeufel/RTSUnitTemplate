@@ -359,7 +359,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			});
 		}
 	}
-
+/*
 	// Perform the synchronization kick for all collected units
 	if (UnitsToKick.Num() > 0)
 	{
@@ -389,7 +389,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 			}
 		}
 	}
-
+	*/
 	// Respect global replication mode: only run in custom Mass mode
 	if (World->GetNetMode() == NM_Client)
 	{

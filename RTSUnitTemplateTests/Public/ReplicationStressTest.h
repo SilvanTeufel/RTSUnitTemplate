@@ -51,6 +51,7 @@ private:
 	UPROPERTY(Replicated)
 	bool bBurstSpawned = false;
 	float TimeSinceStart = 0.0f;
+	float LastMonitorTime = 0.0f;
 	
 	enum class ETestState : uint8
 	{
