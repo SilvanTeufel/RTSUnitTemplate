@@ -36,6 +36,7 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
         EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
         EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
+        EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     
         EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
         EntityQuery.AddTagRequirement<FMassStateRunTag>(EMassFragmentPresence::Any);
@@ -649,7 +650,8 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                         if (!LookDir.IsNearlyZero())
                         {
                             const FRotator TargetRot = LookDir.Rotation();
-                            const float InterpSpeed = (StatsList[i].RotationSpeed > 0.f) ? StatsList[i].RotationSpeed : CharList[i].RotationSpeed;
+                            const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed;
+                            const float InterpSpeed = (RotationSpeedDeg > 0.f) ? RotationSpeedDeg : CharList[i].RotationSpeed;
                             const FRotator NewRot = FMath::RInterpTo(Actor->GetActorRotation(), TargetRot, ActualDeltaTime, InterpSpeed);
                             MassTransform.SetRotation(NewRot.Quaternion());
                             bRotatedToBuildArea = true;
@@ -787,6 +789,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
+        const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -814,7 +817,9 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
 
             // 1. Adjust rotation based on state (moving vs. attacking)
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
 
             const bool bRotatesToMovementWhileAttacking = StatsList[i].bCanMoveWhileAttacking && StatsList[i].bRotatesToMovementIfMoveWhileAttacking;
             const bool bIsMoving = !VelocityList[i].Value.IsNearlyZero(50.f);
@@ -841,7 +846,31 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             }
             else
             {
-                RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                // Extension: If we are building and have a WorkerStatsFragment, prioritize the build area position
+                bool bRotatedToBuildArea = false;
+                if (WorkerStatsList.IsValidIndex(i) && DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()))
+                {
+                    const FMassWorkerStatsFragment& WS = WorkerStatsList[i];
+                    if (!WS.BuildAreaPosition.IsNearlyZero())
+                    {
+                        FVector LookDir = (WS.BuildAreaPosition - CurrentActorLocation);
+                        LookDir.Z = 0.f;
+                        if (!LookDir.IsNearlyZero())
+                        {
+                            const FRotator TargetRot = LookDir.Rotation();
+                            const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed;
+                            const float InterpSpeed = (RotationSpeedDeg > 0.f) ? RotationSpeedDeg : CharList[i].RotationSpeed;
+                            const FRotator NewRot = FMath::RInterpTo(Actor->GetActorRotation(), TargetRot, ActualDeltaTime, InterpSpeed);
+                            MassTransform.SetRotation(NewRot.Quaternion());
+                            bRotatedToBuildArea = true;
+                        }
+                    }
+                }
+
+                if (!bRotatedToBuildArea)
+                {
+                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                }
             }
 
             // 2. Adjust height for ground snapping or flying

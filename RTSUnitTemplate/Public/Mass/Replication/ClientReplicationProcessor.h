@@ -53,4 +53,5 @@ protected:
 
 private:
 	FMassEntityQuery EntityQuery;
+	FMassEntityQuery MappingQuery;
 };

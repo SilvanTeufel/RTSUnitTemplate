@@ -95,6 +95,10 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
+
+	MappingQuery.Initialize(EntityManager);
+	MappingQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
+	MappingQuery.RegisterWithProcessor(*this);
 }
 
 void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -103,6 +107,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval) return;
+	const float AccumulatedDelta = TimeSinceLastRun;
 	TimeSinceLastRun = 0.f;
 	
 	UWorld* World = GetWorld();
@@ -134,7 +139,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	}
 
 	TMap<uint32, FMassEntityHandle> GlobalNetToEntity;
-	EntityQuery.ForEachEntityChunk(Context, [&GlobalNetToEntity](FMassExecutionContext& Ctx)
+	MappingQuery.ForEachEntityChunk(Context, [&GlobalNetToEntity](FMassExecutionContext& Ctx)
 	{
 		const int32 Num = Ctx.GetNumEntities();
 		const TConstArrayView<FMassNetworkIDFragment> NetIDs = Ctx.GetFragmentView<FMassNetworkIDFragment>();
@@ -149,7 +154,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	int32 MaxActionsPerTick = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
 
 	// 3) Hauptschleife: Replikation anwenden
-	EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC, World](FMassExecutionContext& ChunkCtx)
+	EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC, World, AccumulatedDelta](FMassExecutionContext& ChunkCtx)
 	{
 		static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
 		const int32 NumEntities = ChunkCtx.GetNumEntities();
@@ -220,11 +225,22 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							if (!(UseItem->ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
 							{
 								AIT.LastKnownLocation = FVector(UseItem->TargetLoc);
-								if (UseItem->TargetID != 0)
+							}
+
+							if (UseItem->TargetID != 0)
+							{
+								if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->TargetID))
 								{
-									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->TargetID)) AIT.TargetEntity = *Found;
+									AIT.TargetEntity = *Found;
 								}
-								else AIT.TargetEntity.Reset();
+								else
+								{
+									AIT.TargetEntity.Reset();
+								}
+							}
+							else
+							{
+								AIT.TargetEntity.Reset();
 							}
 							
 							// Action Slot 2
@@ -301,9 +317,17 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					// Gentle reconciliation (simplified for this task)
 					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
-					ClientXf.SetLocation(FMath::VInterpTo(ClientXf.GetLocation(), FinalXf.GetLocation(), ChunkCtx.GetDeltaTimeSeconds(), 5.0f));
-					//ClientXf.SetRotation(FQuat::Slerp(ClientXf.GetRotation(), FinalXf.GetRotation(), FMath::Min(1.0f, ChunkCtx.GetDeltaTimeSeconds() * 5.0f)));
-					ClientXf.SetRotation(ClientXf.GetRotation());
+					ClientXf.SetLocation(FMath::VInterpTo(ClientXf.GetLocation(), FinalXf.GetLocation(), AccumulatedDelta, 5.0f));
+
+					const float UnitRotationSpeed = (CombatList[EntityIdx].RotationSpeed > 0.f) ? 
+													 CombatList[EntityIdx].RotationSpeed : 
+													 CharList[EntityIdx].RotationSpeed;
+
+					// Ein Faktor von 5.0f entsprach ca. 200-300 Grad/s in der Wahrnehmung.
+					// Wir koppeln dies nun dynamisch:
+					const float DynamicInterpRate = FMath::Max(5.0f, UnitRotationSpeed / 40.0f);
+					
+					ClientXf.SetRotation(FQuat::Slerp(ClientXf.GetRotation(), FinalXf.GetRotation(), FMath::Min(1.0f, AccumulatedDelta * DynamicInterpRate)));
 				}
 			}
 

@@ -987,16 +987,17 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (!(NewRepBits & UnitReplicationBits::Slot_TargetIsMove))
                             {
                                 Item->TargetLoc = FVector(AIT->LastKnownLocation);
-                                uint32 TargetNetIDVal = 0u;
-                                if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
-                                {
-                                    if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
-                                    {
-                                        TargetNetIDVal = TgtNet->NetID.GetValue();
-                                    }
-                                }
-                                Item->TargetID = TargetNetIDVal;
                             }
+
+                            uint32 TargetNetIDVal = 0u;
+                            if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
+                            {
+                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                                {
+                                    TargetNetIDVal = TgtNet->NetID.GetValue();
+                                }
+                            }
+                            Item->TargetID = TargetNetIDVal;
 
                             if (AIT->AbilityTargetLocation.SizeSquared() > 0.1f)
                             {
