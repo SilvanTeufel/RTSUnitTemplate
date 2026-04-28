@@ -110,8 +110,8 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 				if (DistSq <= FMath::Square(CheckRadius))
 				{
-					// Trigger GroundHit on CDO
-					if (Projectile.ProjectileClass)
+					// Trigger GroundHit on CDO (SERVER ONLY to avoid inaccuracy and CDO state pollution on client)
+					if (Projectile.ProjectileClass && Context.GetWorld()->GetNetMode() != NM_Client)
 					{
 						if (AProjectile* ProjCDO = Projectile.ProjectileClass->GetDefaultObject<AProjectile>())
 						{
