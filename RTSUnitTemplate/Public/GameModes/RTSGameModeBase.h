@@ -92,7 +92,7 @@ public:
 	int GatherControllerTimer = 2.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float LoadingTimePerUnit = 0.25f;
+	float LoadingTimePerUnit = 0.025f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float MaxLoadingTime = 40.f;

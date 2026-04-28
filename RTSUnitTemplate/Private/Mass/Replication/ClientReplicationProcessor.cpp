@@ -1,6 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
-
-
+﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
@@ -53,7 +51,6 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
 #include "Mass/Replication/UnitReplicationPayload.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
-#include "MassRepresentationFragments.h"
 #include "EngineUtils.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Mass/Replication/ReplicationSettings.h"
@@ -64,30 +61,15 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
 UClientReplicationProcessor::UClientReplicationProcessor()
 	: EntityQuery(*this)
 {
-	// Ensure the processor is auto-registered into the runtime pipeline on clients
 	bAutoRegisterWithProcessingPhases = true;
-	// THIS IS CRITICAL: This processor should ONLY run on clients
 	ExecutionFlags = (int32)EProcessorExecutionFlags::Client;
-	// We need to touch AActors and iterate world actors; require GameThread execution
 	bRequiresGameThreadExecution = true;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
-
- if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
- 	{
- 		UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: Constructed. Phase=%d"), (int32)ProcessingPhase);
- 	}
 }
 
 void UClientReplicationProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	Super::InitializeInternal(Owner, EntityManager);
-	UWorld* World = GetWorld();
-	const ENetMode Mode = World ? World->GetNetMode() : NM_Standalone;
- if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-	{
-		UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: InitializeInternal. World=%s NetMode=%d AutoReg=%d"),
-			World ? *World->GetName() : TEXT("<null>"), (int32)Mode, bAutoRegisterWithProcessingPhases ? 1 : 0);
-	}
 }
 
 void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -110,11 +92,9 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FRunAnimationFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
-	// Prediction fragment so we can skip reconciliation while client-side prediction is active
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
-		
 }
 
 void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -122,174 +102,38 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	if (bSkipReplication) return;
 
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
-	if (TimeSinceLastRun < ExecutionInterval)
-	{
-		return;
-	}
+	if (TimeSinceLastRun < ExecutionInterval) return;
 	TimeSinceLastRun = 0.f;
 	
-	static int32 GExecCount = 0;
 	UWorld* World = GetWorld();
-	if (!World)
-	{
-  if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-  	{
-  		UE_LOG(LogTemp, Warning, TEXT("ClientReplicationProcessor: Execute skipped (no World)"));
-  	}
-		return;
-	}
-	// Respect global replication mode: only run in custom Mass mode on clients
-	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass)
-	{
-		return;
-	}
- if (!World->IsNetMode(NM_Client))
-	{
-		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-		{
-			UE_LOG(LogTemp, Verbose, TEXT("ClientReplicationProcessor: Execute skipped. NetMode=%d World=%s"), (int32)World->GetNetMode(), *World->GetName());
-		}
-		return;
-	}
-	GExecCount++;
-	AExtendedControllerBase* LocalPC = Cast<AExtendedControllerBase>(World->GetFirstPlayerController());
-	// Update global replication mode from CVAR each tick for runtime switching
-	if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2 && GExecCount <= 60)
-	{
-  UE_LOG(LogTemp, Verbose, TEXT("ClientReplicationProcessor: Execute #%d Time=%.2f (FullReplication=%d)"), GExecCount, World->GetTimeSeconds(), bUseFullReplication ? 1 : 0);
-	}
+	if (!World || !World->IsNetMode(NM_Client)) return;
+	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass) return;
 
-	// 1) Gather existing client-side NetIDs so we can detect missing entities
+	AExtendedControllerBase* LocalPC = Cast<AExtendedControllerBase>(World->GetFirstPlayerController());
+
+	// 1) Gather existing client-side NetIDs
 	TSet<uint32> ExistingIDs;
-	int32 TotalEntities = 0;
-	int32 TotalChunks = 0;
-	EntityQuery.ForEachEntityChunk(Context, [&ExistingIDs, &TotalEntities, &TotalChunks](FMassExecutionContext& GatherCtx)
+	EntityQuery.ForEachEntityChunk(Context, [&ExistingIDs](FMassExecutionContext& GatherCtx)
 	{
 		const int32 Num = GatherCtx.GetNumEntities();
-		TotalEntities += Num;
-		TotalChunks++;
 		const TConstArrayView<FMassNetworkIDFragment> NetIDList = GatherCtx.GetFragmentView<FMassNetworkIDFragment>();
-		for (int32 i = 0; i < Num; ++i)
-		{
-			ExistingIDs.Add(NetIDList[i].NetID.GetValue());
-		}
+		for (int32 i = 0; i < Num; ++i) ExistingIDs.Add(NetIDList[i].NetID.GetValue());
 	});
- if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2 && GExecCount <= 60)
-	{
-		UE_LOG(LogTemp, Log, TEXT("ClientReplicationProcessor: Query matched %d entities across %d chunks"), TotalEntities, TotalChunks);
-	}
 
-	// 2) We do NOT create entities on the client. Instead we will map NetIDs to already created entities later in this tick.
-	//    Throttle registry actor lookup to once per second and cache between ticks.
+	// 2) Registry and Bubble mapping
 	AUnitRegistryReplicator* RegistryActor = nullptr;
-	TMap<FName, FMassNetworkID> BubbleByOwnerName;
 	TMap<int32, FMassNetworkID> AuthoritativeByUnitIndex;
+	for (TActorIterator<AUnitRegistryReplicator> It(World); It; ++It)
 	{
-		static TWeakObjectPtr<AUnitRegistryReplicator> GCachedRegistry;
-		static double GLastLookup = 0.0;
-		UWorld* LocalWorld = GetWorld();
-		const double Now = LocalWorld ? LocalWorld->GetTimeSeconds() : 0.0;
-		
-		// Reset static cache on world cleanup/change
-		static UWorld* GLastWorld = nullptr;
-		if (LocalWorld != GLastWorld)
+		RegistryActor = *It;
+		for (const FUnitRegistryItem& Item : RegistryActor->Registry.Items)
 		{
-			GCachedRegistry.Reset();
-			GLastWorld = LocalWorld;
+			if (Item.UnitIndex != INDEX_NONE) AuthoritativeByUnitIndex.Add(Item.UnitIndex, Item.NetID);
 		}
-
-		if (GCachedRegistry.IsValid())
-		{
-			RegistryActor = GCachedRegistry.Get();
-		}
-		else if (LocalWorld && (Now - GLastLookup) >= 1.0)
-		{
-			GLastLookup = Now;
-			for (TActorIterator<AUnitRegistryReplicator> It(LocalWorld); It; ++It)
-			{
-				GCachedRegistry = *It;
-				break;
-			}
-			RegistryActor = GCachedRegistry.Get();
-		}
-
-		if (RegistryActor)
-		{
-			for (const FUnitRegistryItem& Item : RegistryActor->Registry.Items)
-			{
-				if (Item.UnitIndex != INDEX_NONE)
-				{
-					AuthoritativeByUnitIndex.Add(Item.UnitIndex, Item.NetID);
-				}
-			}
-		}
+		break;
 	}
 
-	// Reconcile: ensure client has the same set of entities as the authoritative registry
-	// Build quick lookup maps from current client Mass entities
-	TMap<uint32, TWeakObjectPtr<AActor>> ByNetID;
-	TMap<FName, TWeakObjectPtr<AActor>> ByOwnerName;
-
-	// Build additional authoritative mapping from Bubble payload (client-replicated)
-	TSet<uint32> BubbleIDs;
-	if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
-	{
-		if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
-		{
-			for (const FUnitReplicationItem& Item : Bubble->Agents.Items)
-			{
-				BubbleByOwnerName.Add(Item.OwnerName, Item.NetID);
-				BubbleIDs.Add(Item.NetID.GetValue());
-			}
-		}
-	}
-		
-		EntityQuery.ForEachEntityChunk(Context, [&ByNetID, &ByOwnerName](FMassExecutionContext& Ctx)
-	{
-		const int32 Num = Ctx.GetNumEntities();
-		const TConstArrayView<FMassNetworkIDFragment> NetIDs = Ctx.GetFragmentView<FMassNetworkIDFragment>();
-		const TArrayView<FMassActorFragment> Actors = Ctx.GetMutableFragmentView<FMassActorFragment>();
-		for (int32 i = 0; i < Num; ++i)
-		{
-			if (AActor* Act = Actors[i].GetMutable())
-			{
-				ByNetID.Add(NetIDs[i].NetID.GetValue(), Act);
-				ByOwnerName.Add(Act->GetFName(), Act);
-			}
-		}
-	});
-	// Build set of registry NetIDs for fast contains checks and track stability
-	TSet<uint32> RegistryIDs;
-	double NowSeconds = World->GetTimeSeconds();
-	static TMap<const AUnitRegistryReplicator*, uint64> GLastRegistrySignatureByActor;
-	static TMap<const AUnitRegistryReplicator*, double> GLastRegistryChangeTimeByActor;
-	bool bRegistryStable = true; // default stable when no registry or no change detected
-	if (RegistryActor)
-	{
-		uint64 Hash = 1469598103934665603ull; // FNV-1a 64-bit
-		for (const FUnitRegistryItem& It : RegistryActor->Registry.Items)
-		{
-			const uint32 IdVal = It.NetID.GetValue();
-			RegistryIDs.Add(IdVal);
-			Hash ^= (uint64)IdVal; Hash *= 1099511628211ull;
-		}
-		uint64* PrevHash = GLastRegistrySignatureByActor.Find(RegistryActor);
-		if (!PrevHash || *PrevHash != Hash)
-		{
-			GLastRegistrySignatureByActor.Add(RegistryActor, Hash);
-			GLastRegistryChangeTimeByActor.Add(RegistryActor, NowSeconds);
-		}
-		const double* LastChange = GLastRegistryChangeTimeByActor.Find(RegistryActor);
-		const float Debounce = CVarRTS_ClientReplication_UnlinkDebounceSeconds.GetValueOnGameThread();
-		bRegistryStable = (LastChange == nullptr) || ((NowSeconds - *LastChange) >= Debounce);
-	}
-	// Build the full authoritative remote ID set as union of Registry and Bubble IDs
-	TSet<uint32> FullRemoteIDs = RegistryIDs;
-	for (uint32 Bid : BubbleIDs) { FullRemoteIDs.Add(Bid); }
-
-	// Pre-build global NetID to Entity mapping for cross-entity references (e.g. AITarget)
 	TMap<uint32, FMassEntityHandle> GlobalNetToEntity;
-	GlobalNetToEntity.Reserve(ExistingIDs.Num());
 	EntityQuery.ForEachEntityChunk(Context, [&GlobalNetToEntity](FMassExecutionContext& Ctx)
 	{
 		const int32 Num = Ctx.GetNumEntities();
@@ -297,1079 +141,186 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		for (int32 i = 0; i < Num; ++i)
 		{
 			const uint32 NID = NetIDs[i].NetID.GetValue();
-			if (NID != 0)
+			if (NID != 0) GlobalNetToEntity.Add(NID, Ctx.GetEntity(i));
+		}
+	});
+
+	int32 Actions = 0;
+	int32 MaxActionsPerTick = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
+
+	// 3) Hauptschleife: Replikation anwenden
+	EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC, World](FMassExecutionContext& ChunkCtx)
+	{
+		static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
+		const int32 NumEntities = ChunkCtx.GetNumEntities();
+
+		TArrayView<FUnitReplicatedTransformFragment> ReplicatedTransformList = ChunkCtx.GetMutableFragmentView<FUnitReplicatedTransformFragment>();
+		TArrayView<FTransformFragment> TransformList = ChunkCtx.GetMutableFragmentView<FTransformFragment>();
+		TArrayView<FMassActorFragment> ActorList = ChunkCtx.GetMutableFragmentView<FMassActorFragment>();
+		TArrayView<FMassNetworkIDFragment> NetIDList = ChunkCtx.GetMutableFragmentView<FMassNetworkIDFragment>();
+		TArrayView<FMassAITargetFragment> AITargetList = ChunkCtx.GetMutableFragmentView<FMassAITargetFragment>();
+		TArrayView<FMassCombatStatsFragment> CombatList = ChunkCtx.GetMutableFragmentView<FMassCombatStatsFragment>();
+		TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkCtx.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
+		TArrayView<FMassAIStateFragment> AIStateList = ChunkCtx.GetMutableFragmentView<FMassAIStateFragment>();
+		TArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkCtx.GetMutableFragmentView<FMassMoveTargetFragment>();
+		TArrayView<FMassVisualEffectFragment> EffectList = ChunkCtx.GetMutableFragmentView<FMassVisualEffectFragment>();
+		TArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkCtx.GetMutableFragmentView<FMassWorkerStatsFragment>();
+		TArrayView<FEffectAreaImpactFragment> EffectAreaImpactList = ChunkCtx.GetMutableFragmentView<FEffectAreaImpactFragment>();
+		TArrayView<FRunAnimationFragment> RunAnimList = ChunkCtx.GetMutableFragmentView<FRunAnimationFragment>();
+		TArrayView<FMassClientPredictionFragment> PredList = ChunkCtx.GetMutableFragmentView<FMassClientPredictionFragment>();
+
+		TArray<bool> JustLinked;
+		JustLinked.Init(false, NumEntities);
+
+		for (int32 EntityIdx = 0; EntityIdx < NumEntities; ++EntityIdx)
+		{
+			// a) Authoritative NetID Sync
+			if (AActor* OwnerActor = ActorList[EntityIdx].GetMutable())
 			{
-				GlobalNetToEntity.Add(NID, Ctx.GetEntity(i));
+				if (AUnitBase* AsUnit = Cast<AUnitBase>(OwnerActor))
+				{
+					if (const FMassNetworkID* ByIdx = AuthoritativeByUnitIndex.Find(AsUnit->UnitIndex))
+					{
+						if (NetIDList[EntityIdx].NetID != *ByIdx)
+						{
+							JustLinked[EntityIdx] = (NetIDList[EntityIdx].NetID.GetValue() == 0);
+							NetIDList[EntityIdx].NetID = *ByIdx;
+						}
+					}
+				}
+			}
+
+			// b) Replikations-Daten aus der Bubble holen
+			FTransform FinalXf = TransformList[EntityIdx].GetTransform();
+			bool bFromBubble = false;
+
+			if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
+			{
+				if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
+				{
+					if (const FUnitReplicationItem* UseItem = Bubble->Agents.FindItemByNetID(NetIDList[EntityIdx].NetID))
+					{
+						const uint16 YQ = (uint16)(UseItem->PackedBits & 0xFFFF);
+						const uint16 PE = (uint16)(UseItem->PackedBits >> 16);
+						const float LYaw = (static_cast<float>(YQ) / 65535.0f) * 360.0f;
+
+						FVector LocalScale = CharList.IsValidIndex(EntityIdx) ? CharList[EntityIdx].Scale : FVector::OneVector;
+						FinalXf = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(UseItem->Location), LocalScale);
+						bFromBubble = true;
+
+						// Apply TagBits
+						ApplyReplicatedTagBits(EntityManager, ChunkCtx.GetEntity(EntityIdx), UseItem->TagBits);
+
+						// AI Target Slot 1
+						if (AITargetList.IsValidIndex(EntityIdx))
+						{
+							FMassAITargetFragment& AIT = AITargetList[EntityIdx];
+							AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
+							AIT.IsFocusedOnTarget = (PE & UnitReplicationBits::Packed_IsFocusedOnTarget) != 0;
+							if (!(UseItem->ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
+							{
+								AIT.LastKnownLocation = FVector(UseItem->TargetLoc);
+								if (UseItem->TargetID != 0)
+								{
+									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->TargetID)) AIT.TargetEntity = *Found;
+								}
+								else AIT.TargetEntity.Reset();
+							}
+							
+							// Action Slot 2
+							if (UseItem->ReplicationBits & UnitReplicationBits::Slot_ActionIsAbility) AIT.AbilityTargetLocation = FVector(UseItem->ActionLoc);
+							else if (UseItem->ReplicationBits & UnitReplicationBits::Slot_ActionIsFriendly)
+							{
+								AIT.LastKnownFriendlyLocation = FVector(UseItem->ActionLoc);
+								if (UseItem->ActionID != 0)
+								{
+									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->ActionID)) AIT.FriendlyTargetEntity = *Found;
+								}
+								else AIT.FriendlyTargetEntity.Reset();
+							}
+						}
+
+						// AI State & Projectile
+						if (AIStateList.IsValidIndex(EntityIdx))
+						{
+							FMassAIStateFragment& AIS = AIStateList[EntityIdx];
+							AIS.CanAttack = (UseItem->ReplicationBits & UnitReplicationBits::AIS_CanAttack) != 0;
+							AIS.CanMove = (UseItem->ReplicationBits & UnitReplicationBits::AIS_CanMove) != 0;
+							if (UseItem->ReplicationBits & UnitReplicationBits::Slot_ActionIsProjectile)
+							{
+								AIS.ProjectileFireCounter = (uint8)((UseItem->AuxData >> 16) & 0xFF);
+								AIS.LastProjectileTargetLocation = FVector(UseItem->ActionLoc);
+							}
+						}
+
+						// Animation
+						if (RunAnimList.IsValidIndex(EntityIdx))
+						{
+							RunAnimList[EntityIdx].Duration = (float)(UseItem->AuxData & 0xFFFF) / 100.f;
+							RunAnimList[EntityIdx].AnimationState = static_cast<UnitData::EState>((PE & UnitReplicationBits::Packed_AnimStateMask) >> UnitReplicationBits::Packed_AnimStateShift);
+						}
+
+						// Visual Effects
+						if (EffectList.IsValidIndex(EntityIdx))
+						{
+							uint16 Active = (PE & UnitReplicationBits::Packed_ActiveEffectsMask) >> UnitReplicationBits::Packed_ActiveEffectsShift;
+							EffectList[EntityIdx].bPulsateEnabled = (Active & (1 << 0)) != 0;
+							EffectList[EntityIdx].bRotationEnabled = (Active & (1 << 1)) != 0;
+							EffectList[EntityIdx].bOscillationEnabled = (Active & (1 << 2)) != 0;
+							EffectList[EntityIdx].bForceHidden = (UseItem->ReplicationBits & UnitReplicationBits::VE_bForceHidden) != 0;
+						}
+
+						// Move Target
+						if (MoveTargetList.IsValidIndex(EntityIdx) && (UseItem->ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
+						{
+							FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
+							MT.Center = FVector(UseItem->TargetLoc);
+							MT.SlackRadius = (float)(UseItem->MoveData & 0xFF);
+							MT.DesiredSpeed.Set((float)((UseItem->MoveData >> 8) & 0xFFF));
+							MT.IntentAtGoal = static_cast<EMassMovementAction>((PE & UnitReplicationBits::Packed_MoveIntentMask) >> UnitReplicationBits::Packed_MoveIntentShift);
+							MT.DistanceToGoal = (float)((UseItem->AuxData >> 24) & 0xFF) * 4.f;
+							
+							const uint32 ActionID = (UseItem->MoveData >> 20) & 0xFFF;
+							if (AActor* OA = ActorList[EntityIdx].GetMutable())
+							{
+								MT.CreateReplicatedAction(MT.IntentAtGoal, ActionID, World->GetTimeSeconds(), (double)UseItem->Move_ServerStartTime);
+							}
+						}
+					}
+				}
+			}
+
+			// c) Transform anwenden (Snap oder Reconciliation)
+			if (bFromBubble)
+			{
+				if (bUseFullReplication || JustLinked[EntityIdx])
+				{
+					TransformList[EntityIdx].GetMutableTransform() = FinalXf;
+				}
+				else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateDeadTag::StaticStruct()))
+				{
+					// Gentle reconciliation (simplified for this task)
+					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
+					ClientXf.SetLocation(FMath::VInterpTo(ClientXf.GetLocation(), FinalXf.GetLocation(), ChunkCtx.GetDeltaTimeSeconds(), 5.0f));
+					//ClientXf.SetRotation(FQuat::Slerp(ClientXf.GetRotation(), FinalXf.GetRotation(), FMath::Min(1.0f, ChunkCtx.GetDeltaTimeSeconds() * 5.0f)));
+					ClientXf.SetRotation(ClientXf.GetRotation());
+				}
+			}
+
+			// d) Self-Heal
+			if (AActor* OA = ActorList[EntityIdx].GetMutable())
+			{
+				if (NetIDList[EntityIdx].NetID.GetValue() == 0)
+				{
+					int32& Streak = ZeroIdStreak.FindOrAdd(OA);
+					if (++Streak >= 3)
+					{
+						if (UMassActorBindingComponent* Bind = OA->FindComponentByClass<UMassActorBindingComponent>()) Bind->RequestClientMassLink();
+						Streak = 0;
+					}
+				}
+				else ZeroIdStreak.Remove(OA);
 			}
 		}
 	});
-	// Create any missing client entities by OwnerName
-	int32 Actions = 0;
-	int32 Budget = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
-	int32 MaxActionsPerTick = (World->GetTimeSeconds() < 5.0f) ? FMath::Max(64, Budget) : Budget; // CVAR-driven, with startup burst
-
-	// Throttled reconciliation summary (do not spam every tick)
-	{
-		static double GLastSummaryTime = 0.0;
-		const double NowT = World->GetTimeSeconds();
-		const double Interval = 2.0; // seconds
-		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1 && (NowT - GLastSummaryTime) >= Interval)
-		{
-			GLastSummaryTime = NowT;
-			// Compute missing and extra sets relative to authoritative remote (Registry U Bubble)
-			TArray<uint32> MissingOnClient;
-			TArray<uint32> ExtraOnClient;
-			for (uint32 Id : FullRemoteIDs)
-			{
-				if (!ExistingIDs.Contains(Id) && Id != 0)
-				{
-					MissingOnClient.Add(Id);
-				}
-			}
-			for (uint32 Id : ExistingIDs)
-			{
-				if (!FullRemoteIDs.Contains(Id) && Id != 0)
-				{
-					ExtraOnClient.Add(Id);
-				}
-			}
-			const int32 LiveCount = ExistingIDs.Num();
-			const int32 RemoteCount = FullRemoteIDs.Num();
-			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-			{
-				auto JoinFew = [](const TArray<uint32>& Arr){ FString S; const int32 Max=FMath::Min(15, Arr.Num()); for (int32 i=0;i<Max;++i){ if (i>0) S+=TEXT(", "); S+=FString::Printf(TEXT("%u"), Arr[i]); } if (Arr.Num()>Max) S+=TEXT(" ..."); return S; };
-				UE_LOG(LogTemp, Log, TEXT("ClientReconcileSummary: Live=%d Remote=%d Missing=%d Extra=%d (Missing: %s) (Extra: %s)"),
-					LiveCount, RemoteCount, MissingOnClient.Num(), ExtraOnClient.Num(), *JoinFew(MissingOnClient), *JoinFew(ExtraOnClient));
-			}
-			else
-			{
-				UE_LOG(LogTemp, Log, TEXT("ClientReconcileSummary: Live=%d Remote=%d Missing=%d Extra=%d"), LiveCount, RemoteCount, MissingOnClient.Num(), ExtraOnClient.Num());
-			}
-		}
-	}
- if (RegistryActor && RegistryActor->Registry.Items.Num() > 0)
-	{
-		for (const FUnitRegistryItem& It : RegistryActor->Registry.Items)
-		{
-			if (Actions >= MaxActionsPerTick) { break; }
-			if (!ExistingIDs.Contains(It.NetID.GetValue()))
-			{
-				if (TWeakObjectPtr<AActor>* Found = ByOwnerName.Find(It.OwnerName))
-				{
-					if (AActor* Act = Found->Get())
-					{
-						if (UMassActorBindingComponent* Bind = Act->FindComponentByClass<UMassActorBindingComponent>())
-						{
-       if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-       							{
-       								UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Missing NetID %u for %s -> RequestClientMassLink"), It.NetID.GetValue(), *It.OwnerName.ToString());
-       							}
-							Bind->RequestClientMassLink();
-							Actions++;
-						}
-					}
-				}
-				else
-				{
-					// Shared cached lookup to avoid world-wide scans (guarded by CVAR)
-					if (CVarRTS_ClientReplication_EnableCache.GetValueOnGameThread() != 0)
-					{
-						struct FBindingCache
-						{
-							TMap<FName, TWeakObjectPtr<UMassActorBindingComponent>> Map;
-							double LastBuildTime = -1000.0;
-						};
-						static TMap<const UWorld*, FBindingCache> GCacheByWorld;
-						FBindingCache& Cache = GCacheByWorld.FindOrAdd(World);
-						const double NowT = World->GetTimeSeconds();
-						const float Interval = FMath::Max(0.1f, CVarRTS_ClientReplication_CacheRebuildSeconds.GetValueOnGameThread());
-						if ((NowT - Cache.LastBuildTime) >= Interval)
-						{
-							Cache.Map.Reset();
-							for (TActorIterator<AActor> ItAct(World); ItAct; ++ItAct)
-							{
-								if (UMassActorBindingComponent* BindC = ItAct->FindComponentByClass<UMassActorBindingComponent>())
-								{
-									Cache.Map.Add(ItAct->GetFName(), BindC);
-								}
-							}
-							Cache.LastBuildTime = NowT;
-						}
-						if (TWeakObjectPtr<UMassActorBindingComponent>* FoundBind = Cache.Map.Find(It.OwnerName))
-						{
-							if (UMassActorBindingComponent* Bind2 = FoundBind->Get())
-							{
-								const int32 LocalLogLevel = CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread();
-								if (LocalLogLevel >= 1)
-								{
-									UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Missing NetID %u for %s (cache) -> RequestClientMassLink"), It.NetID.GetValue(), *It.OwnerName.ToString());
-								}
-								Bind2->RequestClientMassLink();
-								Actions++;
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-	// Unlink any local client entities that are not present in the aggregated remote set
-	if (!bRegistryStable)
-	{
-		if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-		{
-			UE_LOG(LogTemp, Verbose, TEXT("ClientReconcile: Skipping unlink this tick (registry not stable yet)"));
-		}
-	}
-	else
-	{
-		for (uint32 LocalID : ExistingIDs)
-		{
-			if (Actions >= MaxActionsPerTick) { break; }
-			if (!FullRemoteIDs.Contains(LocalID) && LocalID != 0)
-			{
-				if (TWeakObjectPtr<AActor>* Found = ByNetID.Find(LocalID))
-				{
-					if (AActor* Act = Found->Get())
-					{
-						if (UMassActorBindingComponent* Bind = Act->FindComponentByClass<UMassActorBindingComponent>())
-						{
-       if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-       							{
-       								UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Extra local NetID %u on %s -> RequestClientMassUnlink"), LocalID, *Act->GetName());
-       							}
-							Bind->RequestClientMassUnlink();
-							Actions++;
-						}
-					}
-				}
-			}
-		}
-	}
-		
-		// If we hit the per-tick action budget, warn so we can correlate with units not moving on client
-		if (Actions >= MaxActionsPerTick)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Budget exhausted this tick (Actions=%d, Max=%d). Some link/unlink may be deferred."), Actions, MaxActionsPerTick);
-		}
-		
-		 EntityQuery.ForEachEntityChunk(Context, [this, BubbleByOwnerName, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC](FMassExecutionContext& Context)
-		{
-			// Track zero NetID streaks per actor to trigger self-heal retries
-			static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
-			const int32 NumEntities = Context.GetNumEntities();
-
-			TArrayView<FUnitReplicatedTransformFragment> ReplicatedTransformList = Context.GetMutableFragmentView<FUnitReplicatedTransformFragment>();
-			TArrayView<FTransformFragment> TransformList = Context.GetMutableFragmentView<FTransformFragment>();
-			TArrayView<FMassActorFragment> ActorList = Context.GetMutableFragmentView<FMassActorFragment>();
-			TArrayView<FMassNetworkIDFragment> NetIDList = Context.GetMutableFragmentView<FMassNetworkIDFragment>();
-			const TConstArrayView<FMassRepresentationLODFragment> LODList = Context.GetFragmentView<FMassRepresentationLODFragment>();
-			TArrayView<FMassAITargetFragment> AITargetList = Context.GetMutableFragmentView<FMassAITargetFragment>();
-			// New replicated fragments to apply on client
-			TArrayView<FMassCombatStatsFragment> CombatList = Context.GetMutableFragmentView<FMassCombatStatsFragment>();
-			TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
-			TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
-			TArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
-			TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
-			TArrayView<FMassWorkerStatsFragment> WorkerStatsList = Context.GetMutableFragmentView<FMassWorkerStatsFragment>();
-			TArrayView<FMassRotateToMouseFragment> RotateToMouseList = Context.GetMutableFragmentView<FMassRotateToMouseFragment>();
-			TArrayView<FEffectAreaImpactFragment> EffectAreaImpactList = Context.GetMutableFragmentView<FEffectAreaImpactFragment>();
-			TArrayView<FRunAnimationFragment> RunAnimList = Context.GetMutableFragmentView<FRunAnimationFragment>();
-			// Prediction fragment view (mutable)
-			TArrayView<FMassClientPredictionFragment> PredList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
-
-			// Log registered NetIDs on client for this chunk (verbose only)
-			if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-			{
-				const int32 NumIDs = NumEntities;
-				const int32 MaxLog = FMath::Min(20, NumIDs);
-				FString IdList;
-				for (int32 i = 0; i < MaxLog; ++i)
-				{
-					if (i > 0) { IdList += TEXT(", "); }
-					IdList += FString::Printf(TEXT("%u"), NetIDList[i].NetID.GetValue());
-				}
-				UE_LOG(LogTemp, Verbose, TEXT("ClientReplication: %d entities in chunk. NetIDs[%d]: %s%s"),
-					NumIDs, MaxLog, *IdList, (NumIDs > MaxLog ? TEXT(" ...") : TEXT("")));
-			}
-
-				// Track bubble items claimed in this chunk to avoid duplicate assignment
-				TSet<uint32> ClaimedIDs;
-				// Track seen NetIDs in this chunk to detect duplicates
-				TSet<uint32> SeenIDs;
-				TArray<bool> JustLinked;
-				JustLinked.Init(false, NumEntities);
-
-			for (int32 EntityIdx = 0; EntityIdx < NumEntities; ++EntityIdx)
-			{
-				// Duplicate NetID detection: ensure per-chunk uniqueness
-				const uint32 CurrentID = NetIDList[EntityIdx].NetID.GetValue();
-
-				// 0) Authoritative mapping by UnitIndex first, then Bubble fallback (OwnerName is unstable)
-				if (AActor* OwnerActor = ActorList[EntityIdx].GetMutable())
-				{
-					// Try UnitIndex if this is a UnitBase
-					int32 OwnerUnitIndex = INDEX_NONE;
-					if (const AUnitBase* AsUnit = Cast<AUnitBase>(OwnerActor))
-					{
-						OwnerUnitIndex = AsUnit->UnitIndex;
-					}
-					bool bSet = false;
- 				if (OwnerUnitIndex != INDEX_NONE)
- 				{
- 					if (const FMassNetworkID* ByIdx = AuthoritativeByUnitIndex.Find(OwnerUnitIndex))
- 					{
-       if (NetIDList[EntityIdx].NetID != *ByIdx)
-						{
-							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-							{
-								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s UnitIndex=%d Old=%u New=%u (source=UnitIndex)"),
-									ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), OwnerUnitIndex,
-									NetIDList[EntityIdx].NetID.GetValue(), ByIdx->GetValue());
-							}
-							NetIDList[EntityIdx].NetID = *ByIdx;
-							JustLinked[EntityIdx] = (CurrentID == 0);
-						}
-						bSet = true;
- 					}
- 				}
- 				if (!bSet)
- 				{
- 					const FName OwnerName = OwnerActor->GetFName();
-					if (const FMassNetworkID* BubbleId = BubbleByOwnerName.Find(OwnerName))
-					{
-						if (NetIDList[EntityIdx].NetID != *BubbleId)
-						{
-							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-							{
-								UE_LOG(LogTemp, Log, TEXT("ClientAssignNetID: Actor=%s OwnerName=%s Old=%u New=%u (source=BubbleOwnerName)"),
-									ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"), *OwnerName.ToString(),
-									NetIDList[EntityIdx].NetID.GetValue(), BubbleId->GetValue());
-							}
-							NetIDList[EntityIdx].NetID = *BubbleId;
-							JustLinked[EntityIdx] = (CurrentID == 0);
-						}
-						bSet = true;
-					}
- 				}
-				}
-				if (CurrentID != 0)
-				{
-					if (SeenIDs.Contains(CurrentID))
-					{
-      if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-      					{
-      						UE_LOG(LogTemp, Warning, TEXT("ClientReplication: Duplicate NetID %u detected in chunk"), CurrentID);
-      					}
-						if (AActor* DupActor = ActorList[EntityIdx].GetMutable())
-						{
-							if (UMassActorBindingComponent* Bind = DupActor->FindComponentByClass<UMassActorBindingComponent>())
-							{
-								Bind->RequestClientMassLink();
-							}
-						}
-					}
-					else
-					{
-						SeenIDs.Add(CurrentID);
-					}
-				}
-				// Proximity-based NetID mapping disabled in favor of authoritative registry
-				if (LODList.IsValidIndex(EntityIdx) && LODList[EntityIdx].LOD == EMassLOD::Off)
-				{
-					continue;
-				}
-				bool bFromCache = false;
-				bool bFromBubble = false;
-				bool bActorFallback = false;
-				// Update the replicated fragment from cache if available
-				FTransform Cached;
-				uint32 WantedID_u32 = NetIDList[EntityIdx].NetID.GetValue();
-
-				// NEW: Always apply replicated TagBits and AI Target from the bubble when available (independent of transform path)
-				{
-					UWorld* WorldForTags = nullptr;
-					if (AActor* OwnerA = ActorList[EntityIdx].GetMutable())
-					{
-						WorldForTags = OwnerA->GetWorld();
-					}
-					if (WorldForTags)
-					{
-						if (URTSWorldCacheSubsystem* CacheSub = WorldForTags->GetSubsystem<URTSWorldCacheSubsystem>())
-						{
-							if (AUnitClientBubbleInfo* Bubble = CacheSub->GetBubble(false))
-							{
-								const FUnitReplicationItem* TagItem = Bubble->Agents.FindItemByNetID(NetIDList[EntityIdx].NetID);
-								if (TagItem)
-								{
-									if (UMassEntitySubsystem* ES = WorldForTags->GetSubsystem<UMassEntitySubsystem>())
-									{
-											FMassEntityManager& EMgr = ES->GetMutableEntityManager();
-											const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
-											const uint32 BitsBeforeSync = BuildReplicatedTagBits(EMgr, EH);
-											ApplyReplicatedTagBits(EMgr, EH, TagItem->TagBits);
-											const bool bStateChanged = (BitsBeforeSync != TagItem->TagBits);
-
-											auto HasBit = [TagItem](uint32 Bit) { return (TagItem->ReplicationBits & Bit) != 0; };
-
-											// Apply AI target replication to FMassAITargetFragment regardless of transform source
-    							if (AITargetList.IsValidIndex(EntityIdx))
-    							{
-    								FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
-    								AITFrag.bHasValidTarget = (TagItem->AITargetFlags & 1u) != 0;
-    								AITFrag.IsFocusedOnTarget = (TagItem->AITargetFlags & 2u) != 0;
-    								AITFrag.LastKnownLocation = FVector(TagItem->AITargetLastKnownLocation);
-    								AITFrag.AbilityTargetLocation = FVector(TagItem->AbilityTargetLocation);
-    								const uint32 TgtID = TagItem->AITargetNetID;
-    								if (TgtID != 0)
-    								{
-    									if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(TgtID))
-    									{
-    										AITFrag.TargetEntity = *FoundHandle;
-    									}
-    								}
-    								else
-    								{
-    									AITFrag.TargetEntity.Reset();
-    								}
-
-									// Friendly Target
-									AITFrag.LastKnownFriendlyLocation = FVector(TagItem->AIFriendlyTargetLastKnownLocation);
-									const uint32 FriendlyTgtID = TagItem->AIFriendlyTargetNetID;
-									if (FriendlyTgtID != 0)
-									{
-										if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(FriendlyTgtID))
-										{
-											AITFrag.FriendlyTargetEntity = *FoundHandle;
-										}
-									}
-									else
-									{
-										AITFrag.FriendlyTargetEntity.Reset();
-									}
-    							}
-    							// Apply replicated Combat/Characteristics/AIState subsets
-											if (CombatList.IsValidIndex(EntityIdx))
-											{
-    								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
-    								// Synchronized locally via UUnitActorToFragmentSyncProcessor
-    								// CS.Health = TagItem->CS_Health;
-    								// CS.Shield = TagItem->CS_Shield;
-    								// CS.TeamId = TagItem->CS_TeamId;
-    							}
-    							if (CharList.IsValidIndex(EntityIdx))
-    							{
-    								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-    								// Synchronized locally via UUnitActorToFragmentSyncProcessor
-    								// AC.FlyHeight = TagItem->AC_FlyHeight;
-    								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
-    								const float LYaw   = (static_cast<float>(TagItem->YawQuantized)   / 65535.0f) * 360.0f;
-    								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
-    								{
-    									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(TagItem->Location), AC.Scale);
-    									AC.bTransformDirty = true;
-    									if (TransformList.IsValidIndex(EntityIdx))
-    									{
-    										TransformList[EntityIdx].GetMutableTransform() = AC.PositionedTransform;
-    									}
-    								}
-    							}
-       							if (AIStateList.IsValidIndex(EntityIdx))
-							{
-								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
-								const bool bIsDead = (TagItem->TagBits & UnitTagBits::Dead) != 0;
-								// Only sync timer if not dead, or if it's the very first death sync (timer transition)
-								// Synchronized locally via UUnitActorToFragmentSyncProcessor
-								// if (!bIsDead || (AIS.StateTimer <= 0.001f && TagItem->AIS_StateTimer <= 0.001f))
-								// {
-								// 	AIS.StateTimer = TagItem->AIS_StateTimer;
-								// }
-								AIS.CanAttack = HasBit(UnitReplicationBits::AIS_CanAttack);
-								AIS.CanMove = HasBit(UnitReplicationBits::AIS_CanMove);
-								AIS.HoldPosition = HasBit(UnitReplicationBits::AIS_HoldPosition);
-								AIS.HasAttacked = HasBit(UnitReplicationBits::AIS_HasAttacked);
-								AIS.SwitchingState = HasBit(UnitReplicationBits::AIS_SwitchingState);
-								AIS.IsInitialized = HasBit(UnitReplicationBits::AIS_IsInitialized);
-							}
-								if (WorkerStatsList.IsValidIndex(EntityIdx))
-								{
-									WorkerStatsList[EntityIdx].BuildAreaPosition = FVector(TagItem->Worker_BuildAreaPosition);
-								}
-								if (EffectAreaImpactList.IsValidIndex(EntityIdx))
-								{
-									FEffectAreaImpactFragment& Impact = EffectAreaImpactList[EntityIdx];
-									Impact.bImpactVFXTriggered = HasBit(UnitReplicationBits::EA_bImpactVFXTriggered);
-									Impact.bIsScalingAfterImpact = HasBit(UnitReplicationBits::EA_bIsScalingAfterImpact);
-									Impact.bImpactScaleTriggered = HasBit(UnitReplicationBits::EA_bImpactScaleTriggered);
-									Impact.bPendingDestruction = HasBit(UnitReplicationBits::EA_bPendingDestruction);
-								}
-								// Apply MoveTarget from bubble TagItem early as well to avoid client RPC mirrors
-								if (!bStopMovementReplication && MoveTargetList.IsValidIndex(EntityIdx) && HasBit(UnitReplicationBits::Move_bHasTarget))
-								{
-									FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
-									// Decide if incoming payload is newer than local fragment using ActionID first, then ServerStartTime
-									bool bIsNewer = true;
-									const uint16 IncomingID = TagItem->Move_ActionID;
-									const float IncomingSrvStart = TagItem->Move_ServerStartTime;
-									// If this is an initial/legacy payload (ID==0) and the client is actively predicting, do NOT override prediction
-									if (IncomingID == 0 && PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData)
-									{
-										bIsNewer = false;
-										if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-										{
-											UE_LOG(LogTemp, Warning, TEXT("[ClientRep][Move] Skipping initial MoveTarget from replication while predicting (NetID=%u)"), NetIDList[EntityIdx].NetID.GetValue());
-										}
-									}
-									else if (IncomingID != 0)
-									{
-										const uint16 LocalID = MT.GetCurrentActionID();
-										if (IncomingID < LocalID)
-										{
-											// If the state bits changed, prioritize server's MoveTarget even with lower ActionID (re-sync)
-											if (bStateChanged)
-											{
-												bIsNewer = true;
-											}
-											else
-											{
-												bIsNewer = false;
-											}
-										}
-										else if (IncomingID == LocalID)
-										{
-											const double LocalSrvStart = MT.GetCurrentActionServerStartTime();
-											bIsNewer = (IncomingSrvStart > LocalSrvStart);
-										}
-									}
-					 				if (bIsNewer)
-					 				{
-					 					MT.Center = FVector(TagItem->Move_Center);
-					 					MT.SlackRadius = TagItem->Move_SlackRadius;
-					 					MT.DesiredSpeed.Set(TagItem->Move_DesiredSpeed);
-					 					MT.IntentAtGoal = static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal);
-					 					MT.DistanceToGoal = TagItem->Move_DistanceToGoal;
-					 					// Synchronize action timing so subsequent comparisons are correct
-					 					if (AActor* OwnerA2 = ActorList[EntityIdx].GetMutable())
-					 					{
-					 						UWorld* W = OwnerA2->GetWorld();
-					 						const double WorldStart = W ? (double)W->GetTimeSeconds() : 0.0;
-					 						MT.CreateReplicatedAction(static_cast<EMassMovementAction>(TagItem->Move_IntentAtGoal), IncomingID, WorldStart, (double)IncomingSrvStart);
-					 					}
-					 					// Turn off client prediction if a really new MoveTarget arrived
-					 					if (PredList.IsValidIndex(EntityIdx))
-					 					{
-					 						FMassClientPredictionFragment& Pred = PredList[EntityIdx];
-					 						if (Pred.bHasData)
-					 						{
-					 							Pred.bHasData = false;
-					 							Pred.Location = FVector::ZeroVector;
-					 							Pred.PredDesiredSpeed = 0.f;
-					 							Pred.PredAcceptanceRadius = 0.f;
-					 						}
-					 					}
-					 				}
-								}
-											if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-											{
-												UE_LOG(LogTemp, Log, TEXT("ClientApplyTags: NetID=%u Bits=0x%08x Status=0x%08x"), NetIDList[EntityIdx].NetID.GetValue(), TagItem->TagBits, TagItem->ReplicationBits);
-											}
-									}
-								}
-							}
-						}
-					}
-				}
-
-				const bool bCacheHit = UnitReplicationCache::GetLatest(NetIDList[EntityIdx].NetID, Cached);
-				if (bCacheHit)
-				{
-					ReplicatedTransformList[EntityIdx].Transform = Cached;
-					bFromCache = true;
-				}
-	const FTransform& RepXf = ReplicatedTransformList[EntityIdx].Transform;
-	FTransform FinalXf = RepXf;
-				if (RepXf.GetLocation().IsNearlyZero())
-				{
-					// Try to pull directly from replicated bubble if cache miss
-					UWorld* World = nullptr;
-					if (AActor* Actor = ActorList[EntityIdx].GetMutable())
-					{
-						World = Actor->GetWorld();
-					}
-					if (World)
-					{
-						AUnitClientBubbleInfo* Bubble = nullptr;
-						for (TActorIterator<AUnitClientBubbleInfo> It(World); It; ++It)
-						{
-							Bubble = *It; break;
-						}
-						if (Bubble)
-						{
-							const FMassNetworkID WantedID = NetIDList[EntityIdx].NetID;
-							// Try exact match first
-							const FUnitReplicationItem* UseItem = Bubble->Agents.FindItemByNetID(WantedID);
-							
-							// Mapping logic: ONLY map if we have a valid NetID from authoritative sources.
-							// Nearest-neighbor fallback removed because it often causes 'ghost' jumps 
-							// when units are missing in the bubble or registry.
-							
-							if (UseItem)
-							{
-								auto HasBit2 = [UseItem](uint32 Bit) { return (UseItem->ReplicationBits & Bit) != 0; };
-
-								// Dequantize rotation and build transform
-								const float LYaw   = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
-								FVector LocalScale = FVector::OneVector;
-								if (CharList.IsValidIndex(EntityIdx))
-								{
-									LocalScale = CharList[EntityIdx].Scale;
-								}
-								FinalXf = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(UseItem->Location), LocalScale);
-								bFromBubble = true;
-   							// Apply replicated tag bits to this entity on the client
-							if (UMassEntitySubsystem* ES = World->GetSubsystem<UMassEntitySubsystem>())
-							{
-								FMassEntityManager& EMgr = ES->GetMutableEntityManager();
-								const FMassEntityHandle EH = Context.GetEntity(EntityIdx);
-								const uint32 BitsBeforeSync2 = BuildReplicatedTagBits(EMgr, EH);
-								ApplyReplicatedTagBits(EMgr, EH, UseItem->TagBits);
-								const bool bStateChanged2 = (BitsBeforeSync2 != UseItem->TagBits);
-								// Apply AI target replication to FMassAITargetFragment
-								if (AITargetList.IsValidIndex(EntityIdx))
-								{
-									FMassAITargetFragment& AITFrag = AITargetList[EntityIdx];
-									AITFrag.bHasValidTarget = (UseItem->AITargetFlags & 1u) != 0;
-									AITFrag.IsFocusedOnTarget = (UseItem->AITargetFlags & 2u) != 0;
-									AITFrag.LastKnownLocation = FVector(UseItem->AITargetLastKnownLocation);
-									AITFrag.AbilityTargetLocation = FVector(UseItem->AbilityTargetLocation);
-									
-									// Resolve friendly target NetID
-									const uint32 FriendlyTgtID = UseItem->AIFriendlyTargetNetID;
-									if (FriendlyTgtID != 0)
-									{
-										if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(FriendlyTgtID))
-										{
-											AITFrag.FriendlyTargetEntity = *FoundHandle;
-										}
-									}
-									else
-									{
-										AITFrag.FriendlyTargetEntity.Reset();
-									}
-									AITFrag.LastKnownFriendlyLocation = FVector(UseItem->AIFriendlyTargetLastKnownLocation);
-
-									// Resolve target entity handle on client if we know the NetID -> Entity mapping in this chunk
-									const uint32 TgtID = UseItem->AITargetNetID;
-									if (TgtID != 0)
-									{
-										if (const FMassEntityHandle* FoundHandle = GlobalNetToEntity.Find(TgtID))
-										{
-											AITFrag.TargetEntity = *FoundHandle;
-										}
-									}
-									else
-									{
-										AITFrag.TargetEntity.Reset();
-									}
-								}
-								// Also apply replicated CombatStats/Characteristics/AIState from bubble item to ensure subset data on client
- 							if (CombatList.IsValidIndex(EntityIdx))
- 							{
- 								FMassCombatStatsFragment& CS = CombatList[EntityIdx];
- 								// Synchronized locally via UUnitActorToFragmentSyncProcessor
- 								// CS.Health = UseItem->CS_Health;
- 								// CS.Shield = UseItem->CS_Shield;
- 								// CS.TeamId = UseItem->CS_TeamId;
- 							}
- 							if (CharList.IsValidIndex(EntityIdx))
- 							{
- 								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
- 								// Synchronized locally via UUnitActorToFragmentSyncProcessor
- 								// AC.FlyHeight = UseItem->AC_FlyHeight;
- 								// Rebuild PositionedTransform from base location/rotation (redundant fields removed)
- 								const float LYaw_Inner = (static_cast<float>(UseItem->YawQuantized)   / 65535.0f) * 360.0f;
- 								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()))
- 								{
- 									AC.PositionedTransform = FTransform(FQuat(FRotator(0.f, LYaw_Inner, 0.f)), FVector(UseItem->Location), AC.Scale);
- 									AC.bTransformDirty = true;
- 									if (TransformList.IsValidIndex(EntityIdx))
- 									{
- 										TransformList[EntityIdx].GetMutableTransform() = AC.PositionedTransform;
- 									}
- 								}
- 							}
- 							if (AIStateList.IsValidIndex(EntityIdx))
- 							{
- 								FMassAIStateFragment& AIS = AIStateList[EntityIdx];
- 								const bool bIsDead2 = (UseItem->TagBits & UnitTagBits::Dead) != 0;
- 								// Only sync timer if not dead, or if it's the very first death sync (timer transition)
- 								// Synchronized locally via UUnitActorToFragmentSyncProcessor
- 								// if (!bIsDead2 || (AIS.StateTimer <= 0.001f && UseItem->AIS_StateTimer <= 0.001f))
- 								// {
- 								// 	AIS.StateTimer = UseItem->AIS_StateTimer;
- 								// }
- 								AIS.CanAttack = HasBit2(UnitReplicationBits::AIS_CanAttack);
- 								AIS.CanMove = HasBit2(UnitReplicationBits::AIS_CanMove);
- 								AIS.HoldPosition = HasBit2(UnitReplicationBits::AIS_HoldPosition);
- 								AIS.HasAttacked = HasBit2(UnitReplicationBits::AIS_HasAttacked);
- 								AIS.SwitchingState = HasBit2(UnitReplicationBits::AIS_SwitchingState);
- 								AIS.IsInitialized = HasBit2(UnitReplicationBits::AIS_IsInitialized);
- 							}
-
- 							if (RunAnimList.IsValidIndex(EntityIdx))
- 							{
- 								FRunAnimationFragment& RAF = RunAnimList[EntityIdx];
- 								RAF.Duration = UseItem->RunAnimation_Duration;
- 								RAF.AnimationState = (UnitData::EState)UseItem->RunAnimation_AnimationState;
- 							}
-							
- 							if (EffectList.IsValidIndex(EntityIdx))
- 							{
- 								FMassVisualEffectFragment& Effect = EffectList[EntityIdx];
-								const bool bNewForceHidden = HasBit2(UnitReplicationBits::VE_bForceHidden);
-
- 								if (Effect.bForceHidden != bNewForceHidden)
- 								{
- 									UE_LOG(LogTemp, Log, TEXT("[ClientRep] Visibility changed for NetID=%u: %s"), 
- 										UseItem->NetID.GetValue(), bNewForceHidden ? TEXT("HIDDEN") : TEXT("VISIBLE"));
- 								}
- 								Effect.bForceHidden = bNewForceHidden;
- 								
- 								bool bNewPulsate = (UseItem->VE_ActiveEffects & (1 << 0)) != 0;
-								if (bNewPulsate && !Effect.bPulsateEnabled) Effect.PulsateElapsed = 0.f;
-								Effect.bPulsateEnabled = bNewPulsate;
-
-								bool bNewRotation = (UseItem->VE_ActiveEffects & (1 << 1)) != 0;
-								if (bNewRotation && !Effect.bRotationEnabled) Effect.RotationElapsed = 0.f;
-								Effect.bRotationEnabled = bNewRotation;
-
-								bool bNewOscillation = (UseItem->VE_ActiveEffects & (1 << 2)) != 0;
-								if (bNewOscillation && !Effect.bOscillationEnabled) Effect.OscillationElapsed = 0.f;
-								Effect.bOscillationEnabled = bNewOscillation;
-
-								// Resolve ISMs if null
-								if (AMassUnitBase* UnitBase = Cast<AMassUnitBase>(ActorList[EntityIdx].GetMutable()))
-								{
-									if (!Effect.PulsateTargetISM.IsValid()) Effect.PulsateTargetISM = UnitBase->ISMComponent;
-									if (!Effect.RotationTargetISM.IsValid()) Effect.RotationTargetISM = UnitBase->ISMComponent;
-									if (!Effect.OscillationTargetISM.IsValid()) Effect.OscillationTargetISM = UnitBase->ISMComponent;
-								}
-							}
-
-							if (WorkerStatsList.IsValidIndex(EntityIdx))
-							{
-								FMassWorkerStatsFragment& WS = WorkerStatsList[EntityIdx];
-								WS.BuildAreaPosition = FVector(UseItem->Worker_BuildAreaPosition);
-							}
-
- 								// Apply MoveTarget if present (guarded by bStopMovementReplication)
- 		           if (HasBit2(UnitReplicationBits::Move_bHasTarget))
- 	       {
- 	           if (bStopMovementReplication)
- 	           {
- 	               if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
- 	               {
- 	                   UE_LOG(LogTemp, Verbose, TEXT("[ClientRep] Skipping MoveTarget replication (UseItem path) for NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
- 	               }
- 	           }
- 	           else if (MoveTargetList.IsValidIndex(EntityIdx))
- 	           {
- 	               FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
- 	               // Decide newer vs older by Move_ActionID then Move_ServerStartTime
- 	               bool bIsNewer2 = true;
- 	               const uint16 IncomingID2 = UseItem->Move_ActionID;
- 	               const float IncomingSrvStart2 = UseItem->Move_ServerStartTime;
- 	               // If initial/legacy payload (ID==0) and client is currently predicting, keep prediction and skip overriding
- 	               if (IncomingID2 == 0 && PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData)
- 	               {
- 	                   bIsNewer2 = false;
- 	                   if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
- 	                   {
- 	                       UE_LOG(LogTemp, Warning, TEXT("[ClientRep][Move] Skipping initial MoveTarget (UseItem path) while predicting (NetID=%u)"), NetIDList[EntityIdx].NetID.GetValue());
- 	                   }
- 	               }
- 	               else if (IncomingID2 != 0)
- 	               {
- 	                   const uint16 LocalID2 = MT.GetCurrentActionID();
- 	                   if (IncomingID2 < LocalID2)
- 	                   {
- 	                       // If the state bits changed, prioritize server's MoveTarget even with lower ActionID (re-sync)
- 	                       if (bStateChanged2)
- 	                       {
- 	                           bIsNewer2 = true;
- 	                       }
- 	                       else
- 	                       {
- 	                           bIsNewer2 = false;
- 	                       }
- 	                   }
- 	                   else if (IncomingID2 == LocalID2)
- 	                   {
- 	                       const double LocalSrvStart2 = MT.GetCurrentActionServerStartTime();
- 	                       bIsNewer2 = (IncomingSrvStart2 > LocalSrvStart2);
- 	                   }
- 	               }
- 	               if (bIsNewer2)
- 	               {
- 	                   MT.Center = FVector(UseItem->Move_Center);
- 	                   MT.SlackRadius = UseItem->Move_SlackRadius;
- 	                   MT.DesiredSpeed.Set(UseItem->Move_DesiredSpeed);
- 	                   MT.IntentAtGoal = static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal);
- 	                   MT.DistanceToGoal = UseItem->Move_DistanceToGoal;
- 	                   if (AActor* OwnerA3 = ActorList[EntityIdx].GetMutable())
- 	                   {
- 	                       UWorld* W3 = OwnerA3->GetWorld();
- 	                       const double WorldStart3 = W3 ? (double)W3->GetTimeSeconds() : 0.0;
- 	                       MT.CreateReplicatedAction(static_cast<EMassMovementAction>(UseItem->Move_IntentAtGoal), IncomingID2, WorldStart3, (double)IncomingSrvStart2);
- 	                   }
- 	                   // Turn off client prediction if a really new MoveTarget arrived
- 	                   if (PredList.IsValidIndex(EntityIdx))
- 	                   {
- 	                       FMassClientPredictionFragment& Pred = PredList[EntityIdx];
- 	                       if (Pred.bHasData)
- 	                       {
- 	                           Pred.bHasData = false;
- 	                           Pred.Location = FVector::ZeroVector;
- 	                           Pred.PredDesiredSpeed = 0.f;
- 	                           Pred.PredAcceptanceRadius = 0.f;
- 	                       }
- 	                   }
- 	               }
- 	           }
-	           else
-	           {
-	               // Unconditional warning on client: expected FMassMoveTargetFragment but it's missing for this entity
-	               static TSet<uint32> WarnedOnceClient; // avoid spamming per NetID
-	               const uint32 IdVal = NetIDList[EntityIdx].NetID.GetValue();
-	               if (!WarnedOnceClient.Contains(IdVal))
-	               {
-	                   WarnedOnceClient.Add(IdVal);
-	                   const FName OwnerN = (ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].GetMutable()) ? ActorList[EntityIdx].GetMutable()->GetFName() : NAME_None;
-	                   UE_LOG(LogTemp, Warning, TEXT("[ClientRep] Missing FMassMoveTargetFragment for Entity NetID=%u Owner=%s (has Move target in payload)"), IdVal, *OwnerN.ToString());
-	               }
-	           }
-	       }
-							}
-						}
-						}
-					}
-				
-					// If still zero, use actor fallback to avoid popping to origin
-					if (FinalXf.GetLocation().IsNearlyZero())
-					{
-						if (AActor* Actor = ActorList[EntityIdx].GetMutable())
-						{
-							FinalXf = Actor->GetActorTransform();
-							bActorFallback = true;
-						}
-					}
-				}
-				// Replication mode: either full replication (direct set) or reconciliation via steering/force
-				if (bUseFullReplication || JustLinked[EntityIdx])
-				{
-					// Disable reconciliation: directly set the Mass transform to authoritative
-					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
-					
-					// If rotating to mouse, preserve current Yaw to avoid fighting with UMassRotateToMouseProcessor
-					// BUT ONLY for the local owner. Remote clients should follow server yaw.
-					if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassRotateToMouseTag::StaticStruct()))
-					{
-						bool bIsLocalRotator = false;
-						if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(ActorList[EntityIdx].GetMutable()))
-						{
-							int32 LocalPlayerId = (LocalPC && LocalPC->PlayerState) ? LocalPC->PlayerState->GetPlayerId() : -2;
-							if (SpawnerUnit->ActiveRotationPlayerId == LocalPlayerId)
-							{
-								bIsLocalRotator = true;
-							}
-						}
-
-						if (bIsLocalRotator)
-						{
-							FRotator FinalRot = FinalXf.Rotator();
-							FRotator CurrentRot = ClientXf.Rotator();
-							FinalRot.Yaw = CurrentRot.Yaw;
-							FinalXf.SetRotation(FinalRot.Quaternion());
-						}
-					}
-
-					ClientXf = FinalXf;
-
-					if (CharList.IsValidIndex(EntityIdx))
-					{
-						FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-						
-						// WICHTIG: Da Scale nicht repliziert wird, müssen wir hier 
-						// die lokale Skalierung (vom Actor-Sync) in die finale Transformation übernehmen.
-						FinalXf.SetScale3D(AC.Scale);
-
-						float DistSq = FVector::DistSquared(AC.PositionedTransform.GetLocation(), FinalXf.GetLocation());
-
-						// Wenn Einheit gestoppt ODER Abweichung zur Server-Position > 50cm ODER initialer Snap
-						if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()) || DistSq > FMath::Square(50.0f) || JustLinked[EntityIdx])
-						{
-							AC.PositionedTransform = FinalXf;
-							AC.bTransformDirty = true;
-						}
-					}
-
-					// Also zero out steering/force to prevent drift from movement systems this tick
-					TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
-					TArrayView<FMassSteeringFragment> SteeringList = Context.GetMutableFragmentView<FMassSteeringFragment>();
-					if (ForceList.IsValidIndex(EntityIdx))
-					{
-						ForceList[EntityIdx].Value = FVector::ZeroVector;
-					}
-					if (SteeringList.IsValidIndex(EntityIdx))
-					{
-						SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
-					}
-				}
-				else
-				{
-					// Skip reconciliation if the unit is dead
-					if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateDeadTag::StaticStruct()))
-					{
-						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-						{
-							UE_LOG(LogTemp, Verbose, TEXT("ClientReconcile: Skipped (dead) NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
-						}
-						continue;
-					}
-
-					// Skip reconciliation entirely while client-side prediction is active
-					bool bPredicting = false;
-					if (PredList.Num() > 0)
-					{
-						bPredicting = PredList[EntityIdx].bHasData;
-					}
-					if (bPredicting)
-					{
-						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-						{
-							UE_LOG(LogTemp, Warning, TEXT("ClientReconcile: Skipped (predicting) NetID=%u"), NetIDList[EntityIdx].NetID.GetValue());
-						}
-						continue;
-					}
-					// Server reconciliation: compare authoritative FinalXf vs current Mass transform and apply gentle correction via Force/Steering
-					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
-					const FVector CurrentLoc = ClientXf.GetLocation();
-					const FVector TargetLoc = FinalXf.GetLocation();
-					FVector PosError = TargetLoc - CurrentLoc;
-					// Only correct horizontal to avoid oscillations in height; vertical handled by other processors
-					FVector PosErrorXY(PosError.X, PosError.Y, 0.f);
-					const float ErrorDistSq = PosErrorXY.SizeSquared();
-					// One-time snap to server if overall error exceeds FullReplicationDistance and we're in reconciliation mode
-					{
-						static TSet<uint32> GSnappedOnce;
-						const uint32 ThisNetID = NetIDList[EntityIdx].NetID.GetValue();
-						const float Dist3DSq = FVector::DistSquared(TargetLoc, CurrentLoc);
-						const float SnapThreshSq = FullReplicationDistance > 0.f ? FMath::Square(FullReplicationDistance) : 0.f;
-						// If far away and haven't snapped yet, do a single full replication (snap) this tick
-						if (SnapThreshSq > 0.f && Dist3DSq > SnapThreshSq && !GSnappedOnce.Contains(ThisNetID))
-						{
-							FTransform& ClientXfSnap = TransformList[EntityIdx].GetMutableTransform();
-							ClientXfSnap = FinalXf;
-							if (CharList.IsValidIndex(EntityIdx))
-							{
-								FMassAgentCharacteristicsFragment& AC = CharList[EntityIdx];
-								float DistSq = FVector::DistSquared(AC.PositionedTransform.GetLocation(), FinalXf.GetLocation());
-
-								if (DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassStateStopMovementTag::StaticStruct()) || DistSq > FMath::Square(50.0f))
-								{
-									AC.PositionedTransform = FinalXf;
-									AC.bTransformDirty = true;
-								}
-							}
-							// Zero force/steering this tick to avoid overshoot
-							TArrayView<FMassForceFragment> ForceListSnap = Context.GetMutableFragmentView<FMassForceFragment>();
-							TArrayView<FMassSteeringFragment> SteeringListSnap = Context.GetMutableFragmentView<FMassSteeringFragment>();
-							if (ForceListSnap.IsValidIndex(EntityIdx)) { ForceListSnap[EntityIdx].Value = FVector::ZeroVector; }
-							if (SteeringListSnap.IsValidIndex(EntityIdx)) { SteeringListSnap[EntityIdx].DesiredVelocity = FVector::ZeroVector; }
-							GSnappedOnce.Add(ThisNetID);
-							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-							{
-								UE_LOG(LogTemp, Warning, TEXT("ClientSnapOnce: NetID=%u Dist=%.1f (>%.1f)"), ThisNetID, FMath::Sqrt(Dist3DSq), FullReplicationDistance);
-							}
-							// Skip further reconciliation for this entity this tick
-							continue;
-						}
-						// If we've snapped previously and are now within half the threshold, allow future snaps again
-						if (GSnappedOnce.Contains(ThisNetID) && Dist3DSq <= FMath::Square(FMath::Max(FullReplicationDistance * 0.5f, 100.f)))
-						{
-							GSnappedOnce.Remove(ThisNetID);
-						}
-					}
-					// Thresholds and gains
-				
-					if (ErrorDistSq > MinErrorForCorrectionSq)
-					{
-						// Convert position error into a corrective acceleration vector
-						FVector Corrective = PosErrorXY.GetClampedToMaxSize(MaxCorrectionAccel / FMath::Max(1.f, Kp)) * Kp;
-						// Apply as additional force (accel) this frame; UnitApplyMassMovementProcessor consumes Force.Value
-						TArrayView<FMassForceFragment> ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
-						TArrayView<FMassSteeringFragment> SteeringList = Context.GetMutableFragmentView<FMassSteeringFragment>();
-						if (ForceList.IsValidIndex(EntityIdx))
-						{
-							FMassForceFragment& ForceFrag = ForceList[EntityIdx];
-							ForceFrag.Value += Corrective;
-						}
-						// Also bias steering slightly toward the authoritative target to converge faster
-						if (SteeringList.IsValidIndex(EntityIdx))
-						{
-							FMassSteeringFragment& Steer = SteeringList[EntityIdx];
-							Steer.DesiredVelocity += Corrective * 0.1f; // small bias
-						}
-						// Diagnostic: log corrective force magnitude and error distance (warning level)
-						if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 1)
-						{
-							const float Err = FMath::Sqrt(ErrorDistSq);
-							UE_LOG(LogTemp, Warning, TEXT("ClientReconcileForce: NetID=%u ErrXY=%.1f Corr=(%.1f,%.1f,%.1f) Kp=%.1f MaxAccel=%.1f"),
-								NetIDList[EntityIdx].NetID.GetValue(), Err, Corrective.X, Corrective.Y, Corrective.Z, Kp, MaxCorrectionAccel);
-						}
-					}
-
-					// Gentle rotation reconciliation (primarily yaw)
-					if (bEnableRotationReconciliation)
-					{
-						const float Dt = Context.GetDeltaTimeSeconds();
-						
-						// Special handling for RotateToMouse: if we are NOT the local rotator, snap to server rotation
-						bool bHasRTMTag = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIdx), FMassRotateToMouseTag::StaticStruct());
-						bool bIsLocalRotator = false;
-
-						if (bHasRTMTag)
-						{
-							if (ASpawnerUnit* SpawnerUnit = Cast<ASpawnerUnit>(ActorList[EntityIdx].GetMutable()))
-							{
-								int32 LocalPlayerId = (LocalPC && LocalPC->PlayerState) ? LocalPC->PlayerState->GetPlayerId() : -2;
-								if (SpawnerUnit->ActiveRotationPlayerId == LocalPlayerId)
-								{
-									bIsLocalRotator = true;
-								}
-							}
-						}
-
-						if (bHasRTMTag && !bIsLocalRotator)
-						{
-							ClientXf.SetRotation(FinalXf.GetRotation());
-							if (CharList.IsValidIndex(EntityIdx))
-							{
-								CharList[EntityIdx].PositionedTransform.SetRotation(FinalXf.GetRotation());
-								CharList[EntityIdx].bTransformDirty = true;
-							}
-							continue; // Skip gentle reconciliation
-						}
-
-						// Extract current and target rotations
-						const FRotator CurrRot = ClientXf.GetRotation().Rotator();
-						const FRotator TgtRot = FinalXf.GetRotation().Rotator();
-						float DeltaPitch = FMath::FindDeltaAngleDegrees(CurrRot.Pitch, TgtRot.Pitch);
-						float DeltaYaw   = FMath::FindDeltaAngleDegrees(CurrRot.Yaw,   TgtRot.Yaw);
-						float DeltaRoll  = FMath::FindDeltaAngleDegrees(CurrRot.Roll,  TgtRot.Roll);
-						bool bApply = false;
-						FRotator NewRot = CurrRot;
-						if (bRotationYawOnly)
-						{
-							if (FMath::Abs(DeltaYaw) > MinYawErrorForCorrectionDeg)
-							{
-								const float MaxStep = MaxRotationCorrectionDegPerSec * Dt;
-								const float Step = FMath::Clamp(KpRot * DeltaYaw, -MaxStep, MaxStep);
-								NewRot.Yaw = CurrRot.Yaw + Step;
-								bApply = true;
-							}
-						}
-						else
-						{
-							// Apply to all axes with same limits
-							const float MaxStep = MaxRotationCorrectionDegPerSec * Dt;
-							bool bAny = false;
-							if (FMath::Abs(DeltaYaw) > MinYawErrorForCorrectionDeg)
-							{
-								NewRot.Yaw = CurrRot.Yaw + FMath::Clamp(KpRot * DeltaYaw, -MaxStep, MaxStep);
-								bAny = true;
-							}
-							if (FMath::Abs(DeltaPitch) > MinYawErrorForCorrectionDeg)
-							{
-								NewRot.Pitch = CurrRot.Pitch + FMath::Clamp(KpRot * DeltaPitch, -MaxStep, MaxStep);
-								bAny = true;
-							}
-							if (FMath::Abs(DeltaRoll) > MinYawErrorForCorrectionDeg)
-							{
-								NewRot.Roll = CurrRot.Roll + FMath::Clamp(KpRot * DeltaRoll, -MaxStep, MaxStep);
-								bAny = true;
-							}
-							bApply = bAny;
-						}
-						if (bApply)
-						{
-							ClientXf.SetRotation(NewRot.Quaternion());
-							if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-							{
-								UE_LOG(LogTemp, Verbose, TEXT("ClientReconcileRot: NetID=%u CurrYaw=%.1f TgtYaw=%.1f AppliedYaw=%.1f (d=%.1f, Kp=%.2f, MaxDeg/s=%.1f)"),
-									NetIDList[EntityIdx].NetID.GetValue(), CurrRot.Yaw, TgtRot.Yaw, NewRot.Yaw, DeltaYaw, KpRot, MaxRotationCorrectionDegPerSec);
-							}
-						}
-					}
-				}
-
-    // Detailed client log: what transform we compared and source (disabled by default)
-				if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2)
-				{
-					const AActor* OA = ActorList[EntityIdx].GetMutable();
-					const int32 UnitIndex = (OA && OA->IsA<AUnitBase>()) ? static_cast<const AUnitBase*>(OA)->UnitIndex : INDEX_NONE;
-					UE_LOG(LogTemp, Log, TEXT("ClientApplyXf: Actor=%s UnitIndex=%d NetID=%u Src=%s Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
-						OA ? *OA->GetName() : TEXT("<none>"), UnitIndex, NetIDList[EntityIdx].NetID.GetValue(),
-						bFromCache ? TEXT("Cache") : (bFromBubble ? TEXT("Bubble") : (bActorFallback ? TEXT("ActorFallback") : TEXT("ReplicatedFrag"))),
-						FinalXf.GetLocation().X, FinalXf.GetLocation().Y, FinalXf.GetLocation().Z,
-						FinalXf.Rotator().Pitch, FinalXf.Rotator().Yaw, FinalXf.Rotator().Roll,
-						FinalXf.GetScale3D().X, FinalXf.GetScale3D().Y, FinalXf.GetScale3D().Z);
-				}
-				// Additional verbose diagnostics: log AI target fragment values for this entity on the client
-				if (CVarRTS_ClientReplication_LogLevel.GetValueOnGameThread() >= 2 && AITargetList.IsValidIndex(EntityIdx))
-				{
-					const FMassAITargetFragment& AIT = AITargetList[EntityIdx];
-					uint32 TargetNetIDDiag = 0u;
-					if (AIT.TargetEntity.IsSet() && EntityManager.IsEntityValid(AIT.TargetEntity))
-					{
-						if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT.TargetEntity))
-						{
-							TargetNetIDDiag = TgtNet->NetID.GetValue();
-						}
-					}
-					UE_LOG(LogTemp, Log, TEXT("ClientAITarget: Actor=%s NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetSet=%d TargetNetID=%u"),
-						ActorList[EntityIdx].GetMutable() ? *ActorList[EntityIdx].GetMutable()->GetName() : TEXT("<none>"),
-						NetIDList[EntityIdx].NetID.GetValue(),
-						AIT.bHasValidTarget?1:0,
-						AIT.IsFocusedOnTarget?1:0,
-						*AIT.LastKnownLocation.ToString(),
-						*AIT.AbilityTargetLocation.ToString(),
-						AIT.TargetEntity.IsSet()?1:0,
-						TargetNetIDDiag);
-				}
-
-    // Self-heal if NetID repeatedly missing on client
-				AActor* OwnerActor2 = ActorList[EntityIdx].GetMutable();
-				if (OwnerActor2)
-				{
-					int32& Streak = ZeroIdStreak.FindOrAdd(OwnerActor2);
-					if (NetIDList[EntityIdx].NetID.GetValue() == 0)
-					{
-						Streak++;
-						if (Streak >= 3) // three consecutive ticks
-						{
-							if (UMassActorBindingComponent* Bind = OwnerActor2->FindComponentByClass<UMassActorBindingComponent>())
-							{
-								Bind->RequestClientMassLink();
-							}
-						}
-					}
-					else
-					{
-						ZeroIdStreak.Remove(OwnerActor2);
-					}
-				}
-			}
-
-		});
 }

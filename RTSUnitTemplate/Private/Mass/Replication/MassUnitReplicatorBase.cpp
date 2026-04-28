@@ -241,9 +241,15 @@ static bool UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager
         SetBit(UnitReplicationBits::EA_bPendingDestruction, Impact->bPendingDestruction);
     }
 
-    if (Item.ReplicationBits != NewBits)
+    const uint32 ProtectedMask = 0x1F000000; // Bits 24-28 (Slots + EA_bPendingDestruction is 24)
+    // EA_bPendingDestruction is Bit 24. Slots are 25, 26, 27, 28.
+    // So 0x1F000000 covers bits 24, 25, 26, 27, 28.
+    
+    const uint32 CombinedBits = (Item.ReplicationBits & ProtectedMask) | (NewBits & ~ProtectedMask);
+
+    if (Item.ReplicationBits != CombinedBits)
     {
-        Item.ReplicationBits = NewBits;
+        Item.ReplicationBits = CombinedBits;
         return true;
     }
     return false;
@@ -332,7 +338,6 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         {
             if (AActor* Ow = ActorFrag->GetMutable())
             {
-                NewItem.OwnerName = Ow->GetFName();
                 if (AUnitBase* UnitActor = Cast<AUnitBase>(Ow))
                 {
                     // Projectile data is now handled locally on client via UnitBase
@@ -347,89 +352,114 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
             return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
         };
         const FRotator Rot = VisualXf.Rotator();
-        NewItem.YawQuantized = QuantizeAngle(Rot.Yaw);
+        const uint16 YQ = QuantizeAngle(Rot.Yaw);
         NewItem.TagBits = BuildReplicatedTagBits(EntityManager, Entity);
         UpdateReplicationBits(NewItem, EntityManager, Entity, BubbleInfo);
 
+        uint16 NewPackedEnums = 0;
         
-            if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
-            {
-                NewItem.Move_Center = (FVector3f)MT->Center;
-                NewItem.Move_SlackRadius = MT->SlackRadius;
-                NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
-                NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
-                NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
-                // Versioning fields to allow client to resolve newer vs older
-                NewItem.Move_ActionID = MT->GetCurrentActionID();
-                NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
-            }
-       
+        if (const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+        {
+            // Slot 1: Target (Move)
+            NewItem.TargetLoc = FVector(MT->Center);
+            NewItem.ReplicationBits |= UnitReplicationBits::Slot_TargetIsMove;
+
+            // MoveData bundling
+            const uint8 QSlack = (uint8)FMath::Clamp(MT->SlackRadius, 0.f, 255.f);
+            const uint16 QSpeed = (uint16)FMath::Clamp(MT->DesiredSpeed.Get(), 0.f, 4095.f);
+            const uint16 QActionID = (uint16)(MT->GetCurrentActionID() & 0xFFF);
+            NewItem.MoveData = (uint32)QSlack | ((uint32)QSpeed << 8) | ((uint32)QActionID << 20);
+
+            NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+
+            NewPackedEnums |= (static_cast<uint16>(MT->IntentAtGoal) << UnitReplicationBits::Packed_MoveIntentShift) & UnitReplicationBits::Packed_MoveIntentMask;
+
+            // Distance to Goal in AuxData (Bits 24-31)
+            const uint8 QDist = (uint8)FMath::Clamp(MT->DistanceToGoal / 4.f, 0.f, 255.f);
+            NewItem.AuxData |= ((uint32)QDist << 24);
+        }
+
         // Fill AI target replication fields if available
         if (const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
         {
-            // Flags
-            NewItem.AITargetFlags = 0u;
-            if (AIT->bHasValidTarget) NewItem.AITargetFlags |= 1u;
-            if (AIT->IsFocusedOnTarget) NewItem.AITargetFlags |= 2u;
-            NewItem.AITargetLastKnownLocation = (FVector3f)AIT->LastKnownLocation;
-            NewItem.AbilityTargetLocation = (FVector3f)AIT->AbilityTargetLocation;
-            // Resolve target NetID if the target entity is valid
-            uint32 TargetNetIDVal = 0u;
-            if (AIT->TargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->TargetEntity))
+            if (AIT->bHasValidTarget) NewPackedEnums |= UnitReplicationBits::Packed_HasValidTarget;
+            if (AIT->IsFocusedOnTarget) NewPackedEnums |= UnitReplicationBits::Packed_IsFocusedOnTarget;
+            
+            // If Slot 1 is NOT taken by Move, use it for AI Target
+            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
             {
-                if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                NewItem.TargetLoc = FVector(AIT->LastKnownLocation);
+                uint32 TargetNetIDVal = 0u;
+                if (AIT->TargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->TargetEntity))
                 {
-                    TargetNetIDVal = TgtNet->NetID.GetValue();
+                    if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                    {
+                        TargetNetIDVal = TgtNet->NetID.GetValue();
+                    }
                 }
+                NewItem.TargetID = TargetNetIDVal;
             }
-            NewItem.AITargetNetID = TargetNetIDVal;
 
-            // Resolve friendly target NetID
-            uint32 FriendlyTargetNetIDVal = 0u;
-            if (AIT->FriendlyTargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->FriendlyTargetEntity))
+            // Ability Target in Slot 2 (Action)
+            if (AIT->AbilityTargetLocation.SizeSquared() > 0.1f)
             {
-                if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                NewItem.ActionLoc = FVector(AIT->AbilityTargetLocation);
+                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsAbility;
+            }
+
+            // Sync friendly target (Alternative for Slot 2 if no Ability)
+            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_ActionIsAbility))
+            {
+                uint32 FriendlyTargetNetIDVal = 0u;
+                if (AIT->FriendlyTargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->FriendlyTargetEntity))
                 {
-                    FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                    if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                    {
+                        FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                    }
+                }
+                if (FriendlyTargetNetIDVal != 0)
+                {
+                    NewItem.ActionID = FriendlyTargetNetIDVal;
+                    NewItem.ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
+                    NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsFriendly;
                 }
             }
-            NewItem.AIFriendlyTargetNetID = FriendlyTargetNetIDVal;
-            NewItem.AIFriendlyTargetLastKnownLocation = (FVector3f)AIT->LastKnownFriendlyLocation;
-            NewItem.Worker_BuildAreaPosition = (FVector3f)AIT->LastKnownFriendlyLocation;
         }
-        // Fill additional fragments: CombatStats, AgentCharacteristics, AIState
-        if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
-        {
-            // CS_Health, CS_Shield, CS_TeamId are now synchronized locally to save bandwidth
-            // NewItem.CS_Health = CS->Health;
-            // NewItem.CS_Shield = CS->Shield;
-            // NewItem.CS_TeamId = (uint8)CS->TeamId;
-        }
-        if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
-        {
-            // AC_FlyHeight is now synchronized locally
-            // NewItem.AC_FlyHeight = AC->FlyHeight;
-        }
+        
         if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
         {
-            // AIS_StateTimer is now synchronized locally
-            // NewItem.AIS_StateTimer = AIS->StateTimer;
-            NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
-            NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
-            NewItem.AIS_ProjectileTargetLocation = (FVector3f)AIS->LastProjectileTargetLocation;
+            // Projectile Target in Slot 2 (Action) - High Priority
+            if (AIS->ProjectileFireCounter != 0)
+            {
+                NewItem.ActionLoc = FVector(AIS->LastProjectileTargetLocation);
+                NewItem.ActionID = AIS->LastTargetNetID;
+                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsProjectile;
+
+                // AuxData: ProjectileFireCounter (Bits 16-23)
+                NewItem.AuxData |= ((uint32)AIS->ProjectileFireCounter << 16);
+            }
         }
 
-        // Fill Visual Effect Fragment
+        if (const FRunAnimationFragment* RAF = EntityManager.GetFragmentDataPtr<FRunAnimationFragment>(Entity))
+        {
+            // AuxData: Duration (Bits 0-15, quant 0.01s)
+            const uint16 QDur = (uint16)FMath::Clamp(RAF->Duration * 100.f, 0.f, 65535.f);
+            NewItem.AuxData |= (uint32)QDur;
+
+            NewPackedEnums |= (static_cast<uint16>(RAF->AnimationState.GetValue()) << UnitReplicationBits::Packed_AnimStateShift) & UnitReplicationBits::Packed_AnimStateMask;
+        }
+
         if (const FMassVisualEffectFragment* VE = EntityManager.GetFragmentDataPtr<FMassVisualEffectFragment>(Entity))
         {
-            uint8 ActiveBits = 0;
+            uint16 ActiveBits = 0;
             if (VE->bPulsateEnabled) ActiveBits |= (1 << 0);
             if (VE->bRotationEnabled) ActiveBits |= (1 << 1);
             if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
-            NewItem.VE_ActiveEffects = ActiveBits;
-            
-            // Pulsate data now handled locally
+            NewPackedEnums |= (ActiveBits << UnitReplicationBits::Packed_ActiveEffectsShift) & UnitReplicationBits::Packed_ActiveEffectsMask;
         }
+
+        NewItem.PackedBits = (uint32)YQ | ((uint32)NewPackedEnums << 16);
 
         // Fill EffectArea Impact Fragment
         if (const FEffectAreaImpactFragment* Impact = EntityManager.GetFragmentDataPtr<FEffectAreaImpactFragment>(Entity))
@@ -454,11 +484,13 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
     else
     {
         // Update initial values just in case and mark dirty using configurable thresholds
-        const float LocThresh = FMath::Max(0.0f, CVarRTS_ServerRep_LocThresholdCm.GetValueOnGameThread());
+        const float LocThresh = FMath::Max(0.01f, CVarRTS_ServerRep_LocThresholdCm.GetValueOnGameThread());
         const float AngleThresh = FMath::Clamp(CVarRTS_ServerRep_AngleThresholdDeg.GetValueOnGameThread(), 0.0f, 180.0f);
         const float ScaleThresh = FMath::Max(0.0f, CVarRTS_ServerRep_ScaleThreshold.GetValueOnGameThread());
         bool bDirty = false;
         const FVector NewLoc = Xf.GetLocation();
+        
+        // Use Equals on Location (FVector_NetQuantize will handle quantization during serialization)
         if (!Item->Location.Equals(NewLoc, LocThresh)) { Item->Location = NewLoc; bDirty = true; }
         // Angle snapping helper based on threshold to reduce churn
         auto QuantizeAngleWithThreshold = [AngleThresh](float AngleDeg)->uint16
@@ -470,7 +502,14 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
         };
         const FRotator Rot = Xf.Rotator();
         const uint16 NewY = QuantizeAngleWithThreshold(Rot.Yaw);
-        if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
+        
+        // Yaw is in lower 16 bits of PackedBits
+        const uint16 CurrentY = (uint16)(Item->PackedBits & 0xFFFF);
+        if (CurrentY != NewY)
+        {
+            Item->PackedBits = (Item->PackedBits & 0xFFFF0000) | (uint32)NewY;
+            bDirty = true;
+        }
         if (bDirty)
         {
             BubbleInfo->Agents.MarkItemDirty(*Item);
@@ -733,95 +772,126 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                 {
                     FUnitReplicationItem NewItem;
                     NewItem.NetID = NetID;
-                    NewItem.OwnerName = OwnerName;
                     NewItem.Location = Loc;
                     auto QuantizeAngle = [](float AngleDeg)->uint16
                     {
                         const float Norm = FMath::Fmod(AngleDeg + 360.0f, 360.0f);
                         return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
                     };
-                    NewItem.YawQuantized = QuantizeAngle(Rot.Yaw);
+                    const uint16 YQ = QuantizeAngle(Rot.Yaw);
+                    const FMassEntityHandle EH = Context.GetEntity(Idx);
+                    
                     if (EM)
                     {
-                        const FMassEntityHandle EH = Context.GetEntity(Idx);
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
                         UpdateReplicationBits(NewItem, *EM, EH, BubbleInfo);
+
+                        uint16 NewPackedEnums = 0;
                         if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                         {
-                            NewItem.Move_Center = (FVector3f)MT->Center;
-                            NewItem.Move_SlackRadius = MT->SlackRadius;
-                            NewItem.Move_DesiredSpeed = MT->DesiredSpeed.Get();
-                            NewItem.Move_IntentAtGoal = static_cast<uint8>(MT->IntentAtGoal);
-                            NewItem.Move_DistanceToGoal = MT->DistanceToGoal;
-                            // Versioning fields to allow client to resolve newer vs older
-                            NewItem.Move_ActionID = MT->GetCurrentActionID();
+                            // Slot 1: Target (Move)
+                            NewItem.TargetLoc = FVector(MT->Center);
+                            NewItem.ReplicationBits |= UnitReplicationBits::Slot_TargetIsMove;
+                            
+                            // MoveData bundling
+                            const uint8 QSlack = (uint8)FMath::Clamp(MT->SlackRadius, 0.f, 255.f);
+                            const uint16 QSpeed = (uint16)FMath::Clamp(MT->DesiredSpeed.Get(), 0.f, 4095.f);
+                            const uint16 QActionID = (uint16)(MT->GetCurrentActionID() & 0xFFF);
+                            NewItem.MoveData = (uint32)QSlack | ((uint32)QSpeed << 8) | ((uint32)QActionID << 20);
+                            
                             NewItem.Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+
+                            NewPackedEnums |= (static_cast<uint16>(MT->IntentAtGoal) << UnitReplicationBits::Packed_MoveIntentShift) & UnitReplicationBits::Packed_MoveIntentMask;
+                            
+                            // Distance to Goal in AuxData (Bits 24-31)
+                            const uint8 QDist = (uint8)FMath::Clamp(MT->DistanceToGoal / 4.f, 0.f, 255.f); // 0..1020cm
+                            NewItem.AuxData |= ((uint32)QDist << 24);
                         }
                         
                         // Fill AI target fields if fragment exists
                         if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
                         {
-                            NewItem.AITargetFlags = 0u;
-                            if (AIT->bHasValidTarget) NewItem.AITargetFlags |= 1u;
-                            if (AIT->IsFocusedOnTarget) NewItem.AITargetFlags |= 2u;
-                            NewItem.AITargetLastKnownLocation = (FVector3f)AIT->LastKnownLocation;
-                            NewItem.AbilityTargetLocation = (FVector3f)AIT->AbilityTargetLocation;
-                            uint32 TargetNetIDVal = 0u;
-                            if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
+                            if (AIT->bHasValidTarget) NewPackedEnums |= UnitReplicationBits::Packed_HasValidTarget;
+                            if (AIT->IsFocusedOnTarget) NewPackedEnums |= UnitReplicationBits::Packed_IsFocusedOnTarget;
+                            
+                            // If Slot 1 is NOT taken by Move, use it for AI Target
+                            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
                             {
-                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                                NewItem.TargetLoc = FVector(AIT->LastKnownLocation);
+                                uint32 TargetNetIDVal = 0u;
+                                if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
                                 {
-                                    TargetNetIDVal = TgtNet->NetID.GetValue();
+                                    if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                                    {
+                                        TargetNetIDVal = TgtNet->NetID.GetValue();
+                                    }
                                 }
+                                NewItem.TargetID = TargetNetIDVal;
                             }
-                            NewItem.AITargetNetID = TargetNetIDVal;
+                            
+                            // Ability Target in Slot 2 (Action)
+                            if (AIT->AbilityTargetLocation.SizeSquared() > 0.1f)
+                            {
+                                NewItem.ActionLoc = FVector(AIT->AbilityTargetLocation);
+                                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsAbility;
+                            }
 
-                            // Resolve friendly target NetID
-                            uint32 FriendlyTargetNetIDVal = 0u;
-                            if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
+                            // Sync friendly target (Alternative for Slot 2 if no Ability)
+                            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_ActionIsAbility))
                             {
-                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                                uint32 FriendlyTargetNetIDVal = 0u;
+                                if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
                                 {
-                                    FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                                    if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                                    {
+                                        FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                                    }
+                                }
+                                if (FriendlyTargetNetIDVal != 0)
+                                {
+                                    NewItem.ActionID = FriendlyTargetNetIDVal;
+                                    NewItem.ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
+                                    NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsFriendly;
                                 }
                             }
-                            NewItem.AIFriendlyTargetNetID = FriendlyTargetNetIDVal;
-                            NewItem.AIFriendlyTargetLastKnownLocation = (FVector3f)AIT->LastKnownFriendlyLocation;
                         }
-                        // Fill additional replicated fragments at creation time (subset)
-                        if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
-                        {
-                            // Redundant fields synchronized locally
-                        }
-                        if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
-                        {
-                        }
+
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
                         {
-                            // AIS_StateTimer is now synchronized locally
-                            NewItem.AIS_ProjectileFireCounter = AIS->ProjectileFireCounter;
-                            NewItem.AIS_LastTargetNetID = AIS->LastTargetNetID;
-                            NewItem.AIS_ProjectileTargetLocation = (FVector3f)AIS->LastProjectileTargetLocation;
+                            // Projectile Target in Slot 2 (Action) - High Priority
+                            if (AIS->ProjectileFireCounter != 0) // Simple check if we ever fired
+                            {
+                                // We always sync Projectile data if it's active
+                                NewItem.ActionLoc = FVector(AIS->LastProjectileTargetLocation);
+                                NewItem.ActionID = AIS->LastTargetNetID;
+                                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsProjectile;
+                                
+                                // AuxData: ProjectileFireCounter (Bits 16-23)
+                                NewItem.AuxData |= ((uint32)AIS->ProjectileFireCounter << 16);
+                            }
                         }
 
                         // Fill RunAnimation fragment data
                         if (const FRunAnimationFragment* RAF = EM->GetFragmentDataPtr<FRunAnimationFragment>(EH))
                         {
-                            NewItem.RunAnimation_Duration = RAF->Duration;
-                            NewItem.RunAnimation_AnimationState = (uint8)RAF->AnimationState.GetValue();
+                            // AuxData: Duration (Bits 0-15, quant 0.01s)
+                            const uint16 QDur = (uint16)FMath::Clamp(RAF->Duration * 100.f, 0.f, 65535.f);
+                            NewItem.AuxData |= (uint32)QDur;
+                            
+                            NewPackedEnums |= (static_cast<uint16>(RAF->AnimationState.GetValue()) << UnitReplicationBits::Packed_AnimStateShift) & UnitReplicationBits::Packed_AnimStateMask;
                         }
 
                         // Fill Visual Effect Fragment
                         if (const FMassVisualEffectFragment* VE = EM->GetFragmentDataPtr<FMassVisualEffectFragment>(EH))
                         {
-                            uint8 ActiveBits = 0;
+                            uint16 ActiveBits = 0;
                             if (VE->bPulsateEnabled) ActiveBits |= (1 << 0);
                             if (VE->bRotationEnabled) ActiveBits |= (1 << 1);
                             if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
-                            NewItem.VE_ActiveEffects = ActiveBits;
-                            
-                            // Pulsate data now handled locally
+                            NewPackedEnums |= (ActiveBits << UnitReplicationBits::Packed_ActiveEffectsShift) & UnitReplicationBits::Packed_ActiveEffectsMask;
                         }
+
+                        NewItem.PackedBits = (uint32)YQ | ((uint32)NewPackedEnums << 16);
 
                         // Fill EffectArea Impact Fragment
                         if (const FEffectAreaImpactFragment* Impact = EM->GetFragmentDataPtr<FEffectAreaImpactFragment>(EH))
@@ -829,6 +899,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             // EA data now handled locally
                         }
                     }
+                    
                     const int32 NewIdx = BubbleInfo->Agents.Items.Add(NewItem);
                     GNewUnitsAddedThisFrame++;
                     BubbleInfo->Agents.MarkItemDirty(BubbleInfo->Agents.Items[NewIdx]);
@@ -836,23 +907,20 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                 }
                 else
                 {
-                    // Read CVAR thresholds once per bubble pass
+                    // Update logic for existing units
                     const float LocThresh = FMath::Max(0.0f, CVarRTS_ServerRep_LocThresholdCm.GetValueOnGameThread());
                     const float AngleThresh = FMath::Clamp(CVarRTS_ServerRep_AngleThresholdDeg.GetValueOnGameThread(), 0.0f, 180.0f);
-                    const float ScaleThresh = FMath::Max(0.0f, CVarRTS_ServerRep_ScaleThreshold.GetValueOnGameThread());
-                    const float HealthThresh = FMath::Max(0.0f, CVarRTS_ServerRep_HealthThreshold.GetValueOnGameThread());
-                    const float SightThresh = FMath::Max(0.0f, CVarRTS_ServerRep_SightRadiusThreshold.GetValueOnGameThread());
-
+                    
                     const FMassEntityHandle EH = Context.GetEntity(Idx);
-                    const uint32 NewBits = EM ? BuildReplicatedTagBits(*EM, EH) : Item->TagBits;
-                    const bool bIsDead = (NewBits & UnitTagBits::Dead) != 0;
+                    const uint32 NewTagBits = EM ? BuildReplicatedTagBits(*EM, EH) : Item->TagBits;
+                    const bool bIsDead = (NewTagBits & UnitTagBits::Dead) != 0;
 
                     bool bDirty = false;
 
-                    // Skip transform replication for dead units as requested
                     if (!bIsDead)
                     {
                         if (!Item->Location.Equals(Loc, LocThresh)) { Item->Location = Loc; bDirty = true; }
+                        
                         auto QuantizeAngleWithThreshold = [AngleThresh](float AngleDeg)->uint16
                         {
                             const float ClampedStep = FMath::Max(0.1f, AngleThresh);
@@ -861,167 +929,134 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
                         };
                         const uint16 NewY = QuantizeAngleWithThreshold(Rot.Yaw);
-                        if (Item->YawQuantized != NewY) { Item->YawQuantized = NewY; bDirty = true; }
+                        const uint16 CurrentY = (uint16)(Item->PackedBits & 0xFFFF);
+                        if (CurrentY != NewY)
+                        {
+                            Item->PackedBits = (Item->PackedBits & 0xFFFF0000) | (uint32)NewY;
+                            bDirty = true;
+                        }
                     }
-                    
-                    // Update tag bits and AI target if EntityManager is available
+
                     if (EM)
                     {
-                        if (Item->TagBits != NewBits) { Item->TagBits = NewBits; bDirty = true; }
+                        if (Item->TagBits != NewTagBits) { Item->TagBits = NewTagBits; bDirty = true; }
                         if (UpdateReplicationBits(*Item, *EM, EH, BubbleInfo)) { bDirty = true; }
-                        if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
-                        {
-                            uint8 NewFlags = 0u;
-                            if (AIT->bHasValidTarget) NewFlags |= 1u;
-                            if (AIT->IsFocusedOnTarget) NewFlags |= 2u;
-                            uint32 NewTargetNetID = 0u;
-                            if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
-                            {
-                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
-                                {
-                                    NewTargetNetID = TgtNet->NetID.GetValue();
-                                }
-                            }
-                            if (Item->AITargetFlags != NewFlags) { Item->AITargetFlags = NewFlags; bDirty = true; }
-                            if (Item->AITargetNetID != NewTargetNetID) { Item->AITargetNetID = NewTargetNetID; bDirty = true; }
-                            if (!Item->AITargetLastKnownLocation.Equals((FVector3f)AIT->LastKnownLocation, 10.0f)) { Item->AITargetLastKnownLocation = (FVector3f)AIT->LastKnownLocation; bDirty = true; }
-                            
-                            // Sync friendly target
-                            uint32 NewFriendlyTargetNetID = 0u;
-                            if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
-                            {
-                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
-                                {
-                                    NewFriendlyTargetNetID = TgtNet->NetID.GetValue();
-                                }
-                            }
-                            if (Item->AIFriendlyTargetNetID != NewFriendlyTargetNetID) { Item->AIFriendlyTargetNetID = NewFriendlyTargetNetID; bDirty = true; }
-                            if (!Item->AIFriendlyTargetLastKnownLocation.Equals((FVector3f)AIT->LastKnownFriendlyLocation, 10.0f)) { Item->AIFriendlyTargetLastKnownLocation = (FVector3f)AIT->LastKnownFriendlyLocation; bDirty = true; }
 
-                            if (!Item->AbilityTargetLocation.Equals((FVector3f)AIT->AbilityTargetLocation, 10.0f)) { Item->AbilityTargetLocation = (FVector3f)AIT->AbilityTargetLocation; bDirty = true; }
+                        uint16 NewPackedEnums = (uint16)(Item->PackedBits >> 16);
+                        uint32 NewMoveData = 0u; 
+                        uint32 NewAuxData = 0u;
+                        uint32 NewRepBits = Item->ReplicationBits & ~UnitReplicationBits::Slot_TargetIsMove & ~UnitReplicationBits::Slot_ActionIsAbility & ~UnitReplicationBits::Slot_ActionIsProjectile & ~UnitReplicationBits::Slot_ActionIsFriendly;
+                        
+                        // Clear slots for rebuild
+                        Item->TargetLoc = FVector_NetQuantize();
+                        Item->TargetID = 0;
+                        Item->ActionLoc = FVector_NetQuantize();
+                        Item->ActionID = 0;
 
-                            // Sync RunAnimation fragment data
-                            if (const FRunAnimationFragment* RAF = EM->GetFragmentDataPtr<FRunAnimationFragment>(EH))
-                            {
-                                if (Item->RunAnimation_Duration != RAF->Duration) { Item->RunAnimation_Duration = RAF->Duration; bDirty = true; }
-                                uint8 NewStateVal = (uint8)RAF->AnimationState.GetValue();
-                                if (Item->RunAnimation_AnimationState != NewStateVal) { Item->RunAnimation_AnimationState = NewStateVal; bDirty = true; }
-                            }
-                        }
                         if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
                         {
-                            bool bMoveDirty = false;
-                            if (!Item->Move_Center.Equals((FVector3f)MT->Center, 10.0f)) { Item->Move_Center = (FVector3f)MT->Center; bMoveDirty = true; }
-                            if (!FMath::IsNearlyEqual(Item->Move_SlackRadius, MT->SlackRadius, 1.0f)) { Item->Move_SlackRadius = MT->SlackRadius; bMoveDirty = true; }
-                            const float DesiredSpeed = MT->DesiredSpeed.Get();
-                            if (!FMath::IsNearlyEqual(Item->Move_DesiredSpeed, DesiredSpeed, 10.0f)) { Item->Move_DesiredSpeed = DesiredSpeed; bMoveDirty = true; }
-                            const uint8 Intent = static_cast<uint8>(MT->IntentAtGoal);
-                            if (Item->Move_IntentAtGoal != Intent) { Item->Move_IntentAtGoal = Intent; bMoveDirty = true; }
-                            if (!FMath::IsNearlyEqual(Item->Move_DistanceToGoal, MT->DistanceToGoal, 50.0f)) { Item->Move_DistanceToGoal = MT->DistanceToGoal; bMoveDirty = true; }
-                            // Versioning fields
-                            const uint16 NewActionID = MT->GetCurrentActionID();
-                            if (Item->Move_ActionID != NewActionID) { Item->Move_ActionID = NewActionID; bMoveDirty = true; }
-                            const float NewSrvStart = (float)MT->GetCurrentActionServerStartTime();
-                            if (!FMath::IsNearlyEqual(Item->Move_ServerStartTime, NewSrvStart, 0.1f)) { Item->Move_ServerStartTime = NewSrvStart; bMoveDirty = true; }
-                            if (bMoveDirty) { bDirty = true; }
+                            Item->TargetLoc = FVector(MT->Center);
+                            NewRepBits |= UnitReplicationBits::Slot_TargetIsMove;
+                            
+                            const uint8 QSlack = (uint8)FMath::Clamp(MT->SlackRadius, 0.f, 255.f);
+                            const uint16 QSpeed = (uint16)FMath::Clamp(MT->DesiredSpeed.Get(), 0.f, 4095.f);
+                            const uint16 QActionID = (uint16)(MT->GetCurrentActionID() & 0xFFF);
+                            NewMoveData = (uint32)QSlack | ((uint32)QSpeed << 8) | ((uint32)QActionID << 20);
+
+                            if (Item->Move_ServerStartTime != (float)MT->GetCurrentActionServerStartTime())
+                            {
+                                Item->Move_ServerStartTime = (float)MT->GetCurrentActionServerStartTime();
+                                bDirty = true;
+                            }
+
+                            const uint16 Intent = (static_cast<uint16>(MT->IntentAtGoal) << UnitReplicationBits::Packed_MoveIntentShift) & UnitReplicationBits::Packed_MoveIntentMask;
+                            NewPackedEnums = (NewPackedEnums & ~UnitReplicationBits::Packed_MoveIntentMask) | Intent;
+
+                            const uint8 QDist = (uint8)FMath::Clamp(MT->DistanceToGoal / 4.f, 0.f, 255.f);
+                            NewAuxData |= ((uint32)QDist << 24);
                         }
 
-                        // Keep additional replicated fragments in sync (subset)
-                        if (const FMassCombatStatsFragment* CS = EM->GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
+                        if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
                         {
-                            // if (!FMath::IsNearlyEqual(Item->CS_Health, CS->Health, HealthThresh)) { Item->CS_Health = CS->Health; bDirty = true; }
-                            // if (Item->CS_TeamId != CS->TeamId) { Item->CS_TeamId = CS->TeamId; bDirty = true; }
-                            // if (!FMath::IsNearlyEqual(Item->CS_Shield, CS->Shield, HealthThresh)) { Item->CS_Shield = CS->Shield; bDirty = true; }
-                        }
+                            const uint16 FlagMask = UnitReplicationBits::Packed_HasValidTarget | UnitReplicationBits::Packed_IsFocusedOnTarget;
+                            uint16 Flags = 0u;
+                            if (AIT->bHasValidTarget) Flags |= UnitReplicationBits::Packed_HasValidTarget;
+                            if (AIT->IsFocusedOnTarget) Flags |= UnitReplicationBits::Packed_IsFocusedOnTarget;
+                            NewPackedEnums = (NewPackedEnums & ~FlagMask) | Flags;
 
-                        if (const FMassAgentCharacteristicsFragment* AC = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
-                        {
-                            // if (!FMath::IsNearlyEqual(Item->AC_FlyHeight, AC->FlyHeight, 0.01f)) { Item->AC_FlyHeight = AC->FlyHeight; bDirty = true; }
+                            if (!(NewRepBits & UnitReplicationBits::Slot_TargetIsMove))
+                            {
+                                Item->TargetLoc = FVector(AIT->LastKnownLocation);
+                                uint32 TargetNetIDVal = 0u;
+                                if (AIT->TargetEntity.IsSet() && EM->IsEntityValid(AIT->TargetEntity))
+                                {
+                                    if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->TargetEntity))
+                                    {
+                                        TargetNetIDVal = TgtNet->NetID.GetValue();
+                                    }
+                                }
+                                Item->TargetID = TargetNetIDVal;
+                            }
+
+                            if (AIT->AbilityTargetLocation.SizeSquared() > 0.1f)
+                            {
+                                Item->ActionLoc = FVector(AIT->AbilityTargetLocation);
+                                NewRepBits |= UnitReplicationBits::Slot_ActionIsAbility;
+                            }
+                            else
+                            {
+                                uint32 FriendlyTargetNetIDVal = 0u;
+                                if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
+                                {
+                                    if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
+                                    {
+                                        FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
+                                    }
+                                }
+                                if (FriendlyTargetNetIDVal != 0)
+                                {
+                                    Item->ActionID = FriendlyTargetNetIDVal;
+                                    Item->ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
+                                    NewRepBits |= UnitReplicationBits::Slot_ActionIsFriendly;
+                                }
+                            }
                         }
 
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
                         {
-                            // Only replicate StateTimer if NOT dead, or if it's the first time it's dead (transition)
-                            // bool bIsDeadTransition = (bIsDead && Item->AIS_StateTimer > 0.001f && AIS->StateTimer <= 0.001f);
-                            // if (!bIsDead || bIsDeadTransition)
-                            // {
-                            //     if (!FMath::IsNearlyEqual(Item->AIS_StateTimer, AIS->StateTimer, 0.001f)) 
-                            //     { 
-                            //         Item->AIS_StateTimer = AIS->StateTimer; 
-                            //         bDirty = true; 
-                            //     }
-                            // }
-                            if (Item->AIS_ProjectileFireCounter != AIS->ProjectileFireCounter) { Item->AIS_ProjectileFireCounter = AIS->ProjectileFireCounter; bDirty = true; }
-                            
-                            // Also ensure Projectile details and LastTargetNetID is current if we are firing
-                            if (bDirty)
+                            if (AIS->ProjectileFireCounter != 0)
                             {
-                                Item->AIS_LastTargetNetID = AIS->LastTargetNetID;
-                                Item->AIS_ProjectileTargetLocation = (FVector3f)AIS->LastProjectileTargetLocation;
+                                Item->ActionLoc = FVector(AIS->LastProjectileTargetLocation);
+                                Item->ActionID = AIS->LastTargetNetID;
+                                NewRepBits |= UnitReplicationBits::Slot_ActionIsProjectile;
+                                NewAuxData |= ((uint32)AIS->ProjectileFireCounter << 16);
                             }
                         }
 
-                        // Update Friendly Target info
-                        if (const FMassAITargetFragment* AIT = EM->GetFragmentDataPtr<FMassAITargetFragment>(EH))
+                        if (const FRunAnimationFragment* RAF = EM->GetFragmentDataPtr<FRunAnimationFragment>(EH))
                         {
-                            uint32 FriendlyTargetNetIDVal = 0u;
-                            if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityActive(AIT->FriendlyTargetEntity))
-                            {
-                                if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
-                                {
-                                    FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
-                                }
-                            }
-
-                            if (Item->AIFriendlyTargetNetID != FriendlyTargetNetIDVal)
-                            {
-                                Item->AIFriendlyTargetNetID = FriendlyTargetNetIDVal;
-                                bDirty = true;
-                            }
-                            if (!Item->AIFriendlyTargetLastKnownLocation.Equals((FVector3f)AIT->LastKnownFriendlyLocation, 1.0f))
-                            {
-                                Item->AIFriendlyTargetLastKnownLocation = (FVector3f)AIT->LastKnownFriendlyLocation;
-                                bDirty = true;
-                            }
+                            const uint16 QDur = (uint16)FMath::Clamp(RAF->Duration * 100.f, 0.f, 65535.f);
+                            NewAuxData |= (uint32)QDur;
+                            const uint16 State = (static_cast<uint16>(RAF->AnimationState.GetValue()) << UnitReplicationBits::Packed_AnimStateShift) & UnitReplicationBits::Packed_AnimStateMask;
+                            NewPackedEnums = (NewPackedEnums & ~UnitReplicationBits::Packed_AnimStateMask) | State;
                         }
 
-                        // Update Worker Stats (BuildAreaPosition)
-                        if (const FMassWorkerStatsFragment* WS = EM->GetFragmentDataPtr<FMassWorkerStatsFragment>(EH))
-                        {
-                            if (!Item->Worker_BuildAreaPosition.Equals((FVector3f)WS->BuildAreaPosition, 1.0f))
-                            {
-                                Item->Worker_BuildAreaPosition = (FVector3f)WS->BuildAreaPosition;
-                                bDirty = true;
-                            }
-                        }
-
-                        // Update Visual Effect Fragment
                         if (const FMassVisualEffectFragment* VE = EM->GetFragmentDataPtr<FMassVisualEffectFragment>(EH))
                         {
-                            uint8 ActiveBits = 0;
+                            uint16 ActiveBits = 0;
                             if (VE->bPulsateEnabled) ActiveBits |= (1 << 0);
                             if (VE->bRotationEnabled) ActiveBits |= (1 << 1);
                             if (VE->bOscillationEnabled) ActiveBits |= (1 << 2);
-
-                            if (Item->VE_ActiveEffects != ActiveBits) { Item->VE_ActiveEffects = ActiveBits; bDirty = true; }
-                            
-                            // Pulsate data now handled locally
+                            NewPackedEnums = (NewPackedEnums & ~UnitReplicationBits::Packed_ActiveEffectsMask) | ((ActiveBits << UnitReplicationBits::Packed_ActiveEffectsShift) & UnitReplicationBits::Packed_ActiveEffectsMask);
                         }
 
-                        // Update EffectArea Impact Fragment
-                        if (const FEffectAreaImpactFragment* Impact = EM->GetFragmentDataPtr<FEffectAreaImpactFragment>(EH))
-                        {
-                            // EA data now handled locally
-                        }
-
-                        if (RepLogLevel() >= 2)
-                        {
-                            //UE_LOG(LogTemp, Log, TEXT("ServerReplicate (Upd): NetID=%u Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
-                            //    NetID.GetValue(), Item->CS_Health, Item->CS_MaxHealth, Item->CS_RunSpeed, Item->CS_TeamId,
-                            //    Item->AC_bIsFlying?1:0, Item->AC_bIsInvisible?1:0, Item->AC_FlyHeight,
-                            //    Item->AIS_StateTimer, Item->AIS_CanAttack?1:0, Item->AIS_CanMove?1:0, Item->AIS_HoldPosition?1:0);
-                        }
+                        const uint32 FinalPackedBits = (Item->PackedBits & 0xFFFF) | ((uint32)NewPackedEnums << 16);
+                        if (Item->PackedBits != FinalPackedBits) { Item->PackedBits = FinalPackedBits; bDirty = true; }
+                        if (Item->MoveData != NewMoveData) { Item->MoveData = NewMoveData; bDirty = true; }
+                        if (Item->AuxData != NewAuxData) { Item->AuxData = NewAuxData; bDirty = true; }
+                        if (Item->ReplicationBits != NewRepBits) { Item->ReplicationBits = NewRepBits; bDirty = true; }
                     }
+
                     if (bDirty)
                     {
                         BubbleInfo->Agents.MarkItemDirty(*Item);

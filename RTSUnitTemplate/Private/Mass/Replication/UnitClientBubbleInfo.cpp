@@ -28,7 +28,8 @@ static TAutoConsoleVariable<float> CVarRTS_Bubble_NetUpdateHz(
 // Implementierung der Fast Array Item Callbacks
 static FTransform BuildTransformFromItem(const FUnitReplicationItem& Item)
 {
-	const float Yaw = (static_cast<float>(Item.YawQuantized) / 65535.0f) * 360.0f;
+	const uint16 YQ = (uint16)(Item.PackedBits & 0xFFFF);
+	const float Yaw = (static_cast<float>(YQ) / 65535.0f) * 360.0f;
 	FTransform Xf;
 	Xf.SetLocation(Item.Location);
 	Xf.SetRotation(FQuat(FRotator(0.f, Yaw, 0.f)));
@@ -44,7 +45,8 @@ void FUnitReplicationItem::PostReplicatedAdd(const FUnitReplicationArray& InArra
 		UnitReplicationCache::SetLatest(NetID, Xf);
 
 		// Synchronize fire counter to avoid spawning on join/initial replication
-		LastServerProjectileFireCounter = AIS_ProjectileFireCounter;
+		const uint8 CurrentFireCounter = (uint8)((AuxData >> 16) & 0xFF);
+		LastServerProjectileFireCounter = CurrentFireCounter;
 		PredictedPendingShots = 0;
 		// Reset client-only prediction state
 		PredictionTimer = 0.f;
@@ -58,36 +60,24 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 	{
 		UnitReplicationCache::SetLatest(NetID, BuildTransformFromItem(*this));
 
-		// Check for projectile fire events
-		if (AIS_ProjectileFireCounter != LastServerProjectileFireCounter)
-		{
-			if (UWorld* World = InArraySerializer.OwnerBubble->GetWorld())
-			{
-				// Projectile data is now retrieved locally from the actor in the spawn block below
-			}
+		const uint8 CurrentFireCounter = (uint8)((AuxData >> 16) & 0xFF);
 
+		// Check for projectile fire events
+		if (CurrentFireCounter != LastServerProjectileFireCounter)
+		{
 			// Ring-safe delta for 8-bit counter
-			uint8 RawDelta = (uint8)(AIS_ProjectileFireCounter - LastServerProjectileFireCounter);
+			uint8 RawDelta = (uint8)(CurrentFireCounter - LastServerProjectileFireCounter);
 			
 			// Consume pending predictions first
 			uint8 UsedFromPending = FMath::Min(RawDelta, PredictedPendingShots);
 			PredictedPendingShots -= UsedFromPending;
 			uint8 UseDelta = RawDelta - UsedFromPending;
 
-			// Safety clamp to avoid spawning storms if counters desync heavily
-			// At startup or after catch-up we intentionally only show the latest shot.
+			// Safety clamp to avoid spawning storms
 			const uint8 MaxBurst = 32;
-			if (UseDelta > MaxBurst)
-			{
-				UseDelta = MaxBurst;
-			}
+			if (UseDelta > MaxBurst) UseDelta = MaxBurst;
 
-			if (UseDelta > 0)
-			{
-			}
-
-			LastServerProjectileFireCounter = AIS_ProjectileFireCounter;
-			// Clear client prediction latch/timer on any server fire counter change
+			LastServerProjectileFireCounter = CurrentFireCounter;
 			bPredictedLatch = false;
 			PredictionTimer = 0.f;
 
@@ -98,17 +88,12 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 					if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
 					{
 						// Resolve target location
-						FVector TargetLoc = FVector(AIS_ProjectileTargetLocation);
-						if (TargetLoc.IsZero())
-						{
-							TargetLoc = FVector(AITargetLastKnownLocation);
-						}
+						FVector TgtLoc = FVector::ZeroVector;
+						if (ReplicationBits & UnitReplicationBits::Slot_ActionIsProjectile) TgtLoc = FVector(ActionLoc);
+						else if (!(ReplicationBits & UnitReplicationBits::Slot_TargetIsMove)) TgtLoc = FVector(TargetLoc);
 
-						// Startup/validation gates: skip visual spawn if unit target invalid
-						if (TargetLoc.IsNearlyZero())
-						{
-							return;
-						}
+						// Startup/validation gates
+						if (TgtLoc.IsNearlyZero()) return;
 
 						// 1. Resolve Style/Parameters
 						TSubclassOf<AProjectile> ProjectileClass_Resolved = nullptr;
@@ -199,13 +184,14 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 						// Determine HalfHeight for Auto Z-Offset
 						float HalfHeight = 0.f;
+						const uint32 TgtID = (ReplicationBits & UnitReplicationBits::Slot_ActionIsProjectile) ? ActionID : 0;
 						if (!bDisableAutoZOffset_Resolved)
 						{
-							if (AIS_LastTargetNetID != 0)
+							if (TgtID != 0)
 							{
 								if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
 								{
-									if (UMassActorBindingComponent* TargetBind = Cache->FindBindingByMassNetID(AIS_LastTargetNetID))
+									if (UMassActorBindingComponent* TargetBind = Cache->FindBindingByMassNetID(TgtID))
 									{
 										if (AActor* TargetActor = TargetBind->GetOwner())
 											HalfHeight = TargetActor->GetComponentsBoundingBox().GetSize().Z * 0.5f;
@@ -214,16 +200,16 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 							}
 						}
 
-						FVector FinalTargetCenter = TargetLoc;
+						FVector FinalTargetCenter = TgtLoc;
 						FinalTargetCenter.Z += HalfHeight + ZOffset_Resolved;
 
 						// Resolve target entity handle
 						FMassEntityHandle TargetHandle;
-						if (AIS_LastTargetNetID != 0)
+						if (TgtID != 0)
 						{
 							if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
 							{
-								if (UMassActorBindingComponent* TargetBind = Cache->FindBindingByMassNetID(AIS_LastTargetNetID))
+								if (UMassActorBindingComponent* TargetBind = Cache->FindBindingByMassNetID(TgtID))
 									TargetHandle = TargetBind->GetEntityHandle();
 							}
 						}
