@@ -92,8 +92,10 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FRunAnimationFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassUnitYawFollowFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
+	EntityQuery.AddTagRequirement<FMassUnitYawFollowTag>(EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 
 	MappingQuery.Initialize(EntityManager);
@@ -154,7 +156,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	int32 MaxActionsPerTick = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
 
 	// 3) Hauptschleife: Replikation anwenden
-	EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC, World, AccumulatedDelta](FMassExecutionContext& ChunkCtx)
+	EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC, World, AccumulatedDelta, &Context](FMassExecutionContext& ChunkCtx)
 	{
 		static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
 		const int32 NumEntities = ChunkCtx.GetNumEntities();
@@ -172,6 +174,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		TArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkCtx.GetMutableFragmentView<FMassWorkerStatsFragment>();
 		TArrayView<FEffectAreaImpactFragment> EffectAreaImpactList = ChunkCtx.GetMutableFragmentView<FEffectAreaImpactFragment>();
 		TArrayView<FRunAnimationFragment> RunAnimList = ChunkCtx.GetMutableFragmentView<FRunAnimationFragment>();
+		TConstArrayView<FMassUnitYawFollowFragment> FollowList = ChunkCtx.GetFragmentView<FMassUnitYawFollowFragment>();
 		TArrayView<FMassClientPredictionFragment> PredList = ChunkCtx.GetMutableFragmentView<FMassClientPredictionFragment>();
 
 		TArray<bool> JustLinked;
@@ -325,7 +328,15 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 					// Ein Faktor von 5.0f entsprach ca. 200-300 Grad/s in der Wahrnehmung.
 					// Wir koppeln dies nun dynamisch:
-					const float DynamicInterpRate = FMath::Max(5.0f, UnitRotationSpeed / 40.0f);
+					float DynamicInterpRate = FMath::Max(5.0f, UnitRotationSpeed / 40.0f);
+
+					// NEU: Wenn die Einheit lokal zum Ziel rotiert, dämpfen wir die Korrektur durch die Replikation stark ab.
+					// Dies verhindert das "Gegensteuern" der Replikation gegen die flüssige lokale Vorhersage.
+					const bool bIsFollowTarget = FollowList.IsValidIndex(EntityIdx);
+					if (bIsFollowTarget)
+					{
+						DynamicInterpRate *= 0.1f; // Replikations-Einfluss stark reduzieren
+					}
 					
 					ClientXf.SetRotation(FQuat::Slerp(ClientXf.GetRotation(), FinalXf.GetRotation(), FMath::Min(1.0f, AccumulatedDelta * DynamicInterpRate)));
 				}

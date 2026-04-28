@@ -721,8 +721,9 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
 
-        const TConstArrayView<FTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FTransformFragment>();
-        TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+        //TArrayView<FTransformFragment> TransformFragments = ChunkContext.GetMutableFragmentView<FTransformFragment>();
+            const TConstArrayView<FTransformFragment> TransformFragments = ChunkContext.GetFragmentView<FTransformFragment>();
+            TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassRepresentationLODFragment> LODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
 
@@ -754,7 +755,6 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
             HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, LocalTransform, FinalLocation, bIsDead);
 
             LocalTransform.SetLocation(FinalLocation);
-
             PendingActorUpdates.Emplace(Actor, LocalTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
         }
     });

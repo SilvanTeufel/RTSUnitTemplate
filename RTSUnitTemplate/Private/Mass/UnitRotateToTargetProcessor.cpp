@@ -60,11 +60,18 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 			if (!UnitBase) continue;
 
 			FTransform& MassTransform = TransformList[i].GetMutableTransform();
-			
-			// Authoritatively update Mass transform location from Actor to preserve it during rotation sync
-			const FVector CurrentActorLocation = UnitBase->GetMassActorLocation();
-			MassTransform.SetLocation(CurrentActorLocation);
 
+			const FVector PreviousLocation = MassTransform.GetLocation();
+			const FQuat PreviousQuat = MassTransform.GetRotation();
+			
+			// Authoritatively update Mass transform location from Actor ONLY if skeletal movement is used
+			if (UnitBase->bUseSkeletalMovement)
+			{
+				const FVector CurrentActorLocation = UnitBase->GetMassActorLocation();
+				MassTransform.SetLocation(CurrentActorLocation);
+			}
+
+			const FVector CurrentLocation = MassTransform.GetLocation();
 			const FQuat CurrentQuat = MassTransform.GetRotation();
 
 			const FMassAITargetFragment& TargetFrag = TargetList[i];
@@ -98,19 +105,19 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 					bIsDead = DoesEntityHaveTag(EntityManager, TargetFrag.TargetEntity, FMassStateDeadTag::StaticStruct());
 				}
 
-				const float Distance = FVector::Dist(CurrentActorLocation, TargetLocation);
-				float MaxRange = 2500.f;
-				if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
-				{
-					if (MassUnit->MassActorBindingComponent)
+					const float Distance = FVector::Dist(CurrentLocation, TargetLocation);
+					float MaxRange = 2500.f;
+					if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
 					{
-						MaxRange = MassUnit->MassActorBindingComponent->LoseSightRadius;
+						if (MassUnit->MassActorBindingComponent)
+						{
+							MaxRange = MassUnit->MassActorBindingComponent->LoseSightRadius;
+						}
 					}
-				}
 
-				if (!bIsDead && Distance <= MaxRange)
-				{
-					FVector Dir = TargetLocation - CurrentActorLocation;
+					if (!bIsDead && Distance <= MaxRange)
+					{
+						FVector Dir = TargetLocation - CurrentLocation;
 					Dir.Z = 0.f;
 					if (Dir.Normalize())
 					{
@@ -121,38 +128,34 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 				}
 			}
 
-			// Smooth interpolation
-			float Alpha = (FollowFrag.Duration > 0.f) ? FMath::Clamp(DeltaTime / FollowFrag.Duration, 0.f, 1.f) : 1.f;
-			if (FollowFrag.EaseExp != 1.0f && FollowFrag.Duration > 0.f)
-			{
-				Alpha = FMath::Pow(Alpha, FollowFrag.EaseExp);
-			}
-
-			FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, Alpha);
+			// Smooth interpolation using QInterpTo for better frame-rate independence and smoothness
+			float InterpSpeed = (FollowFrag.Duration > 0.f) ? (1.0f / FollowFrag.Duration) : 10.0f;
+			FQuat NewQuat = FMath::QInterpTo(CurrentQuat, TargetQuat, DeltaTime, InterpSpeed);
 			MassTransform.SetRotation(NewQuat);
 
-			// Always update PositionedTransform
-			CharList[i].PositionedTransform = MassTransform;
+			const bool bLocationChanged = !PreviousLocation.Equals(MassTransform.GetLocation(), 0.01f);
+			const bool bRotationChanged = !PreviousQuat.Equals(MassTransform.GetRotation(), 0.0001f);
 
-			// Sync to Actor (since we are on Game Thread)
-			const FRotator ActorRot = UnitBase->GetActorRotation();
-
-			const bool bLocationChanged = !CurrentActorLocation.Equals(MassTransform.GetLocation(), 0.025f);
-			const bool bRotationChanged = !ActorRot.Quaternion().Equals(MassTransform.GetRotation(), 0.0001f);
-
-			if (bLocationChanged || bRotationChanged)
+			if (UnitBase->bUseSkeletalMovement)
 			{
-				CharList[i].bTransformDirty = true;
-				
-				if (UnitBase->bUseSkeletalMovement)
+				if (bLocationChanged || bRotationChanged)
 				{
+					CharList[i].PositionedTransform = MassTransform;
+					CharList[i].bTransformDirty = true;
 					Actor->SetActorTransform(MassTransform, false, nullptr, ETeleportType::None);
 				}
-				else
+			}
+			else
+			{
+				// For normal units and buildings: Only update rotation part to avoid losing Z-offset managed by SyncProcessor
+				if (bRotationChanged)
 				{
-					// SEtActor wird nur 1mal pro Sekunde aktiviert ansonsten wir position in fragment geschrieben
-					//UnitBase->Multicast_UpdateISMInstanceTransform_Implementation(UnitBase->InstanceIndex, MassTransform);
+					CharList[i].PositionedTransform.SetRotation(MassTransform.GetRotation());
+					CharList[i].bTransformDirty = true;
 				}
+				
+				// If location changed externally (e.g. by movement processor), 
+				// we rely on ActorTransformSyncProcessor to update PositionedTransform.Z correctly.
 			}
 		}
 	});
