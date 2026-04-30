@@ -691,10 +691,17 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 		return false;
 	}
 
-	return IsOnViewport
-		&& ( !EnableFog
-		   || IsVisibleEnemy
-		   || IsMyTeam );
+	const bool bFogVisible = (!EnableFog || IsVisibleEnemy || IsMyTeam);
+
+	// Viewport optimization is for local rendering only.
+	// On a Server (Listen or Dedicated), we ignore it for this calculation 
+	// to prevent bForceHidden from replicating to clients based on the host's camera.
+	if (GetWorld()->GetNetMode() < NM_Client)
+	{
+		return bFogVisible;
+	}
+
+	return IsOnViewport && bFogVisible;
 }
 
 void APerformanceUnit::StopNiagaraComponent(UNiagaraComponent* NC, float FadeTime)
