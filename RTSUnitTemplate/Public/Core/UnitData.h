@@ -3,10 +3,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "NavigationSystem.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/DataTable.h"
 #include "Sound/SoundBase.h"
 #include "Engine/SkeletalMesh.h"
+#include "Mass/MassUnitVisualFragments.h"
 #include "Materials/MaterialInstance.h"
 #include "UnitData.generated.h"
 
@@ -463,3 +465,4 @@ struct FUnitSpawnData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FUnitSpawnParameter SpawnParameter;
 };
+

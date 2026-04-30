@@ -67,7 +67,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
 
     EntityQuery.ForEachEntityChunk(Context, 
-        [this](FMassExecutionContext& ChunkContext)
+        [this, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -90,7 +90,19 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             const FTransformFragment& TransformFrag = TransformList[i];
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-
+            
+            const float Age = World->GetTimeSeconds() - StateFrag.BirthTime;
+            const bool bIsTooYoung =  Age < 1.f;
+            
+            
+            if (bIsTooYoung)
+            {
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::PISwitcher, Entity);
+                }
+            }
+            
             // --- Update StoredLocation to current position ---
             const FVector CurrentLocation = TransformFrag.GetTransform().GetLocation();
             StateFrag.StoredLocation = CurrentLocation;

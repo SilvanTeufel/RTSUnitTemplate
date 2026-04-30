@@ -405,6 +405,9 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		}
 	}
 	
+	if (NewUnitState == UnitData::Idle && UnitState == UnitData::PatrolRandom) return;
+	
+	
 	UnitState = NewUnitState;
 }
 

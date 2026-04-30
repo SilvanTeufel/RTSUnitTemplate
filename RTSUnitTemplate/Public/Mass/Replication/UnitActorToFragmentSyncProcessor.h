@@ -5,7 +5,19 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassEntityQuery.h"
+#include "GameModes/ResourceGameMode.h"
 #include "UnitActorToFragmentSyncProcessor.generated.h"
+
+class AUnitBase;
+class AEffectArea;
+struct FMassEntityManager;
+struct FMassEntityHandle;
+struct FMassCombatStatsFragment;
+struct FMassAgentCharacteristicsFragment;
+struct FMassAIStateFragment;
+struct FMassVisibilityFragment;
+struct FMassPatrolFragment;
+struct FEffectAreaImpactFragment;
 
 /**
  * Processor to synchronize data from AUnitBase actors to Mass fragments locally on both Server and Client.
@@ -19,9 +31,20 @@ class RTSUNITTEMPLATE_API UUnitActorToFragmentSyncProcessor : public UMassProces
 public:
 	UUnitActorToFragmentSyncProcessor();
 
+	
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
 	FMassEntityQuery EntityQuery;
+	
+
+
+private:
+	void SyncCombatStats(const AUnitBase& Unit, FMassCombatStatsFragment& CombatStatsFragment);
+	void SyncCharacteristics(const AUnitBase& Unit, FMassAgentCharacteristicsFragment& CharacteristicsFragment);
+	void SyncAIState(const AUnitBase& Unit, FMassAIStateFragment& AIStateFragment, FMassCombatStatsFragment& CombatStatsFragment);
+	void SyncVisibility(const AUnitBase& Unit, FMassVisibilityFragment& VisibilityFragment);
+	void SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFragment, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle);
+	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment& CombatStatsFragment);
 };

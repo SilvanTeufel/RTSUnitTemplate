@@ -724,7 +724,7 @@ void ACustomControllerBase::Batch_KickUnits(const TArray<AUnitBase*>& Units)
 			{
 				// Refined to work like Batch_CorrectSetUnitMoveTargets:
 				// Use UpdateMoveTarget instead of StopMovement to trigger "Move" action
-				UpdateMoveTarget(*MoveTarget, ProjectLocation, Unit->RunSpeed, World);
+				UpdateMoveTarget(*MoveTarget, ProjectLocation, Unit->Attributes->GetRunSpeed(), World);
 				MoveTarget->DistanceToGoal = 0.f;
 				MoveTarget->SlackRadius = 50.f;
 			}
@@ -755,7 +755,7 @@ void ACustomControllerBase::Batch_KickUnits(const TArray<AUnitBase*>& Units)
 		EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(EntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(EntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(EntityHandle);
-		
+
 		if (Unit->MassActorBindingComponent && !Unit->MassActorBindingComponent->StopSeparation && !Cast<AConstructionUnit>(Unit))
 		{
 			EntityManager.Defer().RemoveTag<FMassStateStopSeparationTag>(EntityHandle);

@@ -22,6 +22,9 @@ void UCastingFallBackProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+    // Sicherstellen, dass die Query registriert wird
+    EntityQuery.RegisterWithProcessor(*this); 
 }
 
 void UCastingFallBackProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
@@ -36,6 +39,12 @@ void UCastingFallBackProcessor::InitializeInternal(UObject& Owner, const TShared
 
 void UCastingFallBackProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    const UWorld* World = EntityManager.GetWorld();
+    if (!EntityQuery.IsInitialized() || !World || World->GetNetMode() == NM_Client)
+    {
+        return;
+    }
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval) return;
     TimeSinceLastRun -= ExecutionInterval;
@@ -71,6 +80,7 @@ void UCastingFallBackProcessor::Execute(FMassEntityManager& EntityManager, FMass
         }
     });
 }
+
 
 void UCastingFallBackProcessor::HandleCastingFallback(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {

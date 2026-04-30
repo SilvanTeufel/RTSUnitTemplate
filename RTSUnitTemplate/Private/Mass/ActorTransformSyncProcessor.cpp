@@ -380,7 +380,9 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
                 UnitBase->GetUnitState() != UnitData::GoToBuild &&
                 UnitBase->GetUnitState() != UnitData::Build &&
                 UnitBase->GetUnitState() != UnitData::Repair &&
-                UnitBase->GetUnitState() != UnitData::Casting)
+                UnitBase->GetUnitState() != UnitData::Casting &&
+                 UnitBase->GetUnitState() != UnitData::PatrolRandom && 
+                 UnitBase->GetUnitState() != UnitData::PatrolIdle)
             {
                 UnitBase->SetUnitState(UnitData::Run);
             }

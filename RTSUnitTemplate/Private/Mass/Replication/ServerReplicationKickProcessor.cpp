@@ -351,7 +351,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 				for (int32 i = 0; i < Num; ++i)
 				{
 					FMassEntityHandle Entity = KickCtx.GetEntity(i);
-					EntityManager.Defer().RemoveTag<FMassStateNeedsInitialKickTag>(Entity);
+					//EntityManager.Defer().RemoveTag<FMassStateNeedsInitialKickTag>(Entity);
 
 					if (AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].GetMutable()))
 					{

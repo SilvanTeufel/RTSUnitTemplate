@@ -12,6 +12,10 @@
 #include "MassEntitySubsystem.h"
 #include "GAS/AttributeSetBase.h"
 #include "Mass/MassActorBindingComponent.h"
+#include "Actors/Waypoint.h"
+#include "GameModes/ResourceGameMode.h"
+#include "Core/RTSUnitUtils.h"
+using namespace RTSUnitUtils;
 
 
 UUnitActorToFragmentSyncProcessor::UUnitActorToFragmentSyncProcessor()
@@ -32,11 +36,13 @@ void UUnitActorToFragmentSyncProcessor::ConfigureQueries(const TSharedRef<FMassE
 	EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
 void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	
 	EntityQuery.ForEachEntityChunk(Context, [&, this](FMassExecutionContext& ChunkContext)
 	{
 		const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
@@ -46,6 +52,7 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 		const TArrayView<FMassVisibilityFragment> VisibilityList = ChunkContext.GetMutableFragmentView<FMassVisibilityFragment>();
 		const TArrayView<FMassVisualEffectFragment> VisualEffectList = ChunkContext.GetMutableFragmentView<FMassVisualEffectFragment>();
 		const TArrayView<FEffectAreaImpactFragment> ImpactList = ChunkContext.GetMutableFragmentView<FEffectAreaImpactFragment>();
+		const TArrayView<FMassPatrolFragment> PatrolList = ChunkContext.GetMutableFragmentView<FMassPatrolFragment>();
 
 		for (int32 EntityIndex = 0; EntityIndex < ChunkContext.GetNumEntities(); ++EntityIndex)
 		{
@@ -54,80 +61,120 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 
 			if (const AUnitBase* Unit = Cast<AUnitBase>(Actor))
 			{
-				// Sync Combat Stats
-				if (Unit->Attributes)
-				{
-					CombatStatsList[EntityIndex].Health = Unit->Attributes->GetHealth();
-					CombatStatsList[EntityIndex].Shield = Unit->Attributes->GetShield();
-					CombatStatsList[EntityIndex].MaxHealth = Unit->Attributes->GetMaxHealth();
-					CombatStatsList[EntityIndex].MaxShield = Unit->Attributes->GetMaxShield();
-					CombatStatsList[EntityIndex].TeamId = Unit->TeamId;
-
-					CombatStatsList[EntityIndex].AttackDamage = Unit->Attributes->GetAttackDamage();
-					CombatStatsList[EntityIndex].AttackRange = Unit->Attributes->GetRange();
-					CombatStatsList[EntityIndex].RunSpeed = Unit->Attributes->GetRunSpeed();
-					CombatStatsList[EntityIndex].Armor = Unit->Attributes->GetArmor();
-					CombatStatsList[EntityIndex].MagicResistance = Unit->Attributes->GetMagicResistance();
-				}
-
-				CombatStatsList[EntityIndex].PauseDuration = Unit->PauseDuration;
-				CombatStatsList[EntityIndex].AttackDuration = Unit->AttackDuration;
-				CombatStatsList[EntityIndex].bUseProjectile = Unit->UseProjectile;
-				CombatStatsList[EntityIndex].CastTime = Unit->CastTime;
-				CombatStatsList[EntityIndex].IsInitialized = Unit->IsInitialized;
-
-				if (Unit->MassActorBindingComponent)
-				{
-					if (!AIStateList[EntityIndex].bHasExtendedLoseSight)
-					{
-						CombatStatsList[EntityIndex].SightRadius = Unit->MassActorBindingComponent->SightRadius;
-						CombatStatsList[EntityIndex].LoseSightRadius = Unit->MassActorBindingComponent->LoseSightRadius;
-					}
-				}
-
-				// Sync Characteristics
-				CharacteristicsList[EntityIndex].FlyHeight = Unit->FlyHeight;
-				CharacteristicsList[EntityIndex].bIsFlying = Unit->IsFlying;
-				CharacteristicsList[EntityIndex].bCanOnlyAttackFlying = Unit->CanOnlyAttackFlying;
-				CharacteristicsList[EntityIndex].bCanOnlyAttackGround = Unit->CanOnlyAttackGround;
-				CharacteristicsList[EntityIndex].bCanDetectInvisible = Unit->CanDetectInvisible;
-				const FVector CurrentActorScale = Unit->GetActorScale3D();
-				// Prüfe auf Änderung, um unnötige Dirty-Flags zu vermeiden
+				SyncCombatStats(*Unit, CombatStatsList[EntityIndex]);
+				SyncCharacteristics(*Unit, CharacteristicsList[EntityIndex]);
+				SyncAIState(*Unit, AIStateList[EntityIndex], CombatStatsList[EntityIndex]);
+				SyncVisibility(*Unit, VisibilityList[EntityIndex]);
 				
-				if (!CharacteristicsList[EntityIndex].Scale.Equals(CurrentActorScale, 0.001f))
+				// KORREKTUR: Zugriff über EntityManager für optionale Fragmente
+				FMassEntityHandle EntityHandle = ChunkContext.GetEntity(EntityIndex);
+				if (FMassPatrolFragment* PatrolFrag = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(EntityHandle))
 				{
-					CharacteristicsList[EntityIndex].Scale = CurrentActorScale;
-					CharacteristicsList[EntityIndex].PositionedTransform.SetScale3D(CurrentActorScale);
-					CharacteristicsList[EntityIndex].bTransformDirty = true;
+					SyncPatrol(*Unit, *PatrolFrag, EntityManager, EntityHandle);
 				}
-
-				
-				// Sync AI State
-				AIStateList[EntityIndex].CanAttack = Unit->CanAttack;
-				AIStateList[EntityIndex].CanMove = Unit->CanMove;
-				AIStateList[EntityIndex].HoldPosition = Unit->bHoldPosition;
-
-				// Sync Visibility Stats
-				if (VisibilityList.Num() > 0 && Unit->Attributes)
-				{
-					VisibilityList[EntityIndex].LastHealth = Unit->Attributes->GetHealth();
-					VisibilityList[EntityIndex].LastShield = Unit->Attributes->GetShield();
-				}
+			
 			}
 			else if (const AEffectArea* Area = Cast<AEffectArea>(Actor))
 			{
 				if (ImpactList.Num() > 0)
 				{
-					ImpactList[EntityIndex].StartScaleTime = Area->StartScaleTime;
-					ImpactList[EntityIndex].VisualRotationOffset = Area->VisualRotationOffset;
-					ImpactList[EntityIndex].TeamId = Area->TeamId;
-				}
-
-				if (CombatStatsList.Num() > 0)
-				{
-					CombatStatsList[EntityIndex].TeamId = Area->TeamId;
+					SyncEffectArea(*Area, ImpactList[EntityIndex], CombatStatsList[EntityIndex]);
 				}
 			}
 		}
 	});
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, FMassCombatStatsFragment& Stats)
+{
+	if (Unit.Attributes)
+	{
+		Stats.Health = Unit.Attributes->GetHealth();
+		Stats.Shield = Unit.Attributes->GetShield();
+		Stats.MaxHealth = Unit.Attributes->GetMaxHealth();
+		Stats.MaxShield = Unit.Attributes->GetMaxShield();
+		Stats.TeamId = Unit.TeamId;
+
+		Stats.AttackDamage = Unit.Attributes->GetAttackDamage();
+		Stats.AttackRange = Unit.Attributes->GetRange();
+		Stats.RunSpeed = Unit.Attributes->GetRunSpeed();
+		Stats.Armor = Unit.Attributes->GetArmor();
+		Stats.MagicResistance = Unit.Attributes->GetMagicResistance();
+	}
+
+	Stats.PauseDuration = Unit.PauseDuration;
+	Stats.AttackDuration = Unit.AttackDuration;
+	Stats.bUseProjectile = Unit.UseProjectile;
+	Stats.CastTime = Unit.CastTime;
+	Stats.IsInitialized = Unit.IsInitialized;
+	Stats.bIsInitializedOnClient = true;
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncCharacteristics(const AUnitBase& Unit, FMassAgentCharacteristicsFragment& Characteristics)
+{
+	Characteristics.FlyHeight = Unit.FlyHeight;
+	Characteristics.bIsFlying = Unit.IsFlying;
+	Characteristics.bCanOnlyAttackFlying = Unit.CanOnlyAttackFlying;
+	Characteristics.bCanOnlyAttackGround = Unit.CanOnlyAttackGround;
+	Characteristics.bCanDetectInvisible = Unit.CanDetectInvisible;
+	const FVector CurrentActorScale = Unit.GetActorScale3D();
+	
+	if (!Characteristics.Scale.Equals(CurrentActorScale, 0.001f))
+	{
+		Characteristics.Scale = CurrentActorScale;
+		Characteristics.PositionedTransform.SetScale3D(CurrentActorScale);
+		Characteristics.bTransformDirty = true;
+	}
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncAIState(const AUnitBase& Unit, FMassAIStateFragment& AIState, FMassCombatStatsFragment& CombatStats)
+{
+	AIState.CanAttack = Unit.CanAttack;
+	AIState.CanMove = Unit.CanMove;
+	AIState.HoldPosition = Unit.bHoldPosition;
+
+	if (Unit.MassActorBindingComponent)
+	{
+		if (!AIState.bHasExtendedLoseSight)
+		{
+			CombatStats.SightRadius = Unit.MassActorBindingComponent->SightRadius;
+			CombatStats.LoseSightRadius = Unit.MassActorBindingComponent->LoseSightRadius;
+		}
+	}
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncVisibility(const AUnitBase& Unit, FMassVisibilityFragment& Visibility)
+{
+	if (Unit.Attributes)
+	{
+		Visibility.LastHealth = Unit.Attributes->GetHealth();
+		Visibility.LastShield = Unit.Attributes->GetShield();
+	}
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFrag, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle)
+{
+	if (!Unit.HasAuthority()) return;
+	
+	if (Unit.NextWaypoint)
+	{
+		if (PatrolFrag.TargetWaypointLocation != Unit.NextWaypoint->GetActorLocation())
+		{
+			PatrolFrag.bLoopPatrol = Unit.NextWaypoint->PatrolCloseToWaypoint;
+			PatrolFrag.RandomPatrolMinIdleTime = Unit.NextWaypoint->PatrolCloseMinInterval;
+			PatrolFrag.RandomPatrolMaxIdleTime = Unit.NextWaypoint->PatrolCloseMaxInterval;
+			PatrolFrag.TargetWaypointLocation = Unit.NextWaypoint->GetActorLocation();
+			PatrolFrag.RandomPatrolRadius = (Unit.NextWaypoint->PatrolCloseOffset.X + Unit.NextWaypoint->PatrolCloseOffset.Y) / 2.f;
+			PatrolFrag.IdleChance = Unit.NextWaypoint->PatrolCloseIdlePercentage;
+		}
+	}
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& Impact, FMassCombatStatsFragment& CombatStats)
+{
+    Impact.StartScaleTime = Area.StartScaleTime;
+    Impact.VisualRotationOffset = Area.VisualRotationOffset;
+    Impact.TeamId = Area.TeamId;
+
+	CombatStats.TeamId = Area.TeamId;
 }

@@ -23,7 +23,7 @@ protected:
     virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
     virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
     virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
-
+    
     UFUNCTION()
     void HandleCastingFallback(FName SignalName, TArray<FMassEntityHandle>& Entities);
 

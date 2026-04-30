@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MassEntityTypes.h"
+#include "MassEntityHandle.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "MassUnitVisualFragments.generated.h"
 

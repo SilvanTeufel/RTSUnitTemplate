@@ -44,7 +44,10 @@ void UPatrolRandomStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-
+    EntityQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -86,6 +89,13 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer reset
+            
+            const float Age = World->GetTimeSeconds() - StateFrag.BirthTime;
+            const bool bIsOldEnough =  Age >= 1.f;
+         
+            
+       
+
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for StopMovement
             const FTransformFragment& TransformFrag = TransformList[i];
@@ -108,7 +118,8 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 const float AcceptanceRadius = MoveTarget.SlackRadius * 4;
                 const float Dist= FVector::Dist2D(CurrentLocation, CurrentDestination);
                 
-                if (Dist <= AcceptanceRadius && !StateFrag.SwitchingState)
+                
+                if (Dist <= AcceptanceRadius && !StateFrag.SwitchingState && bIsOldEnough)
                 {
                     StateFrag.SwitchingState = true;
                     StateFrag.StoredLocation = CurrentLocation; // Speichere den erreichten Punkt als Rückkehrziel
@@ -122,7 +133,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
                     continue;
                 }
-
+                
 
         } // End Entity Loop
     }); // End ForEachEntityChunk

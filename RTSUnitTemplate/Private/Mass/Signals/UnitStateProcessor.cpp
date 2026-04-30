@@ -62,6 +62,8 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Core/CollisionUtils.h"
+#include "Core/RTSUnitUtils.h"
+using namespace RTSUnitUtils;
 
 namespace
 {
@@ -942,7 +944,7 @@ void UUnitStateProcessor::SyncUnitBase(FName SignalName, TArray<FMassEntityHandl
 		SynchronizeUnitState(Entity);
 	}
 }
-
+/*
 FVector FindGroundLocationAtPosition(const UObject* WorldContextObject, FVector Position, TArray<AActor*> ActorsToIgnore, float TraceDistance = 10000.f)
 {
 	if (!WorldContextObject)
@@ -1045,6 +1047,7 @@ static FVector ProjectLocationToNavMeshOnEdge(UWorld* World, const FVector& Cent
 
 	return TargetPos;
 }
+*/
 
 void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle Entity)
 {
@@ -1100,22 +1103,11 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         {
             // Das MUTABLE Combat Stats Fragment holen
             FMassCombatStatsFragment* CombatStatsFrag = GTEntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CapturedEntity);
-        	FMassPatrolFragment* PatrolFrag = GTEntityManager.GetFragmentDataPtr<FMassPatrolFragment>(CapturedEntity);
 			FMassWorkerStatsFragment* WorkerStats = GTEntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(CapturedEntity);
 			FMassAIStateFragment* AIStateFragment = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity);
         	FMassAgentCharacteristicsFragment* CharFragment = GTEntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(CapturedEntity);
 
             UAttributeSetBase* AttributeSet = StrongUnitActor->Attributes;
-
-        	if (StrongUnitActor && CharFragment)
-        	{
-        		// Synchronized locally via UUnitActorToFragmentSyncProcessor
-        		// CharFragment->bIsFlying = StrongUnitActor->IsFlying;
-        		// CharFragment->FlyHeight = StrongUnitActor->FlyHeight;
-        		// CharFragment->bCanOnlyAttackFlying = StrongUnitActor->CanOnlyAttackFlying;
-        		// CharFragment->bCanOnlyAttackGround = StrongUnitActor->CanOnlyAttackGround;
-        		// CharFragment->bCanDetectInvisible = StrongUnitActor->CanDetectInvisible;
-        	}
         	
         	if (StrongUnitActor && AIStateFragment && CharFragment)
         	{
@@ -1138,66 +1130,12 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
                     
         			if (StrongUnitActor->HasAuthority() && !StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_RegisterBuildingAsObstacle();
         		}
-        		// AIStateFragment->CanAttack = StrongUnitActor->CanAttack; // Synchronized locally via UUnitActorToFragmentSyncProcessor
-        		
-        		// Synchronized locally via UUnitActorToFragmentSyncProcessor
-        		// AIStateFragment->IsInitialized = StrongUnitActor->IsInitialized;
-        		// AIStateFragment->HoldPosition = StrongUnitActor->bHoldPosition;
         	}
         	
             if (CombatStatsFrag && AttributeSet)
             {
-            	// Synchronized locally via UUnitActorToFragmentSyncProcessor
-                // CombatStatsFrag->Health = AttributeSet->GetHealth();
-                // CombatStatsFrag->Shield = AttributeSet->GetShield();
-            	// CombatStatsFrag->MaxHealth = AttributeSet->GetMaxHealth();
-            	// CombatStatsFrag->MaxShield = AttributeSet->GetMaxShield();
-            	
-            	/*
-            	if (FMassVisibilityFragment* VisFrag = GTEntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(CapturedEntity))
-            	{
-					VisFrag->LastHealth = AttributeSet->GetHealth();
-					VisFrag->LastShield = AttributeSet->GetShield();
-				}
-            	
-            	CombatStatsFrag->AttackDamage = AttributeSet->GetAttackDamage();
-            	CombatStatsFrag->AttackRange = AttributeSet->GetRange();
-            	CombatStatsFrag->RunSpeed = AttributeSet->GetRunSpeed();
-            	CombatStatsFrag->Armor = AttributeSet->GetArmor();
-				CombatStatsFrag->MagicResistance = AttributeSet->GetMagicResistance();
-
-            	CombatStatsFrag->PauseDuration = StrongUnitActor->PauseDuration;// We need to add this to Attributes i guess;
-				CombatStatsFrag->AttackDuration = StrongUnitActor->AttackDuration;
-				CombatStatsFrag->bUseProjectile = StrongUnitActor->UseProjectile; // Assuming UsesProjectile() on Attributes
-				CombatStatsFrag->CastTime = StrongUnitActor->CastTime;
-				CombatStatsFrag->IsInitialized = StrongUnitActor->IsInitialized;
-
-            	if (StrongUnitActor->MassActorBindingComponent)
-            	{
-            		if (AIStateFragment && !AIStateFragment->bHasExtendedLoseSight)
-            		{
-            			CombatStatsFrag->SightRadius = StrongUnitActor->MassActorBindingComponent->SightRadius;
-						CombatStatsFrag->LoseSightRadius = StrongUnitActor->MassActorBindingComponent->LoseSightRadius;
-            		}
-            	}
-            	*/
-
-            	if (StrongUnitActor && StrongUnitActor->NextWaypoint) // Use config from Actor if available
-            	{
-            		if (PatrolFrag->TargetWaypointLocation != StrongUnitActor->NextWaypoint->GetActorLocation())
-            		{
-						PatrolFrag->bLoopPatrol = StrongUnitActor->NextWaypoint->PatrolCloseToWaypoint; // Assuming direct property access
-						PatrolFrag->RandomPatrolMinIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMinInterval;
-						PatrolFrag->RandomPatrolMaxIdleTime = StrongUnitActor->NextWaypoint->PatrolCloseMaxInterval;
-						PatrolFrag->TargetWaypointLocation = StrongUnitActor->NextWaypoint->GetActorLocation();
-						PatrolFrag->RandomPatrolRadius = (StrongUnitActor->NextWaypoint->PatrolCloseOffset.X+StrongUnitActor->NextWaypoint->PatrolCloseOffset.Y)/2.f;
-						PatrolFrag->IdleChance = StrongUnitActor->NextWaypoint->PatrolCloseIdlePercentage;
-            		}
-				}
-
             	if (StrongUnitActor && StrongUnitActor->IsWorker) // Use config from Actor if available
             	{
-            		
             		if (ResourceGameMode && !StrongUnitActor->Base)
             		{
             			StrongUnitActor->Base = ResourceGameMode->GetClosestBaseFromArray(StrongUnitActor, ResourceGameMode->WorkAreaGroups.BaseAreas);
@@ -1328,8 +1266,13 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     	if (!StrongUnitActor) return;
 
     	FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
-    	if( StrongUnitActor->GetUnitState() != UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
+    	
+    	if( StrongUnitActor->GetUnitState() != UnitData::PatrolRandom && StrongUnitActor->GetUnitState() != UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
 			StrongUnitActor->SetUnitState(UnitData::Idle);
+		}
+    	
+    	if( StrongUnitActor->GetUnitState() == UnitData::PatrolRandom && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolRandomTag::StaticStruct())){
+    		SwitchState(UnitSignals::PatrolRandom, CapturedEntity, GTEntityManager);
 		}
     	
     	UpdateUnitArrayMovement(CapturedEntity , StrongUnitActor);
@@ -1345,7 +1288,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     			StateFrag->SyncIdleCount++;
     			if (StateFrag->SyncIdleCount >= 3)
     			{
-    				SwitchState(UnitSignals::Idle, CapturedEntity, GTEntityManager);
+    				//SwitchState(UnitSignals::Idle, CapturedEntity, GTEntityManager);
     				StateFrag->SyncIdleCount = 0;
     			}
     		}
