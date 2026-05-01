@@ -16,7 +16,8 @@ public class RTSUnitTemplateTests : ModuleRules
             "MassEntity",
             "MassCommon",
             "MassNavigation",
-            "MassActors"
+            "MassActors",
+            "MassReplication"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]

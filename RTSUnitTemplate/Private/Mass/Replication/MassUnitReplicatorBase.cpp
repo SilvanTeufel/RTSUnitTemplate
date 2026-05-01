@@ -134,7 +134,7 @@ static AUnitClientBubbleInfo* GetOrSpawnBubble(UWorld& World)
     return Bubble;
 }
 
-static bool UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager& EM, FMassEntityHandle EH, AUnitClientBubbleInfo* BubbleInfo)
+bool UMassUnitReplicatorBase::UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager& EM, FMassEntityHandle EH, AUnitClientBubbleInfo* BubbleInfo)
 {
     uint32 NewBits = 0u;
     auto SetBit = [&NewBits](uint32 Bit, bool bValue) { if (bValue) NewBits |= Bit; };
@@ -176,26 +176,25 @@ static bool UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager
 				{
 					// Resolve unit's standard values for comparison
 					float StandardSpeed = Unit->Attributes ? Unit->Attributes->GetProjectileSpeed() : 0.f;
-					if (StandardSpeed <= 0.f)
+					const AProjectile* UnitProjCDO = (Unit->ProjectileBaseClass) ? Cast<AProjectile>(Unit->ProjectileBaseClass->GetDefaultObject()) : nullptr;
+					
+					if (StandardSpeed <= 0.f && UnitProjCDO)
 					{
-						if (const AProjectile* ProjCDO = Cast<AProjectile>(Unit->ProjectileBaseClass->GetDefaultObject()))
-							StandardSpeed = ProjCDO->MovementSpeed;
+						StandardSpeed = UnitProjCDO->MovementSpeed;
 					}
 
-					const AProjectile* UnitProjCDO = Cast<AProjectile>(Unit->ProjectileBaseClass->GetDefaultObject());
-
 					// Determine if the current shot is "Standard" or "Special"
-					bool bIsStandard = (AIS->LastProjectileClass == Unit->ProjectileBaseClass) &&
+					bool bIsStandard = UnitProjCDO && (AIS->LastProjectileClass == Unit->ProjectileBaseClass) &&
 									   FMath::IsNearlyEqual(AIS->LastProjectileSpeed, StandardSpeed, 1.0f) &&
 									   AIS->LastProjectileScale.Equals(Unit->ProjectileScale, 0.05f) &&
 									   FMath::IsNearlyEqual(AIS->LastProjectileSpread, 0.f, 0.1f) &&
-									   (AIS->LastProjectileCount == (UnitProjCDO ? (UnitProjCDO->HomingMissleCount > 0 ? UnitProjCDO->HomingMissleCount : 1) : 1)) &&
+									   (AIS->LastProjectileCount == (UnitProjCDO->HomingMissleCount > 0 ? UnitProjCDO->HomingMissleCount : 1)) &&
 									   (AIS->LastIsBouncingNext == false) &&
 									   (AIS->LastIsBouncingBack == false) &&
 									   FMath::IsNearlyEqual(AIS->LastZOffset, 0.f, 0.1f) &&
 									   AIS->LastProjectileSpawnOffset.IsNearlyZero(0.1f) &&
 									   (AIS->LastDisableAutoZOffset == false) &&
-									   FMath::IsNearlyEqual(AIS->LastTwinProjectileDistance, UnitProjCDO ? UnitProjCDO->TwinProjectileDistance : 0.f, 0.1f);
+									   FMath::IsNearlyEqual(AIS->LastTwinProjectileDistance, UnitProjCDO->TwinProjectileDistance, 0.1f);
 
 					if (!bIsStandard)
 					{
@@ -782,7 +781,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     if (EM)
                     {
                         NewItem.TagBits = BuildReplicatedTagBits(*EM, EH);
-                        UpdateReplicationBits(NewItem, *EM, EH, BubbleInfo);
+                        UMassUnitReplicatorBase::UpdateReplicationBits(NewItem, *EM, EH, BubbleInfo);
 
                         uint16 NewPackedEnums = 0;
                         if (const FMassMoveTargetFragment* MT = EM->GetFragmentDataPtr<FMassMoveTargetFragment>(EH))
@@ -938,7 +937,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                     if (EM)
                     {
                         uint32 RebuiltTagBits = NewTagBits; // Base from BuildReplicatedTagBits
-                        if (UpdateReplicationBits(*Item, *EM, EH, BubbleInfo)) { bDirty = true; }
+                        if (UMassUnitReplicatorBase::UpdateReplicationBits(*Item, *EM, EH, BubbleInfo)) { bDirty = true; }
 
                         uint16 NewPackedEnums = (uint16)(Item->PackedBits >> 16);
                         uint32 NewMoveData = 0u; 

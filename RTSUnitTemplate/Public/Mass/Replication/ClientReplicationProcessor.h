@@ -34,10 +34,7 @@ public:
 	// If reconciliation error exceeds this distance (cm), perform a one-time full replication (snap) on that tick
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float FullReplicationDistance = 300.f; // cm
-
-	// Rotation reconciliation (Yaw-only by default)
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	bool bEnableRotationReconciliation = false; // enable gentle rotation correction
+	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float MinYawErrorForCorrectionDeg = 3.0f; // deg, threshold to start correcting
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)

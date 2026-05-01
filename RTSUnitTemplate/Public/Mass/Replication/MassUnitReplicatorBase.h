@@ -4,7 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "MassReplicationProcessor.h"
+#include "Mass/Replication/UnitReplicationPayload.h"
 #include "MassUnitReplicatorBase.generated.h"
+
+class AUnitClientBubbleInfo;
 
 /**
  * 
@@ -25,4 +28,6 @@ public:
 
 	// Server-side: Serialize entity data for replication
 	virtual void ProcessClientReplication(FMassExecutionContext& Context, FMassReplicationContext& ReplicationContext) override;
+
+	static bool UpdateReplicationBits(FUnitReplicationItem& Item, FMassEntityManager& EM, FMassEntityHandle EH, AUnitClientBubbleInfo* BubbleInfo);
 };

@@ -133,7 +133,7 @@ void UBuildStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     if (SignalSubsystem)
     {
         SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncCastTime, Entity);
-        SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncConstructionScale, Entity);
+        // SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncConstructionScale, Entity);
     }
 
     // --- Completion Check ---
@@ -167,7 +167,7 @@ void UBuildStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 
     if (SignalSubsystem)
     {
-        SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncConstructionScale, Entity);
+        // SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncConstructionScale, Entity);
     }
 }
 
