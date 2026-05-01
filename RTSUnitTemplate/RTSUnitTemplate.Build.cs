@@ -29,7 +29,8 @@ public class RTSUnitTemplate : ModuleRules
             "GameplayAbilities", 
             "GameplayTasks", 
             "GameplayTags",
-            "Niagara"
+            "Niagara",
+            "EnhancedInput"
         });
 
         // Private: implementation-only dependencies
@@ -48,7 +49,7 @@ public class RTSUnitTemplate : ModuleRules
             "Slate", "SlateCore", "MoviePlayer",
 
             // Input & FX
-            "InputCore", "EnhancedInput",
+            "InputCore",
 
             // Misc
             "StructUtils", "Json", "JsonUtilities", "RenderCore", "Landscape",

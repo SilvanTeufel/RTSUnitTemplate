@@ -61,27 +61,42 @@ void ACustomControllerBase::BeginPlay()
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
 {
+	UE_LOG(LogTemp, Log, TEXT("Multi_SetMyTeamUnits: Starte Filterung für %d Einheiten (TeamId: %d)"), AllUnits.Num(), SelectableTeamId);
+
 	if (!IsLocalController()) return;
-	
-	// TSGameMode->AllUnits is onyl available on Server why we start running on server
-	// We Mutlicast to CLient and send him AllUnits as parameter
-	TArray<AUnitBase*> NewSelection;
+
+	if (!HUDBase)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Multi_SetMyTeamUnits: HUDBase ist nicht valide!"));
+		return;
+	}
+
+	// Aktuelle Selektion leeren, bevor wir neu filtern
+	HUDBase->DeselectAllUnits();
+	int32 FilteredCount = 0;
+
 	for (int32 i = 0; i < AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		// Every Controller can Check his own TeamId
 		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
 		{
-			NewSelection.Add(Unit);
+			// Direkt zum HUD-Array hinzufügen, da SetUnitSelected die Liste leeren würde
+			HUDBase->SelectedUnits.AddUnique(Unit);
+			Unit->SetSelected();
+			FilteredCount++;
 		}
 	}
+
+	// Synchronisiere die Controller-Liste mit der HUD-Liste
+	SelectedUnits = HUDBase->SelectedUnits;
+
+	UE_LOG(LogTemp, Log, TEXT("Multi_SetMyTeamUnits: Filterung abgeschlossen. %d Einheiten selektiert."), FilteredCount);
 
 	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
 	if (Camera)
 	{
 		Camera->SetupResourceWidget(this);
 	}
-	
 }
 
 void ACustomControllerBase::Multi_SetCamLocation_Implementation(FVector NewLocation)

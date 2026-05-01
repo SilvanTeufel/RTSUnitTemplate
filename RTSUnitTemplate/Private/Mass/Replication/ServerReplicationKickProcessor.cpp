@@ -196,7 +196,7 @@ UServerReplicationKickProcessor::UServerReplicationKickProcessor()
 	: EntityQuery(*this)
 {
 	bAutoRegisterWithProcessingPhases = true;
-	ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone | (int32)EProcessorExecutionFlags::Client;
+	ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
 	bRequiresGameThreadExecution = true;
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 }
@@ -237,7 +237,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 	TimeSinceLastRun = 0.f;
 
 	UWorld* World = GetWorld();
-	if (!World)
+	if (!World || World->GetNetMode() == NM_Client)
 	{
 		return;
 	}
@@ -397,10 +397,6 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		}
 	}
 	// Respect global replication mode: only run in custom Mass mode
-	if (World->GetNetMode() == NM_Client)
-	{
-		return; // Replication logic below is for Server only
-	}
 	if (CVarRTS_ServerKick_Enable.GetValueOnGameThread() == 0)
 	{
 		return; // disabled via CVAR

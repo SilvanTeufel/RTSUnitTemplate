@@ -12,7 +12,11 @@ public class RTSUnitTemplateTests : ModuleRules
             "CoreUObject",
             "Engine",
             "FunctionalTesting",
-            "RTSUnitTemplate"
+            "RTSUnitTemplate",
+            "MassEntity",
+            "MassCommon",
+            "MassNavigation",
+            "MassActors"
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]

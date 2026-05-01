@@ -951,6 +951,8 @@ inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector&
 		//UE_LOG(LogTemp, Error, TEXT("UChaseStateProcessor::UpdateMoveTarget: World is null! Cannot update MoveTarget."));
 		return;
 	}
+
+	ensureMsgf(World->GetNetMode() != NM_Client, TEXT("UpdateMoveTarget should only be called on the authority (File: %s, Line: %d)"), TEXT(__FILE__), __LINE__);
     
 	// --- Modify the Fragment ---
 	MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
@@ -973,6 +975,8 @@ inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 		UE_LOG(LogTemp, Warning, TEXT("StopMovement: World is null!"));
 		return;
 	}
+
+	ensureMsgf(World->GetNetMode() != NM_Client, TEXT("StopMovement should only be called on the authority"));
 
 	// Modifiziere das bergebene Fragment direkt
 	MoveTarget.CreateNewAction(EMassMovementAction::Stand, *World); // Wichtig: Aktion neu erstellen!
