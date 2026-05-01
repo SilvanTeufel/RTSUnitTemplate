@@ -13,6 +13,7 @@
 #include "Actors/Projectile.h"
 #include "Components/PointLightComponent.h"
 #include "Components/SpotLightComponent.h"
+#include "Engine/EngineTypes.h"
 #include "Mass/UnitMassTag.h"
 #include "PerformanceUnit.generated.h"
 
@@ -181,6 +182,11 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CheckTimerVisibility();
 		
+	virtual ENetMode GetUnitNetMode() const;
+	
+	UPROPERTY()
+	uint8 NetModeOverride = 255;
+
 	private:
 		
 		UPROPERTY(Transient)

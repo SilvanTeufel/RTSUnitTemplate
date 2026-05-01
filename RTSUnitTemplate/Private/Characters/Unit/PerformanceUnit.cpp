@@ -678,6 +678,15 @@ void APerformanceUnit::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 }
 
 
+ENetMode APerformanceUnit::GetUnitNetMode() const
+{
+	if (NetModeOverride != 255)
+	{
+		return (ENetMode)NetModeOverride;
+	}
+	return GetNetMode();
+}
+
 bool APerformanceUnit::ComputeLocalVisibility() const
 {
 	// If the unit is not initialized (e.g., it is loaded in a transport), it should always be invisible.
@@ -696,7 +705,8 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 	// Viewport optimization is for local rendering only.
 	// On a Server (Listen or Dedicated), we ignore it for this calculation 
 	// to prevent bForceHidden from replicating to clients based on the host's camera.
-	if (GetWorld()->GetNetMode() < NM_Client)
+	const ENetMode CurrentNetMode = GetUnitNetMode();
+	if (CurrentNetMode < NM_Client)
 	{
 		return bFogVisible;
 	}
@@ -822,3 +832,4 @@ void APerformanceUnit::StopAllEffects_Implementation(bool bFadeAudio, float Fade
     }
     ActiveAudio.Empty();
 }
+

@@ -17,6 +17,10 @@ class RTSUNITTEMPLATE_API UUnitVisibilityProcessor : public UMassProcessor
 public:
 	UUnitVisibilityProcessor();
 
+private:
+	UPROPERTY(Transient)
+	UWorld* World;
+
 protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
@@ -25,13 +29,10 @@ protected:
 	UFUNCTION()
 	void HandleVisibilitySignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
-private:
-	//void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
-
-	UPROPERTY(Transient)
-	UWorld* World;
-
+protected:
 	FMassEntityQuery EntityQuery;
+
+private:
 
 	float TimeSinceLastRun = 0.0f;
 	float ExecutionInterval = 0.05f; 
