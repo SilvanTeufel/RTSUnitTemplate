@@ -324,33 +324,98 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			// c) Transform anwenden (Snap oder Reconciliation)
 			if (bFromBubble)
 			{
-				if (bUseFullReplication || JustLinked[EntityIdx])
+				FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
+				const FVector CurrentLocation = ClientXf.GetLocation();
+				const FVector TargetLocation = FinalXf.GetLocation();
+				const float DistanceSq = FVector::DistSquared(CurrentLocation, TargetLocation);
+
+				if (bUseFullReplication || JustLinked[EntityIdx] || DistanceSq > FMath::Square(FullReplicationDistance))
 				{
-					TransformList[EntityIdx].GetMutableTransform() = FinalXf;
+					ClientXf = FinalXf;
 				}
 				else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateDeadTag::StaticStruct()))
 				{
-					// Gentle reconciliation (simplified for this task)
-					FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
-					ClientXf.SetLocation(FMath::VInterpTo(ClientXf.GetLocation(), FinalXf.GetLocation(), AccumulatedDelta, 5.0f));
+					// --- Location Reconciliation ---
+					float CurrentKp = Kp;
+					float CurrentMinErrorSq = MinErrorForCorrectionSq;
 
-					const float UnitRotationSpeed = (CombatList[EntityIdx].RotationSpeed > 0.f) ? 
-													 CombatList[EntityIdx].RotationSpeed : 
-													 CharList[EntityIdx].RotationSpeed;
+					const bool bIsMoving = (MoveTargetList.IsValidIndex(EntityIdx) && MoveTargetList[EntityIdx].DesiredSpeed.Get() > 10.f) || 
+										   (PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData);
+					
+					if (bIsMoving)
+					{
+						// Increase tolerance and decrease correction speed while moving to prevent stuttering
+						CurrentMinErrorSq *= 4.0f; // e.g. from 25cm to 50cm threshold
+						CurrentKp *= 0.4f;
 
-					// Ein Faktor von 5.0f entsprach ca. 200-300 Grad/s in der Wahrnehmung.
-					// Wir koppeln dies nun dynamisch:
-					float DynamicInterpRate = FMath::Max(5.0f, UnitRotationSpeed / 40.0f);
+						// If the server is pulling us backwards, be even more gentle
+						const FVector Forward = ClientXf.GetRotation().GetForwardVector();
+						const FVector ErrorDir = (TargetLocation - CurrentLocation).GetSafeNormal();
+						if (FVector::DotProduct(Forward, ErrorDir) < -0.2f)
+						{
+							CurrentKp *= 0.5f;
+						}
+					}
 
+					if (DistanceSq > CurrentMinErrorSq)
+					{
+						// Proportional gain Kp used as interpolation speed for smooth correction
+						FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, AccumulatedDelta, CurrentKp);
+
+						// Use MaxCorrectionAccel as a velocity limit (Speed Cap) for the reconciliation
+						const FVector DeltaMove = NewLocation - CurrentLocation;
+						const float MaxMove = MaxCorrectionAccel * AccumulatedDelta;
+						if (DeltaMove.SizeSquared() > FMath::Square(MaxMove))
+						{
+							NewLocation = CurrentLocation + (DeltaMove.GetSafeNormal() * MaxMove);
+						}
+
+						ClientXf.SetLocation(NewLocation);
+					}
+
+					// --- Rotation Reconciliation ---
+					float FinalKpRot = KpRot;
+					
 					// NEU: Wenn die Einheit lokal zum Ziel rotiert, dämpfen wir die Korrektur durch die Replikation stark ab.
 					// Dies verhindert das "Gegensteuern" der Replikation gegen die flüssige lokale Vorhersage.
 					const bool bIsFollowTarget = FollowList.IsValidIndex(EntityIdx);
 					if (bIsFollowTarget)
 					{
-						DynamicInterpRate *= 0.1f; // Replikations-Einfluss stark reduzieren
+						FinalKpRot *= 0.1f; // Replikations-Einfluss stark reduzieren
 					}
-					
-					ClientXf.SetRotation(FQuat::Slerp(ClientXf.GetRotation(), FinalXf.GetRotation(), FMath::Min(1.0f, AccumulatedDelta * DynamicInterpRate)));
+
+					if (bRotationYawOnly)
+					{
+						FRotator CurrentRotator = ClientXf.GetRotation().Rotator();
+						FRotator TargetRotator = FinalXf.GetRotation().Rotator();
+						float YawError = FRotator::NormalizeAxis(TargetRotator.Yaw - CurrentRotator.Yaw);
+
+						if (FMath::Abs(YawError) > MinYawErrorForCorrectionDeg)
+						{
+							// Apply proportional correction limited by MaxRotationCorrectionDegPerSec
+							const float MaxStep = MaxRotationCorrectionDegPerSec * AccumulatedDelta;
+							const float DesiredStep = YawError * FinalKpRot;
+							const float Step = FMath::Clamp(DesiredStep, -MaxStep, MaxStep);
+							
+							CurrentRotator.Yaw = FRotator::NormalizeAxis(CurrentRotator.Yaw + Step);
+							ClientXf.SetRotation(CurrentRotator.Quaternion());
+						}
+					}
+					else
+					{
+						// Full Rotation Slerp
+						const FQuat CurrentRot = ClientXf.GetRotation();
+						const FQuat TargetRot = FinalXf.GetRotation();
+						
+						// Angle distance for threshold check
+						const float AngleRad = CurrentRot.AngularDistance(TargetRot);
+						if (FMath::RadiansToDegrees(AngleRad) > MinYawErrorForCorrectionDeg)
+						{
+							// We use FinalKpRot * 10.0f to keep it in a similar range as the original logic 
+							// where InterpRate was around 5-10.
+							ClientXf.SetRotation(FQuat::Slerp(CurrentRot, TargetRot, FMath::Min(1.0f, AccumulatedDelta * FinalKpRot * 10.f)));
+						}
+					}
 				}
 			}
 
