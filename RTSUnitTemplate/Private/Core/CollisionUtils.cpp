@@ -139,7 +139,7 @@ FVector FCollisionUtils::ComputeImpactSurfaceXY(const AActor* Attacker, const AA
 
     if (bTargetFlying)
     {
-        Surface.Z = TargetCenter.Z;
+        Surface.Z = OverrideIncomingLocation.IsSet() ? IncomingLoc.Z : TargetCenter.Z;
     }
     else
     {

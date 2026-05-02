@@ -250,11 +250,25 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 									if (AUnitBase* TargetUnit = Cast<AUnitBase>(TargetActor))
 									{
 										FVector PreciseImpactPos = FCollisionUtils::ComputeImpactSurfaceXY(ShooterActor, TargetActor, ProjPos);
+										
+										// If target is flying, ensure impact VFX stay at projectile height
+										if (UnitCharFrags[j].bIsFlying)
+										{
+											PreciseImpactPos.Z = ProjPos.Z;
+										}
+										
 										TargetUnit->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
 									}
 									else if (AEffectArea* EffectArea = Cast<AEffectArea>(TargetActor))
 									{
 										FVector PreciseImpactPos = FCollisionUtils::ComputeImpactSurfaceXY(ShooterActor, TargetActor, ProjPos);
+										
+										// If target is flying, ensure impact VFX stay at projectile height
+										if (UnitCharFrags[j].bIsFlying)
+										{
+											PreciseImpactPos.Z = ProjPos.Z;
+										}
+										
 										EffectArea->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
 									}
 								}
