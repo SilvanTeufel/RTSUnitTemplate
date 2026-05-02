@@ -112,8 +112,39 @@ void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, F
 
 void UUnitActorToFragmentSyncProcessor::SyncCharacteristics(const AUnitBase& Unit, FMassAgentCharacteristicsFragment& Characteristics)
 {
-	Characteristics.FlyHeight = Unit.FlyHeight;
-	Characteristics.bIsFlying = Unit.IsFlying;
+	bool bFlyParamChanged = false;
+	if (Characteristics.FlyHeight != Unit.FlyHeight)
+	{
+		Characteristics.FlyHeight = Unit.FlyHeight;
+		bFlyParamChanged = true;
+	}
+
+	if (Characteristics.bIsFlying != Unit.IsFlying)
+	{
+		Characteristics.bIsFlying = Unit.IsFlying;
+		bFlyParamChanged = true;
+	}
+
+	if (bFlyParamChanged)
+	{
+		// Wenn sich Flugparameter aendern (besonders auf dem Client wichtig),
+		// muessen wir die visuelle Position neu berechnen, falls es ein Gebaeude ist.
+		// Bei Einheiten, die sich bewegen, macht das der MovementProcessor/PlacementProcessor ohnehin.
+		// Aber Gebaeude haben StopMovement und werden sonst nie wieder angefasst.
+		if (!Unit.CanMove)
+		{
+			FVector FinalLoc = Characteristics.PositionedTransform.GetLocation();
+			const float NewZ = Characteristics.bIsFlying ? (Characteristics.LastGroundLocation + Characteristics.FlyHeight) : (Characteristics.LastGroundLocation + Characteristics.CapsuleHeight);
+			
+			if (!FMath::IsNearlyEqual(FinalLoc.Z, NewZ))
+			{
+				FinalLoc.Z = NewZ;
+				Characteristics.PositionedTransform.SetLocation(FinalLoc);
+				Characteristics.bTransformDirty = true;
+			}
+		}
+	}
+	
 	Characteristics.bCanOnlyAttackFlying = Unit.CanOnlyAttackFlying;
 	Characteristics.bCanOnlyAttackGround = Unit.CanOnlyAttackGround;
 	Characteristics.bCanDetectInvisible = Unit.CanDetectInvisible;

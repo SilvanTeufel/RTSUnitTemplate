@@ -1125,6 +1125,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
             // <<< REPLACE Properties/Getters with your actual variable names/functions >>>
             CharFrag->bIsFlying = UnitOwner->IsFlying; // Assuming direct property access
         	CharFrag->FlyHeight = UnitOwner->FlyHeight;
+
             CharFrag->bCanOnlyAttackFlying = UnitOwner->CanOnlyAttackFlying;
             CharFrag->bCanOnlyAttackGround = UnitOwner->CanOnlyAttackGround;
             CharFrag->bIsInvisible = UnitOwner->bIsInvisible;
@@ -1168,7 +1169,15 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
                 // FIX: Set visual position for buildings (static)
                 FVector FinalLoc = UnitOwner->GetActorLocation();
-                FinalLoc.Z = CharFrag->LastGroundLocation + CharFrag->CapsuleHeight;
+                if (CharFrag->bIsFlying)
+                {
+                    FinalLoc.Z = CharFrag->LastGroundLocation + CharFrag->FlyHeight;
+                }
+                else
+                {
+                    FinalLoc.Z = CharFrag->LastGroundLocation + CharFrag->CapsuleHeight;
+                }
+
                 CharFrag->PositionedTransform.SetLocation(FinalLoc);
                 CharFrag->bTransformDirty = true;
 
