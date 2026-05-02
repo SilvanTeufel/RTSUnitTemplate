@@ -776,12 +776,26 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
     // Kopie der Entities für sichere asynchrone Verarbeitung
     TArray<FMassEntityHandle> EntitiesCopy = Entities;
 
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
     // An den Game Thread senden, da NavSys verwendet wird
-    AsyncTask(ENamedThreads::GameThread, [this, EntitiesCopy]() mutable
+    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, EntitiesCopy]() mutable
     {
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
         // --- Dieser Code läuft garantiert im Game Thread ---
 
         if (!EntitySubsystem) { return; }
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
+
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager(); // Mutable für Fragment-Zugriff
         UWorld* World = EntitySubsystem->GetWorld();
         if (!World) { return; }
@@ -835,12 +849,26 @@ void UUnitStateProcessor::ForceSetPatrolRandomTarget(FMassEntityHandle& Entity)
 
 
 
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
     // An den Game Thread senden, da NavSys verwendet wird
-    AsyncTask(ENamedThreads::GameThread, [this, Entity]() mutable
+    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, Entity]() mutable
     {
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
         // --- Dieser Code läuft garantiert im Game Thread ---
 
         if (!EntitySubsystem) { return; }
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
+
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
         UWorld* World = EntitySubsystem->GetWorld();
         if (!World) { return; }
@@ -902,13 +930,26 @@ void UUnitStateProcessor::ChangeUnitState(FName SignalName, TArray<FMassEntityHa
 
     TArray<FMassEntityHandle> EntitiesCopy = Entities; 
 
-    AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
     {
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
         // Re-check EntitySubsystem just in case? Usually fine if 'this' is valid.
         if (!EntitySubsystem) 
         {
              // UE_LOG(LogTemp, Error, TEXT("ChangeUnitState (GameThread): EntitySubsystem became null!"));
              return;
+        }
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
         }
 
         const FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
@@ -1079,13 +1120,18 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
     }
 
 
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
     TWeakObjectPtr<AUnitBase> WeakUnitActor(const_cast<AUnitBase*>(UnitActor));
     FMassEntityHandle CapturedEntity = Entity; // Handle per Wert kopieren
 
     // --- AsyncTask an den GameThread senden ---
-    AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity]() mutable
+    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, WeakUnitActor, CapturedEntity]() mutable
     {
-    	
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
         // --- Code in dieser Lambda läuft jetzt im GameThread ---
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
@@ -1095,6 +1141,14 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             //UE_LOG(LogTemp, Error, TEXT("SynchronizeStatsFromActorToFragment (GameThread): EntitySubsystem wurde null!"));
             return;
         }
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
+
         // Mutable EntityManager holen, um Fragment schreiben zu können
         FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
 
@@ -1182,7 +1236,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			
             			FVector TargetXY = AreaLoc + DirToWorker * (AreaRadius + AgentRadius);
             			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
-
+            			
             			WorkerStats->BuildAreaRadius = AreaRadius;
             			WorkerStats->BuildAreaArrivalDistance = ArrivalDistanceMultiplier * StrongUnitActor->MovementAcceptanceRadius; // Nutze konsistente Distanz
             			WorkerStats->BuildingAvailable = StrongUnitActor->BuildArea->Building ? true : false;
@@ -1256,14 +1310,33 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
         return;
     }
 	
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
     TWeakObjectPtr<AUnitBase> WeakUnitActor(const_cast<AUnitBase*>(UnitActor));
     FMassEntityHandle CapturedEntity = Entity;
 	
-    AsyncTask(ENamedThreads::GameThread, [this, WeakUnitActor, CapturedEntity]() mutable
+    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, WeakUnitActor, CapturedEntity]() mutable
     {
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
         AUnitBase* StrongUnitActor = WeakUnitActor.Get();
 
     	if (!StrongUnitActor) return;
+
+        // Subsystem-Validität im GameThread prüfen
+        if (!EntitySubsystem)
+        {
+            return;
+        }
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
 
     	FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
     	
@@ -1400,14 +1473,27 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
                     TWeakObjectPtr<AUnitBase> WeakAttacker(UnitBase);
                     FMassEntityHandle AttackerEntity = Entity; // Capture for potential signals or logging
 
+                    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
                     // Dispatch to GameThread for ability activation as it involves Actor UFUNCTIONs
-                    AsyncTask(ENamedThreads::GameThread, [this, AttackerEntity, WeakAttacker]() mutable
+                    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, AttackerEntity, WeakAttacker]() mutable
                     {
+                        if (!WeakThis.IsValid() || bIsShuttingDown)
+                        {
+                            return;
+                        }
+
                         AUnitBase* StrongAttacker = WeakAttacker.Get();
 
                         if (!EntitySubsystem) // Re-check EntitySubsystem on GameThread
                         {
                             // UE_LOG(LogTemp, Error, TEXT("UnitActivateRangedAbilities (GameThread): EntitySubsystem became null!"));
+                            return;
+                        }
+
+                        // Check if world is tearing down
+                        UWorld* GTWorld = EntitySubsystem->GetWorld();
+                        if (!GTWorld || GTWorld->bIsTearingDown)
+                        {
                             return;
                         }
                         // No need for GTEntityManager if not accessing fragments here, but good practice if you might add it later
@@ -1696,12 +1782,25 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 // However, based on your flow, we will signal the state change in the lambda context 
                 // ONLY because we need to pass the entity handle safely. 
                 
+                TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
                 // 6. DISPATCH VISUAL/GAMEPLAY TASK
-                AsyncTask(ENamedThreads::GameThread, [this, Entity, TargetEntity, WeakAttacker, WeakTarget,
+                AsyncTask(ENamedThreads::GameThread, [this, WeakThis, Entity, TargetEntity, WeakAttacker, WeakTarget,
                     AttackAbilityID, ThrowAbilityID, OffensiveAbilityID,
                     AttackAbilities, ThrowAbilities, OffensiveAbilities]() mutable
                 {
+                    if (!WeakThis.IsValid() || bIsShuttingDown)
+                    {
+                        return;
+                    }
+
                     if (!EntitySubsystem) return; // Safety Check
+
+                    // Check if world is tearing down
+                    UWorld* GTWorld = EntitySubsystem->GetWorld();
+                    if (!GTWorld || GTWorld->bIsTearingDown)
+                    {
+                        return;
+                    }
 
                     AUnitBase* StrongAttacker = WeakAttacker.Get();
                     AActor* StrongTarget = WeakTarget.Get();
@@ -1834,14 +1933,27 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
 
     TArray<FMassEntityHandle> EntitiesCopy = Entities; 
 
-    AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
     {
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
         // **Code inside this lambda now runs on the Game Thread**
 
         // Re-check EntitySubsystem just in case? Usually fine if 'this' is valid.
         if (!EntitySubsystem) 
         {
              return;
+        }
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
         }
 
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
@@ -1937,14 +2049,27 @@ void UUnitStateProcessor::HandleEndDead(FName SignalName, TArray<FMassEntityHand
 
     TArray<FMassEntityHandle> EntitiesCopy = Entities; 
 
-    AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+    AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
     {
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
         // **Code inside this lambda now runs on the Game Thread**
 
         // Re-check EntitySubsystem just in case? Usually fine if 'this' is valid.
         if (!EntitySubsystem) 
         {
              return;
+        }
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
         }
 
         FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
@@ -1991,16 +2116,29 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 		// Log error - This check itself is generally safe
 		return;
 	}
-
+    
 	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
-
-	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
 	{
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
 		if (!EntitySubsystem) 
 		{
 			 return;
 		}
 
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
+    
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
 		//HandleGetClosestBaseArea(UnitSignals::GetClosestBase,  EntitiesCopy);
@@ -2086,16 +2224,29 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 		// Log error - This check itself is generally safe
 		return;
 	}
-	
+    
 	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
-
-	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
 	{
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
 		if (!EntitySubsystem) 
 		{
 			 return;
 		}
 
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
+    
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
 		for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
@@ -2190,16 +2341,29 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 		// Log error - This check itself is generally safe
 		return;
 	}
-
+    
 	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
-
-	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
 	{
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
 		if (!EntitySubsystem) 
 		{
 			 return;
 		}
 
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
+    
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
 		for (const FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
@@ -2235,22 +2399,35 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
-    	if (!EntitySubsystem)
-    	{
-    		// Log error - This check itself is generally safe
-    		return;
-    	}
+	if (!EntitySubsystem)
+	{
+		// Log error - This check itself is generally safe
+		return;
+	}
     
-    	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
+	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
     
-    	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
-    	{
-    		if (!EntitySubsystem) 
-    		{
-    			 return;
-    		}
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+	{
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
+		if (!EntitySubsystem) 
+		{
+			 return;
+		}
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
     
-    		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
     
     		for (FMassEntityHandle& Entity : EntitiesCopy) // Iterate the captured copy
     		{
@@ -2715,13 +2892,26 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
     
 	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
     
-	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
 	{
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
 		if (!EntitySubsystem) 
 		{
 				UE_LOG(LogTemp, Warning, TEXT("Early Return 1"));
 			 return;
 		}
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
     
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
     
@@ -2787,12 +2977,25 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
     
 	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
     
-	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
 	{
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
 		if (!EntitySubsystem) 
 		{
 			 return;
 		}
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
     
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
     
@@ -2850,7 +3053,7 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 }
 
 
-void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMassEntityHandle>& Entities)
+ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
 	if (!EntitySubsystem)
@@ -2861,12 +3064,25 @@ void UUnitStateProcessor::SetToUnitStatePlaceholder(FName SignalName, TArray<FMa
     
 	TArray<FMassEntityHandle> EntitiesCopy = Entities; 
     
-	AsyncTask(ENamedThreads::GameThread, [this, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
+    TWeakObjectPtr<UUnitStateProcessor> WeakThis(this);
+	AsyncTask(ENamedThreads::GameThread, [this, WeakThis, SignalName, EntitiesCopy]() mutable // mutable if you modify captures (not needed here)
 	{
+        if (!WeakThis.IsValid() || bIsShuttingDown)
+        {
+            return;
+        }
+
 		if (!EntitySubsystem) 
 		{
 			 return;
 		}
+
+        // Check if world is tearing down
+        UWorld* GTWorld = EntitySubsystem->GetWorld();
+        if (!GTWorld || GTWorld->bIsTearingDown)
+        {
+            return;
+        }
     
 		FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
     
@@ -2928,11 +3144,15 @@ void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEnti
 
 	// Must be run on GameThread to access UObjects
 	TArray<FMassEntityHandle> CopiedEntities = Entities;
+	TWeakObjectPtr<ACustomControllerBase> WeakCustomPC = CustomPC;
 
-	AsyncTask(ENamedThreads::GameThread, [CustomPC, CopiedEntities = MoveTemp(CopiedEntities)]()
+	AsyncTask(ENamedThreads::GameThread, [WeakCustomPC, CopiedEntities = MoveTemp(CopiedEntities)]()
 	{
-		//CustomPC->UpdateFogMaskWithCircles(CopiedEntities);
-		//CustomPC->UpdateMinimap(CopiedEntities);
+		if (ACustomControllerBase* StrongPC = WeakCustomPC.Get())
+		{
+			//StrongPC->UpdateFogMaskWithCircles(CopiedEntities);
+			//StrongPC->UpdateMinimap(CopiedEntities);
+		}
 	});
 }
 
@@ -2949,9 +3169,13 @@ void UUnitStateProcessor::HandleUpdateSelectionCircle(FName SignalName, TArray<F
 
 
 
-	AsyncTask(ENamedThreads::GameThread, [CustomPC]()
+	TWeakObjectPtr<ACustomControllerBase> WeakCustomPC = CustomPC;
+	AsyncTask(ENamedThreads::GameThread, [WeakCustomPC]()
 	{
-		CustomPC->UpdateSelectionCircles();
+		if (ACustomControllerBase* StrongPC = WeakCustomPC.Get())
+		{
+			StrongPC->UpdateSelectionCircles();
+		}
 	});
 }
 
