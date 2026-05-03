@@ -3017,7 +3017,6 @@ void ACustomControllerBase::LeftClickReleasedMass()
 	DropUnitBase();
 	int BestIndex = GetHighestPriorityWidgetIndex();
 	CurrentUnitWidgetIndex = BestIndex;
-	//UpdateSelectionCircles();
 	AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase);
 	if (ExtendedCameraBase)
 	{

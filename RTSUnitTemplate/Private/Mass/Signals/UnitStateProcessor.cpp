@@ -237,13 +237,6 @@ void UUnitStateProcessor::UnbindDelegates_Internal()
 			FogParametersDelegateHandle.Reset();
 		}
 
-		if (SelectionCircleDelegateHandle.IsValid())
-		{
-			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle);
-			Delegate.Remove(SelectionCircleDelegateHandle);
-			SelectionCircleDelegateHandle.Reset();
-		}
-
 		if (SyncUnitBaseDelegateHandle.IsValid())
 		{
 			auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase);

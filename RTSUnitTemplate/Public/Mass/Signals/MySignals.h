@@ -73,7 +73,6 @@ namespace UnitSignals
 	const FName UnitEnterSight(TEXT("UnitEnterSight"));
 	const FName UnitExitSight(TEXT("UnitExitSight"));
 	const FName UpdateFogMask(TEXT("UpdateFogMask"));
-	const FName UpdateSelectionCircle(TEXT("UpdateSelectionCircle"));
 	const FName UpdateVisibility(TEXT("UpdateVisibility"));
 
 	const FName ProjectileImpact(TEXT("ProjectileImpact"));

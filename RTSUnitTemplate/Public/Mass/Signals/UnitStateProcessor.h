@@ -148,7 +148,6 @@ private:
 
 	TArray<FDelegateHandle> SightChangeRequestDelegateHandle;
 	FDelegateHandle FogParametersDelegateHandle;
-	FDelegateHandle SelectionCircleDelegateHandle;
 	FDelegateHandle SpawnSignalDelegateHandle;
 	FDelegateHandle ProjectileImpactSignalDelegateHandle;
 	FDelegateHandle LoadUnitDelegateHandle;

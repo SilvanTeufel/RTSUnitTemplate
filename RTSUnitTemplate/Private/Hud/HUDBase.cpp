@@ -15,6 +15,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "GeometryCollection/GeometryCollectionSimulationTypes.h"
 #include "Net/UnrealNetwork.h"
+#include "CanvasItem.h"
+#include "Engine/Canvas.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/MassUnitVisualFragments.h"
@@ -255,33 +257,81 @@ void AHUDBase::SetExtensionPreviewLine(FVector Start, FVector End, FColor Color,
 	ExtensionPreviewLine.bIsActive = true;
 }
 
-void AHUDBase::DrawSelectionIndicator(const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FColor Color, float Thickness)
+void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion)
 {
-	const int32 Segments = 32;
+	// 1. Transparenz-Vorbereitung: Alpha-Steuerung
+	Color.A = bUseTransparency ? SelectionAlpha : 1.0f;
+
+	// 2. Segmente bestimmen (Achteck/Rot. Achteck: 8, Kreis: 32)
+	const int32 Segments = (SelectionStyle == ESelectionIndicatorStyle::Octagon || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) ? 8 : 32;
 	const float AngleStep = 2.0f * PI / Segments;
+    
+	// 3. Rotation berechnen (für rotierende Varianten)
+	float RotationOffset = 0.0f;
+	if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon)
+	{
+		RotationOffset = GetWorld()->GetTimeSeconds() * FMath::DegreesToRadians(RotatingCircleSpeed);
+	}
+
+	// 4. Occlusion-Vorbereitung (Vektor zur Kamera für 2/3 Sichtbarkeit)
+	FVector DirToCamera = FVector::ZeroVector;
+	const bool bOcclusionActive = bEnableOcclusion && !bDisableOcclusion;
+	if (bOcclusionActive)
+	{
+		if (APlayerCameraManager* CamManager = GetOwningPlayerController() ? GetOwningPlayerController()->PlayerCameraManager : nullptr)
+		{
+			DirToCamera = (CamManager->GetCameraLocation() - Location).GetSafeNormal2D();
+		}
+	}
+
 	FVector2D PrevScreenPoint;
 	bool bPrevPointValid = false;
-
-	// Wir rotieren nur um die Z-Achse (Yaw)
 	FRotator YawRotation(0, Rotation.Yaw, 0);
 
 	for (int32 i = 0; i <= Segments; i++)
 	{
-		float Angle = i * AngleStep;
-        
-		// Oval-Berechnung: X und Y Radien können unterschiedlich sein
-		FVector LocalPoint(FMath::Cos(Angle) * RadiusX, FMath::Sin(Angle) * RadiusY, 0.f);
-        
-		// Rotation der Einheit auf den Punkt anwenden
+		float CurrentAngle = (i * AngleStep) + RotationOffset;
+
+		// Spezial-Logik für 2/3 Kreis: Nur 240 Grad zeichnen
+		if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle)
+		{
+			float NormalizedAngle = FMath::Fmod(FMath::RadiansToDegrees(i * AngleStep), 360.0f);
+			if (NormalizedAngle > 240.0f) 
+			{ 
+				bPrevPointValid = false; 
+				continue; 
+			}
+		}
+
+		FVector LocalPoint(FMath::Cos(CurrentAngle) * RadiusX, FMath::Sin(CurrentAngle) * RadiusY, 0.f);
 		FVector WorldPoint = Location + YawRotation.RotateVector(LocalPoint);
-		WorldPoint.Z += 20.f; // Kleiner Offset vom Boden
+		WorldPoint.Z += 10.f; // Kleiner Offset gegen Z-Fighting mit dem Landscape
+
+		// 5. Fake-Occlusion: Punkt ausblenden, wenn er hinter der Einheit liegt (2/3 Sichtbarkeit)
+		if (bOcclusionActive)
+		{
+			FVector DirToPoint = (WorldPoint - Location).GetSafeNormal2D();
+			float VisibilityDot = FVector::DotProduct(DirToCamera, DirToPoint);
+			
+			// -0.5f entspricht einem Öffnungswinkel von 240 Grad (2/3 Kreis)
+			if (VisibilityDot < -0.5f) 
+			{
+				bPrevPointValid = false;
+				continue;
+			}
+		}
 
 		FVector2D ScreenPoint;
 		if (GetOwningPlayerController()->ProjectWorldLocationToScreen(WorldPoint, ScreenPoint))
 		{
-			if (i > 0 && bPrevPointValid)
+			if (bPrevPointValid)
 			{
-				DrawLine(PrevScreenPoint.X, PrevScreenPoint.Y, ScreenPoint.X, ScreenPoint.Y, Color, Thickness);
+				// FIX: FCanvasLineItem mit explizitem BlendMode für Transparenz
+				FCanvasLineItem LineItem(PrevScreenPoint, ScreenPoint);
+				LineItem.LineThickness = Thickness;
+				LineItem.SetColor(Color); 
+				LineItem.BlendMode = SE_BLEND_Translucent; 
+				Canvas->DrawItem(LineItem);
 			}
 			PrevScreenPoint = ScreenPoint;
 			bPrevPointValid = true;
@@ -307,6 +357,7 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 		FRotator UnitRotation = Unit->GetActorRotation();
 		float FinalRadiusX = 60.f;
 		float FinalRadiusY = 60.f;
+		bool bIsFlying = false;
 
 		// 1. Größe aus Fragment beziehen
 		if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
@@ -318,6 +369,7 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 				{
 					if (const FMassAgentCharacteristicsFragment* Frag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
 					{
+						bIsFlying = Frag->bIsFlying;
 						// Auf Boden projizieren
 						DrawLocation.Z = Frag->LastGroundLocation;
 
@@ -337,12 +389,14 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 		}
 
 		DrawSelectionIndicator(
+			Unit,
 			DrawLocation, 
 			FinalRadiusX * SelectionSizeMultiplier, 
 			FinalRadiusY * SelectionSizeMultiplier, 
 			UnitRotation, 
-			SelectionColor, 
-			SelectionThickness
+			FLinearColor(SelectionColor), 
+			SelectionThickness,
+			bIsFlying
 		);
 	}
 }

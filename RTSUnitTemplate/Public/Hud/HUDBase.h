@@ -12,6 +12,15 @@
 
 
 
+UENUM(BlueprintType)
+enum class ESelectionIndicatorStyle : uint8
+{
+	Circle                  UMETA(DisplayName = "Normaler Kreis"),
+	RotatingPartialCircle   UMETA(DisplayName = "Rotierender 2/3 Kreis"),
+	Octagon                 UMETA(DisplayName = "Achteck"),
+	RotatingOctagon         UMETA(DisplayName = "Rotierendes Achteck")
+};
+
 /**
  * 
  */
@@ -36,7 +45,7 @@ private:
 	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f);
 	
 	// Rotierende Ovale/Kreise
-	void DrawSelectionIndicator(const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FColor Color, float Thickness);
+	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion = false);
 	void DrawAllSelectedUnitsIndicators();
 
 public:
@@ -44,10 +53,25 @@ public:
 	FColor SelectionColor = FColor::Green;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	float SelectionThickness = 1.0f;
+	float SelectionThickness = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
 	float SelectionSizeMultiplier = 1.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
+	ESelectionIndicatorStyle SelectionStyle = ESelectionIndicatorStyle::Circle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
+	bool bUseTransparency = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float SelectionAlpha = 0.6f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
+	bool bEnableOcclusion = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
+	float RotatingCircleSpeed = 120.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ClickIndicatorRadius = 15.f;
