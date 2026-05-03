@@ -807,7 +807,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 	const bool bIsClient = GetWorld() && GetWorld()->GetNetMode() == NM_Client;
 	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(this);
 
-	if (bIsClient && MassUnit && MassUnit->MassActorBindingComponent)
+	if (MassUnit && MassUnit->MassActorBindingComponent)
 	{
 		FMassEntityHandle EntityHandle = MassUnit->MassActorBindingComponent->GetEntityHandle();
 		if (EntityHandle.IsValid())
@@ -856,13 +856,24 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 					
 					// Z-Position: Boden + (Hälfte + OffsetZ)
 					float HalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-					float FinalZ = LastGround + (HalfHeight + RelativeMuzzleLocation.Z);
+
+					// KORREKTUR: Verwende FlyHeight statt HalfHeight, wenn die Einheit fliegt
+					float VerticalOffset = (AC && AC->bIsFlying) ? AC->FlyHeight : HalfHeight;
+					float FinalZ = LastGround + (VerticalOffset + RelativeMuzzleLocation.Z);
 					
 					// XY-Position: Predicted Transform + Rotated OffsetXY
 					FVector MuzzleXY = RelativeMuzzleLocation;
 					MuzzleXY.Z = 0.f;
 					FVector FinalPos = TF->GetTransform().TransformPosition(MuzzleXY);
 					FinalPos.Z = FinalZ;
+
+					// KORREKTUR: Berücksichtige AttributeOffset auf dem Server
+					float AttributeOffset = bIsClient ? 0.f : (Attributes ? Attributes->GetProjectileScaleActorDirectionOffset() : 0.f);
+					if (AttributeOffset != 0.f)
+					{
+						FVector ShootingUnitForward = TF->GetTransform().GetRotation().Vector();
+						FinalPos += AttributeOffset * ShootingUnitForward;
+					}
 					
 					return FinalPos + AdditionalOffset;
 				}
@@ -874,6 +885,8 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 
 	// 1. Try to find a component with the specific tag (Server or non-Mass Client)
 	TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), ProjectileSpawnTag);
+
+
 	if (Comps.Num() > 0)
 	{
 		if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
@@ -889,9 +902,10 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 					{
 						if (Instance.TemplateISM == ParentISM)
 						{
-							// Use the Mass transform logic with this specific component's relative transform
 							FTransform VisualMuzzleTransform = SpawnComp->GetRelativeTransform() * Instance.CurrentRelativeTransform * MassUnit->GetMassActorTransform();
-							return VisualMuzzleTransform.GetLocation();
+							FVector ResultLoc = VisualMuzzleTransform.GetLocation();
+
+							return ResultLoc;
 						}
 					}
 				}
@@ -899,7 +913,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 			
 			// If not attached to ISM (e.g. attached to StaticMeshComponent), just use standard component location
 			FVector MuzzleLocation = GetActorTransform().TransformPosition(GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation())) + AdditionalOffset;
-			
+
 			return MuzzleLocation;
 		}
 	}
@@ -918,7 +932,15 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 	}
 
 	// 3. Fallback to default offset logic
-	const FVector ShootingUnitLocation = GetMassActorLocation();
+	FVector ShootingUnitLocation = GetMassActorLocation();
+
+
+	// KORREKTUR: Wenn die Einheit fliegt, addiere die Flughöhe zur Basis-Z-Position
+	if (IsFlying)
+	{
+		ShootingUnitLocation.Z += FlyHeight;
+	}
+
 	const FRotator ShootingUnitRotation = MassUnit ? MassUnit->GetMassActorRotation() : GetActorRotation();
 	const FVector ShootingUnitForward = ShootingUnitRotation.Vector();
 	

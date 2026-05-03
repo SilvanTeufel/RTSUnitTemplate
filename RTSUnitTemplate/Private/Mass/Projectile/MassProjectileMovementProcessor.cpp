@@ -73,11 +73,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					Projectile.ArcHeightDistanceFactor = CDO->ArcHeightDistanceFactor;
 					Projectile.ArcHeight = CDO->ArcHeight;
 
-					// Strikte Synchronisation von MaxPiercedTargets
-					if (Projectile.MaxPiercedTargets != CDO->MaxPiercedTargets)
-					{
-						Projectile.MaxPiercedTargets = CDO->MaxPiercedTargets;
-					}
 					Projectile.CollisionRadius = CDO->CollisionRadius;
 
                					// Robust sync for Niagara

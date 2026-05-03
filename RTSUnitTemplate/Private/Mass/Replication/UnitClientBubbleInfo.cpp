@@ -159,6 +159,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 											if (ProjectileSpeed_Resolved <= 0.f) ProjectileSpeed_Resolved = DefaultProjCDO->MovementSpeed;
 											TwinProjectileDistance_Resolved = DefaultProjCDO->TwinProjectileDistance;
 											ProjectileCount_Resolved = (DefaultProjCDO->HomingMissleCount > 0) ? DefaultProjCDO->HomingMissleCount : 1;
+											MaxPiercedTargets_Resolved = DefaultProjCDO->MaxPiercedTargets;
 											HomingRotationSpeed_Base = DefaultProjCDO->HomingRotationSpeed;
 											HomingMaxSpiralRadius_Base = DefaultProjCDO->HomingMaxSpiralRadius;
 											HomingInterpSpeed_Base = DefaultProjCDO->HomingInterpSpeed;

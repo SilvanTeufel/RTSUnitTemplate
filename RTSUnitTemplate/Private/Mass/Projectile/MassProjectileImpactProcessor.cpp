@@ -202,10 +202,9 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 					Projectile.PiercedTargets++;
 					
-
-    	if (Projectile.PiercedTargets >= Projectile.MaxPiercedTargets)
-    	{
-    		ProjContext.Defer().DestroyEntity(ProjEntity);
+					if (Projectile.PiercedTargets >= Projectile.MaxPiercedTargets)
+					{
+						ProjContext.Defer().DestroyEntity(ProjEntity);
 						
 						FMassProjectileVisualFragment& Visual = VisualList[i];
 						if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)

@@ -293,10 +293,6 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
         ProjectileFragment.FlightDirection = Transform.GetRotation().GetForwardVector();
     }
 
-	// Diagnose-Log für die initiale Fragment-Erstellung auf dem Client
-	if (bIsClient)
-	{
-	}
 
 	ProjectileFragment.RotationOffset = CDO->RotationOffset;
 	ProjectileFragment.RotationSpeed = CDO->RotationSpeed;
