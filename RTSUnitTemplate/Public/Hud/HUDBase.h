@@ -42,7 +42,7 @@ private:
 	};
 
 	TArray<FClickIndicator> ClickIndicators;
-	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f, int32 InSegments = -1);
+	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f, int32 InSegments = -1, bool bDisableSizeCulling = false);
 	
 	// Rotierende Ovale/Kreise
 	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion = false, int32 InSegments = -1);
@@ -61,11 +61,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
 	ESelectionIndicatorStyle SelectionStyle = ESelectionIndicatorStyle::Circle;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	bool bUseTransparency = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection", meta = (ClampMin = "0.0", ClampMax = "1.0"))
-	float SelectionAlpha = 0.6f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
 	bool bEnableOcclusion = true;

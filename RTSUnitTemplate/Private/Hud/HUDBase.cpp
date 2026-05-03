@@ -60,7 +60,7 @@ void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, fl
 
 	float Traveled = 0.f;
 	FLinearColor LineColor(Color);
-	LineColor.A = bUseTransparency ? SelectionAlpha : (Color.A / 255.f);
+	LineColor.A = (Color.A / 255.f);
 
 	while (Traveled < TotalScreenLen)
 	{
@@ -88,7 +88,7 @@ void AHUDBase::AddClickIndicator(FVector Location, FColor Color, float LifeTime,
 	ClickIndicators.Add(NewIndicator);
 }
 
-void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness, int32 InSegments)
+void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness, int32 InSegments, bool bDisableSizeCulling)
 {
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !Canvas) return;
@@ -104,7 +104,7 @@ void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor
 	FVector2D VecY = ScreenAxisY - ScreenCenter;
 
 	// Size Culling
-	if (VecX.SizeSquared() < 16.f && VecY.SizeSquared() < 16.f) return;
+	if (!bDisableSizeCulling && VecX.SizeSquared() < 16.f && VecY.SizeSquared() < 16.f) return;
 
 	const int32 Segments = (InSegments > 0) ? InSegments : 16;
 	const float AngleStep = 2.0f * PI / Segments;
@@ -121,7 +121,7 @@ void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor
 	float ThicknessToUse = (Thickness < 0.f) ? ClickIndicatorThickness : Thickness;
 
 	FLinearColor LineColor(Color);
-	LineColor.A = bUseTransparency ? SelectionAlpha : (Color.A / 255.f);
+	LineColor.A = (Color.A / 255.f);
 
 	for (int32 i = 0; i <= Segments; i++)
 	{
@@ -317,8 +317,6 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 {
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !PC->PlayerCameraManager || !Canvas) return;
-
-	Color.A = bUseTransparency ? SelectionAlpha : 1.0f;
 
 	// 1. Projektions-Basis berechnen (Nur 3 Calls statt 64!)
 	FVector2D ScreenCenter, ScreenAxisX, ScreenAxisY;
@@ -534,7 +532,7 @@ void AHUDBase::DrawHUD()
 			ClickIndicators.RemoveAtSwap(i);
 			continue;
 		}
-		DrawProjectedCircle(ClickIndicators[i].Location, ClickIndicators[i].Radius, ClickIndicators[i].Color);
+		DrawProjectedCircle(ClickIndicators[i].Location, ClickIndicators[i].Radius, ClickIndicators[i].Color, -1.f, -1, true);
 	}
 
 	// Draw dashed links between selected buildings and their waypoints each frame
@@ -970,9 +968,9 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 
 		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
 		{
-			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+			const float DistSq = FVector::DistSquared(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
 			
-			if (Distance <= Sight &&
+			if (DistSq <= FMath::Square(Sight) &&
 				Unit->GetUnitState() != UnitData::Dead &&
 				DetectingUnit->GetUnitState() != UnitData::Dead)
 			{
@@ -982,9 +980,9 @@ void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUni
 		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
 		{
 
-			float Distance = FVector::Dist(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
+			const float DistSq = FVector::DistSquared(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
 
-			if (Distance <= Sight)
+			if (DistSq <= FMath::Square(Sight))
 				DetectedUnits.Emplace(Unit);
 
 		}
