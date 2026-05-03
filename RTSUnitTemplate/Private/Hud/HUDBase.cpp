@@ -36,31 +36,38 @@ void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, fl
 	FVector Start = InStart; Start.Z += ZOffset;
 	FVector End = InEnd; End.Z += ZOffset;
 
-	const FVector Dir = (End - Start);
-	const float TotalLen = Dir.Size();
-	if (TotalLen <= KINDA_SMALL_NUMBER)
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !Canvas) return;
+
+	FVector2D ScreenStart, ScreenEnd;
+	// Nur Endpunkte projizieren für maximale Performance
+	if (!PC->ProjectWorldLocationToScreen(Start, ScreenStart) || !PC->ProjectWorldLocationToScreen(End, ScreenEnd))
 	{
 		return;
 	}
-	const FVector StepDir = Dir / TotalLen;
-	const float SegmentLen = FMath::Max(1.f, DashLen);
-	const float SkipLen = FMath::Max(0.f, GapLen);
+
+	const FVector2D Dir = (ScreenEnd - ScreenStart);
+	const float TotalScreenLen = Dir.Size();
+	if (TotalScreenLen <= KINDA_SMALL_NUMBER) return;
+
+	// Umrechnungsfaktor von 3D zu Screen (grob für die Dash-Länge)
+	float Total3DLen = FVector::Dist(Start, End);
+	float Scale = TotalScreenLen / Total3DLen;
+
+	const FVector2D StepDir = Dir / TotalScreenLen;
+	const float ScreenDashLen = FMath::Max(1.f, DashLen * Scale);
+	const float ScreenGapLen = FMath::Max(0.f, GapLen * Scale);
 
 	float Traveled = 0.f;
-	while (Traveled < TotalLen)
+	while (Traveled < TotalScreenLen)
 	{
-		const float ThisDash = FMath::Min(SegmentLen, TotalLen - Traveled);
-		const FVector SegStart = Start + StepDir * Traveled;
-		const FVector SegEnd = Start + StepDir * (Traveled + ThisDash);
+		const float ThisDash = FMath::Min(ScreenDashLen, TotalScreenLen - Traveled);
+		const FVector2D SegStart = ScreenStart + StepDir * Traveled;
+		const FVector2D SegEnd = ScreenStart + StepDir * (Traveled + ThisDash);
 
-		FVector2D ScreenStart, ScreenEnd;
-		if (GetOwningPlayerController()->ProjectWorldLocationToScreen(SegStart, ScreenStart) &&
-			GetOwningPlayerController()->ProjectWorldLocationToScreen(SegEnd, ScreenEnd))
-		{
-			DrawLine(ScreenStart.X, ScreenStart.Y, ScreenEnd.X, ScreenEnd.Y, Color, Thickness);
-		}
+		DrawLine(SegStart.X, SegStart.Y, SegEnd.X, SegEnd.Y, Color, Thickness);
 
-		Traveled += ThisDash + SkipLen;
+		Traveled += ThisDash + ScreenGapLen;
 	}
 }
 
@@ -74,33 +81,43 @@ void AHUDBase::AddClickIndicator(FVector Location, FColor Color, float LifeTime,
 	ClickIndicators.Add(NewIndicator);
 }
 
-void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness)
+void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness, int32 InSegments)
 {
-	const int32 Segments = 16;
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !Canvas) return;
+
+	FVector2D ScreenCenter, ScreenAxisX, ScreenAxisY;
+	FVector ZOff(0, 0, 15.f);
+	if (!PC->ProjectWorldLocationToScreen(Location + ZOff, ScreenCenter)) return;
+    
+	// Wir nehmen an, dass der Kreis flach auf dem Boden liegt (Yaw=0)
+	PC->ProjectWorldLocationToScreen(Location + ZOff + FVector(Radius, 0, 0), ScreenAxisX);
+	PC->ProjectWorldLocationToScreen(Location + ZOff + FVector(0, Radius, 0), ScreenAxisY);
+
+	FVector2D VecX = ScreenAxisX - ScreenCenter;
+	FVector2D VecY = ScreenAxisY - ScreenCenter;
+
+	const int32 Segments = (InSegments > 0) ? InSegments : 16;
 	const float AngleStep = 2.0f * PI / Segments;
-	FVector2D PrevScreenPoint = FVector2D::ZeroVector;
-	bool bPrevPointValid = false;
+	FVector2D PrevPoint;
+	bool bPrevValid = false;
 
 	float ThicknessToUse = (Thickness < 0.f) ? ClickIndicatorThickness : Thickness;
 
 	for (int32 i = 0; i <= Segments; i++)
 	{
 		float Angle = i * AngleStep;
-		FVector WorldPoint = Location + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 15.f);
-		FVector2D ScreenPoint;
-		if (GetOwningPlayerController()->ProjectWorldLocationToScreen(WorldPoint, ScreenPoint))
+		float CosA = FMath::Cos(Angle);
+		float SinA = FMath::Sin(Angle);
+        
+		FVector2D ScreenPoint = ScreenCenter + (CosA * VecX) + (SinA * VecY);
+
+		if (bPrevValid)
 		{
-			if (i > 0 && bPrevPointValid)
-			{
-				DrawLine(PrevScreenPoint.X, PrevScreenPoint.Y, ScreenPoint.X, ScreenPoint.Y, Color, ThicknessToUse);
-			}
-			PrevScreenPoint = ScreenPoint;
-			bPrevPointValid = true;
+			DrawLine(PrevPoint.X, PrevPoint.Y, ScreenPoint.X, ScreenPoint.Y, Color, ThicknessToUse);
 		}
-		else
-		{
-			bPrevPointValid = false;
-		}
+		PrevPoint = ScreenPoint;
+		bPrevValid = true;
 	}
 }
 
@@ -112,17 +129,24 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 	}
 
 	UWorld* World = GetWorld();
-	if (!World)
+	APlayerController* PC = GetOwningPlayerController();
+	if (!World || !PC)
 	{
 		return;
 	}
 
 	for (AUnitBase* Unit : SelectedUnits)
 	{
+		if (!IsValid(Unit)) continue;
+
+		// Frustum Culling: Gebäude im Bild?
+		FVector2D Dummy;
+		if (!PC->ProjectWorldLocationToScreen(Unit->GetActorLocation(), Dummy)) continue;
+
 		ABuildingBase* Building = Cast<ABuildingBase>(Unit);
 		if (!Building || !Building->HasWaypoint)
 		{
-			continue; // only buildings have visualized waypoint links
+			continue; 
 		}
 
 		AWaypoint* WP = Building->NextWaypoint;
@@ -183,7 +207,8 @@ void AHUDBase::DrawSelectedUnitsMovementLines()
 	}
 
 	UWorld* World = GetWorld();
-	if (!World)
+	APlayerController* PC = GetOwningPlayerController();
+	if (!World || !PC)
 	{
 		return;
 	}
@@ -204,6 +229,13 @@ void AHUDBase::DrawSelectedUnitsMovementLines()
 		return;
 	}
 	const FVector GroupCenter = Sum / float(Count);
+
+	// Frustum Culling: Zentrum im Bild?
+	FVector2D Dummy;
+	if (!PC->ProjectWorldLocationToScreen(GroupCenter, Dummy))
+	{
+		return;
+	}
 
 	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem)
@@ -257,86 +289,120 @@ void AHUDBase::SetExtensionPreviewLine(FVector Start, FVector End, FColor Color,
 	ExtensionPreviewLine.bIsActive = true;
 }
 
-void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion)
+void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion, int32 InSegments)
 {
-	// 1. Transparenz-Vorbereitung: Alpha-Steuerung
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !PC->PlayerCameraManager || !Canvas) return;
+
 	Color.A = bUseTransparency ? SelectionAlpha : 1.0f;
 
-	// 2. Segmente bestimmen (Achteck/Rot. Achteck: 8, Kreis: 32)
-	const int32 Segments = (SelectionStyle == ESelectionIndicatorStyle::Octagon || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) ? 8 : 32;
-	const float AngleStep = 2.0f * PI / Segments;
+	// 1. Projektions-Basis berechnen (Nur 3 Calls statt 64!)
+	FVector2D ScreenCenter, ScreenAxisX, ScreenAxisY;
+	FVector ZOff(0, 0, 10.f);
+	if (!PC->ProjectWorldLocationToScreen(Location + ZOff, ScreenCenter)) return;
     
-	// 3. Rotation berechnen (für rotierende Varianten)
-	float RotationOffset = 0.0f;
-	if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon)
-	{
-		RotationOffset = GetWorld()->GetTimeSeconds() * FMath::DegreesToRadians(RotatingCircleSpeed);
+	FRotator YawRot(0, Rotation.Yaw, 0);
+	PC->ProjectWorldLocationToScreen(Location + ZOff + YawRot.RotateVector(FVector(RadiusX, 0, 0)), ScreenAxisX);
+	PC->ProjectWorldLocationToScreen(Location + ZOff + YawRot.RotateVector(FVector(0, RadiusY, 0)), ScreenAxisY);
+
+	FVector2D VecX = ScreenAxisX - ScreenCenter;
+	FVector2D VecY = ScreenAxisY - ScreenCenter;
+
+	// 2. Occlusion-Vorbereitung
+	float CamAngleRad = 0.f;
+	bool bOcclusionActive = bEnableOcclusion && !bDisableOcclusion;
+	if (bOcclusionActive) {
+		FVector DirToCam = (PC->PlayerCameraManager->GetCameraLocation() - Location).GetSafeNormal2D();
+		CamAngleRad = FMath::Atan2(DirToCam.Y, DirToCam.X);
 	}
 
-	// 4. Occlusion-Vorbereitung (Vektor zur Kamera für 2/3 Sichtbarkeit)
-	FVector DirToCamera = FVector::ZeroVector;
-	const bool bOcclusionActive = bEnableOcclusion && !bDisableOcclusion;
-	if (bOcclusionActive)
-	{
-		if (APlayerCameraManager* CamManager = GetOwningPlayerController() ? GetOwningPlayerController()->PlayerCameraManager : nullptr)
-		{
-			DirToCamera = (CamManager->GetCameraLocation() - Location).GetSafeNormal2D();
-		}
+	// Höhere Segmentanzahl für rotierende Stile für weiches Fading erzwingen
+	int32 Segments = (InSegments > 0) ? InSegments : 32;
+	if (InSegments <= 0) {
+		if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon)
+			Segments = 64;
+		else if (SelectionStyle == ESelectionIndicatorStyle::Octagon)
+			Segments = 8;
 	}
+    
+	float AngleStep = 2.0f * PI / Segments;
+	float RotOffset = (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) 
+					  ? GetWorld()->GetTimeSeconds() * FMath::DegreesToRadians(RotatingCircleSpeed) : 0.0f;
 
-	FVector2D PrevScreenPoint;
-	bool bPrevPointValid = false;
-	FRotator YawRotation(0, Rotation.Yaw, 0);
+	FVector2D PrevPoint;
+	float PrevAlphaMult = 0.f;
+	bool bPrevValid = false;
 
-	for (int32 i = 0; i <= Segments; i++)
-	{
-		float CurrentAngle = (i * AngleStep) + RotationOffset;
+	for (int32 i = 0; i <= Segments; i++) {
+		float CurrentAngle = (i * AngleStep) + RotOffset;
+		float WorldAngle = CurrentAngle + FMath::DegreesToRadians(Rotation.Yaw);
 
-		// Spezial-Logik für 2/3 Kreis: Nur 240 Grad zeichnen
-		if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle)
-		{
-			float NormalizedAngle = FMath::Fmod(FMath::RadiansToDegrees(i * AngleStep), 360.0f);
-			if (NormalizedAngle > 240.0f) 
-			{ 
-				bPrevPointValid = false; 
-				continue; 
+		float AlphaMult = 1.0f;
+
+		// 3. Occlusion Fade (Exponential)
+		if (bOcclusionActive) {
+			float Diff = FMath::Abs(FMath::UnwindRadians(WorldAngle - CamAngleRad));
+			const float MaxOccl = FMath::DegreesToRadians(120.0f); 
+			const float FadeZone = FMath::DegreesToRadians(30.0f); // 30 Grad Übergangszone
+            
+			if (Diff > MaxOccl) {
+				AlphaMult = 0.0f;
+			} else if (Diff > MaxOccl - FadeZone) {
+				float T = 1.0f - (Diff - (MaxOccl - FadeZone)) / FadeZone;
+				AlphaMult *= (T * T); // Quadratischer Abfall für weichen Übergang
 			}
 		}
 
-		FVector LocalPoint(FMath::Cos(CurrentAngle) * RadiusX, FMath::Sin(CurrentAngle) * RadiusY, 0.f);
-		FVector WorldPoint = Location + YawRotation.RotateVector(LocalPoint);
-		WorldPoint.Z += 10.f; // Kleiner Offset gegen Z-Fighting mit dem Landscape
-
-		// 5. Fake-Occlusion: Punkt ausblenden, wenn er hinter der Einheit liegt (2/3 Sichtbarkeit)
-		if (bOcclusionActive)
-		{
-			FVector DirToPoint = (WorldPoint - Location).GetSafeNormal2D();
-			float VisibilityDot = FVector::DotProduct(DirToCamera, DirToPoint);
-			
-			// -0.5f entspricht einem Öffnungswinkel von 240 Grad (2/3 Kreis)
-			if (VisibilityDot < -0.5f) 
-			{
-				bPrevPointValid = false;
-				continue;
+		// 4. Clipping Fade für Partial Circle (Exponential)
+		if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle) {
+			float Deg = FMath::Fmod(FMath::RadiansToDegrees(i * AngleStep), 360.0f);
+			const float MaxDeg = 240.0f;
+			const float FadeZoneDeg = 40.0f;
+            
+			if (Deg > MaxDeg) {
+				AlphaMult = 0.0f;
+			} else if (Deg > MaxDeg - FadeZoneDeg) {
+				float T = 1.0f - (Deg - (MaxDeg - FadeZoneDeg)) / FadeZoneDeg;
+				AlphaMult *= (T * T);
 			}
 		}
 
-		FVector2D ScreenPoint;
-		if (GetOwningPlayerController()->ProjectWorldLocationToScreen(WorldPoint, ScreenPoint))
-		{
-			if (bPrevPointValid)
-			{
-				// FIX: FCanvasLineItem mit explizitem BlendMode für Transparenz
-				FCanvasLineItem LineItem(PrevScreenPoint, ScreenPoint);
-				LineItem.LineThickness = Thickness;
-				LineItem.SetColor(Color); 
-				LineItem.BlendMode = SE_BLEND_Translucent; 
+		// 5. Screen-Space Berechnung (Kein ProjectWorldLocationToScreen mehr!)
+		float CosA, SinA;
+		if (SelectionStyle == ESelectionIndicatorStyle::Octagon || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) {
+			// Octagon-Interpolation
+			float OctStep = 2.0f * PI / 8.0f;
+			float LocalProgress = (i * AngleStep); 
+			int32 CornerIdx = FMath::FloorToInt(LocalProgress / OctStep);
+			float A1 = CornerIdx * OctStep + RotOffset;
+			float A2 = (CornerIdx + 1) * OctStep + RotOffset;
+            
+			float Alpha = (CurrentAngle - A1) / (A2 - A1);
+			CosA = FMath::Lerp(FMath::Cos(A1), FMath::Cos(A2), Alpha);
+			SinA = FMath::Lerp(FMath::Sin(A1), FMath::Sin(A2), Alpha);
+		} else {
+			CosA = FMath::Cos(CurrentAngle);
+			SinA = FMath::Sin(CurrentAngle);
+		}
+
+		FVector2D ScreenPoint = ScreenCenter + (CosA * VecX) + (SinA * VecY);
+
+		// 6. Zeichnen mit gemitteltem Alpha/Thickness
+		if (bPrevValid) {
+			float AvgAlpha = (AlphaMult + PrevAlphaMult) * 0.5f;
+			if (AvgAlpha > 0.001f) {
+				FCanvasLineItem LineItem(PrevPoint, ScreenPoint);
+				LineItem.LineThickness = Thickness * AvgAlpha;
+				FLinearColor LineColor = Color;
+				LineColor.A *= AvgAlpha;
+				LineItem.SetColor(LineColor);
+				LineItem.BlendMode = SE_BLEND_Translucent;
 				Canvas->DrawItem(LineItem);
 			}
-			PrevScreenPoint = ScreenPoint;
-			bPrevPointValid = true;
 		}
-		else { bPrevPointValid = false; }
+		PrevPoint = ScreenPoint; 
+		PrevAlphaMult = AlphaMult;
+		bPrevValid = true;
 	}
 }
 
@@ -347,6 +413,10 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 	if (!EntitySubsystem) return;
 
 	FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !PC->PlayerCameraManager || SelectedUnits.Num() == 0) return;
+
+	FVector CamLoc = PC->PlayerCameraManager->GetCameraLocation();
 
 	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
 	{
@@ -354,6 +424,17 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 		if (!IsValid(Unit)) { SelectedUnits.RemoveAtSwap(i); continue; }
 
 		FVector DrawLocation = Unit->GetActorLocation();
+
+		// 1. Frustum Culling (Grobe Prüfung ob Einheit im Bild)
+		FVector2D ScreenPos;
+		if (!PC->ProjectWorldLocationToScreen(DrawLocation, ScreenPos)) continue;
+
+		// 2. Entfernung für LOD
+		float DistSq = FVector::DistSquared(CamLoc, DrawLocation);
+		int32 LODSegments = 64;
+		if (DistSq > 16000000.f) LODSegments = 12;      // > 40m
+		else if (DistSq > 4000000.f) LODSegments = 32;  // > 20m
+
 		FRotator UnitRotation = Unit->GetActorRotation();
 		float FinalRadiusX = 60.f;
 		float FinalRadiusY = 60.f;
@@ -396,7 +477,8 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 			UnitRotation, 
 			FLinearColor(SelectionColor), 
 			SelectionThickness,
-			bIsFlying
+			bIsFlying,
+			LODSegments
 		);
 	}
 }

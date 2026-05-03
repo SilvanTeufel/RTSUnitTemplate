@@ -15,10 +15,10 @@
 UENUM(BlueprintType)
 enum class ESelectionIndicatorStyle : uint8
 {
-	Circle                  UMETA(DisplayName = "Normaler Kreis"),
-	RotatingPartialCircle   UMETA(DisplayName = "Rotierender 2/3 Kreis"),
-	Octagon                 UMETA(DisplayName = "Achteck"),
-	RotatingOctagon         UMETA(DisplayName = "Rotierendes Achteck")
+	Circle                  UMETA(DisplayName = "Circle"),
+	RotatingPartialCircle   UMETA(DisplayName = "RotatingPartialCircle"),
+	Octagon                 UMETA(DisplayName = "Octagon"),
+	RotatingOctagon         UMETA(DisplayName = "RotatingOctagon")
 };
 
 /**
@@ -42,10 +42,10 @@ private:
 	};
 
 	TArray<FClickIndicator> ClickIndicators;
-	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f);
+	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f, int32 InSegments = -1);
 	
 	// Rotierende Ovale/Kreise
-	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion = false);
+	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion = false, int32 InSegments = -1);
 	void DrawAllSelectedUnitsIndicators();
 
 public:
