@@ -19,7 +19,6 @@
 #include "Mass/Replication/RTSWorldCacheSubsystem.h" // For MarkSkipMoveForNetID
 #include "NavModifierVolume.h"
 #include "Actors/FogActor.h"
-#include "Actors/SelectionCircleActor.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
@@ -3164,43 +3163,6 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 }
 
 
-void ACustomControllerBase::UpdateSelectionCircles()
-{
-	UWorld* World = GetWorld();
-	if (!ensure(World)) return;
-
-	TArray<FVector_NetQuantize> Positions;
-	TArray<float> WorldRadii;
-    
-	if (UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>())
-	{
-		FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
-
-		for (AUnitBase* SelectedUnit : SelectedUnits)
-		{
-			if (!SelectedUnit) continue;
-
-			FMassEntityHandle Entity = SelectedUnit->MassActorBindingComponent->GetEntityHandle();
-			if (!EM.IsEntityValid(Entity)) continue;
-            
-			const FTransformFragment* TransformFragment = EM.GetFragmentDataPtr<FTransformFragment>(Entity);
-			if (!TransformFragment) continue;
-
-			// Use a default or calculated radius for the selection circle
-			float SelectionRadius = 50.f; // Example radius, adjust as needed
-
-			Positions.Add(FVector_NetQuantize(TransformFragment->GetTransform().GetLocation()));
-			WorldRadii.Add(SelectionRadius);
-		}
-	}
-    
-	// Multicast to all SelectionCircleActors
-	for (TActorIterator<ASelectionCircleActor> It(World); It; ++It)
-	{
-		if (It->TeamId == SelectableTeamId)
-			It->Multicast_UpdateSelectionCircles(Positions, WorldRadii);
-	}
-}
 
 void ACustomControllerBase::Multi_SetupPlayerMiniMap_Implementation()
 {

@@ -6,7 +6,6 @@
 #include "AbilityUnit.h"
 #include "NiagaraComponent.h"
 #include "Actors/AreaDecalComponent.h"
-#include "Actors/SelectionDecalComponent.h"
 #include "TimerManager.h"
 #include "UObject/WeakObjectPtr.h"
 
@@ -14,7 +13,6 @@ class UStaticMeshComponent;
 class AStaticMeshActor;
 class UMassActorBindingComponent;
 class UInstancedStaticMeshComponent;
-class USelectionDecalComponent;
 class UNiagaraComponent;
 
 #include "MassUnitBase.generated.h"
@@ -122,8 +120,6 @@ public:
 	bool AddGameplayEffectFragement = false;
 
 	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
-	USelectionDecalComponent* SelectionIcon;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HealthCompCreated = false;

@@ -119,8 +119,6 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
      {
          UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Sight signals are handled by UnitSightProcessor now (NetMode=%d)."), World ? (int32)World->GetNetMode() : -1);
      }
-    	SelectionCircleDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::UpdateSelectionCircle)
-			.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, HandleUpdateSelectionCircle));
     	
     	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
 				.AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UUnitStateProcessor, SyncUnitBase));
@@ -3076,27 +3074,6 @@ void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEnti
 }
 
 
-void UUnitStateProcessor::HandleUpdateSelectionCircle(FName SignalName, TArray<FMassEntityHandle>& Entities)
-{
-	if (!EntitySubsystem || !World) return;
-
-	APlayerController* PC = World->GetFirstPlayerController(); // Local controller
-	if (!PC) return;
-
-	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
-	if (!CustomPC) return;
-
-
-
-	TWeakObjectPtr<ACustomControllerBase> WeakCustomPC = CustomPC;
-	AsyncTask(ENamedThreads::GameThread, [WeakCustomPC]()
-	{
-		if (ACustomControllerBase* StrongPC = WeakCustomPC.Get())
-		{
-			StrongPC->UpdateSelectionCircles();
-		}
-	});
-}
 
 void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,

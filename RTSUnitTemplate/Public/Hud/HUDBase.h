@@ -34,8 +34,21 @@ private:
 
 	TArray<FClickIndicator> ClickIndicators;
 	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f);
+	
+	// Rotierende Ovale/Kreise
+	void DrawSelectionIndicator(const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FColor Color, float Thickness);
+	void DrawAllSelectedUnitsIndicators();
 
 public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
+	FColor SelectionColor = FColor::Green;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
+	float SelectionThickness = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
+	float SelectionSizeMultiplier = 1.2f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ClickIndicatorRadius = 15.f;
 

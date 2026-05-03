@@ -29,19 +29,12 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.5f;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float UpdateCircleInterval = 0.02f;
-
-	UPROPERTY(BlueprintReadWrite, VisibleAnywhere, Category = RTSUnitTemplate)
-	bool CircleUpdated = false;
-	
 private:
 	FMassEntityQuery EntityQuery;
 
 	float TimeSinceLastRunA = 0.0f;
 	float TimeSinceLastRunB = 0.0f;
-	void HandleUpdateSelectionCircle();
-	
+
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
 };

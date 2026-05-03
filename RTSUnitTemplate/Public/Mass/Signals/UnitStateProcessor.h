@@ -273,9 +273,6 @@ private:
 	void HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 	UFUNCTION()
-	void HandleUpdateSelectionCircle(FName SignalName, TArray<FMassEntityHandle>& Entities);
-
-	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
 	UFUNCTION()

@@ -729,31 +729,11 @@ void AUnitBase::IncreaseExperience()
 
 void AUnitBase::SetSelected()
 {
-	
-	if (SelectionIcon)
-	{
-		if (!bUseSkeletalMovement)
-		{
-			FVector NewLocation = GetMassActorLocation();
-			if (IsFlying)
-				NewLocation.Z = NewLocation.Z-FlyHeight;
-			
-			SelectionIcon->SetWorldLocation(NewLocation);
-		}
-
-		SelectionIcon->ShowSelection();
-	}
-
 	Selected();
 }
 
 void AUnitBase::SetDeselected()
 {
-	if (IsValid(SelectionIcon))
-	{
-		SelectionIcon->HideSelection();
-	}
-
 	// Remove rotation tag on deselection
 	if (MassActorBindingComponent)
 	{

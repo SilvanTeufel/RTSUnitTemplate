@@ -11,7 +11,6 @@
 #include "MassCommandBuffer.h"
 #include "MassNavigationFragments.h"
 #include "MassMovementFragments.h"
-#include "Actors/SelectionCircleActor.h"
 #include "Engine/World.h"        // Include for UWorld, GEngine
 #include "Engine/Engine.h"       // Include for GEngine
 #include "Engine/EngineTypes.h"   // For FHitResult in UFUNCTION params
@@ -233,9 +232,6 @@ public:
 	UFUNCTION()
 	void UpdateMinimap(const TArray<FMassEntityHandle>& Entities);
 
-	UFUNCTION()
-	void UpdateSelectionCircles();
-
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetupPlayerMiniMap();
 
@@ -283,8 +279,6 @@ protected:
 	bool bStopMinimapSearch = false;
 	float MinimapSearchEndTime = 0.0f;
 	
-	UPROPERTY()
-	ASelectionCircleActor* SelectionCircleActor;
 	
 	/** The extent used when projecting a point to the NavMesh to validate move commands. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Navigation")

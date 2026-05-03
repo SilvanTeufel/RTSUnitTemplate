@@ -255,9 +255,103 @@ void AHUDBase::SetExtensionPreviewLine(FVector Start, FVector End, FColor Color,
 	ExtensionPreviewLine.bIsActive = true;
 }
 
+void AHUDBase::DrawSelectionIndicator(const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FColor Color, float Thickness)
+{
+	const int32 Segments = 32;
+	const float AngleStep = 2.0f * PI / Segments;
+	FVector2D PrevScreenPoint;
+	bool bPrevPointValid = false;
+
+	// Wir rotieren nur um die Z-Achse (Yaw)
+	FRotator YawRotation(0, Rotation.Yaw, 0);
+
+	for (int32 i = 0; i <= Segments; i++)
+	{
+		float Angle = i * AngleStep;
+        
+		// Oval-Berechnung: X und Y Radien können unterschiedlich sein
+		FVector LocalPoint(FMath::Cos(Angle) * RadiusX, FMath::Sin(Angle) * RadiusY, 0.f);
+        
+		// Rotation der Einheit auf den Punkt anwenden
+		FVector WorldPoint = Location + YawRotation.RotateVector(LocalPoint);
+		WorldPoint.Z += 20.f; // Kleiner Offset vom Boden
+
+		FVector2D ScreenPoint;
+		if (GetOwningPlayerController()->ProjectWorldLocationToScreen(WorldPoint, ScreenPoint))
+		{
+			if (i > 0 && bPrevPointValid)
+			{
+				DrawLine(PrevScreenPoint.X, PrevScreenPoint.Y, ScreenPoint.X, ScreenPoint.Y, Color, Thickness);
+			}
+			PrevScreenPoint = ScreenPoint;
+			bPrevPointValid = true;
+		}
+		else { bPrevPointValid = false; }
+	}
+}
+
+void AHUDBase::DrawAllSelectedUnitsIndicators()
+{
+	UWorld* World = GetWorld();
+	UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
+	if (!EntitySubsystem) return;
+
+	FMassEntityManager& EM = EntitySubsystem->GetMutableEntityManager();
+
+	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
+	{
+		AUnitBase* Unit = SelectedUnits[i];
+		if (!IsValid(Unit)) { SelectedUnits.RemoveAtSwap(i); continue; }
+
+		FVector DrawLocation = Unit->GetActorLocation();
+		FRotator UnitRotation = Unit->GetActorRotation();
+		float FinalRadiusX = 60.f;
+		float FinalRadiusY = 60.f;
+
+		// 1. Größe aus Fragment beziehen
+		if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
+		{
+			if (MassUnit->MassActorBindingComponent)
+			{
+				FMassEntityHandle Entity = MassUnit->MassActorBindingComponent->GetEntityHandle();
+				if (EM.IsEntityValid(Entity))
+				{
+					if (const FMassAgentCharacteristicsFragment* Frag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
+					{
+						// Auf Boden projizieren
+						DrawLocation.Z = Frag->LastGroundLocation;
+
+						// Unterscheidung Box vs. Capsule
+						if (Frag->bUseBoxComponent)
+						{
+							FinalRadiusX = Frag->BoxExtent.X;
+							FinalRadiusY = Frag->BoxExtent.Y;
+						}
+						else
+						{
+							FinalRadiusX = FinalRadiusY = Frag->CapsuleRadius;
+						}
+					}
+				}
+			}
+		}
+
+		DrawSelectionIndicator(
+			DrawLocation, 
+			FinalRadiusX * SelectionSizeMultiplier, 
+			FinalRadiusY * SelectionSizeMultiplier, 
+			UnitRotation, 
+			SelectionColor, 
+			SelectionThickness
+		);
+	}
+}
+
 void AHUDBase::DrawHUD()
 {
 	Super::DrawHUD();
+
+	DrawAllSelectedUnitsIndicators();
 
 	if (ExtensionPreviewLine.bIsActive)
 	{

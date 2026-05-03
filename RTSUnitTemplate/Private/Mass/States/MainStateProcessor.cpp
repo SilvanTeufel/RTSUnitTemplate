@@ -37,38 +37,11 @@ void UMainStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
     SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld());
 }
 
-void UMainStateProcessor::HandleUpdateSelectionCircle()
-{
-    UWorld* World = GetWorld();
-    
-    if (!World) return;
-
-    APlayerController* PC = World->GetFirstPlayerController(); // Local controller
-    if (!PC) return;
-
-    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
-    if (!CustomPC) return;
-
-
-
-    AsyncTask(ENamedThreads::GameThread, [CustomPC]()
-    {
-        CustomPC->UpdateSelectionCircles();
-    });
-}
-
 void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     // --- Throttling Check ---
     TimeSinceLastRunA += Context.GetDeltaTimeSeconds();
-    TimeSinceLastRunB += Context.GetDeltaTimeSeconds();
 
-    // --- Handle Update Selection Circle Logic ---
-    if (TimeSinceLastRunB >= UpdateCircleInterval)
-    {
-        TimeSinceLastRunB -= UpdateCircleInterval;
-    }
-    
     if (TimeSinceLastRunA < ExecutionInterval)
     {
         return; // Skip execution this frame

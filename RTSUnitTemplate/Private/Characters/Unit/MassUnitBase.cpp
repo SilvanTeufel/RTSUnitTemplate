@@ -44,13 +44,6 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	}
 
 	
-	SelectionIcon = CreateDefaultSubobject<USelectionDecalComponent>(TEXT("SelectionIcon"));
-
-	if (SelectionIcon)
-	{
-		SelectionIcon->SetupAttachment(RootComponent);
-	}
-
 	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
 	HealthWidgetComp->SetupAttachment(RootComponent);
 	HealthWidgetComp->SetVisibility(true);
@@ -1726,17 +1719,6 @@ void AMassUnitBase::Multicast_UpdateISMInstanceTransform_Implementation(int32 In
 	}
 
 	
-	if (SelectionIcon && !SelectionIcon->bHiddenInGame)
-	{
-		// Setze die Welt-Position des Decals auf die neue Welt-Position der Instanz.
-		// Die Rotation des Decals muss nicht geändert werden, da es immer nach unten projiziert.
-		FVector NewLocation = NewTransform.GetLocation();
-	
-		if (IsFlying)
-			NewLocation.Z = NewLocation.Z-FlyHeight;
-		
-		SelectionIcon->SetWorldLocation(NewLocation);
-	}
 }
 
 
