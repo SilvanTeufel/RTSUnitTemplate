@@ -59,13 +59,20 @@ void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, fl
 	const float ScreenGapLen = FMath::Max(0.f, GapLen * Scale);
 
 	float Traveled = 0.f;
+	FLinearColor LineColor(Color);
+	LineColor.A = bUseTransparency ? SelectionAlpha : (Color.A / 255.f);
+
 	while (Traveled < TotalScreenLen)
 	{
 		const float ThisDash = FMath::Min(ScreenDashLen, TotalScreenLen - Traveled);
 		const FVector2D SegStart = ScreenStart + StepDir * Traveled;
 		const FVector2D SegEnd = ScreenStart + StepDir * (Traveled + ThisDash);
 
-		DrawLine(SegStart.X, SegStart.Y, SegEnd.X, SegEnd.Y, Color, Thickness);
+		FCanvasLineItem LineItem(SegStart, SegEnd);
+		LineItem.LineThickness = Thickness;
+		LineItem.SetColor(LineColor);
+		LineItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(LineItem);
 
 		Traveled += ThisDash + ScreenGapLen;
 	}
@@ -90,34 +97,51 @@ void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor
 	FVector ZOff(0, 0, 15.f);
 	if (!PC->ProjectWorldLocationToScreen(Location + ZOff, ScreenCenter)) return;
     
-	// Wir nehmen an, dass der Kreis flach auf dem Boden liegt (Yaw=0)
 	PC->ProjectWorldLocationToScreen(Location + ZOff + FVector(Radius, 0, 0), ScreenAxisX);
 	PC->ProjectWorldLocationToScreen(Location + ZOff + FVector(0, Radius, 0), ScreenAxisY);
 
 	FVector2D VecX = ScreenAxisX - ScreenCenter;
 	FVector2D VecY = ScreenAxisY - ScreenCenter;
 
+	// Size Culling
+	if (VecX.SizeSquared() < 16.f && VecY.SizeSquared() < 16.f) return;
+
 	const int32 Segments = (InSegments > 0) ? InSegments : 16;
 	const float AngleStep = 2.0f * PI / Segments;
+	
+	float CosStep, SinStep;
+	FMath::SinCos(&SinStep, &CosStep, AngleStep);
+	
+	float CosCurrent = 1.0f;
+	float SinCurrent = 0.0f;
+
 	FVector2D PrevPoint;
 	bool bPrevValid = false;
 
 	float ThicknessToUse = (Thickness < 0.f) ? ClickIndicatorThickness : Thickness;
 
+	FLinearColor LineColor(Color);
+	LineColor.A = bUseTransparency ? SelectionAlpha : (Color.A / 255.f);
+
 	for (int32 i = 0; i <= Segments; i++)
 	{
-		float Angle = i * AngleStep;
-		float CosA = FMath::Cos(Angle);
-		float SinA = FMath::Sin(Angle);
-        
-		FVector2D ScreenPoint = ScreenCenter + (CosA * VecX) + (SinA * VecY);
+		FVector2D ScreenPoint = ScreenCenter + (CosCurrent * VecX) + (SinCurrent * VecY);
 
 		if (bPrevValid)
 		{
-			DrawLine(PrevPoint.X, PrevPoint.Y, ScreenPoint.X, ScreenPoint.Y, Color, ThicknessToUse);
+			FCanvasLineItem LineItem(PrevPoint, ScreenPoint);
+			LineItem.LineThickness = ThicknessToUse;
+			LineItem.SetColor(LineColor);
+			LineItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(LineItem);
 		}
 		PrevPoint = ScreenPoint;
 		bPrevValid = true;
+
+		float NextCos = CosCurrent * CosStep - SinCurrent * SinStep;
+		float NextSin = SinCurrent * CosStep + CosCurrent * SinStep;
+		CosCurrent = NextCos;
+		SinCurrent = NextSin;
 	}
 }
 
@@ -308,6 +332,10 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 	FVector2D VecX = ScreenAxisX - ScreenCenter;
 	FVector2D VecY = ScreenAxisY - ScreenCenter;
 
+	// --- OPTIMIERUNG: Size Culling ---
+	// Wenn der Kreis kleiner als ein paar Pixel ist, abbrechen
+	if (VecX.SizeSquared() < 16.f && VecY.SizeSquared() < 16.f) return;
+
 	// 2. Occlusion-Vorbereitung
 	float CamAngleRad = 0.f;
 	bool bOcclusionActive = bEnableOcclusion && !bDisableOcclusion;
@@ -329,14 +357,19 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 	float RotOffset = (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) 
 					  ? GetWorld()->GetTimeSeconds() * FMath::DegreesToRadians(RotatingCircleSpeed) : 0.0f;
 
+	// --- OPTIMIERUNG: Iterative Trigonometrie Vorbereitung ---
+	float CosStep, SinStep;
+	FMath::SinCos(&SinStep, &CosStep, AngleStep);
+    
+	float CosCurrent, SinCurrent;
+	FMath::SinCos(&SinCurrent, &CosCurrent, RotOffset);
+
 	FVector2D PrevPoint;
 	float PrevAlphaMult = 0.f;
 	bool bPrevValid = false;
 
 	for (int32 i = 0; i <= Segments; i++) {
-		float CurrentAngle = (i * AngleStep) + RotOffset;
-		float WorldAngle = CurrentAngle + FMath::DegreesToRadians(Rotation.Yaw);
-
+		float WorldAngle = (i * AngleStep) + RotOffset + FMath::DegreesToRadians(Rotation.Yaw);
 		float AlphaMult = 1.0f;
 
 		// 3. Occlusion Fade (Exponential)
@@ -345,64 +378,61 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 			const float MaxOccl = FMath::DegreesToRadians(120.0f); 
 			const float FadeZone = FMath::DegreesToRadians(30.0f); // 30 Grad Übergangszone
             
-			if (Diff > MaxOccl) {
-				AlphaMult = 0.0f;
-			} else if (Diff > MaxOccl - FadeZone) {
+			if (Diff > MaxOccl) AlphaMult = 0.0f;
+			else if (Diff > MaxOccl - FadeZone) {
 				float T = 1.0f - (Diff - (MaxOccl - FadeZone)) / FadeZone;
-				AlphaMult *= (T * T); // Quadratischer Abfall für weichen Übergang
+				AlphaMult *= (T * T);
 			}
 		}
 
 		// 4. Clipping Fade für Partial Circle (Exponential)
 		if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle) {
 			float Deg = FMath::Fmod(FMath::RadiansToDegrees(i * AngleStep), 360.0f);
-			const float MaxDeg = 240.0f;
-			const float FadeZoneDeg = 40.0f;
-            
-			if (Deg > MaxDeg) {
-				AlphaMult = 0.0f;
-			} else if (Deg > MaxDeg - FadeZoneDeg) {
-				float T = 1.0f - (Deg - (MaxDeg - FadeZoneDeg)) / FadeZoneDeg;
+			if (Deg > 240.0f) AlphaMult = 0.0f;
+			else if (Deg > 200.0f) {
+				float T = 1.0f - (Deg - 200.0f) / 40.0f;
 				AlphaMult *= (T * T);
 			}
 		}
 
-		// 5. Screen-Space Berechnung (Kein ProjectWorldLocationToScreen mehr!)
+		// 5. Screen-Space Berechnung
 		float CosA, SinA;
 		if (SelectionStyle == ESelectionIndicatorStyle::Octagon || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) {
-			// Octagon-Interpolation
 			float OctStep = 2.0f * PI / 8.0f;
-			float LocalProgress = (i * AngleStep); 
-			int32 CornerIdx = FMath::FloorToInt(LocalProgress / OctStep);
+			int32 CornerIdx = FMath::FloorToInt((i * AngleStep) / OctStep);
 			float A1 = CornerIdx * OctStep + RotOffset;
 			float A2 = (CornerIdx + 1) * OctStep + RotOffset;
-            
-			float Alpha = (CurrentAngle - A1) / (A2 - A1);
+			float Alpha = ((i * AngleStep) + RotOffset - A1) / (A2 - A1);
 			CosA = FMath::Lerp(FMath::Cos(A1), FMath::Cos(A2), Alpha);
 			SinA = FMath::Lerp(FMath::Sin(A1), FMath::Sin(A2), Alpha);
 		} else {
-			CosA = FMath::Cos(CurrentAngle);
-			SinA = FMath::Sin(CurrentAngle);
+			CosA = CosCurrent;
+			SinA = SinCurrent;
 		}
 
 		FVector2D ScreenPoint = ScreenCenter + (CosA * VecX) + (SinA * VecY);
 
 		// 6. Zeichnen mit gemitteltem Alpha/Thickness
-		if (bPrevValid) {
+		if (bPrevValid && (AlphaMult > 0.001f || PrevAlphaMult > 0.001f)) {
 			float AvgAlpha = (AlphaMult + PrevAlphaMult) * 0.5f;
-			if (AvgAlpha > 0.001f) {
-				FCanvasLineItem LineItem(PrevPoint, ScreenPoint);
-				LineItem.LineThickness = Thickness * AvgAlpha;
-				FLinearColor LineColor = Color;
-				LineColor.A *= AvgAlpha;
-				LineItem.SetColor(LineColor);
-				LineItem.BlendMode = SE_BLEND_Translucent;
-				Canvas->DrawItem(LineItem);
-			}
+			FCanvasLineItem LineItem(PrevPoint, ScreenPoint);
+			LineItem.LineThickness = Thickness * AvgAlpha;
+			FLinearColor LineColor = Color;
+			LineColor.A *= AvgAlpha;
+			LineItem.SetColor(LineColor);
+			LineItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(LineItem);
 		}
+		
 		PrevPoint = ScreenPoint; 
 		PrevAlphaMult = AlphaMult;
 		bPrevValid = true;
+
+		// --- OPTIMIERUNG: Berechne nächsten Cos/Sin über Rotation-Matrix ---
+		float NextCos = CosCurrent * CosStep - SinCurrent * SinStep;
+		float NextSin = SinCurrent * CosStep + CosCurrent * SinStep;
+		CosCurrent = NextCos;
+		SinCurrent = NextSin;
 	}
 }
 
@@ -786,9 +816,9 @@ void AHUDBase::MoveUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 		if (Units[i]->RunLocationArray.Num()) {
 
 			FVector ActorLocation = Units[i]->GetActorLocation();
-			const float Distance = sqrt((ActorLocation.X-Units[i]->RunLocation.X)*(ActorLocation.X-Units[i]->RunLocation.X)+(ActorLocation.Y-Units[i]->RunLocation.Y)*(ActorLocation.Y-Units[i]->RunLocation.Y));//FVector::Distance(ActorLocation, Units[i]->RunLocation);
+			const float DistSq = FVector::DistSquared2D(ActorLocation, Units[i]->RunLocation);
 
-			if (Distance <= Units[i]->MovementAcceptanceRadius) { 
+			if (DistSq <= FMath::Square(Units[i]->MovementAcceptanceRadius)) { 
 				if (Units[i]->RunLocationArrayIterator < Units[i]->RunLocationArray.Num()) {
 					
 					Units[i]->RunLocation = Units[i]->RunLocationArray[Units[i]->RunLocationArrayIterator];
@@ -822,10 +852,10 @@ void AHUDBase::IsSpeakingUnitClose(TArray <AUnitBase*> Units, TArray <ASpeakingU
 				{
 					const FVector UnitLocation = Units[u]->GetActorLocation();
 					const FVector SpeakingUnitLocation = SpeakUnits[i]->GetActorLocation();
-					const float MinSpeakDistance = SpeakUnits[i]->MinSpeakDistance;
-					const float Distance = sqrt((UnitLocation.X-SpeakingUnitLocation.X)*(UnitLocation.X-SpeakingUnitLocation.X)+(UnitLocation.Y-SpeakingUnitLocation.Y)*(UnitLocation.Y-SpeakingUnitLocation.Y));
+					const float MinSpeakDistSq = FMath::Square(SpeakUnits[i]->MinSpeakDistance);
+					const float DistSq = FVector::DistSquared2D(UnitLocation, SpeakingUnitLocation);
 					
-					if(Distance < MinSpeakDistance && SpeakUnits[i]->SpeechBubble && SpeakUnits[i]->SpeechBubble->WidgetIndex != 2)
+					if(DistSq < MinSpeakDistSq && SpeakUnits[i]->SpeechBubble && SpeakUnits[i]->SpeechBubble->WidgetIndex != 2)
 					{
 						SpeakUnits[i]->SpeechBubble->WidgetIndex = 1;
 						SpeakUnits[i]->SpeechBubble->WidgetSwitcher->SetActiveWidgetIndex(1);
@@ -849,10 +879,9 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 		if (Units[i]->RunLocationArray.Num()) {
 
 			FVector ActorLocation = Units[i]->GetActorLocation();
+			const float DistSq = FVector::DistSquared2D(ActorLocation, Units[i]->RunLocation);
 
-			const float Distance = sqrt((ActorLocation.X-Units[i]->RunLocation.X)*(ActorLocation.X-Units[i]->RunLocation.X)+(ActorLocation.Y-Units[i]->RunLocation.Y)*(ActorLocation.Y-Units[i]->RunLocation.Y));//FVector::Distance(ActorLocation, Units[i]->RunLocation);
-
-			if (Distance <= Units[i]->MovementAcceptanceRadius) { // || DistanceY <= Units[i]->StopRunToleranceY 
+			if (DistSq <= FMath::Square(Units[i]->MovementAcceptanceRadius)) { // || DistanceY <= Units[i]->StopRunToleranceY 
 				if (Units[i]->RunLocationArrayIterator < Units[i]->RunLocationArray.Num()) {
 					
 					Units[i]->RunLocation = Units[i]->RunLocationArray[Units[i]->RunLocationArrayIterator];
