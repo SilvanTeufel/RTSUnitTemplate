@@ -51,7 +51,7 @@ void AVisibilityFunctionalTest::StartTest()
 		return;
 	}
 
-	auto RunStep = [this](bool bMyTeam, bool bVisibleEnemy, bool bOnViewport, bool bExpected, const FString& StepName)
+	auto RunStep = [this](bool bMyTeam, bool bVisibleEnemy, bool bOnViewport, bool bExpectedActor, bool bExpectedInherent, const FString& StepName)
 	{
 		// Reset state
 		TestUnit->IsMyTeam = bMyTeam;
@@ -61,13 +61,23 @@ void AVisibilityFunctionalTest::StartTest()
 		TestUnit->EnableFog = true;
 		TestUnit->bIsInvisible = false;
 
-		bool bActual = TestUnit->ComputeLocalVisibility();
+		// 1) Actor check (Local visibility including Viewport on Client)
+		bool bActualActor = TestUnit->ComputeLocalVisibility();
 		
-		FString LogMsg = FString::Printf(TEXT("%s: MyTeam=%d, VisEnemy=%d, Viewport=%d | Result=%d (Expected=%d)"), 
-			*StepName, bMyTeam, bVisibleEnemy, bOnViewport, bActual, bExpected);
+		FString LogMsgActor = FString::Printf(TEXT("%s (Actor): MyTeam=%d, VisEnemy=%d, Viewport=%d | Result=%d (Expected=%d)"), 
+			*StepName, bMyTeam, bVisibleEnemy, bOnViewport, bActualActor, bExpectedActor);
 		
-		AddInfo(LogMsg);
-		AssertEqual_Bool(bActual, bExpected, LogMsg);
+		AddInfo(LogMsgActor);
+		AssertEqual_Bool(bActualActor, bExpectedActor, LogMsgActor);
+
+		// 2) Inherent check (Visibility without Viewport, used for replication/ISMs)
+		bool bActualInherent = TestUnit->ComputeInherentVisibility();
+		
+		FString LogMsgInherent = FString::Printf(TEXT("%s (Inherent): MyTeam=%d, VisEnemy=%d, Viewport=%d | Result=%d (Expected=%d)"), 
+			*StepName, bMyTeam, bVisibleEnemy, bOnViewport, bActualInherent, bExpectedInherent);
+		
+		AddInfo(LogMsgInherent);
+		AssertEqual_Bool(bActualInherent, bExpectedInherent, LogMsgInherent);
 	};
 
 	// Log NetMode for context
@@ -83,19 +93,21 @@ void AVisibilityFunctionalTest::StartTest()
 	AddInfo(FString::Printf(TEXT("Test Environment NetMode: %s"), *NetModeStr));
 
 	// Scenario 1: Own Team, In Viewport -> Always Visible
-	RunStep(true, false, true, true, TEXT("Step 1 (Own Team, In Viewport)"));
+	RunStep(true, false, true, true, true, TEXT("Step 1 (Own Team, In Viewport)"));
 
 	// Scenario 2: Enemy, In Fog -> Invisible
-	RunStep(false, false, true, false, TEXT("Step 2 (Enemy in Fog)"));
+	RunStep(false, false, true, false, false, TEXT("Step 2 (Enemy in Fog)"));
 
 	// Scenario 3: Enemy, Detected -> Visible
-	RunStep(false, true, true, true, TEXT("Step 3 (Detected Enemy)"));
+	RunStep(false, true, true, true, true, TEXT("Step 3 (Detected Enemy)"));
 
-	// Scenario 4: Own Team, Off-screen -> Context dependent
-	// On Server/Standalone: Should remain visible (bForceHidden = false)
-	// On Client: Should be hidden (Optimization)
-	bool bExpectedOffScreen = (GetWorld()->GetNetMode() < NM_Client);
-	RunStep(true, false, false, bExpectedOffScreen, TEXT("Step 4 (Off-screen)"));
+	// Scenario 4: Own Team, Off-screen
+	// Actor (SkelMesh) on Client should be hidden (optimization), 
+	// but Inherent (ISMs) should stay visible (to avoid server-viewport-poisoning).
+	bool bExpectedActorOffScreen = (GetWorld()->GetNetMode() < NM_Client);
+	bool bExpectedInherentOffScreen = true; // Inherent visibility should ignore viewport
+	
+	RunStep(true, false, false, bExpectedActorOffScreen, bExpectedInherentOffScreen, TEXT("Step 4 (Off-screen)"));
 
 	FinishTest(EFunctionalTestResult::Succeeded, TEXT("Visibility Functional Test completed."));
 }

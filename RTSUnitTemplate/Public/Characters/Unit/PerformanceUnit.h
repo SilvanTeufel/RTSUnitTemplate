@@ -216,6 +216,7 @@ public:
 	virtual void SetActorVisibility(bool bVisible) override { SetCharacterVisibility(bVisible); }
 	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) override;
 	virtual bool ComputeLocalVisibility() const override;
+	virtual bool ComputeInherentVisibility() const override;
 	// End IMassVisibilityInterface
 	
 };

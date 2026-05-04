@@ -153,22 +153,26 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 bVisible = !bForceHidden;
             }
 
-            // Dirty-Flag check: skip entities whose transform hasn't changed and whose visibility is unchanged
-            if (!CharFrag.bTransformDirty && !VisualFrag.bUseSkeletalMovement)
+            // Check if visibility state has changed to force an update
+            bool bVisibilityChanged = false;
+            for (const FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances)
             {
-                bool bVisibilityChanged = false;
-                for (const FMassUnitVisualInstance& Instance : VisualFrag.VisualInstances)
+                if (Instance.bWasVisible != bVisible)
                 {
-                    if (Instance.bWasVisible != bVisible)
-                    {
-                        bVisibilityChanged = true;
-                        break;
-                    }
+                    bVisibilityChanged = true;
+                    break;
                 }
-                if (!bVisibilityChanged)
-                {
-                    continue;
-                }
+            }
+
+            // Dirty-Flag check: skip entities whose transform hasn't changed and whose visibility is unchanged
+            if (!CharFrag.bTransformDirty && !VisualFrag.bUseSkeletalMovement && !bVisibilityChanged)
+            {
+                continue;
+            }
+
+            if (bVisibilityChanged)
+            {
+                CharFrag.bTransformDirty = true;
             }
 
             // Reset dirty flag after processing

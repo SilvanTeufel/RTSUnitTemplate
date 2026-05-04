@@ -19,4 +19,5 @@ public:
 	virtual void SetActorVisibility(bool bVisible) = 0;
 	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) = 0;
 	virtual bool ComputeLocalVisibility() const = 0;
+	virtual bool ComputeInherentVisibility() const = 0;
 };

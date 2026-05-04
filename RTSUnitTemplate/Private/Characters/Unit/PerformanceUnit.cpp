@@ -132,7 +132,7 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 			FMassEntityHandle Entity = MassActorBindingComponent->GetEntityHandle();
 			if (Entity.IsValid())
 			{
-				VisualManager->SetUnitVisualVisible(Entity, desiredVisibility);
+				VisualManager->SetUnitVisualVisible(Entity, ComputeInherentVisibility());
 			}
 		}
 	}
@@ -141,20 +141,7 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 
 void APerformanceUnit::VisibilityTickFog()
 {
-	if (!IsInitialized)
-	{
-		SetCharacterVisibility(false);
-		return;
-	}
-
-	if (IsMyTeam)
-	{
-		SetCharacterVisibility(IsOnViewport);
-	}else
-	{
-		if(IsOnViewport)SetCharacterVisibility(IsVisibleEnemy);
-		else SetCharacterVisibility(false);
-	}
+	SetCharacterVisibility(ComputeLocalVisibility());
 }
 
 
@@ -687,9 +674,8 @@ ENetMode APerformanceUnit::GetUnitNetMode() const
 	return GetNetMode();
 }
 
-bool APerformanceUnit::ComputeLocalVisibility() const
+bool APerformanceUnit::ComputeInherentVisibility() const
 {
-	// If the unit is not initialized (e.g., it is loaded in a transport), it should always be invisible.
 	if (!IsInitialized)
 	{
 		return false;
@@ -700,7 +686,14 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 		return false;
 	}
 
-	const bool bFogVisible = (!EnableFog || IsVisibleEnemy || IsMyTeam);
+	const bool bResult = (!EnableFog || IsVisibleEnemy || IsMyTeam);
+	
+	return bResult;
+}
+
+bool APerformanceUnit::ComputeLocalVisibility() const
+{
+	const bool bInherent = ComputeInherentVisibility();
 
 	// Viewport optimization is for local rendering only.
 	// On a Server (Listen or Dedicated), we ignore it for this calculation 
@@ -708,10 +701,12 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 	const ENetMode CurrentNetMode = GetUnitNetMode();
 	if (CurrentNetMode < NM_Client)
 	{
-		return bFogVisible;
+		return bInherent;
 	}
 
-	return IsOnViewport && bFogVisible;
+	const bool bResult = IsOnViewport && bInherent;
+	
+	return bResult;
 }
 
 void APerformanceUnit::StopNiagaraComponent(UNiagaraComponent* NC, float FadeTime)

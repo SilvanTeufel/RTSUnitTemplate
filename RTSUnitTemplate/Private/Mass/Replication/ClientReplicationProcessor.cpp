@@ -298,7 +298,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							EffectList[EntityIdx].bPulsateEnabled = (Active & (1 << 0)) != 0;
 							EffectList[EntityIdx].bRotationEnabled = (Active & (1 << 1)) != 0;
 							EffectList[EntityIdx].bOscillationEnabled = (Active & (1 << 2)) != 0;
-							EffectList[EntityIdx].bForceHidden = (UseItem->ReplicationBits & UnitReplicationBits::VE_bForceHidden) != 0;
 						}
 
 						// Move Target

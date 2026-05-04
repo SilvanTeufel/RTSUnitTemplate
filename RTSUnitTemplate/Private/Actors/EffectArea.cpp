@@ -222,7 +222,7 @@ void AEffectArea::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 	}
 }
 
-bool AEffectArea::ComputeLocalVisibility() const
+bool AEffectArea::ComputeInherentVisibility() const
 {
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
 	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
@@ -249,7 +249,14 @@ bool AEffectArea::ComputeLocalVisibility() const
 		return false;
 	}
 
-	return VisibleByTeam && VisibleByFog;
+	const bool bResult = VisibleByTeam && VisibleByFog;
+
+	return bResult;
+}
+
+bool AEffectArea::ComputeLocalVisibility() const
+{
+	return ComputeInherentVisibility();
 }
 
 void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)

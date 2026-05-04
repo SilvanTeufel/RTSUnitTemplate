@@ -82,8 +82,20 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 {
 	if (!World) return;
 
-	APlayerController* PC = World->GetFirstPlayerController();
-	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+	APlayerController* LocalPC = nullptr;
+	if (World->GetNetMode() != NM_DedicatedServer)
+	{
+		for (FConstPlayerControllerIterator Iterator = World->GetPlayerControllerIterator(); Iterator; ++Iterator)
+		{
+			APlayerController* PC = Iterator->Get();
+			if (PC && PC->IsLocalController())
+			{
+				LocalPC = PC;
+				break;
+			}
+		}
+	}
+	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(LocalPC);
 	
 	//const bool bIsClient = (World->GetNetMode() != NM_DedicatedServer);
 	const float DeltaTime = Context.GetDeltaTimeSeconds();
@@ -140,15 +152,14 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 					// 2) Update Viewport Visibility
 					FVector2D ScreenPosition;
+					bool bCalculatedOnViewport = false;
 					if (UGameplayStatics::ProjectWorldToScreen(CustomPC, Location, ScreenPosition))
 					{
-						Vis.bIsOnViewport = (ScreenPosition.X >= -Vis.VisibilityOffset && ScreenPosition.X <= (float)ViewportSizeX + Vis.VisibilityOffset &&
+						bCalculatedOnViewport = (ScreenPosition.X >= -Vis.VisibilityOffset && ScreenPosition.X <= (float)ViewportSizeX + Vis.VisibilityOffset &&
 											 ScreenPosition.Y >= -Vis.VisibilityOffset && ScreenPosition.Y <= (float)ViewportSizeY + Vis.VisibilityOffset);
 					}
-					else
-					{
-						Vis.bIsOnViewport = false;
-					}
+					
+					Vis.bIsOnViewport = bCalculatedOnViewport;
 
 					// 1.5) Update Fog Visibility
 					if (Vis.bIsMyTeam || !Vis.bAffectedByFogOfWar)
@@ -185,10 +196,18 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					{
 						Vis.bIsVisibleEnemy = false;
 					}
+
+					if (Unit)
+					{
+						Unit->IsOnViewport = bCalculatedOnViewport;
+						Unit->IsMyTeam = (LocalTeamId == StatsList[i].TeamId || LocalTeamId == 0);
+						Unit->IsVisibleEnemy = bIsVisibleByFog;
+					}
 				}
-				else
+				else if (World->GetNetMode() == NM_DedicatedServer)
 				{
-					// On Server (Dedicated) or non-local controller, we should ensure it's visible by default for viewport
+					// On Server (Dedicated), we should ensure it's visible by default for viewport
+					// This prevents the server's viewport from affecting clients if this fragment is ever shared or replicated.
 					Vis.bIsOnViewport = true;
 					Vis.bIsMyTeam = true; 
 					Vis.bIsVisibleEnemy = true;
@@ -210,9 +229,15 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			
 			if (Unit)
 			{
-				Unit->IsMyTeam = Vis.bIsMyTeam;
-				Unit->IsOnViewport = Vis.bIsOnViewport;
-				Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
+				// We already updated Unit properties above for local controllers, 
+				// but we ensure it's synced here for all cases if needed.
+				// However, if we are not a local controller, we should be careful.
+				if (!(CustomPC && CustomPC->IsLocalController()))
+				{
+					Unit->IsMyTeam = Vis.bIsMyTeam;
+					Unit->IsOnViewport = Vis.bIsOnViewport;
+					Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
+				}
 				
 				if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
 				{

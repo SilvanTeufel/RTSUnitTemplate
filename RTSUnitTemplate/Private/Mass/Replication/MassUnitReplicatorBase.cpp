@@ -228,10 +228,6 @@ bool UMassUnitReplicatorBase::UpdateReplicationBits(FUnitReplicationItem& Item, 
     {
         SetBit(UnitReplicationBits::Move_bHasTarget, true); 
     }
-    if (const FMassVisualEffectFragment* VE = EM.GetFragmentDataPtr<FMassVisualEffectFragment>(EH))
-    {
-        SetBit(UnitReplicationBits::VE_bForceHidden, VE->bForceHidden);
-    }
     if (const FEffectAreaImpactFragment* Impact = EM.GetFragmentDataPtr<FEffectAreaImpactFragment>(EH))
     {
         SetBit(UnitReplicationBits::EA_bImpactVFXTriggered, Impact->bImpactVFXTriggered);

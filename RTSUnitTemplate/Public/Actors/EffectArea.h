@@ -232,6 +232,7 @@ public:
 	virtual void SetActorVisibility(bool bVisible) override;
 	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) override;
 	virtual bool ComputeLocalVisibility() const override;
+	virtual bool ComputeInherentVisibility() const override;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void ImpactEvent(AUnitBase* Unit);

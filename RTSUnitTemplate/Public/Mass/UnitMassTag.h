@@ -541,13 +541,13 @@ struct FMassVisibilityFragment : public FMassFragment
 {
 	GENERATED_BODY()
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	bool bIsMyTeam = false;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	bool bIsOnViewport = false;
 
-	UPROPERTY()
+	UPROPERTY(Transient)
 	bool bIsVisibleEnemy = false;
 
 	UPROPERTY()
