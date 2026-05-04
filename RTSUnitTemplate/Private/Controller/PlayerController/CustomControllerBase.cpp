@@ -3084,12 +3084,21 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 	if (!ensure(World)) return;
 
 	// --- Suche/Cache Logik ---
+	if (CachedMinimapActor && CachedMinimapActor->TeamId != SelectableTeamId)
+	{
+		CachedMinimapActor = nullptr;
+	}
+
 	if (!CachedMinimapActor)
 	{
 		for (TActorIterator<AMinimapActor> It(World); It; ++It)
 		{
-			CachedMinimapActor = *It;
-			break; // Nur den ersten nehmen
+			if (It->TeamId == SelectableTeamId)
+			{
+				CachedMinimapActor = *It;
+				UE_LOG(LogTemp, Log, TEXT("[CustomController] Found matching MinimapActor for Team %d"), SelectableTeamId);
+				break;
+			}
 		}
 
 		if (!CachedMinimapActor)
@@ -3321,6 +3330,9 @@ void ACustomControllerBase::Server_SetPendingTeam_Implementation(int32 TeamId)
 		// server's authoritative version of the subsystem.
 		TeamSubsystem->SetTeamForPlayer(this, TeamId);
 	}
+
+	// Reset Minimap Cache for new team
+	CachedMinimapActor = nullptr;
 }
 
 void ACustomControllerBase::HandleAttackMovePressed()

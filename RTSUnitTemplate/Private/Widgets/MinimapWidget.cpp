@@ -12,6 +12,7 @@
 void UMinimapWidget::InitializeForTeam(int32 TeamId)
 {
     PendingTeamId = TeamId;
+	UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] InitializeForTeam called with TeamId: %d"), TeamId);
     
     // --- 1. Find the correct MinimapActor for this player ---
     if (!GetWorld()) return;
@@ -22,13 +23,20 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
     TArray<AActor*> FoundActors;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AMinimapActor::StaticClass(), FoundActors);
 
+	UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] Found %d MinimapActors in world"), FoundActors.Num());
+
     for (AActor* Actor : FoundActors)
     {
         AMinimapActor* MinimapActor = Cast<AMinimapActor>(Actor);
-        if (MinimapActor && MinimapActor->TeamId == PlayerTeamId)
+        if (MinimapActor)
         {
-            MinimapActorRef = MinimapActor;
-            break; // Found our actor, no need to search further
+			UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] Checking Actor: %s, ActorTeamId: %d (Looking for: %d)"), *MinimapActor->GetName(), MinimapActor->TeamId, PlayerTeamId);
+			if (MinimapActor->TeamId == PlayerTeamId)
+			{
+				MinimapActorRef = MinimapActor;
+				UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] Successfully matched MinimapActor: %s"), *MinimapActor->GetName());
+				break; // Found our actor, no need to search further
+			}
         }
     }
     if (MinimapActorRef && MinimapImage)
@@ -76,6 +84,7 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
 
 void UMinimapWidget::RetryInitialize()
 {
+	UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] RetryInitialize called for PendingTeamId: %d"), PendingTeamId);
     InitializeForTeam(PendingTeamId);
 }
 
