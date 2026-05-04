@@ -49,8 +49,6 @@ void AMinimapActor::BeginPlay()
 {
 	Super::BeginPlay();
 
-	UE_LOG(LogTemp, Log, TEXT("[MinimapActor] BeginPlay: Name=%s, TeamId=%d, Role=%d"), *GetName(), TeamId, (int32)GetLocalRole());
-
 	if (MapBoundsComponent)
     {
         const FVector Origin = MapBoundsComponent->GetComponentLocation();
@@ -178,7 +176,6 @@ bool AMinimapActor::TryGetMaterialColor(const FHitResult& Hit, FLinearColor& Out
 
 void AMinimapActor::CaptureMapTopography()
 {
-	UE_LOG(LogTemp, Log, TEXT("[MinimapActor] CaptureMapTopography Start: Name=%s, TeamId=%d"), *GetName(), TeamId);
     UWorld* World = GetWorld();
     if (!World) return;
 
@@ -543,8 +540,8 @@ void AMinimapActor::CaptureMapTopography()
         reinterpret_cast<uint8*>(Pixels.GetData())
     );
 
-    UE_LOG(LogTemp, Log, TEXT("[MinimapActor] CaptureMapTopography Finished: Name=%s, TeamId=%d, TexSize=%d, Height: %.0f - %.0f"),
-        *GetName(), TeamId, TexSize, MinHeight, MaxHeight);
+    UE_LOG(LogTemp, Log, TEXT("Minimap topography captured via LineTrace (%dx%d, Height: %.0f - %.0f)"),
+        TexSize, TexSize, MinHeight, MaxHeight);
 }
 
 void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -558,7 +555,6 @@ void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 void AMinimapActor::InitMinimapTexture()
 {
-	UE_LOG(LogTemp, Log, TEXT("[MinimapActor] InitMinimapTexture: Name=%s, TeamId=%d"), *GetName(), TeamId);
     // Create the transient texture that will be updated and displayed in UMG.
     MinimapTexture = UTexture2D::CreateTransient(MinimapTexSize, MinimapTexSize, PF_B8G8R8A8);
     check(MinimapTexture);
@@ -581,7 +577,6 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     const TArray<float>& FogRadii,
     const TArray<uint8>& UnitTeamIds)
 {
-	UE_LOG(LogTemp, Log, TEXT("[MinimapActor] MulticastUpdate: Name=%s, ActorTeamId=%d, UnitCount=%d"), *GetName(), TeamId, UnitRefs.Num());
     if (!MinimapTexture || MinimapPixels.Num() == 0) return;
 
     // --- Pass 1: Clear the entire map with the Fog Color (apply FogOpacity) ---

@@ -12,7 +12,6 @@
 void UMinimapWidget::InitializeForTeam(int32 TeamId)
 {
     PendingTeamId = TeamId;
-	UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] InitializeForTeam called with TeamId: %d"), TeamId);
     
     // --- 1. Find the correct MinimapActor for this player ---
     if (!GetWorld()) return;
@@ -23,18 +22,14 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
     TArray<AActor*> FoundActors;
     UGameplayStatics::GetAllActorsOfClass(GetWorld(), AMinimapActor::StaticClass(), FoundActors);
 
-	UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] Found %d MinimapActors in world"), FoundActors.Num());
-
     for (AActor* Actor : FoundActors)
     {
         AMinimapActor* MinimapActor = Cast<AMinimapActor>(Actor);
         if (MinimapActor)
         {
-			UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] Checking Actor: %s, ActorTeamId: %d (Looking for: %d)"), *MinimapActor->GetName(), MinimapActor->TeamId, PlayerTeamId);
 			if (MinimapActor->TeamId == PlayerTeamId)
 			{
 				MinimapActorRef = MinimapActor;
-				UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] Successfully matched MinimapActor: %s"), *MinimapActor->GetName());
 				break; // Found our actor, no need to search further
 			}
         }
@@ -60,11 +55,9 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
             {
                 GetWorld()->GetTimerManager().ClearTimer(RetryTimerHandle);
             }
-            UE_LOG(LogTemp, Log, TEXT("MinimapWidget successfully initialized for Team ID: %d"), PlayerTeamId);
         }
         else
         {
-             UE_LOG(LogTemp, Warning, TEXT("MinimapWidget found actor but textures or MID not ready for Team ID: %d. Retrying..."), PlayerTeamId);
              if (GetWorld() && !RetryTimerHandle.IsValid())
              {
                  GetWorld()->GetTimerManager().SetTimer(RetryTimerHandle, this, &UMinimapWidget::RetryInitialize, 0.5f, true);
@@ -73,8 +66,6 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("MinimapWidget failed to find MinimapActor for Team ID %d or MinimapImage is not bound! Retrying..."), PlayerTeamId);
-        
         if (GetWorld() && !RetryTimerHandle.IsValid())
         {
             GetWorld()->GetTimerManager().SetTimer(RetryTimerHandle, this, &UMinimapWidget::RetryInitialize, 0.5f, true);
@@ -84,7 +75,6 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
 
 void UMinimapWidget::RetryInitialize()
 {
-	UE_LOG(LogTemp, Log, TEXT("[MinimapWidget] RetryInitialize called for PendingTeamId: %d"), PendingTeamId);
     InitializeForTeam(PendingTeamId);
 }
 

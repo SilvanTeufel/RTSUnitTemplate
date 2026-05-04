@@ -60,7 +60,7 @@ void ACustomControllerBase::BeginPlay()
 
 void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AActor*>& AllUnits)
 {
-	UE_LOG(LogTemp, Log, TEXT("Multi_SetMyTeamUnits: Starte Filterung für %d Einheiten (TeamId: %d)"), AllUnits.Num(), SelectableTeamId);
+	UE_LOG(LogTemp, Log, TEXT("Multi_SetMyTeamUnits: Starte Filterung fuer %d Einheiten (TeamId: %d)"), AllUnits.Num(), SelectableTeamId);
 
 	if (!IsLocalController()) return;
 
@@ -3096,7 +3096,6 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 			if (It->TeamId == SelectableTeamId)
 			{
 				CachedMinimapActor = *It;
-				UE_LOG(LogTemp, Log, TEXT("[CustomController] Found matching MinimapActor for Team %d"), SelectableTeamId);
 				break;
 			}
 		}
@@ -3106,7 +3105,6 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 			if (World->GetTimeSeconds() > MinimapSearchEndTime)
 			{
 				bStopMinimapSearch = true;
-				UE_LOG(LogTemp, Warning, TEXT("Kein MinimapActor nach 10 Sek. gefunden. Suche gestoppt."));
 			}
 			return;
 		}
