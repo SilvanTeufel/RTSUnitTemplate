@@ -336,8 +336,10 @@ AUnitClientBubbleInfo::AUnitClientBubbleInfo(const FObjectInitializer& ObjectIni
 
 	// Aktiviere Replikation für diesen Actor
 	bReplicates = true;
+	//bAlwaysRelevant = true;
+	//NetPriority = 1.0f;
 	bAlwaysRelevant = false;
-	NetPriority = 0.5f; // Lower priority to allow important RPCs (like work area updates) to pass through first
+	NetPriority = 0.5f; 
 	// Read desired replication rate (Hz) from CVAR; default 5
 	float Hz = CVarRTS_Bubble_NetUpdateHz.GetValueOnGameThread();
 	SetNetUpdateFrequency(Hz);

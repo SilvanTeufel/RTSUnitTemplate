@@ -62,7 +62,7 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	bUseControllerRotationRoll = false;
 
 	// We replicate now via Mass
-	GetCharacterMovement()->SetIsReplicated(false);
+	//GetCharacterMovement()->SetIsReplicated(false);
 	/*
 	GetCharacterMovement()->bOrientRotationToMovement = true;
 	GetCharacterMovement()->RotationRate = FRotator(0.0f, 600.0f, 0.0f);
@@ -116,16 +116,15 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 
 	bReplicates = true;
+	bAlwaysRelevant = true;
 	SetReplicates(true);
 	SetNetUpdateFrequency(2);
 	SetMinNetUpdateFrequency(1);
 	GetCharacterMovement()->SetIsReplicated(false);
 	GetCapsuleComponent()->SetIsReplicated(false);
-	
-	GetCapsuleComponent()->SetIsReplicated(false);
+
 	GetMesh()->SetIsReplicated(false);
 	ISMComponent->SetIsReplicated(false);
-	
 	NavObstaclePadding = 5.0f;
 	bIsBuilding = false;
 }
