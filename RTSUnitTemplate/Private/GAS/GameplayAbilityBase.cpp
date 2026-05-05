@@ -1029,16 +1029,10 @@ void UGameplayAbilityBase::ApplyActiveUpgradesToUnit(AUnitBase* Unit)
 
 void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMultiplier, float PitchMultiplier)
 {
-	if (!Sound)
-	{
-		return;
-	}
+	if (!Sound) return;
 
 	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
-	if (!Info || !Info->OwnerActor.IsValid())
-	{
-		return;
-	}
+	if (!Info || !Info->OwnerActor.IsValid()) return;
 
 	int32 TeamId = INDEX_NONE;
 	if (const AUnitBase* Unit = Cast<AUnitBase>(Info->OwnerActor.Get()))
@@ -1049,41 +1043,47 @@ void UGameplayAbilityBase::PlayOwnerLocalSound(USoundBase* Sound, float VolumeMu
 	UWorld* World = GetWorld();
 	if (TeamId != INDEX_NONE && World)
 	{
+		APlayerController* TargetPC = nullptr;
+
+		// 1. Try to get the specific instigator from AGASUnit
 		if (const AGASUnit* Unit = Cast<AGASUnit>(Info->AvatarActor.Get()))
 		{
-			if (APlayerController* InitiatorPC = Unit->CurrentInstigatorPC.Get())
-			{
-				if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(InitiatorPC))
-				{
-					if (ExtPC->SelectableTeamId == TeamId)
-					{
-						// If the initiator is an AI agent (ARLAgent), we do not play sounds.
-						if (ExtPC->GetPawn() && ExtPC->GetPawn()->IsA(ARLAgent::StaticClass()))
-						{
-							return;
-						}
+			TargetPC = Unit->CurrentInstigatorPC.Get();
+		}
 
-						if (ExtPC->IsLocalPlayerController())
-						{
-							UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier * ExtPC->GetSoundMultiplier(), PitchMultiplier);
-						}
-						else
-						{
-							ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
-						}
+		// 2. Fallback to ActorInfo's PlayerController (handles possessed units/standard GAS)
+		if (!TargetPC && Info->PlayerController.IsValid())
+		{
+			TargetPC = Info->PlayerController.Get();
+		}
+
+		if (TargetPC)
+		{
+			if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(TargetPC))
+			{
+				if (ExtPC->SelectableTeamId == TeamId)
+				{
+					// Filter AI agents
+					if (ExtPC->GetPawn() && ExtPC->GetPawn()->IsA(ARLAgent::StaticClass()))
+					{
 						return;
 					}
+
+					if (ExtPC->IsLocalPlayerController())
+					{
+						UGameplayStatics::PlaySound2D(ExtPC, Sound, VolumeMultiplier * ExtPC->GetSoundMultiplier(), PitchMultiplier);
+					}
+					else
+					{
+						ExtPC->Client_PlaySound2D(Sound, VolumeMultiplier, PitchMultiplier);
+					}
+					return; // Successfully played for the initiator
 				}
-			}
-			else if (!World->IsNetMode(NM_Standalone))
-			{
-				// If there is no instigator, it's likely an AI or automated action.
-				// For UI/Local sounds, we skip it to prevent AI actions from being heard by human players.
-				// In Standalone, we skip this return to fall through to the player controller loop below.
-				return;
 			}
 		}
 
+		// 3. Fallback: Broadcast to the entire team if no specific initiator was found
+		// This ensures the sound plays for the player in multiplayer even if context was lost
 		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 		{
 			APlayerController* PC = It->Get();

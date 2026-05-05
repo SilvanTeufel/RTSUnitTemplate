@@ -313,6 +313,8 @@ bool AGASUnit::ActivateAbilityByInputID(
 	else
 	{
 		// 2) Try to activate
+		CurrentInstigatorPC = InstigatorPC;
+
 		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
 		if (bIsActivated)
 		{
@@ -322,7 +324,6 @@ bool AGASUnit::ActivateAbilityByInputID(
 			Queued.HitResult    = HitResult;
 			Queued.InstigatorPC = InstigatorPC;
 			CurrentSnapshot = Queued;
-			CurrentInstigatorPC = InstigatorPC;
 		}
 		if (bIsActivated && HitResult.IsValidBlockingHit())
 		{
@@ -421,12 +422,13 @@ void AGASUnit::ActivateNextQueuedAbility()
 			AbilityQueueSize = QueSnapshot.Num();
 			
 			// 2) Activate the next queued ability
+			CurrentInstigatorPC = Next.InstigatorPC.Get();
+
 			bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(Next.AbilityClass);
 
 			if (bIsActivated)
 			{
 				CurrentSnapshot = Next;
-				CurrentInstigatorPC = Next.InstigatorPC.Get();
 
 				if (Next.HitResult.IsValidBlockingHit())
 				{
