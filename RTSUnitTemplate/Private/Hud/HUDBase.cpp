@@ -444,7 +444,16 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !PC->PlayerCameraManager || SelectedUnits.Num() == 0) return;
 
-	FVector CamLoc = PC->PlayerCameraManager->GetCameraLocation();
+	// Bestimmung der Genauigkeit basierend auf der Anzahl der Einheiten
+	int32 GlobalSegments = 64; // Höchste Genauigkeit (bis 25 Einheiten)
+	if (SelectedUnits.Num() > 50)
+	{
+		GlobalSegments = 12;   // Niedrigste Genauigkeit (über 50 Einheiten)
+	}
+	else if (SelectedUnits.Num() > 25)
+	{
+		GlobalSegments = 32;   // Mittlere Genauigkeit (26 bis 50 Einheiten)
+	}
 
 	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
 	{
@@ -456,12 +465,6 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 		// 1. Frustum Culling (Grobe Prüfung ob Einheit im Bild)
 		FVector2D ScreenPos;
 		if (!PC->ProjectWorldLocationToScreen(DrawLocation, ScreenPos)) continue;
-
-		// 2. Entfernung für LOD
-		float DistSq = FVector::DistSquared(CamLoc, DrawLocation);
-		int32 LODSegments = 64;
-		if (DistSq > 16000000.f) LODSegments = 12;      // > 40m
-		else if (DistSq > 4000000.f) LODSegments = 32;  // > 20m
 
 		FRotator UnitRotation = Unit->GetActorRotation();
 		float FinalRadiusX = 60.f;
@@ -506,7 +509,7 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 			FLinearColor(SelectionColor), 
 			SelectionThickness,
 			bIsFlying,
-			LODSegments
+			GlobalSegments
 		);
 	}
 }
