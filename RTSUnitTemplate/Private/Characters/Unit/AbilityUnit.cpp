@@ -407,6 +407,10 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	
 	if (NewUnitState == UnitData::Idle && UnitState == UnitData::PatrolRandom) return;
 	
+	if (bCanCallBPEvents && NewUnitState != UnitState)
+	{
+		ChangedUnitState(UnitState, NewUnitState);
+	}
 	
 	UnitState = NewUnitState;
 }

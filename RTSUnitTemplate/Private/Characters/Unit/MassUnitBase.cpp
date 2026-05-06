@@ -268,6 +268,39 @@ bool AMassUnitBase::AddStopSeparationTagToEntity()
 	return true;
 }
 
+bool AMassUnitBase::RemoveStopSeparationTagFromEntity()
+{
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): RemoveStopSeparationTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+
+	EntityManager->Defer().RemoveTag<FMassStateStopSeparationTag>(EntityHandle);
+
+	return true;
+}
+
+bool AMassUnitBase::SetSeparationEnabled(bool bEnable)
+{
+	if (bEnable)
+	{
+		return RemoveStopSeparationTagFromEntity();
+	}
+	else
+	{
+		return AddStopSeparationTagToEntity();
+	}
+}
+
 bool AMassUnitBase::ApplyStopXYMovementTag(bool bApply)
 {
 	FMassEntityManager* EntityManager;
@@ -313,10 +346,12 @@ bool AMassUnitBase::EnableDynamicObstacle(bool Enable)
 	if (!Enable)
 	{
 		EntityManager->Defer().AddTag<FMassStateDisableObstacleTag>(EntityHandle);
+		EntityManager->Defer().RemoveTag<FMassInNavigationObstacleGridTag>(EntityHandle);
 	}
 	else
 	{
 		EntityManager->Defer().RemoveTag<FMassStateDisableObstacleTag>(EntityHandle);
+		EntityManager->Defer().AddTag<FMassInNavigationObstacleGridTag>(EntityHandle);
 	}
 	
 	return true;

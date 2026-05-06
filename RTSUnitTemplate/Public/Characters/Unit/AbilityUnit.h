@@ -81,6 +81,9 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void WorkerGoToOther();
 	
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void ChangedUnitState(UnitData::EState OldUnitState, UnitData::EState NewUnitState);
+	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	TEnumAsByte<UnitData::EState> GetUnitState() const;
 

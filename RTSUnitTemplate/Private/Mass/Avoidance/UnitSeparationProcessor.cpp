@@ -24,6 +24,7 @@ namespace
 
 		// NEU: Speichert, ob die Einheit gerade vom SoftAvoidanceProcessor gerettet wird
 		bool bIsBracingAgainstWall = false;
+		bool bIsFlying = false;
 	};
 
 	static FVector Horizontal(const FVector& V)
@@ -89,7 +90,7 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		for (int32 i = 0; i < Num; ++i)
 		{
 			FVector Location = Transforms[i].GetTransform().GetLocation();
-			if (NavSystem)
+			if (NavSystem && !Characs[i].bIsFlying)
 			{
 				FNavLocation NavLoc;
 				if (!NavSystem->ProjectPointToNavigation(Location, NavLoc, FVector(100.f, 100.f, 300.f)))
@@ -116,6 +117,7 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			Info.TeamId = CombatStats[i].TeamId;
 			Info.CapsuleRadius = Characs[i].CapsuleRadius;
 			Info.Target = Targets[i].TargetEntity;
+			Info.bIsFlying = Characs[i].bIsFlying;
 			
 			Info.bUseWorkerStrength = DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateResourceExtractionTag::StaticStruct());
 
@@ -160,6 +162,11 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		for (int32 b = a + 1; b < Units.Num(); ++b)
 		{
 			const FClumpUnitInfo& B = Units[b];
+
+			if (A.bIsFlying != B.bIsFlying)
+			{
+				continue;
+			}
 
 			const bool bSameTeam = (A.TeamId == B.TeamId);
 

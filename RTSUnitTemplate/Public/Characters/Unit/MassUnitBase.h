@@ -175,6 +175,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool AddStopSeparationTagToEntity();
 
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool RemoveStopSeparationTagFromEntity();
+
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool SetSeparationEnabled(bool bEnable);
+
 	// Apply or remove the tag that freezes only X/Y movement (allowing Z updates)
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool ApplyStopXYMovementTag(bool bApply);
