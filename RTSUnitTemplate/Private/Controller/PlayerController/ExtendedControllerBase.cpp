@@ -5310,6 +5310,7 @@ void AExtendedControllerBase::Client_SelectUnitsFromSameSquad_Implementation(con
 		if (!Unit) continue;
 		Unit->SetSelected();
 		HUD->SelectedUnits.AddUnique(Unit);
+		HUD->SelectedUnitsSet.Add(Unit);
 	}
 }
 

@@ -81,6 +81,7 @@ void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AAc
 		{
 			// Direkt zum HUD-Array hinzufügen, da SetUnitSelected die Liste leeren würde
 			HUDBase->SelectedUnits.AddUnique(Unit);
+			HUDBase->SelectedUnitsSet.Add(Unit);
 			Unit->SetSelected();
 			FilteredCount++;
 		}
