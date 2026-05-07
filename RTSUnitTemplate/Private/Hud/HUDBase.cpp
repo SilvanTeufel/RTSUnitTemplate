@@ -463,7 +463,11 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
 	{
 		AUnitBase* Unit = SelectedUnits[i];
-		if (!IsValid(Unit)) { SelectedUnits.RemoveAtSwap(i); continue; }
+		if (!IsValid(Unit)) { 
+			SelectedUnits.RemoveAtSwap(i); 
+			SelectedUnitsSet.Remove(Unit);
+			continue; 
+		}
 
 		FVector DrawLocation = Unit->GetActorLocation();
 
@@ -654,6 +658,7 @@ void AHUDBase::DrawHUD()
                         if (Unit->GetOwner() == nullptr) Unit->SetOwner(Controller);
                         Unit->SetSelected();
                         SelectedUnits.Emplace(Unit);
+                        SelectedUnitsSet.Add(Unit);
                         SelectUnitsFromSameSquad(Unit);
                     }
                 }
@@ -730,6 +735,7 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
                         }
                         UnitBase->SetSelected();
                         SelectedUnits.AddUnique(UnitBase);
+                        SelectedUnitsSet.Add(UnitBase);
                         SelectUnitsFromSameSquad(UnitBase);
                     }
                 }
@@ -948,6 +954,7 @@ void AHUDBase::SetUnitSelected(AUnitBase* Unit, bool bIsAi)
 		else
 		{
 			SelectedUnits.RemoveAtSwap(i);
+			SelectedUnitsSet.Remove(Sel);
 		}
 	}
 
@@ -983,6 +990,7 @@ void AHUDBase::DeselectAllUnits()
 			else
 			{
 				SelectedUnits.RemoveAtSwap(i);
+				SelectedUnitsSet.Remove(Sel);
 			}
 		}
 
@@ -1060,45 +1068,24 @@ void AHUDBase::DrawAllHealthBars()
 	if (!bEnableHealthBars || !Canvas) return;
 
 	APlayerController* PC = GetOwningPlayerController();
-	if (!PC) return;
+	if (!PC || !PC->PlayerCameraManager) return;
 
 	UWorld* World = GetWorld();
 	UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
 
-	// Sync fast lookup set with current selection (controllers may modify the array directly)
-	SelectedUnitsSet.Reset();
-	for (AUnitBase* Sel : SelectedUnits)
-	{
-		if (IsValid(Sel)) SelectedUnitsSet.Add(Sel);
-	}
+	// 1. Predictive LOD basierend auf dem letzten Frame
+	float SegmentScale = 1.f;
+	if (LastFrameVisibleCount >= 50) SegmentScale = 0.25f;
+	else if (LastFrameVisibleCount >= 25) SegmentScale = 0.5f;
 
-	// Determine LOD based on how many healthbars we are about to draw (on-screen and eligible only)
+	// 2. Kamera-Daten cachen
+	const FVector RightV = PC->PlayerCameraManager->GetCameraRotation().RotateVector(FVector::RightVector);
+	const FVector UpV = PC->PlayerCameraManager->GetCameraRotation().RotateVector(FVector::UpVector);
 	int32 ViewX = 0, ViewY = 0;
 	PC->GetViewportSize(ViewX, ViewY);
-	auto IsOnScreen = [&](const FVector2D& Pt) -> bool
-	{
-		return Pt.X >= 0.f && Pt.X <= (float)ViewX && Pt.Y >= 0.f && Pt.Y <= (float)ViewY;
-	};
-	auto CountEligible = [&](const TArray<AUnitBase*>& Units)->int32
-	{
-		int32 Count = 0;
-		for (AUnitBase* Unit : Units)
-		{
-			if (!IsValid(Unit) || !Unit->Attributes) continue;
-			if (!(Unit->IsMyTeam || Unit->IsVisibleEnemy)) continue;
-			const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
-			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !(bShowHealthOnSelected && bIsSelected)) continue;
-			FVector2D CenterPos;
-			if (!PC->ProjectWorldLocationToScreen(Unit->GetActorLocation(), CenterPos)) continue;
-			if (!IsOnScreen(CenterPos)) continue;
-			++Count;
-		}
-		return Count;
-	};
-	const int32 EligibleCount = CountEligible(FriendlyUnits) + CountEligible(EnemyUnitBases);
-	float SegmentScale = 1.f;
-	if (EligibleCount >= 50) SegmentScale = 0.25f; else if (EligibleCount >= 25) SegmentScale = 0.5f;
+
+	int32 CurrentVisibleCount = 0;
 
 	auto DrawBarsForArray = [&](const TArray<AUnitBase*>& Units) {
 		for (int32 i = Units.Num() - 1; i >= 0; --i)
@@ -1106,27 +1093,28 @@ void AHUDBase::DrawAllHealthBars()
 			AUnitBase* Unit = Units[i];
 			if (!IsValid(Unit) || !Unit->Attributes) continue;
 
-			// Sichtbarkeits- und Bedingungs-Check
+			// Schnelle Selektionsprüfung (O(1) via synchronisiertem Set)
+			const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !(bShowHealthOnSelected && bIsSelected)) continue;
+
+			// Sichtbarkeits-Check
 			if (!(Unit->IsMyTeam || Unit->IsVisibleEnemy)) continue;
 
-			bool bIsSelected = SelectedUnitsSet.Contains(Unit);
-			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !(bShowHealthOnSelected && bIsSelected))
-			{
-				continue;
-			}
+			// 3. Einzige Projektion für diesen Frame
+			FVector2D ScreenPos;
+			if (!PC->ProjectWorldLocationToScreen(Unit->GetActorLocation(), ScreenPos)) continue;
+			
+			// Screen-Culling
+			if (ScreenPos.X < 0.f || ScreenPos.X > (float)ViewX || ScreenPos.Y < 0.f || ScreenPos.Y > (float)ViewY) continue;
 
-			// Nur zeichnen, wenn die Einheit auf dem Bildschirm ist
-			FVector2D CenterPos;
-			if (!PC->ProjectWorldLocationToScreen(Unit->GetActorLocation(), CenterPos)) continue;
-			if (!(CenterPos.X >= 0.f && CenterPos.X <= (float)ViewX && CenterPos.Y >= 0.f && CenterPos.Y <= (float)ViewY)) continue;
+			CurrentVisibleCount++;
 
-			FVector DrawLocation = Unit->GetActorLocation();
 			float FinalRadiusX = 60.f;
 			float FinalRadiusY = 60.f;
 			float FinalRadiusZ = 60.f;
 			bool bIsFlying = false;
 
-			// Direkter Komponenten-Zugriff statt Tag-Suche
+			// Direkter Komponenten-Zugriff
 			if (UBoxComponent* BoxComp = Unit->BoxCollisionComponent)
 			{
 				const FVector Extent = BoxComp->GetUnscaledBoxExtent();
@@ -1140,7 +1128,6 @@ void AHUDBase::DrawAllHealthBars()
 				FinalRadiusZ = Character->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
 			}
 
-			// Größe und Boden-Position aus Fragment beziehen (für MassUnits)
 			if (EM)
 			{
 				if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
@@ -1153,8 +1140,6 @@ void AHUDBase::DrawAllHealthBars()
 							if (const FMassAgentCharacteristicsFragment* Frag = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
 							{
 								bIsFlying = Frag->bIsFlying;
-								DrawLocation.Z = Frag->LastGroundLocation;
-
 								if (Frag->bUseBoxComponent)
 								{
 									FinalRadiusX = Frag->BoxExtent.X;
@@ -1164,7 +1149,7 @@ void AHUDBase::DrawAllHealthBars()
 								else
 								{
 									FinalRadiusX = FinalRadiusY = Frag->CapsuleRadius;
-									FinalRadiusZ = Frag->CapsuleHeight * 0.5f; // Vermutung: CapsuleHeight ist Gesamthöhe
+									FinalRadiusZ = Frag->CapsuleHeight * 0.5f;
 								}
 							}
 						}
@@ -1172,65 +1157,44 @@ void AHUDBase::DrawAllHealthBars()
 				}
 			}
 
-			// Determine which settings to use
-			const FHealthBarSettings* CurrentSettings = &GroundHealthBarSettings;
-			if (!Unit->CanMove)
-			{
-				CurrentSettings = &BuildingHealthBarSettings;
-			}
-			else if (Unit->IsFlying)
-			{
-				CurrentSettings = &FlyingHealthBarSettings;
-			}
+			// Einstellungs-Auswahl
+			FHealthBarSettings EffectiveSettings;
+			if (!Unit->CanMove) EffectiveSettings = BuildingHealthBarSettings;
+			else if (Unit->IsFlying) EffectiveSettings = FlyingHealthBarSettings;
+			else EffectiveSettings = GroundHealthBarSettings;
 
-			// LOD: Segmente je nach Last reduzieren (Kopie, Original bleibt unverändert)
-			FHealthBarSettings EffectiveSettings = *CurrentSettings;
+			// LOD anwenden
 			int32 BaseSegments = EffectiveSettings.Segments;
-			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle && BaseSegments <= 0)
-			{
-				BaseSegments = 32; // Sinnvolle Default-Segmentzahl für Arcs
-			}
+			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle && BaseSegments <= 0) BaseSegments = 32;
 			if (BaseSegments > 0)
 			{
 				EffectiveSettings.Segments = FMath::Max(4, FMath::FloorToInt(BaseSegments * SegmentScale));
 			}
 
-			FinalRadiusX *= EffectiveSettings.Scale;
-			FinalRadiusY *= EffectiveSettings.Scale;
-			FinalRadiusZ *= EffectiveSettings.Scale;
-
 			float MaxRadius = FMath::Max(FinalRadiusX, FinalRadiusY);
 
 			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle)
 			{
-				if (bIsFlying)
-				{
-					// Direkt unter der Einheit statt am Boden
-					DrawLocation.Z = Unit->GetActorLocation().Z - FinalRadiusZ;
-				}
-				DrawSemiCircleHealthBar(Unit, DrawLocation, MaxRadius, MaxRadius, bIsFlying, EffectiveSettings);
+				DrawSemiCircleHealthBar(Unit, ScreenPos, MaxRadius, MaxRadius, bIsFlying, EffectiveSettings, RightV, UpV);
 			}
-			else
+			else if (EffectiveSettings.Style == EHealthBarStyle::Stacked)
 			{
-				FVector2D ScreenPos = CenterPos; // bereits berechnet
-
-				if (EffectiveSettings.Style == EHealthBarStyle::Stacked)
-				{
-					DrawStackedHealthBar(Unit, ScreenPos, MaxRadius, EffectiveSettings);
-				}
-				else if (EffectiveSettings.Style == EHealthBarStyle::SideBrackets)
-				{
-					DrawSideBracketsHealthBar(Unit, ScreenPos, FinalRadiusZ, MaxRadius, EffectiveSettings);
-				}
+				DrawStackedHealthBar(Unit, ScreenPos, MaxRadius, EffectiveSettings, RightV);
+			}
+			else if (EffectiveSettings.Style == EHealthBarStyle::SideBrackets)
+			{
+				DrawSideBracketsHealthBar(Unit, ScreenPos, FinalRadiusZ, MaxRadius, EffectiveSettings, RightV, UpV);
 			}
 		}
 	};
 
 	DrawBarsForArray(FriendlyUnits);
 	DrawBarsForArray(EnemyUnitBases);
+
+	LastFrameVisibleCount = CurrentVisibleCount;
 }
 
-void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings)
+void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV)
 {
 	UAttributeSetBase* Attr = Unit->Attributes;
 	float Health = Attr->GetHealth();
@@ -1245,15 +1209,14 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos,
 
 	APlayerController* PC = GetOwningPlayerController();
 	float ProjectedSize = 60.f;
-	if (PC && PC->PlayerCameraManager)
+	if (PC)
 	{
-		FVector2D Center, Edge;
+		FVector2D Edge;
 		FVector Loc = Unit->GetActorLocation();
-		FVector RightV = PC->PlayerCameraManager->GetCameraRotation().RotateVector(FVector(0, 1, 0));
-		
-		if (PC->ProjectWorldLocationToScreen(Loc, Center) && PC->ProjectWorldLocationToScreen(Loc + RightV * WorldRadius, Edge))
+		// Einzige zusätzliche Projektion für die Breite
+		if (PC->ProjectWorldLocationToScreen(Loc + RightV * WorldRadius, Edge))
 		{
-			ProjectedSize = (Edge - Center).Size() * 2.0f;
+			ProjectedSize = (Edge - ScreenPos).Size() * 2.0f;
 		}
 	}
 
@@ -1307,10 +1270,10 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos,
 	DrawSegmentedBar(Pos, HealthPct, Settings.HealthColor);
 }
 
-void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& DrawLocation, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings)
+void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
 	APlayerController* PC = GetOwningPlayerController();
-	if (!PC || !PC->PlayerCameraManager || !Canvas) return;
+	if (!PC || !Canvas) return;
 
 	UAttributeSetBase* Attr = Unit->Attributes;
 	float HealthPct = FMath::Clamp(Attr->GetHealth() / Attr->GetMaxHealth(), 0.f, 1.f);
@@ -1320,154 +1283,55 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& DrawLocat
 	float BaseRadius = RadiusX * Settings.RadiusMultiplier;
 	float Thickness = Settings.Thickness * Settings.Scale;
 	
-	// Billboard Rotation: Zum Kamera-Vektor zeigen
-	FVector CamLoc = PC->PlayerCameraManager->GetCameraLocation();
-	FVector DirToCam = CamLoc - DrawLocation;
-	DirToCam.Z = 0.f;
-	FRotator Rotation = DirToCam.Rotation();
-
+	FVector Loc = Unit->GetActorLocation();
 	FVector ZOff(0, 0, 5.f);
-	FRotator YawRot(0, Rotation.Yaw, 0);
+	if (bIsFlying) ZOff.Z = -5.f; 
 
-	// Optimierte 2D-Basis-Projektion: nur 3 Projektionen statt pro Segment
+	FVector2D Right2D, Up2D;
+	if (PC->ProjectWorldLocationToScreen(Loc + ZOff + RightV * BaseRadius, Right2D) &&
+		PC->ProjectWorldLocationToScreen(Loc + ZOff + UpV * BaseRadius, Up2D))
 	{
-		FVector2D Center2D;
-		if (PC->ProjectWorldLocationToScreen(DrawLocation + ZOff, Center2D))
+		auto DrawArc2D = [&](float InRadius, float Pct, FColor Color)
 		{
-			FVector AxisX = YawRot.RotateVector(FVector(1, 0, 0));
-			FVector AxisY = YawRot.RotateVector(FVector(0, 1, 0));
-			FVector2D Right2D, Up2D;
-			if (PC->ProjectWorldLocationToScreen(DrawLocation + ZOff + AxisX * BaseRadius, Right2D)
-				&& PC->ProjectWorldLocationToScreen(DrawLocation + ZOff + AxisY * BaseRadius, Up2D))
-			{
-				auto DrawArc2D = [&](float InRadius, float Pct, FColor Color)
-				{
-					// Ermittele 2D-Basisvektoren skaliert auf den gewuenschten Radius
-					const float Base = FMath::Max(1.f, BaseRadius);
-					FVector2D EX = (Right2D - Center2D) * (InRadius / Base);
-					FVector2D EY = (Up2D - Center2D) * (InRadius / Base);
+			const float Base = FMath::Max(1.f, BaseRadius);
+			FVector2D EX = (Right2D - ScreenPos) * (InRadius / Base);
+			FVector2D EY = (Up2D - ScreenPos) * (InRadius / Base);
 
-					int32 Segments = Settings.Segments > 0 ? Settings.Segments : 32;
-					const float TotalAngle = PI;
-					const float SegAngle = TotalAngle / (float)Segments;
-					float ScaledGapSpace = Settings.SegmentSpace * Settings.Scale * 2.0f;
-					float GapAngle = (InRadius > 0.f) ? (ScaledGapSpace / InRadius) : 0.f;
-					GapAngle = FMath::Clamp(GapAngle, 0.035f, SegAngle * 0.4f);
-					const float DrawAngle = SegAngle - GapAngle;
-
-					for (int32 s = 0; s < Segments; ++s)
-					{
-						const bool bFilled = (s < FMath::CeilToInt(Segments * Pct));
-						const FColor SegColor = bFilled ? Color : Settings.BackgroundColor;
-						const float A0 = s * SegAngle - (PI * 0.5f);
-						const float A1 = A0 + DrawAngle;
-						const FVector2D P0 = Center2D + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
-						const FVector2D P1 = Center2D + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
-
-						FCanvasLineItem LineItem(P0, P1);
-						LineItem.LineThickness = Thickness;
-						LineItem.SetColor(FLinearColor(SegColor));
-						Canvas->DrawItem(LineItem);
-					}
-				};
-
-				DrawArc2D(BaseRadius, HealthPct, Settings.HealthColor);
-				if (MaxShield > 0.f)
-				{
-					DrawArc2D(BaseRadius + Thickness + 2.f, ShieldPct, Settings.ShieldColor);
-				}
-				return; // Wir sind fertig; alten (teureren) Pfad ueberspringen
-			}
-		}
-	}
-
-	auto DrawArc = [&](float InRadius, float Pct, FColor Color)
-	{
-		if (Settings.Segments > 0)
-		{
-			float TotalAngle = PI;
-			float SegAngle = TotalAngle / Settings.Segments;
-
-			// GapAngle in Bogenmaß. Wir erhöhen den Effekt von SegmentSpace für die Welt-Projektion,
-			// da Welt-Einheiten oft kleiner wirken als Screen-Pixel.
+			int32 Segments = Settings.Segments > 0 ? Settings.Segments : 32;
+			const float TotalAngle = PI;
+			const float SegAngle = TotalAngle / (float)Segments;
 			float ScaledGapSpace = Settings.SegmentSpace * Settings.Scale * 2.0f;
 			float GapAngle = (InRadius > 0.f) ? (ScaledGapSpace / InRadius) : 0.f;
-			
-			// Wir erzwingen eine Mindestlücke von ca. 2 Grad (0.035 rad) für die Sichtbarkeit,
-			// begrenzen sie aber auf maximal 40% der Segmentgröße.
 			GapAngle = FMath::Clamp(GapAngle, 0.035f, SegAngle * 0.4f);
-			float DrawAngle = SegAngle - GapAngle;
+			const float DrawAngle = SegAngle - GapAngle;
 
-			for (int32 s = 0; s < Settings.Segments; s++)
+			const float StartAngleRad = FMath::DegreesToRadians(Settings.RotationOffset);
+
+			for (int32 s = 0; s < Segments; ++s)
 			{
-				float SegStartAngle = s * SegAngle - (PI * 0.5f);
-				bool bIsFilled = (s < FMath::CeilToInt(Settings.Segments * Pct));
-				FColor SegColor = bIsFilled ? Color : Settings.BackgroundColor;
+				const bool bFilled = (s < FMath::CeilToInt(Segments * Pct));
+				const FColor SegColor = bFilled ? Color : Settings.BackgroundColor;
+				const float A0 = StartAngleRad + s * SegAngle;
+				const float A1 = A0 + DrawAngle;
+				const FVector2D P0 = ScreenPos + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
+				const FVector2D P1 = ScreenPos + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
 
-				int32 SegArcPoints = 8;
-				FVector2D PrevPoint;
-				bool bPrevValid = false;
-				for (int32 i = 0; i <= SegArcPoints; i++)
-				{
-					float CurrentAngle = SegStartAngle + (i * (DrawAngle / SegArcPoints));
-					FVector WorldPos = DrawLocation + ZOff + YawRot.RotateVector(FVector(FMath::Cos(CurrentAngle) * InRadius, FMath::Sin(CurrentAngle) * InRadius, 0.f));
-					FVector2D ScreenPoint;
-					if (PC->ProjectWorldLocationToScreen(WorldPos, ScreenPoint))
-					{
-						if (bPrevValid)
-						{
-							FCanvasLineItem LineItem(PrevPoint, ScreenPoint);
-							LineItem.LineThickness = Thickness;
-							LineItem.SetColor(FLinearColor(SegColor));
-							Canvas->DrawItem(LineItem);
-						}
-						PrevPoint = ScreenPoint;
-						bPrevValid = true;
-					}
-					else bPrevValid = false;
-				}
+				FCanvasLineItem LineItem(P0, P1);
+				LineItem.LineThickness = Thickness;
+				LineItem.SetColor(FLinearColor(SegColor));
+				Canvas->DrawItem(LineItem);
 			}
-		}
-		else
+		};
+
+		DrawArc2D(BaseRadius, HealthPct, Settings.HealthColor);
+		if (MaxShield > 0.f)
 		{
-			int32 Segments = 32;
-			float AngleStep = PI / Segments;
-			FVector2D PrevPoint;
-			bool bPrevValid = false;
-
-			for (int32 i = 0; i <= Segments; i++)
-			{
-				float CurrentAngle = (i * AngleStep) - (PI * 0.5f);
-				bool bIsActive = (i * AngleStep <= PI * Pct);
-				FColor DrawColor = bIsActive ? Color : Settings.BackgroundColor;
-
-				FVector WorldPos = DrawLocation + ZOff + YawRot.RotateVector(FVector(FMath::Cos(CurrentAngle) * InRadius, FMath::Sin(CurrentAngle) * InRadius, 0.f));
-				FVector2D ScreenPoint;
-				if (PC->ProjectWorldLocationToScreen(WorldPos, ScreenPoint))
-				{
-					if (bPrevValid)
-					{
-						FCanvasLineItem LineItem(PrevPoint, ScreenPoint);
-						LineItem.LineThickness = Thickness;
-						LineItem.SetColor(FLinearColor(DrawColor));
-						Canvas->DrawItem(LineItem);
-					}
-					PrevPoint = ScreenPoint;
-					bPrevValid = true;
-				}
-				else bPrevValid = false;
-			}
+			DrawArc2D(BaseRadius + Thickness + 2.f, ShieldPct, Settings.ShieldColor);
 		}
-	};
-
-	DrawArc(BaseRadius, HealthPct, Settings.HealthColor);
-	if (MaxShield > 0.f)
-	{
-		DrawArc(BaseRadius + Thickness + 2.f, ShieldPct, Settings.ShieldColor);
 	}
 }
 
-void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings)
+void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
 	UAttributeSetBase* Attr = Unit->Attributes;
 	float HealthPct = FMath::Clamp(Attr->GetHealth() / Attr->GetMaxHealth(), 0.f, 1.f);
@@ -1478,24 +1342,19 @@ void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector2D& Scree
 	float WorldWidth = 40.f;
 	float ProjectedHeight = 60.f;
 
-	if (PC && PC->PlayerCameraManager)
+	if (PC)
 	{
-		FVector2D Center, EdgeWidth, EdgeHeight;
+		FVector2D EdgeWidth, EdgeHeight;
 		FVector Loc = Unit->GetActorLocation();
-		FVector RightV = PC->PlayerCameraManager->GetCameraRotation().RotateVector(FVector(0, 1, 0));
-		FVector UpV = PC->PlayerCameraManager->GetCameraRotation().RotateVector(FVector(0, 0, 1));
 		
-		if (PC->ProjectWorldLocationToScreen(Loc, Center))
+		if (PC->ProjectWorldLocationToScreen(Loc + RightV * WorldWidthRadius, EdgeWidth))
 		{
-			if (PC->ProjectWorldLocationToScreen(Loc + RightV * WorldWidthRadius, EdgeWidth))
-			{
-				WorldWidth = (EdgeWidth - Center).Size();
-			}
+			WorldWidth = (EdgeWidth - ScreenPos).Size();
+		}
 
-			if (PC->ProjectWorldLocationToScreen(Loc + UpV * WorldRadius, EdgeHeight))
-			{
-				ProjectedHeight = (EdgeHeight - Center).Size() * 2.0f;
-			}
+		if (PC->ProjectWorldLocationToScreen(Loc + UpV * WorldRadius, EdgeHeight))
+		{
+			ProjectedHeight = (EdgeHeight - ScreenPos).Size() * 2.0f;
 		}
 	}
 

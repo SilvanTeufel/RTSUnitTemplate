@@ -51,6 +51,9 @@ struct FHealthBarSettings
 	float Scale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	float RotationOffset = 180.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	FColor HealthColor = FColor::Red;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
@@ -83,9 +86,9 @@ private:
 	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion = false, int32 InSegments = -1);
 	void DrawAllSelectedUnitsIndicators();
 	void DrawAllHealthBars();
-	void DrawStackedHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings);
-	void DrawSemiCircleHealthBar(class AUnitBase* Unit, const FVector& DrawLocation, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings);
-	void DrawSideBracketsHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings);
+	void DrawStackedHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV);
+	void DrawSemiCircleHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
+	void DrawSideBracketsHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "RTS|HUD")
@@ -194,6 +197,8 @@ public:
 
 	UPROPERTY()
 	TSet <AUnitBase*> SelectedUnitsSet;
+
+	int32 LastFrameVisibleCount = 0;
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "IsSpeakingUnitClose", Keywords = "RTSUnitTemplate IsSpeakingUnitClose"), Category = TopDownRTSTemplate)
 	void IsSpeakingUnitClose(TArray <AUnitBase*> Units, TArray <ASpeakingUnit*> SpeakUnits);

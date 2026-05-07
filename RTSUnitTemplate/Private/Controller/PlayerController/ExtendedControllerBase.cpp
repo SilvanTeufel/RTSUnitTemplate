@@ -4946,6 +4946,7 @@ void AExtendedControllerBase::Client_UpdateHUDSelection_Implementation(const TAr
 	{
 		if (!bIsAi) NewUnit->SetSelected();
 		HUDBase->SelectedUnits.Emplace(NewUnit);
+		HUDBase->SelectedUnitsSet.Add(NewUnit);
 	}
 	CurrentUnitWidgetIndex = 0;
 	SelectedUnits = HUDBase->SelectedUnits;
@@ -4969,6 +4970,7 @@ void AExtendedControllerBase::Client_DeselectSingleUnit_Implementation(AUnitBase
 
 	// Remove the unit from the HUD's selected units array
 	HUDBase->SelectedUnits.Remove(UnitToDeselect);
+	HUDBase->SelectedUnitsSet.Remove(UnitToDeselect);
 
 	// Update the controller's selected units
 	SelectedUnits = HUDBase->SelectedUnits;
