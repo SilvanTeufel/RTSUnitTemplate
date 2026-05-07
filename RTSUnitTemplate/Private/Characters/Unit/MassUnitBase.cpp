@@ -7,6 +7,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "GAS/AttributeSetBase.h"
+#include "Hud/HUDBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Net/UnrealNetwork.h"
 #include "Components/SkeletalMeshComponent.h"
@@ -1191,6 +1192,19 @@ bool AMassUnitBase::GetMassEntityData(const FMassEntityManager*& OutEntityManage
 void AMassUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Deaktivierung bei aktivem HUD-System
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
+		{
+			if (HUD->bEnableHealthBars && HealthWidgetComp)
+			{
+				HealthWidgetComp->SetVisibility(false);
+				HealthWidgetComp->SetComponentTickEnabled(false);
+			}
+		}
+	}
 }
 
 void AMassUnitBase::Tick(float DeltaSeconds)

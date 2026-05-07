@@ -18,6 +18,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "Hud/HUDBase.h"
 #include "Engine/SkeletalMesh.h" // For USkeletalMesh
 #include "Engine/SkeletalMeshLODSettings.h" // To access LOD settings
 #include "Engine/SkinnedAssetCommon.h"
@@ -149,6 +150,23 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 {
 	if (!HealthWidgetComp) return;
 
+	// Deaktivierung bei aktivem HUD-System
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
+		{
+			if (HUD->bEnableHealthBars)
+			{
+				if (HealthWidgetComp->IsVisible() || HealthWidgetComp->IsComponentTickEnabled())
+				{
+					HealthWidgetComp->SetVisibility(false);
+					HealthWidgetComp->SetComponentTickEnabled(false);
+				}
+				return;
+			}
+		}
+	}
+
 	// Use cached health bar widget pointer to avoid casting every tick
 	if (!CachedHealthBarWidget)
 	{
@@ -244,6 +262,23 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 void APerformanceUnit::HandleStandardHealthBarVisibility()
 {
 	if (!HealthWidgetComp) return;
+
+	// Deaktivierung bei aktivem HUD-System
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
+		{
+			if (HUD->bEnableHealthBars)
+			{
+				if (HealthWidgetComp->IsVisible() || HealthWidgetComp->IsComponentTickEnabled())
+				{
+					HealthWidgetComp->SetVisibility(false);
+					HealthWidgetComp->SetComponentTickEnabled(false);
+				}
+				return;
+			}
+		}
+	}
 
 	// Use cached health bar widget pointer to avoid casting every tick
 	if (!CachedHealthBarWidget)

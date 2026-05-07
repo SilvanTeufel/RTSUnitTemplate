@@ -14,6 +14,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Actors/Projectile.h"
+#include "Hud/HUDBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -134,6 +135,14 @@ void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
+		{
+			HUD->RegisterUnit(this);
+		}
+	}
+	
 	BoxCollisionComponent = FCollisionUtils::FindTaggedBoxComponent(this);
 	if (BoxCollisionComponent)
 	{
@@ -173,6 +182,19 @@ void AUnitBase::InitHealthbarOwner()
 	}
 	// Ensure proper widget for squads
 	EnsureSquadHealthbarState();
+}
+
+void AUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
+		{
+			HUD->UnregisterUnit(this);
+		}
+	}
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void AUnitBase::EnsureSquadHealthbarState()
