@@ -51,7 +51,25 @@ struct FHealthBarSettings
 	float Scale = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	float MinScreenSize = 20.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	float MaxScreenSize = 500.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	float RotationOffset = 180.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	float HeightOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	bool bShowOutline = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	FColor OutlineColor = FColor::Black;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	float OutlineThickness = 1.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	FColor HealthColor = FColor::Red;
@@ -86,9 +104,9 @@ private:
 	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion = false, int32 InSegments = -1);
 	void DrawAllSelectedUnitsIndicators();
 	void DrawAllHealthBars();
-	void DrawStackedHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV);
-	void DrawSemiCircleHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
-	void DrawSideBracketsHealthBar(class AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
+	void DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV);
+	void DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
+	void DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "RTS|HUD")
@@ -136,19 +154,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
 	float RotatingCircleSpeed = 120.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorRadius = 15.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorThickness = 1.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorLifeTime = 1.5f;
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	virtual void DrawHUD();
 
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax);
 	
 	void Tick(float DeltaSeconds);
@@ -156,43 +174,43 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool bSelectFullSquad = false;
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SelectUnitsFromSameSquad(AUnitBase* SelectedUnit);
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TArray <AUnitBase*> FriendlyUnits;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TArray <AUnitBase*> EnemyUnitBases;
 	
-	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void AddUnitsToArray();
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "bSelectFriendly", Keywords = "TopDownRTSTemplate bSelectFriendly"), Category = TopDownRTSTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "bSelectFriendly", Keywords = "TopDownRTSTemplate bSelectFriendly"), Category = "TopDownRTSTemplate")
 	bool bSelectFriendly = false;
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "InitialPoint", Keywords = "RTSUnitTemplate InitialPoint"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "InitialPoint", Keywords = "RTSUnitTemplate InitialPoint"), Category = "RTSUnitTemplate")
 	FVector2D InitialPoint;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CurrentPoint", Keywords = "RTSUnitTemplate CurrentPoint"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CurrentPoint", Keywords = "RTSUnitTemplate CurrentPoint"), Category = "RTSUnitTemplate")
 	FVector2D CurrentPoint;
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "IPoint", Keywords = "RTSUnitTemplate IPoint"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "IPoint", Keywords = "RTSUnitTemplate IPoint"), Category = "RTSUnitTemplate")
 	FVector IPoint = FVector(0.f,0.f, 0.f);
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CPoint", Keywords = "RTSUnitTemplate CPoint"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CPoint", Keywords = "RTSUnitTemplate CPoint"), Category = "RTSUnitTemplate")
 	FVector CPoint = FVector(0.f,0.f, 0.f);
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "RectangleScaleSelectionFactor", Keywords = "RTSUnitTemplate RectangleScaleSelectionFactor"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "RectangleScaleSelectionFactor", Keywords = "RTSUnitTemplate RectangleScaleSelectionFactor"), Category = "RTSUnitTemplate")
 	float RectangleScaleSelectionFactor = 0.9;
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = "RTSUnitTemplate")
 	FVector2D GetMousePos2D();
 
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SelectedEnemyUnits", Keywords = "RTSUnitTemplate SelectedEnemyUnits"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "SelectedEnemyUnits", Keywords = "RTSUnitTemplate SelectedEnemyUnits"), Category = "RTSUnitTemplate")
 	TArray <AUnitBase*> SelectedUnits;
 
 	UPROPERTY()
@@ -200,28 +218,28 @@ public:
 
 	int32 LastFrameVisibleCount = 0;
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "IsSpeakingUnitClose", Keywords = "RTSUnitTemplate IsSpeakingUnitClose"), Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "IsSpeakingUnitClose", Keywords = "RTSUnitTemplate IsSpeakingUnitClose"), Category = "TopDownRTSTemplate")
 	void IsSpeakingUnitClose(TArray <AUnitBase*> Units, TArray <ASpeakingUnit*> SpeakUnits);
 	
-	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CharacterIsUnSelectable", Keywords = "RTSUnitTemplate CharacterIsUnSelectable"), Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CharacterIsUnSelectable", Keywords = "RTSUnitTemplate CharacterIsUnSelectable"), Category = "RTSUnitTemplate")
 	bool CharacterIsUnSelectable = true;
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "MoveUnitsThroughWayPoints", Keywords = "RTSUnitTemplate MoveUnitsThroughWayPoints"), Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "MoveUnitsThroughWayPoints", Keywords = "RTSUnitTemplate MoveUnitsThroughWayPoints"), Category = "TopDownRTSTemplate")
 	void MoveUnitsThroughWayPoints(TArray <AUnitBase*> Units);
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "PatrolUnitsThroughWayPoints", Keywords = "RTSUnitTemplate PatrolUnitsThroughWayPoints"), Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "PatrolUnitsThroughWayPoints", Keywords = "RTSUnitTemplate PatrolUnitsThroughWayPoints"), Category = "TopDownRTSTemplate")
 	void PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units);
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetUnitSelected", Keywords = "RTSUnitTemplate SetUnitSelected"), Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetUnitSelected", Keywords = "RTSUnitTemplate SetUnitSelected"), Category = "TopDownRTSTemplate")
 	void SetUnitSelected(AUnitBase* Unit, bool bIsAi = false);
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DeselectAllUnits", Keywords = "RTSUnitTemplate DeselectAllUnits"), Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DeselectAllUnits", Keywords = "RTSUnitTemplate DeselectAllUnits"), Category = "TopDownRTSTemplate")
 	void DeselectAllUnits();
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DetectUnit", Keywords = "RTSUnitTemplate DetectUnit"), Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DetectUnit", Keywords = "RTSUnitTemplate DetectUnit"), Category = "TopDownRTSTemplate")
 	void DetectUnit(AUnitBase* DetectingUnit, TArray <AActor*> &DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId);
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ControllDirectionToMouse", Keywords = "RTSUnitTemplate ControllDirectionToMouse"), Category = TopDownRTSTemplate)
+	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ControllDirectionToMouse", Keywords = "RTSUnitTemplate ControllDirectionToMouse"), Category = "TopDownRTSTemplate")
 	void ControllDirectionToMouse(AActor* Units, FHitResult Hit);
 
 	bool IsActorInsideRec(FVector InPoint, FVector CuPoint, FVector ALocation);

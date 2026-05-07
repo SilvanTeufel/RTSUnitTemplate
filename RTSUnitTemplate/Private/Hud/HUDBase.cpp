@@ -1100,9 +1100,16 @@ void AHUDBase::DrawAllHealthBars()
 			// Sichtbarkeits-Check
 			if (!(Unit->IsMyTeam || Unit->IsVisibleEnemy)) continue;
 
+			// Einstellungs-Auswahl
+			FHealthBarSettings EffectiveSettings;
+			if (!Unit->CanMove) EffectiveSettings = BuildingHealthBarSettings;
+			else if (Unit->IsFlying) EffectiveSettings = FlyingHealthBarSettings;
+			else EffectiveSettings = GroundHealthBarSettings;
+
 			// 3. Einzige Projektion für diesen Frame
 			FVector2D ScreenPos;
-			if (!PC->ProjectWorldLocationToScreen(Unit->GetActorLocation(), ScreenPos)) continue;
+			FVector BaseLoc = Unit->GetActorLocation() + FVector(0, 0, EffectiveSettings.HeightOffset);
+			if (!PC->ProjectWorldLocationToScreen(BaseLoc, ScreenPos)) continue;
 			
 			// Screen-Culling
 			if (ScreenPos.X < 0.f || ScreenPos.X > (float)ViewX || ScreenPos.Y < 0.f || ScreenPos.Y > (float)ViewY) continue;
@@ -1157,12 +1164,6 @@ void AHUDBase::DrawAllHealthBars()
 				}
 			}
 
-			// Einstellungs-Auswahl
-			FHealthBarSettings EffectiveSettings;
-			if (!Unit->CanMove) EffectiveSettings = BuildingHealthBarSettings;
-			else if (Unit->IsFlying) EffectiveSettings = FlyingHealthBarSettings;
-			else EffectiveSettings = GroundHealthBarSettings;
-
 			// LOD anwenden
 			int32 BaseSegments = EffectiveSettings.Segments;
 			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle && BaseSegments <= 0) BaseSegments = 32;
@@ -1175,15 +1176,20 @@ void AHUDBase::DrawAllHealthBars()
 
 			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle)
 			{
-				DrawSemiCircleHealthBar(Unit, ScreenPos, MaxRadius, MaxRadius, bIsFlying, EffectiveSettings, RightV, UpV);
+				// Kreis parallel zum Boden: Wir brauchen einen Forward-Vektor auf der XY-Ebene
+				FVector GroundForward = FVector::CrossProduct(RightV, FVector::UpVector);
+				GroundForward.Z = 0;
+				GroundForward.Normalize();
+
+				DrawSemiCircleHealthBar(Unit, BaseLoc, ScreenPos, FinalRadiusX, FinalRadiusY, bIsFlying, EffectiveSettings, RightV, GroundForward);
 			}
 			else if (EffectiveSettings.Style == EHealthBarStyle::Stacked)
 			{
-				DrawStackedHealthBar(Unit, ScreenPos, MaxRadius, EffectiveSettings, RightV);
+				DrawStackedHealthBar(Unit, BaseLoc, ScreenPos, MaxRadius, EffectiveSettings, RightV);
 			}
 			else if (EffectiveSettings.Style == EHealthBarStyle::SideBrackets)
 			{
-				DrawSideBracketsHealthBar(Unit, ScreenPos, FinalRadiusZ, MaxRadius, EffectiveSettings, RightV, UpV);
+				DrawSideBracketsHealthBar(Unit, BaseLoc, ScreenPos, FinalRadiusZ, MaxRadius, EffectiveSettings, RightV, UpV);
 			}
 		}
 	};
@@ -1194,7 +1200,7 @@ void AHUDBase::DrawAllHealthBars()
 	LastFrameVisibleCount = CurrentVisibleCount;
 }
 
-void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV)
+void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV)
 {
 	UAttributeSetBase* Attr = Unit->Attributes;
 	float Health = Attr->GetHealth();
@@ -1212,45 +1218,54 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos,
 	if (PC)
 	{
 		FVector2D Edge;
-		FVector Loc = Unit->GetActorLocation();
-		// Einzige zusätzliche Projektion für die Breite
-		if (PC->ProjectWorldLocationToScreen(Loc + RightV * WorldRadius, Edge))
+		// BaseLoc bereits mit HeightOffset
+		if (PC->ProjectWorldLocationToScreen(BaseLoc + RightV * WorldRadius, Edge))
 		{
 			ProjectedSize = (Edge - ScreenPos).Size() * 2.0f;
 		}
 	}
 
+	ProjectedSize = FMath::Clamp(ProjectedSize * Settings.Scale, Settings.MinScreenSize, Settings.MaxScreenSize);
+
 	float Thickness = Settings.Thickness * Settings.Scale;
+	float Outline = Settings.bShowOutline ? (Settings.OutlineThickness * Settings.Scale) : 0.f;
+
 	auto DrawSegmentedBar = [&](FVector2D InPos, float Pct, FColor Color)
 	{
+		if (Settings.bShowOutline)
+		{
+			FCanvasTileItem OutlineItem(InPos - FVector2D(Outline, Outline), FVector2D(ProjectedSize + Outline * 2.f, Thickness + Outline * 2.f), FLinearColor(Settings.OutlineColor));
+			OutlineItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(OutlineItem);
+		}
+
+		// Hintergrund der Bar (deckt das massive Outline innen ab)
+		FCanvasTileItem BackgroundItem(InPos, FVector2D(ProjectedSize, Thickness), FLinearColor(Settings.BackgroundColor));
+		BackgroundItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(BackgroundItem);
+
 		if (Settings.Segments > 0)
 		{
 			float TotalSize = ProjectedSize;
 			float SegSize = TotalSize / Settings.Segments;
 			int32 FilledSegs = FMath::CeilToInt(Settings.Segments * Pct);
+			float ScaledSpace = Settings.SegmentSpace * Settings.Scale;
 
-			for (int32 i = 0; i < Settings.Segments; i++)
+			for (int32 i = 0; i < FilledSegs; i++)
 			{
-				bool bFilled = (i < FilledSegs);
-				FColor SegColor = bFilled ? Color : Settings.BackgroundColor;
+				// Beim letzten Segment der Bar keinen Abstand nach rechts lassen
+				float CurrentGap = (i < Settings.Segments - 1) ? ScaledSpace : 0.f;
 				FVector2D SegPos = InPos + FVector2D(i * SegSize, 0);
-				FVector2D SegDim = FVector2D(SegSize - Settings.SegmentSpace, Thickness);
+				FVector2D SegDim = FVector2D(FMath::Max(1.0f, SegSize - CurrentGap), Thickness);
 
-				FCanvasTileItem SegItem(SegPos, SegDim, FLinearColor(SegColor));
+				FCanvasTileItem SegItem(SegPos, SegDim, FLinearColor(Color));
 				SegItem.BlendMode = SE_BLEND_Translucent;
 				Canvas->DrawItem(SegItem);
 			}
 		}
 		else
 		{
-			FVector2D BarDim = FVector2D(ProjectedSize, Thickness);
 			FVector2D FillDim = FVector2D(ProjectedSize * Pct, Thickness);
-
-			// Hintergrund
-			FCanvasTileItem BackgroundItem(InPos, BarDim, FLinearColor(Settings.BackgroundColor));
-			BackgroundItem.BlendMode = SE_BLEND_Translucent;
-			Canvas->DrawItem(BackgroundItem);
-			// Fill
 			FCanvasTileItem FillItem(InPos, FillDim, FLinearColor(Color));
 			FillItem.BlendMode = SE_BLEND_Translucent;
 			Canvas->DrawItem(FillItem);
@@ -1265,12 +1280,12 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos,
 	if (MaxShield > 0.f)
 	{
 		DrawSegmentedBar(Pos, ShieldPct, Settings.ShieldColor);
-		Pos.Y += Thickness + Settings.SegmentSpace;
+		Pos.Y += Thickness + Settings.SegmentSpace + (Outline * 2.f);
 	}
 	DrawSegmentedBar(Pos, HealthPct, Settings.HealthColor);
 }
 
-void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
+void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !Canvas) return;
@@ -1282,8 +1297,9 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector2D& ScreenP
 
 	float BaseRadius = RadiusX * Settings.RadiusMultiplier;
 	float Thickness = Settings.Thickness * Settings.Scale;
+	float Outline = Settings.bShowOutline ? (Settings.OutlineThickness * Settings.Scale) : 0.f;
 	
-	FVector Loc = Unit->GetActorLocation();
+	FVector Loc = BaseLoc;
 	FVector ZOff(0, 0, 5.f);
 	if (bIsFlying) ZOff.Z = -5.f; 
 
@@ -1291,11 +1307,21 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector2D& ScreenP
 	if (PC->ProjectWorldLocationToScreen(Loc + ZOff + RightV * BaseRadius, Right2D) &&
 		PC->ProjectWorldLocationToScreen(Loc + ZOff + UpV * BaseRadius, Up2D))
 	{
+		float ProjectedRadius = (Right2D - ScreenPos).Size() * Settings.Scale;
+		ProjectedRadius = FMath::Clamp(ProjectedRadius, Settings.MinScreenSize * 0.5f, Settings.MaxScreenSize * 0.5f);
+
+		FVector2D DirX = (Right2D - ScreenPos).GetSafeNormal();
+		FVector2D DirY = (Up2D - ScreenPos).GetSafeNormal();
+
+		FVector2D EX_Base = DirX * ProjectedRadius;
+		FVector2D EY_Base = DirY * ProjectedRadius;
+
 		auto DrawArc2D = [&](float InRadius, float Pct, FColor Color)
 		{
 			const float Base = FMath::Max(1.f, BaseRadius);
-			FVector2D EX = (Right2D - ScreenPos) * (InRadius / Base);
-			FVector2D EY = (Up2D - ScreenPos) * (InRadius / Base);
+			float RadiusScale = InRadius / Base;
+			FVector2D EX = EX_Base * RadiusScale;
+			FVector2D EY = EY_Base * RadiusScale;
 
 			int32 Segments = Settings.Segments > 0 ? Settings.Segments : 32;
 			const float TotalAngle = PI;
@@ -1307,18 +1333,42 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector2D& ScreenP
 
 			const float StartAngleRad = FMath::DegreesToRadians(Settings.RotationOffset);
 
+			// Hintergrund-Bogen (und Outline)
 			for (int32 s = 0; s < Segments; ++s)
 			{
-				const bool bFilled = (s < FMath::CeilToInt(Segments * Pct));
-				const FColor SegColor = bFilled ? Color : Settings.BackgroundColor;
 				const float A0 = StartAngleRad + s * SegAngle;
-				const float A1 = A0 + DrawAngle;
+				const float CurrentAngle = (s < Segments - 1) ? DrawAngle : SegAngle;
+				const float A1 = A0 + CurrentAngle;
+				const FVector2D P0 = ScreenPos + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
+				const FVector2D P1 = ScreenPos + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
+
+				if (Settings.bShowOutline)
+				{
+					FCanvasLineItem OutlineItem(P0, P1);
+					OutlineItem.LineThickness = Thickness + Outline * 2.f;
+					OutlineItem.SetColor(FLinearColor(Settings.OutlineColor));
+					Canvas->DrawItem(OutlineItem);
+				}
+
+				FCanvasLineItem BackgroundItem(P0, P1);
+				BackgroundItem.LineThickness = Thickness;
+				BackgroundItem.SetColor(FLinearColor(Settings.BackgroundColor));
+				Canvas->DrawItem(BackgroundItem);
+			}
+
+			// Gefüllte Segmente
+			int32 FilledSegs = FMath::CeilToInt(Segments * Pct);
+			for (int32 s = 0; s < FilledSegs; ++s)
+			{
+				const float A0 = StartAngleRad + s * SegAngle;
+				const float CurrentAngle = (s < Segments - 1) ? DrawAngle : SegAngle;
+				const float A1 = A0 + CurrentAngle;
 				const FVector2D P0 = ScreenPos + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
 				const FVector2D P1 = ScreenPos + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
 
 				FCanvasLineItem LineItem(P0, P1);
 				LineItem.LineThickness = Thickness;
-				LineItem.SetColor(FLinearColor(SegColor));
+				LineItem.SetColor(FLinearColor(Color));
 				Canvas->DrawItem(LineItem);
 			}
 		};
@@ -1326,12 +1376,12 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector2D& ScreenP
 		DrawArc2D(BaseRadius, HealthPct, Settings.HealthColor);
 		if (MaxShield > 0.f)
 		{
-			DrawArc2D(BaseRadius + Thickness + 2.f, ShieldPct, Settings.ShieldColor);
+			DrawArc2D(BaseRadius + Thickness + 2.f + (Outline * 2.f), ShieldPct, Settings.ShieldColor);
 		}
 	}
 }
 
-void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
+void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
 	UAttributeSetBase* Attr = Unit->Attributes;
 	float HealthPct = FMath::Clamp(Attr->GetHealth() / Attr->GetMaxHealth(), 0.f, 1.f);
@@ -1345,50 +1395,62 @@ void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector2D& Scree
 	if (PC)
 	{
 		FVector2D EdgeWidth, EdgeHeight;
-		FVector Loc = Unit->GetActorLocation();
+		FVector Loc = BaseLoc;
 		
 		if (PC->ProjectWorldLocationToScreen(Loc + RightV * WorldWidthRadius, EdgeWidth))
 		{
-			WorldWidth = (EdgeWidth - ScreenPos).Size();
+			WorldWidth = (EdgeWidth - ScreenPos).Size() * Settings.Scale;
 		}
 
 		if (PC->ProjectWorldLocationToScreen(Loc + UpV * WorldRadius, EdgeHeight))
 		{
-			ProjectedHeight = (EdgeHeight - ScreenPos).Size() * 2.0f;
+			ProjectedHeight = (EdgeHeight - ScreenPos).Size() * 2.0f * Settings.Scale;
 		}
 	}
+
+	ProjectedHeight = FMath::Clamp(ProjectedHeight, Settings.MinScreenSize, Settings.MaxScreenSize);
+	WorldWidth = FMath::Max(WorldWidth, Settings.MinScreenSize * 0.5f);
 
 	float BracketHeight = ProjectedHeight;
 	float OffsetX = WorldWidth + 5.f;
 	float Thickness = Settings.Thickness * Settings.Scale;
+	float Outline = Settings.bShowOutline ? (Settings.OutlineThickness * Settings.Scale) : 0.f;
 
 	auto DrawSegmentedBracket = [&](FVector2D Top, float Pct, FColor Color)
 	{
+		if (Settings.bShowOutline)
+		{
+			FCanvasTileItem OutlineItem(Top - FVector2D(Outline, Outline), FVector2D(Thickness + Outline * 2.f, BracketHeight + Outline * 2.f), FLinearColor(Settings.OutlineColor));
+			OutlineItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(OutlineItem);
+		}
+
+		// Hintergrund
+		FCanvasTileItem BackgroundItem(Top, FVector2D(Thickness, BracketHeight), FLinearColor(Settings.BackgroundColor));
+		BackgroundItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(BackgroundItem);
+
 		if (Settings.Segments > 0)
 		{
 			float SegHeight = BracketHeight / Settings.Segments;
 			int32 FilledSegs = FMath::CeilToInt(Settings.Segments * Pct);
-			for (int32 i = 0; i < Settings.Segments; i++)
+			float ScaledSpace = Settings.SegmentSpace * Settings.Scale;
+
+			for (int32 i = 0; i < FilledSegs; i++)
 			{
-				bool bFilled = (i < FilledSegs);
-				FColor SegColor = bFilled ? Color : Settings.BackgroundColor;
-				
+				// Beim untersten Segment (i=0) keinen Abstand nach unten lassen
+				float CurrentGap = (i == 0) ? 0.f : ScaledSpace;
 				FVector2D SegPos = Top + FVector2D(0, BracketHeight - (i + 1) * SegHeight);
-				FVector2D SegDim = FVector2D(Thickness, SegHeight - Settings.SegmentSpace);
+				FVector2D SegDim = FVector2D(Thickness, FMath::Max(1.0f, SegHeight - CurrentGap));
 				
-				FCanvasTileItem SegItem(SegPos, SegDim, FLinearColor(SegColor));
+				FCanvasTileItem SegItem(SegPos, SegDim, FLinearColor(Color));
 				SegItem.BlendMode = SE_BLEND_Translucent;
 				Canvas->DrawItem(SegItem);
 			}
 		}
 		else
 		{
-			// Hintergrund
-			FCanvasTileItem BackgroundItem(Top, FVector2D(Thickness, BracketHeight), FLinearColor(Settings.BackgroundColor));
-			BackgroundItem.BlendMode = SE_BLEND_Translucent;
-			Canvas->DrawItem(BackgroundItem);
-
-			// Fill von unten
+			// Fill von unten (Hintergrund wurde bereits gezeichnet)
 			float FillHeight = BracketHeight * Pct;
 			FCanvasTileItem FillItem(Top + FVector2D(0, BracketHeight - FillHeight), FVector2D(Thickness, FillHeight), FLinearColor(Color));
 			FillItem.BlendMode = SE_BLEND_Translucent;
