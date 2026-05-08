@@ -1202,6 +1202,13 @@ void AHUDBase::DrawAllHealthBars()
 
 void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV)
 {
+	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
+	if (LevelUnit && LevelUnit->bShowLevelOnly)
+	{
+		DrawLevelText(Unit, ScreenPos, Settings);
+		return;
+	}
+
 	UAttributeSetBase* Attr = Unit->Attributes;
 	float Health = Attr->GetHealth();
 	float MaxHealth = Attr->GetMaxHealth();
@@ -1212,6 +1219,9 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, con
 
 	float HealthPct = FMath::Clamp(Health / MaxHealth, 0.f, 1.f);
 	float ShieldPct = (MaxShield > 0.f) ? FMath::Clamp(Shield / MaxShield, 0.f, 1.f) : 0.f;
+
+	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
+	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
 
 	APlayerController* PC = GetOwningPlayerController();
 	float ProjectedSize = 60.f;
@@ -1283,10 +1293,25 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, con
 		Pos.Y += Thickness + Settings.SegmentSpace + (Outline * 2.f);
 	}
 	DrawSegmentedBar(Pos, HealthPct, Settings.HealthColor);
+
+	if (LevelUnit)
+	{
+		FVector2D LevelPos = ScreenPos;
+		LevelPos.X -= (60.f * Settings.Scale) * 0.5f;
+		LevelPos.Y -= 65.f * Settings.Scale;
+		DrawLevelText(Unit, LevelPos, Settings);
+	}
 }
 
 void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
+	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
+	if (LevelUnit && LevelUnit->bShowLevelOnly)
+	{
+		DrawLevelText(Unit, ScreenPos, Settings);
+		return;
+	}
+
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !Canvas) return;
 
@@ -1294,6 +1319,9 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 	float HealthPct = FMath::Clamp(Attr->GetHealth() / Attr->GetMaxHealth(), 0.f, 1.f);
 	float MaxShield = Attr->GetMaxShield();
 	float ShieldPct = (MaxShield > 0.f) ? FMath::Clamp(Attr->GetShield() / MaxShield, 0.f, 1.f) : 0.f;
+
+	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
+	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
 
 	float BaseRadius = RadiusX * Settings.RadiusMultiplier;
 	float Thickness = Settings.Thickness * Settings.Scale;
@@ -1378,15 +1406,30 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 		{
 			DrawArc2D(BaseRadius + Thickness + 2.f + (Outline * 2.f), ShieldPct, Settings.ShieldColor);
 		}
+
+		if (LevelUnit)
+		{
+			DrawLevelText(Unit, ScreenPos, Settings);
+		}
 	}
 }
 
 void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
+	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
+	if (LevelUnit && LevelUnit->bShowLevelOnly)
+	{
+		DrawLevelText(Unit, ScreenPos, Settings);
+		return;
+	}
+
 	UAttributeSetBase* Attr = Unit->Attributes;
 	float HealthPct = FMath::Clamp(Attr->GetHealth() / Attr->GetMaxHealth(), 0.f, 1.f);
 	float MaxShield = Attr->GetMaxShield();
 	float ShieldPct = (MaxShield > 0.f) ? FMath::Clamp(Attr->GetShield() / MaxShield, 0.f, 1.f) : 0.f;
+
+	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
+	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
 
 	APlayerController* PC = GetOwningPlayerController();
 	float WorldWidth = 40.f;
@@ -1468,6 +1511,82 @@ void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc
 		FVector2D R_Top(ScreenPos.X + OffsetX, ScreenPos.Y - BracketHeight * 0.5f);
 		DrawSegmentedBracket(R_Top, ShieldPct, Settings.ShieldColor);
 	}
+
+	if (LevelUnit)
+	{
+		DrawLevelText(Unit, ScreenPos + FVector2D(0, BracketHeight * 0.5f + 10.f * Settings.Scale), Settings);
+	}
+}
+
+void AHUDBase::DrawLevelText(AUnitBase* Unit, const FVector2D& ScreenPos, const FHealthBarSettings& Settings)
+{
+	if (!Settings.bShowLevel || !LevelFont || !Unit) return;
+
+	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
+	if (!LevelUnit) return;
+
+	FString LevelStr = LevelUnit->CachedLevelString;
+	if (LevelStr.IsEmpty())
+	{
+		LevelStr = FString::FromInt(LevelUnit->LevelData.CharacterLevel);
+	}
+
+	float FontScale = Settings.Scale * Settings.LevelTextScale;
+	FVector2D FinalPos = ScreenPos + (Settings.LevelOffset * Settings.Scale);
+
+	FCanvasTextItem TextItem(FinalPos, FText::FromString(LevelStr), LevelFont, Settings.LevelColor);
+	TextItem.Scale = FVector2D(FontScale, FontScale);
+	TextItem.bOutlined = true;
+	TextItem.OutlineColor = FLinearColor::Black;
+	TextItem.BlendMode = SE_BLEND_Translucent;
+
+	Canvas->DrawItem(TextItem);
+}
+
+float AHUDBase::GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHealthBarSettings& Settings)
+{
+	if (DisplayedPct < 0.f)
+	{
+		DisplayedPct = ActualPct;
+		return ActualPct;
+	}
+
+	if (ActualPct < DisplayedPct)
+	{
+		// Sinkt sofort
+		DisplayedPct = ActualPct;
+	}
+	else if (ActualPct > DisplayedPct)
+	{
+		if (Settings.Segments > 0)
+		{
+			float OneSegmentPct = 1.0f / (float)Settings.Segments;
+			float Threshold = OneSegmentPct * Settings.SegmentRefillThreshold;
+
+			// Nächstes Segment Grenze
+			float NextSegmentThreshold = FMath::CeilToFloat(DisplayedPct * (float)Settings.Segments) / (float)Settings.Segments;
+
+			if (FMath::IsNearlyEqual(DisplayedPct, NextSegmentThreshold, 0.0001f))
+			{
+				NextSegmentThreshold += OneSegmentPct;
+			}
+
+			if (ActualPct >= NextSegmentThreshold + Threshold || ActualPct >= 1.0f)
+			{
+				DisplayedPct = ActualPct;
+			}
+		}
+		else
+		{
+			// Kontinuierlich
+			if (ActualPct >= DisplayedPct + 0.01f || ActualPct >= 1.0f)
+			{
+				DisplayedPct = ActualPct;
+			}
+		}
+	}
+
+	return DisplayedPct;
 }
 
 

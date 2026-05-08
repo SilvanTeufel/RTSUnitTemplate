@@ -440,6 +440,12 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool DetectFriendlyUnits = false;
+
+	UPROPERTY()
+	float DisplayedHealthPct = -1.f;
+
+	UPROPERTY()
+	float DisplayedShieldPct = -1.f;
 };
 
 

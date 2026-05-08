@@ -79,6 +79,21 @@ struct FHealthBarSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	FColor BackgroundColor = FColor(0, 0, 0, 150);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Level")
+	bool bShowLevel = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Level")
+	FColor LevelColor = FColor::Yellow;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Level")
+	FVector2D LevelOffset = FVector2D(0.f, -25.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Level")
+	float LevelTextScale = 1.1f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	float SegmentRefillThreshold = 0.2f;
 };
 
 UCLASS()
@@ -105,8 +120,10 @@ private:
 	void DrawAllSelectedUnitsIndicators();
 	void DrawAllHealthBars();
 	void DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV);
+	void DrawLevelText(AUnitBase* Unit, const FVector2D& ScreenPos, const FHealthBarSettings& Settings);
 	void DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
 	void DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
+	float GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHealthBarSettings& Settings);
 
 public:
 	UFUNCTION(BlueprintCallable, Category = "RTS|HUD")
@@ -138,6 +155,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
 	bool bShowAllHealthBarsPermanent = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
+	UFont* LevelFont;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
 	bool bShowHealthOnSelected = true;

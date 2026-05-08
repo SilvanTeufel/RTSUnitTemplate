@@ -32,6 +32,7 @@ void ALevelUnit::Tick(float DeltaTime)
 void ALevelUnit::BeginPlay()
 {
 	Super::BeginPlay();
+	UpdateCachedLevelString();
 }
 
 void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -53,6 +54,7 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 
 void ALevelUnit::OnRep_LevelData(const FLevelData& OldLevelData)
 {
+	UpdateCachedLevelString();
 	if (LevelData.CharacterLevel > OldLevelData.CharacterLevel)
 	{
 		LevelVisibilityCheck();
@@ -79,6 +81,7 @@ void ALevelUnit::LevelUp_Implementation()
 		LevelData.CharacterLevel++;
 		LevelData.TalentPoints += LevelUpData.TalentPointsPerLevel; // Define TalentPointsPerLevel as appropriate
 		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
+		UpdateCachedLevelString();
 		OnLevelUp(LevelData.CharacterLevel);
 		// Trigger any additional level-up effects or logic here
 		LevelVisibilityCheck();
@@ -216,6 +219,7 @@ void ALevelUnit::ResetTalents()
 void ALevelUnit::ResetLevel()
 {
 	LevelData.CharacterLevel = 1;
+	UpdateCachedLevelString();
 	LevelData.TalentPoints = 0;
 	LevelData.UsedTalentPoints = 0;
 	LevelData.Experience = 0;
@@ -266,9 +270,15 @@ void ALevelUnit::LoadLevelDataAndAttributes(const FString& SlotName)
 	if (SaveGameInstance)
 	{
 		LevelData = SaveGameInstance->LevelData;
+		UpdateCachedLevelString();
 		LevelUpData = SaveGameInstance->LevelUpData;
 		
 		Attributes->UpdateAttributes(SaveGameInstance->AttributeSaveData);
 	}
 	
+}
+
+void ALevelUnit::UpdateCachedLevelString()
+{
+	CachedLevelString = FString::FromInt(LevelData.CharacterLevel);
 }

@@ -152,6 +152,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
 	bool bShowLevelOnly = false;
 
+	UPROPERTY(BlueprintReadOnly, Category = "Leveling")
+	FString CachedLevelString;
+
+	void UpdateCachedLevelString();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
 	float HealthWidgetDisplayDuration = 0.0f;
 
