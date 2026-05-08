@@ -923,6 +923,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				CharFrag->bCanDetectInvisible = false;
 				CharFrag->CapsuleRadius = EffectArea->BaseRadius;
 				CharFrag->CapsuleHeight = EffectArea->CapsuleHeight;
+				CharFrag->LastGroundLocation = EffectArea->GetActorLocation().Z;
 				CharFrag->bIsFlying = false;
 				CharFrag->HideActorTime = HideActorTime;
 				CharFrag->DespawnTime = DespawnTime;
@@ -1192,6 +1193,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     	{
     		CharFrag->PositionedTransform = EffectArea->GetActorTransform();
     		CharFrag->CapsuleHeight = EffectArea->CapsuleHeight;
+    		CharFrag->LastGroundLocation = EffectArea->GetActorLocation().Z;
     		CharFrag->CapsuleRadius = 0.f;
     		CharFrag->bUseBoxComponent = false;
     		CharFrag->bIsInvisible = EffectArea->bIsInvisible;
