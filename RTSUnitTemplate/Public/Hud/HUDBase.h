@@ -94,6 +94,9 @@ struct FHealthBarSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	float SegmentRefillThreshold = 0.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	float BarPadding = 2.0f;
 };
 
 UCLASS()

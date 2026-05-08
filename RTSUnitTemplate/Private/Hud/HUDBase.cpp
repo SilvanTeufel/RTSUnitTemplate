@@ -1290,7 +1290,7 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, con
 	if (MaxShield > 0.f)
 	{
 		DrawSegmentedBar(Pos, ShieldPct, Settings.ShieldColor);
-		Pos.Y += Thickness + Settings.SegmentSpace + (Outline * 2.f);
+		Pos.Y += Thickness + (Settings.BarPadding * Settings.Scale) + (Outline * 2.f);
 	}
 	DrawSegmentedBar(Pos, HealthPct, Settings.HealthColor);
 
@@ -1323,7 +1323,8 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
 	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
 
-	float BaseRadius = RadiusX * Settings.RadiusMultiplier;
+	float MaxWorldRadius = FMath::Max(RadiusX, RadiusY);
+	float BaseRadius = MaxWorldRadius * Settings.RadiusMultiplier;
 	float Thickness = Settings.Thickness * Settings.Scale;
 	float Outline = Settings.bShowOutline ? (Settings.OutlineThickness * Settings.Scale) : 0.f;
 	
@@ -1404,7 +1405,7 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 		DrawArc2D(BaseRadius, HealthPct, Settings.HealthColor);
 		if (MaxShield > 0.f)
 		{
-			DrawArc2D(BaseRadius + Thickness + 2.f + (Outline * 2.f), ShieldPct, Settings.ShieldColor);
+			DrawArc2D(BaseRadius + Thickness + (Settings.BarPadding * Settings.Scale) + (Outline * 2.f), ShieldPct, Settings.ShieldColor);
 		}
 
 		if (LevelUnit)
@@ -1455,7 +1456,7 @@ void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc
 	WorldWidth = FMath::Max(WorldWidth, Settings.MinScreenSize * 0.5f);
 
 	float BracketHeight = ProjectedHeight;
-	float OffsetX = WorldWidth + 5.f;
+	float OffsetX = WorldWidth + (Settings.BarPadding * Settings.Scale);
 	float Thickness = Settings.Thickness * Settings.Scale;
 	float Outline = Settings.bShowOutline ? (Settings.OutlineThickness * Settings.Scale) : 0.f;
 
