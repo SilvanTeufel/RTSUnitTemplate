@@ -119,7 +119,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	//DOREPLIFETIME(AEffectArea, AreaEffectOne);
 	//DOREPLIFETIME(AEffectArea, AreaEffectTwo);
-	//DOREPLIFETIME(AEffectArea, AreaEffectThree);
+	DOREPLIFETIME(AEffectArea, TeamId);
 	DOREPLIFETIME(AEffectArea, Niagara_A);
 	DOREPLIFETIME(AEffectArea, BeaconRange);
 	DOREPLIFETIME(AEffectArea, VisualRotationOffset);
