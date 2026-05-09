@@ -77,6 +77,7 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FUnitReplicatedTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
@@ -172,6 +173,9 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkCtx.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
 		TArrayView<FMassAIStateFragment> AIStateList = ChunkCtx.GetMutableFragmentView<FMassAIStateFragment>();
 		TArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkCtx.GetMutableFragmentView<FMassMoveTargetFragment>();
+		TArrayView<FMassVelocityFragment> VelocityList = ChunkCtx.GetMutableFragmentView<FMassVelocityFragment>();
+		TArrayView<FMassForceFragment> ForceList = ChunkCtx.GetMutableFragmentView<FMassForceFragment>();
+		TArrayView<FMassSteeringFragment> SteeringList = ChunkCtx.GetMutableFragmentView<FMassSteeringFragment>();
 		TArrayView<FMassVisualEffectFragment> EffectList = ChunkCtx.GetMutableFragmentView<FMassVisualEffectFragment>();
 		TArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkCtx.GetMutableFragmentView<FMassWorkerStatsFragment>();
 		TArrayView<FEffectAreaImpactFragment> EffectAreaImpactList = ChunkCtx.GetMutableFragmentView<FEffectAreaImpactFragment>();
@@ -329,19 +333,32 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						}
 
 						// Move Target
-						if (MoveTargetList.IsValidIndex(EntityIdx) && (UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove))
+						if (MoveTargetList.IsValidIndex(EntityIdx))
 						{
 							FMassMoveTargetFragment& MT = MoveTargetList[EntityIdx];
-							MT.Center = FVector(UseItem->TargetLoc);
-							MT.SlackRadius = (float)(UseItem->MoveData & 0xFF);
-							MT.DesiredSpeed.Set((float)((UseItem->MoveData >> 8) & 0xFFF));
-							MT.IntentAtGoal = static_cast<EMassMovementAction>((PE & UnitReplicationBits::Packed_MoveIntentMask) >> UnitReplicationBits::Packed_MoveIntentShift);
-							MT.DistanceToGoal = (float)((UseItem->AuxData >> 24) & 0xFF) * 4.f;
-							
-							const uint32 ActionID = (UseItem->MoveData >> 20) & 0xFFF;
-							if (AActor* OA = ActorList[EntityIdx].GetMutable())
+							if (UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove)
 							{
-								MT.CreateReplicatedAction(MT.IntentAtGoal, ActionID, World->GetTimeSeconds(), (double)UseItem->Move_ServerStartTime);
+								MT.Center = FVector(UseItem->TargetLoc);
+								MT.SlackRadius = (float)(UseItem->MoveData & 0xFF);
+								MT.DesiredSpeed.Set((float)((UseItem->MoveData >> 8) & 0xFFF));
+								MT.IntentAtGoal = static_cast<EMassMovementAction>((PE & UnitReplicationBits::Packed_MoveIntentMask) >> UnitReplicationBits::Packed_MoveIntentShift);
+								MT.DistanceToGoal = (float)((UseItem->AuxData >> 24) & 0xFF) * 4.f;
+
+								const uint32 ActionID = (UseItem->MoveData >> 20) & 0xFFF;
+								if (AActor* OA = ActorList[EntityIdx].GetMutable())
+								{
+									MT.CreateReplicatedAction(MT.IntentAtGoal, ActionID, World->GetTimeSeconds(), (double)UseItem->Move_ServerStartTime);
+								}
+							}
+							else
+							{
+								// NEU: Wenn der Server keine Bewegung mehr signalisiert, muss der Client lokal stoppen.
+								// Dies verhindert, dass der lokale MovementProcessor die Einheit gegen die Replikation schiebt.
+								if (MT.DesiredSpeed.Get() > 0.f)
+								{
+									MT.DesiredSpeed.Set(0.f);
+									MT.IntentAtGoal = EMassMovementAction::Stand;
+								}
 							}
 						}
 					}
@@ -369,8 +386,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					const bool bIsMoving = (MoveTargetList.IsValidIndex(EntityIdx) && MoveTargetList[EntityIdx].DesiredSpeed.Get() > 10.f) || 
 										   (PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData);
 					
-					if (bIsMoving)
-					{
+					//if (bIsMoving)
+					//{
 						// Increase tolerance and decrease correction speed while moving to prevent stuttering
 						CurrentMinErrorSq *= 2.0f; // Toleranz während der Fahrt: 200 (ca. 14 cm) statt bisher 100 (10 cm)
 						CurrentKp *= 0.4f;
@@ -382,7 +399,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						{
 							CurrentKp *= 0.5f;
 						}
-					}
+					//}
+					/*else
+					{
+						// NEU: Auch im Stillstand eine leichte Dämpfung beibehalten, um Jitter zu vermeiden.
+						CurrentMinErrorSq *= 1.25f;
+						CurrentKp *= 0.75f;
+					}*/
 
 					if (DistanceSq > CurrentMinErrorSq)
 					{
@@ -404,6 +427,14 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						}
 
 						ClientXf.SetLocation(NewLocation);
+
+						// NEU: Verhindert, dass die lokale Physik die Korrektur sofort wieder aushebelt
+						// KORREKTUR: Nur dämpfen, wenn die Einheit laut Replikation NICHT in Bewegung ist.
+						if (!bIsMoving)
+						{
+							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.1f;
+							if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
+						}
 					}
 
 					// --- Rotation Reconciliation ---

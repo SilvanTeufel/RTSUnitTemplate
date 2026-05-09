@@ -693,9 +693,6 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                         CharList[i].LastActorSyncTime = CurrentTime;
                     }
                 }
-            }else if (UnitBase->GetUnitState() == UnitData::Run)
-            {
-                    UnitBase->SetUnitState(UnitData::Idle);
             }
         }
     });
@@ -909,9 +906,6 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                         CharList[i].LastActorSyncTime = CurrentTime;
                     }
                 }
-            }else if (UnitBase->GetUnitState() == UnitData::Run)
-            {
-                    UnitBase->SetUnitState(UnitData::Idle);
             }
             
         }

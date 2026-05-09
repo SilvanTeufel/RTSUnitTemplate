@@ -1565,6 +1565,15 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		if (!bShouldHave && bHasNow) { EntityManager.Defer().RemoveTag<T>(Entity); }
 	};
 
+	auto SetTagPredictive = [&EntityManager, &Entity, &Bits, bPredicting](uint32 Mask, auto TagStructType)
+	{
+		using T = decltype(TagStructType);
+		const bool bShouldHave = (Bits & Mask) != 0;
+		const bool bHasNow = DoesEntityHaveTag(EntityManager, Entity, T::StaticStruct());
+		if (bShouldHave && !bHasNow) { EntityManager.Defer().AddTag<T>(Entity); }
+		if (!bShouldHave && bHasNow && !bPredicting) { EntityManager.Defer().RemoveTag<T>(Entity); }
+	};
+
 	// Always replicate/control these tags regardless of death state
 	SetTag(UnitTagBits::StopMovement,        FMassStateStopMovementTag());
 	SetTag(UnitTagBits::Frozen,              FMassStateFrozenTag());
@@ -1626,7 +1635,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
 		SetTag(UnitTagBits::Charging,            FMassStateChargingTag());
 		SetTag(UnitTagBits::IsAttacked,          FMassStateIsAttackedTag());
-		SetTag(UnitTagBits::Attack,              FMassStateAttackTag());
+		SetTagPredictive(UnitTagBits::Attack,              FMassStateAttackTag());
 		SetTag(UnitTagBits::Chase,               FMassStateChaseTag());
 		SetTag(UnitTagBits::Build,               FMassStateBuildTag());
 		SetTag(UnitTagBits::ResourceExtraction,  FMassStateResourceExtractionTag());
@@ -1639,7 +1648,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 		SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 		SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
-		SetTag(UnitTagBits::Pause,               FMassStatePauseTag());
+		SetTagPredictive(UnitTagBits::Pause,               FMassStatePauseTag());
 		SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
 
 		if (!bPredicting)

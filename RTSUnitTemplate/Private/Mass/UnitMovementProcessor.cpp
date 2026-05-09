@@ -250,7 +250,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
             }
-            else if ((!PathFrag.HasValidPath() || FVector::DistSquared2D(PathFrag.PathTargetLocation, FinalDestination) > FMath::Square(1.f)) && !PathFrag.bIsPathfindingInProgress)
+            else if ((!PathFrag.HasValidPath() || PathFrag.PathTargetLocation != FinalDestination) && !PathFrag.bIsPathfindingInProgress)
             {
                 // Begin a new path request if we have navigation; otherwise, steer directly.
                 if (bHasNavSystem)
