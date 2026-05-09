@@ -78,7 +78,7 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 			{
 				if (ImpactList.Num() > 0)
 				{
-					SyncEffectArea(*Area, ImpactList[EntityIndex], CombatStatsList[EntityIndex]);
+					SyncEffectArea(*Area, ImpactList[EntityIndex], CombatStatsList[EntityIndex], CharacteristicsList[EntityIndex]);
 				}
 			}
 		}
@@ -201,11 +201,42 @@ void UUnitActorToFragmentSyncProcessor::SyncPatrol(const AUnitBase& Unit, FMassP
 	}
 }
 
-void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& Impact, FMassCombatStatsFragment& CombatStats)
+void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& Impact, FMassCombatStatsFragment& CombatStats, FMassAgentCharacteristicsFragment& Characteristics)
 {
+    // Sync Scaling/Radius properties (BP constants)
+    Impact.StartRadius = Area.StartRadius;
+    Impact.EndRadius = Area.EndRadius;
+    Impact.BaseRadius = Area.BaseRadius;
+    Impact.TimeToEndRadius = Area.TimeToEndRadius;
+    Impact.bScaleOnImpact = Area.bScaleOnImpact;
+    Impact.bPulsate = Area.bPulsate;
+    Impact.bDestroyOnImpact = Area.bDestroyOnImpact;
+    Impact.bIsRadiusScaling = Area.bIsRadiusScaling;
+    Impact.bScaleMesh = Area.ScaleMesh;
+    Impact.IsHealing = Area.IsHealing;
+
+    // Sync Gameplay Effects
+    Impact.AreaEffectOne = Area.AreaEffectOne;
+    Impact.AreaEffectTwo = Area.AreaEffectTwo;
+    Impact.AreaEffectThree = Area.AreaEffectThree;
+
+    // Sync Destruction/Spawn params from Actor/Component
+    if (Area.MassBindingComponent)
+    {
+        Impact.HideActorTime = Area.MassBindingComponent->HideActorTime;
+        Impact.DespawnTime = Area.MassBindingComponent->DespawnTime;
+
+        Characteristics.HideActorTime = Area.MassBindingComponent->HideActorTime;
+        Characteristics.DespawnTime = Area.MassBindingComponent->DespawnTime;
+    }
+    Impact.EarlySpawnTime = Area.EarlySpawnTime;
+    Impact.SpawnRandomOffsetMin = Area.SpawnRandomOffsetMin;
+    Impact.SpawnRandomOffsetMax = Area.SpawnRandomOffsetMax;
+
+    // Existing syncs
     Impact.StartScaleTime = Area.StartScaleTime;
     Impact.VisualRotationOffset = Area.VisualRotationOffset;
     Impact.TeamId = Area.TeamId;
 
-	CombatStats.TeamId = Area.TeamId;
+    CombatStats.TeamId = Area.TeamId;
 }

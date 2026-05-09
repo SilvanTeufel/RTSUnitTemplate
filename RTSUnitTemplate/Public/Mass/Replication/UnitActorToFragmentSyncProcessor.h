@@ -46,5 +46,5 @@ private:
 	void SyncAIState(const AUnitBase& Unit, FMassAIStateFragment& AIStateFragment, FMassCombatStatsFragment& CombatStatsFragment);
 	void SyncVisibility(const AUnitBase& Unit, FMassVisibilityFragment& VisibilityFragment);
 	void SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFragment, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle);
-	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment& CombatStatsFragment);
+	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment& CombatStatsFragment, FMassAgentCharacteristicsFragment& CharacteristicsFragment);
 };

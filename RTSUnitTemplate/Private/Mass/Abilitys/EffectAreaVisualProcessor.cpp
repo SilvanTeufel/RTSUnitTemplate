@@ -1,4 +1,5 @@
 #include "Mass/Abilitys/EffectAreaVisualProcessor.h"
+#include "MassReplicationFragments.h"
 #include "MassCommonFragments.h"
 #include "MassExecutionContext.h"
 #include "MassEntityView.h"
@@ -26,6 +27,7 @@ void UMassEffectAreaVisualProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	VisualQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	VisualQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     VisualQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly);
+	VisualQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	VisualQuery.AddTagRequirement<FMassEffectAreaActiveTag>(EMassFragmentPresence::All);
 	VisualQuery.RegisterWithProcessor(*this);
 
@@ -49,14 +51,66 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 		TArrayView<FMassActorFragment> ActorList = VisualContext.GetMutableFragmentView<FMassActorFragment>();
 		TConstArrayView<FMassVisibilityFragment> VisibilityList = VisualContext.GetFragmentView<FMassVisibilityFragment>();
 
+		TConstArrayView<FMassNetworkIDFragment> NetIDList = VisualContext.GetFragmentView<FMassNetworkIDFragment>();
+		bool bIsClient = VisualContext.GetWorld()->GetNetMode() == NM_Client;
+
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
+			AActor* AreaActor = ActorList[i].GetMutable();
+
+			// 1. FILTER: On client, ignore entities without actors (naked bubble entities)
+			// and ignore entities with NetID 0 (local placeholders)
+			if (bIsClient)
+			{
+				if (!AreaActor)
+				{
+					continue;
+				}
+
+				if (NetIDList.Num() > 0 && NetIDList[i].NetID.GetValue() == 0)
+				{
+					// Optional diagnostic log
+					// UE_LOG(LogTemp, VeryVerbose, TEXT("[EA_LOG] Skipping local entity Index %d"), VisualContext.GetEntity(i).Index);
+					continue;
+				}
+			}
+
 			FEffectAreaVisualFragment& Visual = VisualList[i];
 			FEffectAreaImpactFragment& Impact = ImpactList[i];
-			const FTransform& EntityTransform = TransformList[i].GetTransform();
 			const FMassVisibilityFragment& Visibility = VisibilityList[i];
+
+			// 2. REFRESH OFFSETS: If replicated rotation offset changed, update relative transforms
+			if (!Impact.VisualRotationOffset.Equals(Visual.LastAppliedRotationOffset))
+			{
+				FTransform VisualOffsetTransform(Impact.VisualRotationOffset);
+				Visual.VisualRelativeTransform = Visual.BaseRelativeTransform * VisualOffsetTransform;
+				Visual.Niagara_A_RelativeTransform = Visual.Niagara_A_BaseRelativeTransform * VisualOffsetTransform;
+				Visual.LastAppliedRotationOffset = Impact.VisualRotationOffset;
+
+				if (bIsClient)
+				{
+					UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client Visual: Rotation Offset updated for Entity %d"), VisualContext.GetEntity(i).Index);
+				}
+			}
             
-			AActor* AreaActor = ActorList[i].GetMutable();
+			// 3. TRANSFORM: Use smooth Actor transform on client if available
+			FTransform BaseTransform;
+			if (bIsClient && AreaActor)
+			{
+				BaseTransform = AreaActor->GetTransform();
+				
+				// Diagnostic log for jitter analysis
+				if (Impact.bIsScalingAfterImpact)
+				{
+					UE_LOG(LogTemp, VeryVerbose, TEXT("[EA_LOG] Client Visual: Entity %d, Actor Loc: %s, Mass Loc: %s"), 
+						VisualContext.GetEntity(i).Index, *BaseTransform.GetLocation().ToString(), *TransformList[i].GetTransform().GetLocation().ToString());
+				}
+			}
+			else
+			{
+				BaseTransform = TransformList[i].GetTransform();
+			}
+
 			AEffectArea* EffectArea = Cast<AEffectArea>(AreaActor);
 
 			bool bIsVisibleByFog = !Visibility.bAffectedByFogOfWar || Visibility.bIsMyTeam || Visibility.bIsVisibleEnemy;
@@ -76,7 +130,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 				{
 					float LocalRadius = Visual.BaseMeshRadius;
 					float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
-					FTransform VisualTransform = Visual.VisualRelativeTransform * EntityTransform;
+					FTransform VisualTransform = Visual.VisualRelativeTransform * BaseTransform;
 					VisualTransform.SetScale3D(FVector(ScaleFactor));
 					
 					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, VisualTransform, true, true, true);
@@ -91,7 +145,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
             // Handle Niagara position
             if (Visual.Niagara_A.IsValid())
             {
-                Visual.Niagara_A->SetWorldTransform(Visual.Niagara_A_RelativeTransform * EntityTransform);
+                Visual.Niagara_A->SetWorldTransform(Visual.Niagara_A_RelativeTransform * BaseTransform);
                 Visual.Niagara_A->SetVisibility(bShouldShow);
             }
 
@@ -103,7 +157,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
                 UWorld* World = VisualContext.GetWorld();
                 if (World && World->GetNetMode() != NM_DedicatedServer)
                 {
-                    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->ImpactVFX, EntityTransform.GetLocation());
+                    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->ImpactVFX, BaseTransform.GetLocation());
                 }
                 Impact.bImpactVFXTriggered = false;
             }
@@ -116,11 +170,11 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
                 {
 				    if (EffectArea->SpawnVFX)
 				    {
-					    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->SpawnVFX, EntityTransform.GetLocation());
+					    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->SpawnVFX, BaseTransform.GetLocation());
 				    }
 				    if (EffectArea->SpawnSound)
 				    {
-					    UGameplayStatics::PlaySoundAtLocation(World, EffectArea->SpawnSound, EntityTransform.GetLocation());
+					    UGameplayStatics::PlaySoundAtLocation(World, EffectArea->SpawnSound, BaseTransform.GetLocation());
 				    }
                 }
 				Impact.bSpawnEffectsTriggered = true;

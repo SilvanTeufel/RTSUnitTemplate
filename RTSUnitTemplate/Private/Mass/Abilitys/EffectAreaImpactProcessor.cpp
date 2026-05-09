@@ -1,4 +1,5 @@
 #include "Mass/Abilitys/EffectAreaImpactProcessor.h"
+#include "MassReplicationFragments.h"
 #include "MassCommonFragments.h"
 #include "MassExecutionContext.h"
 #include "MassEntityView.h"
@@ -86,6 +87,7 @@ void UMassEffectAreaImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	AreaQuery.Initialize(EntityManager);
 	AreaQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+	AreaQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	AreaQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddTagRequirement<FMassEffectAreaImpactTag>(EMassFragmentPresence::All);
@@ -150,11 +152,29 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			}
 		};
 
+		bool bIsClient = AreaContext.GetWorld()->GetNetMode() == NM_Client;
+		TConstArrayView<FMassNetworkIDFragment> NetIDList = AreaContext.GetFragmentView<FMassNetworkIDFragment>();
+
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
+			AActor* AreaActor = ActorList[i].GetMutable();
+
+			// FILTER: On client, ignore entities without actors and entities with NetID 0
+			if (bIsClient)
+			{
+				if (!AreaActor)
+				{
+					continue;
+				}
+
+				if (NetIDList.Num() > 0 && NetIDList[i].NetID.GetValue() == 0)
+				{
+					continue;
+				}
+			}
+
 			FEffectAreaImpactFragment& Impact = ImpactList[i];
 			FVector AreaLocation = TransformList[i].GetTransform().GetLocation();
-			AActor* AreaActor = ActorList[i].GetMutable();
 			AEffectArea* EffectArea = Cast<AEffectArea>(AreaActor);
 
 			Impact.ElapsedTime += DeltaTime;
@@ -205,6 +225,13 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			}
 			else if (Impact.bIsScalingAfterImpact)
 			{
+				// Detect start of impact scaling on client
+				if (!bIsServer && Impact.ImpactScalingElapsedTime == 0.f)
+				{
+					UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client: Starting impact scaling for Entity Index %d. StartRadius: %f, EndRadius: %f"), AreaContext.GetEntity(i).Index, Impact.CurrentRadius, Impact.EndRadius);
+					Impact.RadiusAtImpactStart = Impact.CurrentRadius;
+				}
+
 				Impact.ImpactScalingElapsedTime += DeltaTime;
 				float Alpha = (Impact.TimeToEndRadius > 0.f)
 					? FMath::Clamp(Impact.ImpactScalingElapsedTime / Impact.TimeToEndRadius, 0.f, 1.f)
@@ -238,6 +265,19 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 						if (Impact.bDestroyOnImpact)
 						{
 							BeginDestruction(Impact, EffectArea, AreaLocation);
+						}
+					}
+					else
+					{
+						// On client, if scaling finished and we are dead, hide visuals now
+						if (bIsDead)
+						{
+							if (EffectArea)
+							{
+								EffectArea->SetDeathVisualState(true);
+							}
+							Impact.bHasHiddenVisual = true;
+							UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client: Impact scaling finished for Entity Index %d, hiding visuals."), AreaContext.GetEntity(i).Index);
 						}
 					}
 				}
@@ -336,6 +376,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					// Start post-impact scale if configured
 					if (Impact.bScaleOnImpact && !Impact.bImpactScaleTriggered)
 					{
+						UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Server: Triggering impact scaling for Entity Index %d. bIsDead: %d"), AreaContext.GetEntity(i).Index, bIsDead);
 						Impact.bImpactScaleTriggered = true;
 						Impact.bIsScalingAfterImpact = true;
 						Impact.ImpactScalingElapsedTime = 0.f;

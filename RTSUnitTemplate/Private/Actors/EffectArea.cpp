@@ -82,7 +82,7 @@ AEffectArea::AEffectArea()
 void AEffectArea::BeginPlay()
 {
 	Super::BeginPlay();
-	SetReplicateMovement(true);
+	SetReplicateMovement(true); // Re-enabled for smooth client-side transform synchronization
 
 	if (MassBindingComponent)
 	{

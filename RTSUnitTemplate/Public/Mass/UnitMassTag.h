@@ -1321,8 +1321,11 @@ struct FEffectAreaVisualFragment : public FMassFragment
 	int32 InstanceIndex = INDEX_NONE;
 	TWeakObjectPtr<UInstancedStaticMeshComponent> ISMComponent;
 	FTransform VisualRelativeTransform = FTransform::Identity;
+	FTransform BaseRelativeTransform = FTransform::Identity;
+	FQuat LastAppliedRotationOffset = FQuat::Identity;
 	TWeakObjectPtr<UNiagaraComponent> Niagara_A;
 	FTransform Niagara_A_RelativeTransform = FTransform::Identity;
+	FTransform Niagara_A_BaseRelativeTransform = FTransform::Identity;
 	float BaseMeshRadius = 100.f;
 };
 

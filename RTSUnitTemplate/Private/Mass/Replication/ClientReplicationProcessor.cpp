@@ -130,12 +130,14 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// 2) Registry and Bubble mapping
 	AUnitRegistryReplicator* RegistryActor = nullptr;
 	TMap<int32, FMassNetworkID> AuthoritativeByUnitIndex;
+	TMap<FName, FMassNetworkID> AuthoritativeByOwnerName;
 	for (TActorIterator<AUnitRegistryReplicator> It(World); It; ++It)
 	{
 		RegistryActor = *It;
 		for (const FUnitRegistryItem& Item : RegistryActor->Registry.Items)
 		{
 			if (Item.UnitIndex != INDEX_NONE) AuthoritativeByUnitIndex.Add(Item.UnitIndex, Item.NetID);
+			if (Item.OwnerName != NAME_None) AuthoritativeByOwnerName.Add(Item.OwnerName, Item.NetID);
 		}
 		break;
 	}
@@ -156,7 +158,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	int32 MaxActionsPerTick = CVarRTS_ClientReplication_BudgetPerTick.GetValueOnGameThread();
 
 	// 3) Hauptschleife: Replikation anwenden
-	EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByUnitIndex, &EntityManager, &GlobalNetToEntity, LocalPC, World, AccumulatedDelta, &Context](FMassExecutionContext& ChunkCtx)
+	EntityQuery.ForEachEntityChunk(Context, [this, AuthoritativeByUnitIndex, AuthoritativeByOwnerName, &EntityManager, &GlobalNetToEntity, LocalPC, World, AccumulatedDelta, &Context](FMassExecutionContext& ChunkCtx)
 	{
 		static TMap<TWeakObjectPtr<AActor>, int32> ZeroIdStreak;
 		const int32 NumEntities = ChunkCtx.GetNumEntities();
@@ -185,15 +187,25 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			// a) Authoritative NetID Sync
 			if (AActor* OwnerActor = ActorList[EntityIdx].GetMutable())
 			{
+				const FMassNetworkID* FoundID = nullptr;
 				if (AUnitBase* AsUnit = Cast<AUnitBase>(OwnerActor))
 				{
-					if (const FMassNetworkID* ByIdx = AuthoritativeByUnitIndex.Find(AsUnit->UnitIndex))
+					FoundID = AuthoritativeByUnitIndex.Find(AsUnit->UnitIndex);
+				}
+
+				if (!FoundID) // Fallback for EffectAreas
+				{
+					FoundID = AuthoritativeByOwnerName.Find(OwnerActor->GetFName());
+				}
+
+				if (FoundID && NetIDList[EntityIdx].NetID != *FoundID)
+				{
+					JustLinked[EntityIdx] = (NetIDList[EntityIdx].NetID.GetValue() == 0);
+					NetIDList[EntityIdx].NetID = *FoundID;
+
+					if (OwnerActor->IsA<AEffectArea>())
 					{
-						if (NetIDList[EntityIdx].NetID != *ByIdx)
-						{
-							JustLinked[EntityIdx] = (NetIDList[EntityIdx].NetID.GetValue() == 0);
-							NetIDList[EntityIdx].NetID = *ByIdx;
-						}
+						UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client: NetID synchronized for %s (ID: %d)"), *OwnerActor->GetName(), FoundID->GetValue());
 					}
 				}
 			}
@@ -281,6 +293,22 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								{
 									AIS.LastProjectileClass = nullptr; // Fallback to unit default
 								}
+							}
+						}
+
+						// Effect Area Sync
+						if (EffectAreaImpactList.IsValidIndex(EntityIdx))
+						{
+							FEffectAreaImpactFragment& Impact = EffectAreaImpactList[EntityIdx];
+							bool bWasScaling = Impact.bIsScalingAfterImpact;
+							Impact.bIsScalingAfterImpact = (UseItem->ReplicationBits & UnitReplicationBits::EA_bIsScalingAfterImpact) != 0;
+							Impact.bImpactScaleTriggered = (UseItem->ReplicationBits & UnitReplicationBits::EA_bImpactScaleTriggered) != 0;
+							Impact.bPendingDestruction = (UseItem->ReplicationBits & UnitReplicationBits::EA_bPendingDestruction) != 0;
+							Impact.bImpactVFXTriggered = (UseItem->ReplicationBits & UnitReplicationBits::EA_bImpactVFXTriggered) != 0;
+
+							if (Impact.bIsScalingAfterImpact != bWasScaling)
+							{
+								UE_LOG(LogTemp, Log, TEXT("[EA_LOG] ClientReplication: Entity Index %d bIsScalingAfterImpact changed to %d"), ChunkCtx.GetEntity(EntityIdx).Index, Impact.bIsScalingAfterImpact);
 							}
 						}
 

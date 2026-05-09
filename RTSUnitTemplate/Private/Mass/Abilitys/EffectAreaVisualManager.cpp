@@ -98,13 +98,17 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
     VisualFrag->InstanceIndex = ISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector));
     FTransform VisualOffsetTransform(EffectAreaActor->VisualRotationOffset);
 
-    VisualFrag->VisualRelativeTransform = (EffectAreaActor->ISMTemplate ? EffectAreaActor->ISMTemplate->GetRelativeTransform() : FTransform::Identity) * VisualOffsetTransform;
+    VisualFrag->BaseRelativeTransform = (EffectAreaActor->ISMTemplate ? EffectAreaActor->ISMTemplate->GetRelativeTransform() : FTransform::Identity);
+    VisualFrag->LastAppliedRotationOffset = EffectAreaActor->VisualRotationOffset;
+    VisualFrag->VisualRelativeTransform = VisualFrag->BaseRelativeTransform * VisualOffsetTransform;
+
     VisualFrag->BaseMeshRadius = Mesh->GetBounds().BoxExtent.X;
     
     if (EffectAreaActor->Niagara_A)
     {
         VisualFrag->Niagara_A = EffectAreaActor->Niagara_A;
-        VisualFrag->Niagara_A_RelativeTransform = EffectAreaActor->Niagara_A->GetRelativeTransform() * VisualOffsetTransform;
+        VisualFrag->Niagara_A_BaseRelativeTransform = EffectAreaActor->Niagara_A->GetRelativeTransform();
+        VisualFrag->Niagara_A_RelativeTransform = VisualFrag->Niagara_A_BaseRelativeTransform * VisualOffsetTransform;
     }
 
     // Clear the template after registering the visual instance

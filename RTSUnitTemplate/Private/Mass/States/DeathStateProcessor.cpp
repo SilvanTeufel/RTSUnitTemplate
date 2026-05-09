@@ -173,10 +173,27 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
                     }
                     else if (AEffectArea* Area = Cast<AEffectArea>(Actor))
                     {
-                        Area->SetDeathVisualState(true);
+                        bool bIsScalingActive = false;
                         if (FEffectAreaImpactFragment* Impact = EntityManager.GetFragmentDataPtr<FEffectAreaImpactFragment>(Entity))
                         {
-                            Impact->bHasHiddenVisual = true;
+                            // If it's supposed to scale on impact/death, and hasn't finished yet (VFX triggered means finished)
+                            if (Impact->bScaleOnImpact && !Impact->bImpactVFXTriggered)
+                            {
+                                bIsScalingActive = true;
+                            }
+                        }
+
+                        if (!bIsScalingActive)
+                        {
+                            Area->SetDeathVisualState(true);
+                            if (FEffectAreaImpactFragment* Impact = EntityManager.GetFragmentDataPtr<FEffectAreaImpactFragment>(Entity))
+                            {
+                                Impact->bHasHiddenVisual = true;
+                            }
+                        }
+                        else
+                        {
+                            UE_LOG(LogTemp, Log, TEXT("[EA_LOG] DeathState: Delaying hide for Entity Index %d because it is still scaling."), Entity.Index);
                         }
                     }
                     else
