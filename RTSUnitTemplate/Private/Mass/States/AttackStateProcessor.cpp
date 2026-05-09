@@ -20,11 +20,11 @@
 
 UAttackStateProcessor::UAttackStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::All;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    bRequiresGameThreadExecution = true;
 }
 
 void UAttackStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
@@ -47,6 +47,8 @@ void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
 
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
@@ -84,8 +86,11 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
+        auto ForceList = ChunkContext.GetMutableFragmentView<FMassForceFragment>();
 
- 
+        const bool bIsClient = (World->GetNetMode() == NM_Client);
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // State modification stays here
@@ -95,6 +100,25 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for UpdateMoveTarget
+
+            if (bIsClient && !Stats.bCanMoveWhileAttacking)
+            {
+                if (VelocityList.IsValidIndex(i)) VelocityList[i].Value *= 0.1f;
+                if (ForceList.IsValidIndex(i)) ForceList[i].Value = FVector::ZeroVector;
+
+                MoveTarget.DesiredSpeed.Set(0.f);
+                MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
+
+                // NEU: Prädiktive Rotation zum Ziel
+                FVector LookAtDir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
+                LookAtDir.Z = 0.f;
+                if (LookAtDir.Normalize())
+                {
+                    FQuat LookAtQuat = LookAtDir.ToOrientationQuat();
+                    FTransform& MutableTransform = ChunkContext.GetMutableFragmentView<FTransformFragment>()[i].GetMutableTransform();
+                    MutableTransform.SetRotation(LookAtQuat);
+                }
+            }
 
             
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

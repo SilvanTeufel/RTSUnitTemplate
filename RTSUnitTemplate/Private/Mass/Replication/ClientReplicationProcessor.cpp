@@ -387,7 +387,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 										   (PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData);
 					
 					//if (bIsMoving)
-					//{
+					{
 						// Increase tolerance and decrease correction speed while moving to prevent stuttering
 						CurrentMinErrorSq *= 2.0f; // Toleranz während der Fahrt: 200 (ca. 14 cm) statt bisher 100 (10 cm)
 						CurrentKp *= 0.4f;
@@ -399,13 +399,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						{
 							CurrentKp *= 0.5f;
 						}
-					//}
-					/*else
-					{
+					}
+					//else
+					//{
 						// NEU: Auch im Stillstand eine leichte Dämpfung beibehalten, um Jitter zu vermeiden.
-						CurrentMinErrorSq *= 1.25f;
-						CurrentKp *= 0.75f;
-					}*/
+						//CurrentMinErrorSq *= 1.25f;
+						//CurrentKp *= 0.75f;
+					//}
 
 					if (DistanceSq > CurrentMinErrorSq)
 					{

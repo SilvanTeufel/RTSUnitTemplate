@@ -42,8 +42,10 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Stats lesen (AttackPauseDuration)
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position für Distanzcheck
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite); // Eigene Position für Distanzcheck
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
@@ -93,11 +95,37 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         auto TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+        auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
+        auto ForceList = ChunkContext.GetMutableFragmentView<FMassForceFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             if (bIsClient)
             {
+                // Prediction-Bremse: Wenn wir nicht während des Angriffs laufen dürfen, Momentum killen
+                if (!StatsList[i].bCanMoveWhileAttacking)
+                {
+                    if (VelocityList.IsValidIndex(i)) VelocityList[i].Value *= 0.1f;
+                    if (ForceList.IsValidIndex(i)) ForceList[i].Value = FVector::ZeroVector;
+
+                    if (MoveTargetList.IsValidIndex(i))
+                    {
+                        MoveTargetList[i].DesiredSpeed.Set(0.f);
+                        MoveTargetList[i].IntentAtGoal = EMassMovementAction::Stand;
+                    }
+
+                    // NEU: Prädiktive Rotation zum Ziel
+                    FVector LookAtDir = (TargetList[i].LastKnownLocation - ChunkContext.GetFragmentView<FTransformFragment>()[i].GetTransform().GetLocation());
+                    LookAtDir.Z = 0.f;
+                    if (LookAtDir.Normalize())
+                    {
+                        FQuat LookAtQuat = LookAtDir.ToOrientationQuat();
+                        FTransform& MutableTransform = ChunkContext.GetMutableFragmentView<FTransformFragment>()[i].GetMutableTransform();
+                        MutableTransform.SetRotation(LookAtQuat);
+                    }
+                }
+
                 ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i, ActorList[i].GetMutable());
             }
             else
