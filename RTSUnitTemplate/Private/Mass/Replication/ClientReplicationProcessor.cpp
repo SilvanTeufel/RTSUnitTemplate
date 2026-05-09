@@ -398,6 +398,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						if (FVector::DotProduct(Forward, ErrorDir) < -0.2f)
 						{
 							CurrentKp *= 0.5f;
+
+							// NEU: Wenn die Replikation uns entgegen der Laufrichtung zieht, 
+							// drosseln wir die lokale Geschwindigkeit leicht (um ca. 20%).
+							if (VelocityList.IsValidIndex(EntityIdx))
+							{
+								VelocityList[EntityIdx].Value *= 0.8f;
+							}
 						}
 					}
 					//else
@@ -407,10 +414,15 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						//CurrentKp *= 0.75f;
 					//}
 
-					if (DistanceSq > CurrentMinErrorSq)
+					const float ErrorRatio = DistanceSq / CurrentMinErrorSq;
+					if (ErrorRatio > 1.0f)
 					{
+						// NEU: Soft-Threshold Gewichtung (Fade-in von 0.0 auf 1.0)
+						const float SoftWeight = FMath::Clamp(ErrorRatio - 1.0f, 0.0f, 1.0f);
+						const float FinalKp = CurrentKp * SoftWeight;
+
 						// Proportional gain Kp used as interpolation speed for smooth correction
-						FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, AccumulatedDelta, CurrentKp);
+						FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, AccumulatedDelta, FinalKp);
 
 						if (CharList.IsValidIndex(EntityIdx) && !CharList[EntityIdx].bIsFlying)
 						{
@@ -454,11 +466,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						FRotator TargetRotator = FinalXf.GetRotation().Rotator();
 						float YawError = FRotator::NormalizeAxis(TargetRotator.Yaw - CurrentRotator.Yaw);
 
-						if (FMath::Abs(YawError) > MinYawErrorForCorrectionDeg)
+						const float AbsYawError = FMath::Abs(YawError);
+						if (AbsYawError > MinYawErrorForCorrectionDeg)
 						{
+							// NEU: Auch hier fadet die Korrekturstärke sanft ein.
+							const float RotSoftWeight = FMath::Clamp((AbsYawError - MinYawErrorForCorrectionDeg) / MinYawErrorForCorrectionDeg, 0.0f, 1.0f);
+							const float FinalKpRotSoft = FinalKpRot * RotSoftWeight;
+
 							// Apply proportional correction limited by MaxRotationCorrectionDegPerSec
 							const float MaxStep = MaxRotationCorrectionDegPerSec * AccumulatedDelta;
-							const float DesiredStep = YawError * FinalKpRot;
+							const float DesiredStep = YawError * FinalKpRotSoft;
 							const float Step = FMath::Clamp(DesiredStep, -MaxStep, MaxStep);
 							
 							CurrentRotator.Yaw = FRotator::NormalizeAxis(CurrentRotator.Yaw + Step);
