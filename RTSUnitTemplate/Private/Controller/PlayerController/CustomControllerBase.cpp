@@ -25,6 +25,7 @@
 #include "Mass/Signals/MySignals.h"
 #include "Mass/UnitMassTag.h"
 #include "Actors/MinimapActor.h" 
+#include "Actors/EffectArea.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "NavigationSystem.h"
 #include "NavFilters/NavigationQueryFilter.h"
@@ -3111,8 +3112,8 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 		}
 	}
 
-	// Bereite die Arrays vor. NEU: Ein Array für die Aktor-Referenzen.
-	TArray<AUnitBase*>             ActorRefs;
+	// Bereite die Arrays vor.
+	TArray<AActor*>             ActorRefs;
 	TArray<FVector_NetQuantize> Positions;
 	TArray<float>               UnitRadii;
 	TArray<float>               FogRadii;
@@ -3130,35 +3131,52 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 			FMassActorFragment* ActorFrag = EM.GetFragmentDataPtr<FMassActorFragment>(E);
 			const FTransformFragment* TF = EM.GetFragmentDataPtr<FTransformFragment>(E);
 			const FMassCombatStatsFragment* StateFrag = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
-			const FMassAIStateFragment* AI = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
-			const FMassAgentCharacteristicsFragment* CharFrag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
+			
+			// Wir brauchen den Aktor und die Basisdaten
+			if (!ActorFrag || !TF || !StateFrag) continue;
 
-			// Wir brauchen den Aktor, also ist das ActorFragment jetzt zwingend erforderlich
-			if (!ActorFrag || !TF || !StateFrag || !AI || !CharFrag) continue;
-			if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime) continue;
+			AActor* Actor = ActorFrag->GetMutable();
+			if (!Actor) continue;
 
-			AActor* UnitActor = ActorFrag->GetMutable();
-			if (!UnitActor) continue;
-			// --- NEUE LOGIK ZUR ERMITTLUNG DES DYNAMISCHEN RADIUS ---
-			float CapsuleRadius = 150.f; // Wir verwenden 150.f als Fallback-Wert.
-          
-			// Wir casten zum ACharacter, da dieser standardmäßig eine Kapsel hat.
-			// Wenn Ihre AUnitBase von ACharacter erbt, ist dies der richtige Weg.
-			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
-			if (Unit && Unit->GetCapsuleComponent())
+			float MinimapRadius = 150.f;
+			bool bIsValidForMinimap = false;
+
+			if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
 			{
-				// GetScaledCapsuleRadius() berücksichtigt die Skalierung des Aktors.
-				CapsuleRadius = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius()*3.f;
+				const FMassAIStateFragment* AI = EM.GetFragmentDataPtr<FMassAIStateFragment>(E);
+				const FMassAgentCharacteristicsFragment* CharFrag = EM.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(E);
+				
+				if (AI && CharFrag)
+				{
+					if (StateFrag->Health <= 0.f && AI->StateTimer >= CharFrag->DespawnTime) continue;
+				}
+
+				if (Unit->GetCapsuleComponent())
+				{
+					MinimapRadius = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius() * 3.f;
+				}
+				bIsValidForMinimap = true;
 			}
-       	
-			if (!Unit) continue;
-			// --- ENDE DER NEUEN LOGIK ---
-			// --- Fülle die Arrays ---
-			ActorRefs.Add(Unit); // NEU: Füge den Aktor-Pointer hinzu
-			Positions.Add(FVector_NetQuantize(TF->GetTransform().GetLocation()));
-			UnitRadii.Add(CapsuleRadius); 
-			FogRadii.Add(StateFrag->SightRadius);
-			UnitTeamIds.Add(StateFrag->TeamId);
+			else if (AEffectArea* Area = Cast<AEffectArea>(Actor))
+			{
+				MinimapRadius = Area->BaseRadius;
+				
+				// Falls vorhanden, nutze den aktuellen Radius aus dem ImpactFragment
+				if (const FEffectAreaImpactFragment* ImpactFrag = EM.GetFragmentDataPtr<FEffectAreaImpactFragment>(E))
+				{
+					MinimapRadius = ImpactFrag->CurrentRadius;
+				}
+				bIsValidForMinimap = true;
+			}
+
+			if (bIsValidForMinimap)
+			{
+				ActorRefs.Add(Actor);
+				Positions.Add(FVector_NetQuantize(TF->GetTransform().GetLocation()));
+				UnitRadii.Add(MinimapRadius);
+				FogRadii.Add(StateFrag->SightRadius);
+				UnitTeamIds.Add(StateFrag->TeamId);
+			}
 		}
 	}
 

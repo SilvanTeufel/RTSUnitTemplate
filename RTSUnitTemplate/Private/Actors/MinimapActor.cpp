@@ -2,6 +2,7 @@
 #include "Actors/MinimapActor.h"
 
 #include "Characters/Unit/UnitBase.h"
+#include "Actors/EffectArea.h"
 #include "Engine/Texture2D.h"
 #include "Net/UnrealNetwork.h"
 #include "Actors/MapSwitchActor.h"
@@ -571,7 +572,7 @@ void AMinimapActor::InitMinimapTexture()
 }
 
 void AMinimapActor::Multicast_UpdateMinimap_Implementation(
-    const TArray<AUnitBase*>& UnitRefs, // NEUER PARAMETER
+    const TArray<AActor*>& ActorRefs,
     const TArray<FVector_NetQuantize>& Positions,
     const TArray<float>& UnitRadii,
     const TArray<float>& FogRadii,
@@ -591,7 +592,7 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     const float WorldExtentX = FMath::Max(100.0f, MinimapMaxBounds.X - MinimapMinBounds.X);
     const float WorldExtentY = FMath::Max(100.0f, MinimapMaxBounds.Y - MinimapMinBounds.Y);
     if (WorldExtentX <= 0 || WorldExtentY <= 0) return;
-    const int32 Count = FMath::Min(UnitRefs.Num(), Positions.Num());
+    const int32 Count = FMath::Min(ActorRefs.Num(), Positions.Num());
 
     for (int32 i = 0; i < Count; ++i)
     {
@@ -606,24 +607,34 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
         DrawFilledCircle(MinimapPixels, MinimapTexSize, CenterX, CenterY, PixelRadius, BackgroundColor);
     }
     
-    // --- Pass 3: Draw the units on top (MIT NEUER LOGIK) ---
+    // --- Pass 3: Draw the units/areas on top ---
     for (int32 i = 0; i < Count; ++i)
     {
-        bool bShouldDrawUnit = false;
+        bool bShouldDraw = false;
         
         if (UnitTeamIds[i] == TeamId)
         {
-            bShouldDrawUnit = true;
+            bShouldDraw = true;
         }
         else
         {
-            if (UnitRefs[i] && UnitRefs[i]->IsVisibleEnemy)
+            if (AUnitBase* Unit = Cast<AUnitBase>(ActorRefs[i]))
             {
-                bShouldDrawUnit = true;
+                if (Unit->IsVisibleEnemy)
+                {
+                    bShouldDraw = true;
+                }
+            }
+            else if (AEffectArea* Area = Cast<AEffectArea>(ActorRefs[i]))
+            {
+                if (Area->bIsVisibleByFog)
+                {
+                    bShouldDraw = true;
+                }
             }
         }
         
-        if (bShouldDrawUnit)
+        if (bShouldDraw)
         {
             const FVector WorldPos = Positions[i];
             const float U = (WorldPos.X - MinimapMinBounds.X) / WorldExtentX;
@@ -785,14 +796,14 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
 }
 
 void AMinimapActor::UpdateMinimap_Local(
-    const TArray<AUnitBase*>& UnitRefs,
+    const TArray<AActor*>& ActorRefs,
     const TArray<FVector_NetQuantize>& Positions,
     const TArray<float>& UnitRadii,
     const TArray<float>& FogRadii,
     const TArray<uint8>& UnitTeamIds)
 {
     // Simply reuse the same logic as the multicast implementation
-    Multicast_UpdateMinimap_Implementation(UnitRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
+    Multicast_UpdateMinimap_Implementation(ActorRefs, Positions, UnitRadii, FogRadii, UnitTeamIds);
 }
 
 void AMinimapActor::DrawCircleOutline(TArray<FColor>& Pixels, int32 TexSize, int32 CenterX, int32 CenterY, int32 Radius, int32 Thickness, const FColor& Color)

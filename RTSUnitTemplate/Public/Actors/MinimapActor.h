@@ -268,7 +268,7 @@ public:
     
     UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category = "Minimap")
     void Multicast_UpdateMinimap(
-        const TArray<AUnitBase*>& UnitRefs, // NEUER PARAMETER
+        const TArray<AActor*>& ActorRefs,
         const TArray<FVector_NetQuantize>& Positions,
         const TArray<float>& UnitRadii,
         const TArray<float>& FogRadii,
@@ -277,7 +277,7 @@ public:
     // Local, non-replicated update for client-side rendering
     UFUNCTION(BlueprintCallable, Category = "Minimap")
     void UpdateMinimap_Local(
-        const TArray<AUnitBase*>& UnitRefs,
+        const TArray<AActor*>& ActorRefs,
         const TArray<FVector_NetQuantize>& Positions,
         const TArray<float>& UnitRadii,
         const TArray<float>& FogRadii,
