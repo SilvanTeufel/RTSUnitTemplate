@@ -38,7 +38,22 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 	bool bSyncFromCDO = (LogThrottle % 120 == 0); // Sync from CDO every 120 frames
 	LogThrottle++;
 	
-	EntityQuery.ForEachEntityChunk(Context, ([this, &EntityManager, bSyncFromCDO](FMassExecutionContext& Context)
+	// Phase 1: Sammle alle jungen, vom Server bestätigten Projektile (Cross-Chunk)
+	TMap<FMassEntityHandle, FMassEntityHandle> ReplicatedProjectiles; // ShooterHandle -> ProjectileHandle
+	
+	EntityQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
+	{
+		TConstArrayView<FMassProjectileFragment> ProjectileList = ChunkContext.GetFragmentView<FMassProjectileFragment>();
+		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
+		{
+			if (!ProjectileList[i].bIsPredicted && ProjectileList[i].LifeTime < 0.2f)
+			{
+				ReplicatedProjectiles.Add(ProjectileList[i].ShooterEntity, ChunkContext.GetEntity(i));
+			}
+		}
+	});
+
+	EntityQuery.ForEachEntityChunk(Context, ([this, &EntityManager, bSyncFromCDO, &ReplicatedProjectiles](FMassExecutionContext& Context)
 	{
 		UProjectileVisualManager* VisualManager = EntityManager.GetWorld()->GetSubsystem<UProjectileVisualManager>();
 		const float DeltaTime = Context.GetDeltaTimeSeconds();
@@ -53,6 +68,27 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			FMassProjectileFragment& Projectile = ProjectileList[i];
 			FMassProjectileVisualFragment& Visual = VisualList[i];
 			const FMassVisibilityFragment& Visibility = VisibilityList[i];
+
+			// DEDUPLIZIERUNG: Wenn dies ein vorhergesagtes Projektil ist, 
+			// prüfen wir, ob ein repliziertes "Original" existiert (Cross-Chunk).
+			if (Projectile.bIsPredicted && Projectile.LifeTime < 0.2f)
+			{
+				if (FMassEntityHandle* OriginalHandle = ReplicatedProjectiles.Find(Projectile.ShooterEntity))
+				{
+					const FMassProjectileFragment& Other = EntityManager.GetFragmentDataChecked<FMassProjectileFragment>(*OriginalHandle);
+					if (Other.ProjectileClass == Projectile.ProjectileClass)
+					{
+						// Distanzprüfung (Cross-Chunk)
+						FVector MyPos = Transform.GetLocation();
+						FVector OtherPos = EntityManager.GetFragmentDataChecked<FTransformFragment>(*OriginalHandle).GetTransform().GetLocation();
+						
+						if (FVector::DistSquared(MyPos, OtherPos) < 40000.f) // < 200 Einheiten
+						{
+							Projectile.LifeTime = Projectile.MaxLifeTime; // Zur Zerstörung markieren
+						}
+					}
+				}
+			}
 
 			const bool bVisible = Visibility.bIsOnViewport && (!Visibility.bAffectedByFogOfWar || Visibility.bIsMyTeam || Visibility.bIsVisibleEnemy);
 

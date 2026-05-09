@@ -68,6 +68,10 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 			// Ring-safe delta for 8-bit counter
 			uint8 RawDelta = (uint8)(CurrentFireCounter - LastServerProjectileFireCounter);
 			
+			// Capture prediction state BEFORE modification to avoid race/logic errors
+			uint8 OldPending = PredictedPendingShots;
+			bool bWasLatch = bPredictedLatch;
+
 			// Consume pending predictions first
 			uint8 UsedFromPending = FMath::Min(RawDelta, PredictedPendingShots);
 			PredictedPendingShots -= UsedFromPending;
@@ -79,10 +83,43 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 
 			LastServerProjectileFireCounter = CurrentFireCounter;
 			bPredictedLatch = false;
-			PredictionTimer = 0.f;
+
+			// Only reset prediction timer if we didn't predict these shots (server is ahead)
+			// This prevents the client from being 'reset' to 0 while its local timer is already ticking for the next shot
+			if (UseDelta > 0)
+			{
+				PredictionTimer = 0.f;
+			}
 
 			if (UseDelta > 0)
 			{
+				uint8 StyleIdx = (uint8)((ReplicationBits & UnitReplicationBits::AIS_StyleIndexMask) >> UnitReplicationBits::AIS_StyleIndexShift);
+				
+				// STRICTOR FILTER: For AutoAttacks, we almost always trust the client's prediction.
+				// Even if UsedFromPending was 0, if the client was NEAR a fire event (PredictionTimer high),
+				// we skip the server spawn to avoid double fire due to slight sync differences.
+				if (StyleIdx == 0)
+				{
+					if (UsedFromPending > 0 || bWasLatch)
+					{
+						if (UseDelta <= 1)
+						{
+							return;
+						}
+						UseDelta--;
+					}
+					else if (PredictionTimer > 0.05f) // If we are already deep into the next cycle
+					{
+						// Server shot arrived while we are already preparing the next one locally.
+						// This might be the confirmation for a shot we haven't officially 'latched' yet.
+						if (UseDelta <= 1)
+						{
+							return;
+						}
+						UseDelta--;
+					}
+				}
+
 				if (UWorld* World = InArraySerializer.OwnerBubble->GetWorld())
 				{
 					if (UProjectileVisualManager* VisualManager = World->GetSubsystem<UProjectileVisualManager>())
@@ -93,7 +130,13 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 						else if (!(TagBits & UnitReplicationBits::Slot_TargetIsMove)) TgtLoc = FVector(TargetLoc);
 
 						// Startup/validation gates
-						if (TgtLoc.IsNearlyZero()) return;
+						if (TgtLoc.IsNearlyZero())
+						{
+							// Fallback to TargetLoc if ActionLoc is missing for some reason
+							if (!(TagBits & UnitReplicationBits::Slot_TargetIsMove)) TgtLoc = FVector(TargetLoc);
+							
+							if (TgtLoc.IsNearlyZero()) return;
+						}
 
 						// 1. Resolve Style/Parameters
 						TSubclassOf<AProjectile> ProjectileClass_Resolved = nullptr;
@@ -114,7 +157,6 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 						float HomingInterpSpeed_Base = 0.f;
 						bool bStyleFollowTarget = false;
 
-						uint8 StyleIdx = (uint8)((ReplicationBits & UnitReplicationBits::AIS_StyleIndexMask) >> UnitReplicationBits::AIS_StyleIndexShift);
 						if (StyleIdx > 0 && InArraySerializer.OwnerBubble && InArraySerializer.OwnerBubble->ProjectileStyleRegistry.IsValidIndex(StyleIdx - 1))
 						{
 							const FProjectileStyle& Style = InArraySerializer.OwnerBubble->ProjectileStyleRegistry[StyleIdx - 1];
@@ -237,71 +279,77 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 							SpawnPositions.Add(BaseSpawnXf.GetLocation());
 						}
 
-						for (const FVector& ActualSpawnPos : SpawnPositions)
+						FTransform IndividualSpawnXf_Base = BaseSpawnXf;
+						IndividualSpawnXf_Base.SetScale3D(ProjectileScale_Resolved);
+
+						for (uint8 d = 0; d < UseDelta; ++d)
 						{
-							for (int32 i = 0; i < ProjectileCount_Resolved; ++i)
+							for (const FVector& ActualSpawnPos : SpawnPositions)
 							{
-								int32 MultiAngle = (i == 0) ? 0 : ((i & 1) ? 1 : -1);
-								FVector ToCenterDir = (FinalTargetCenter - BaseSpawnXf.GetLocation()).GetSafeNormal();
-								FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
-								
-								FVector SpreadOffset = PerpOffsetDir * ProjectileSpread_Resolved;
-								FVector IndividualTargetLoc = FinalTargetCenter + SpreadOffset;
-
-								FTransform IndividualSpawnXf = BaseSpawnXf;
-								IndividualSpawnXf.SetLocation(ActualSpawnPos);
-								IndividualSpawnXf.SetScale3D(ProjectileScale_Resolved);
-
-								FVector Dir = (IndividualTargetLoc - ActualSpawnPos).GetSafeNormal();
-								
-								// Homing missile initial direction variance
-								const AProjectile* ProjCDO = VisualManager->GetProjectileCDO(ProjectileClass_Resolved);
-								bool bHoming = (ProjCDO && ProjCDO->HomingMissleCount > 0);
-								if (bHoming && ProjectileCount_Resolved > 1)
+								for (int32 i = 0; i < ProjectileCount_Resolved; ++i)
 								{
-									float Angle = (360.0f / ProjectileCount_Resolved) * i;
-									FVector Right, Up;
-									Dir.FindBestAxisVectors(Right, Up);
-									Dir = (Dir + (Right * FMath::Cos(FMath::DegreesToRadians(Angle)) + Up * FMath::Sin(FMath::DegreesToRadians(Angle))) * 0.1f).GetSafeNormal();
+									int32 MultiAngle = (i == 0) ? 0 : ((i & 1) ? 1 : -1);
+									FVector ToCenterDir = (FinalTargetCenter - BaseSpawnXf.GetLocation()).GetSafeNormal();
+									FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
+									
+									FVector SpreadOffset = PerpOffsetDir * ProjectileSpread_Resolved;
+									FVector IndividualTargetLoc = FinalTargetCenter + SpreadOffset;
+
+									FTransform IndividualSpawnXf = IndividualSpawnXf_Base;
+									IndividualSpawnXf.SetLocation(ActualSpawnPos);
+
+									FVector Dir = (IndividualTargetLoc - ActualSpawnPos).GetSafeNormal();
+									
+									// Homing missile initial direction variance
+									const AProjectile* ProjCDO = VisualManager->GetProjectileCDO(ProjectileClass_Resolved);
+									bool bHoming = (ProjCDO && ProjCDO->HomingMissleCount > 0);
+									if (bHoming && ProjectileCount_Resolved > 1)
+									{
+										float Angle = (360.0f / ProjectileCount_Resolved) * i;
+										FVector Right, Up;
+										Dir.FindBestAxisVectors(Right, Up);
+										Dir = (Dir + (Right * FMath::Cos(FMath::DegreesToRadians(Angle)) + Up * FMath::Sin(FMath::DegreesToRadians(Angle))) * 0.1f).GetSafeNormal();
+									}
+
+									IndividualSpawnXf.SetRotation(FQuat(Dir.Rotation() + (MyActor ? MyActor->ProjectileRotationOffset : FRotator(0.f, 90.f, -90.f))));
+
+									float FinalSpeed = ProjectileSpeed_Resolved;
+									float InitialAngle = HomingInitialAngle_Base;
+									float RotSpeed = HomingRotationSpeed_Base;
+									float MaxRadius = HomingMaxSpiralRadius_Base;
+
+									if (bHoming)
+									{
+										FinalSpeed += FMath::RandRange(-ProjCDO->HomingSpeedVariation, ProjCDO->HomingSpeedVariation);
+										FinalSpeed = FMath::Max(FinalSpeed, 100.f);
+										InitialAngle = FMath::RandRange(0.f, 360.f);
+										RotSpeed *= FMath::RandRange(0.9f, 1.4f);
+										if (FMath::RandBool()) RotSpeed *= -1.f;
+										MaxRadius *= FMath::RandRange(0.8f, 1.2f);
+									}
+
+									VisualManager->SpawnMassProjectile(
+										ProjectileClass_Resolved,
+										IndividualSpawnXf,
+										MyActor,
+										nullptr, // Target Actor (Visual only)
+										IndividualTargetLoc,
+										ShooterHandle,
+										TargetHandle,
+										FinalSpeed,
+										TeamId_Resolved,
+										bStyleFollowTarget || (StyleIdx == 0 && (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0),
+										InitialAngle,
+										RotSpeed,
+										MaxRadius,
+										HomingInterpSpeed_Base,
+										nullptr,
+										IndividualSpawnXf.GetScale3D(),
+										-1.f, // Damage (resolved by impact handler)
+										MaxPiercedTargets_Resolved,
+										false // bIsPredicted
+									);
 								}
-
-								IndividualSpawnXf.SetRotation(FQuat(Dir.Rotation() + (MyActor ? MyActor->ProjectileRotationOffset : FRotator(0.f, 90.f, -90.f))));
-
-								float FinalSpeed = ProjectileSpeed_Resolved;
-								float InitialAngle = HomingInitialAngle_Base;
-								float RotSpeed = HomingRotationSpeed_Base;
-								float MaxRadius = HomingMaxSpiralRadius_Base;
-
-								if (bHoming)
-								{
-									FinalSpeed += FMath::RandRange(-ProjCDO->HomingSpeedVariation, ProjCDO->HomingSpeedVariation);
-									FinalSpeed = FMath::Max(FinalSpeed, 100.f);
-									InitialAngle = FMath::RandRange(0.f, 360.f);
-									RotSpeed *= FMath::RandRange(0.9f, 1.4f);
-									if (FMath::RandBool()) RotSpeed *= -1.f;
-									MaxRadius *= FMath::RandRange(0.8f, 1.2f);
-								}
-
-								VisualManager->SpawnMassProjectile(
-									ProjectileClass_Resolved,
-									IndividualSpawnXf,
-									MyActor,
-									nullptr, // Target Actor (Visual only)
-									IndividualTargetLoc,
-									ShooterHandle,
-									TargetHandle,
-									FinalSpeed,
-									TeamId_Resolved,
-									bStyleFollowTarget || (StyleIdx == 0 && (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0),
-									InitialAngle,
-									RotSpeed,
-									MaxRadius,
-									HomingInterpSpeed_Base,
-									nullptr,
-									IndividualSpawnXf.GetScale3D(),
-									-1.f, // Damage (resolved by impact handler)
-									MaxPiercedTargets_Resolved
-								);
 							}
 						}
 					}

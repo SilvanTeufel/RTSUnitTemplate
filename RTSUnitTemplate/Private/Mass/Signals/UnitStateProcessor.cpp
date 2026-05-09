@@ -1420,7 +1420,7 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
 
 void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-    if (!EntitySubsystem) return;
+    if (!EntitySubsystem || (World && World->GetNetMode() == NM_Client)) return;
 
     FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
 
@@ -1572,7 +1572,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
 
 void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
-    if (!EntitySubsystem) return;
+    if (!EntitySubsystem || (World && World->GetNetMode() == NM_Client)) return;
 
     // Use Mutable immediately as we might change State tags/fragments
     FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager(); 

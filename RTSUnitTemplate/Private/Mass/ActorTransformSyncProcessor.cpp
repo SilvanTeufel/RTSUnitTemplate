@@ -558,11 +558,13 @@ void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FM
 
 void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    /*
     const float FrameDeltaTime = Context.GetDeltaTimeSeconds();
     
     float ActualDeltaTime = 0.0f;
     if (!ShouldProceedWithTick(FrameDeltaTime, ActualDeltaTime)) return;
-    
+    */
+    float ActualDeltaTime = Context.GetDeltaTimeSeconds();
     const float CurrentTime = Context.GetWorld()->GetTimeSeconds();
 
     TArray<FActorTransformUpdatePayload> PendingActorUpdates;
@@ -628,7 +630,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             }
             else if (TargetList[i].bRotateTowardsAbility)
             {
-                const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                const bool bReached = RotateTowardsAbility(UnitBase, TargetList[i], StatsList[i], CharList[i], FinalLocation, ActualDeltaTime, MassTransform);
                 if (bReached)
                 {
                     TargetList[i].bRotateTowardsAbility = false;
@@ -636,7 +638,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             }
             else if (!bIsAttackingOrPaused || (bRotatesToMovementWhileAttacking && bIsMoving))
             {
-                RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], FinalLocation, ActualDeltaTime, MassTransform);
             }
             else
             {
@@ -647,7 +649,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                     const FMassWorkerStatsFragment& WS = WorkerStatsList[i];
                     if (!WS.BuildAreaPosition.IsNearlyZero())
                     {
-                        FVector LookDir = (WS.BuildAreaPosition - CurrentActorLocation);
+                        FVector LookDir = (WS.BuildAreaPosition - FinalLocation);
                         LookDir.Z = 0.f;
                         if (!LookDir.IsNearlyZero())
                         {
@@ -663,7 +665,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
                 if (!bRotatedToBuildArea)
                 {
-                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], FinalLocation, ActualDeltaTime, MassTransform);
                 }
             }
 
@@ -765,12 +767,13 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
 }
 
 void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{
+{   /*
     const float FrameDeltaTime = Context.GetDeltaTimeSeconds();
     
     float ActualDeltaTime = 0.0f;
     if (!ShouldProceedWithTick(FrameDeltaTime, ActualDeltaTime)) return;
-    
+    */
+    float ActualDeltaTime = Context.GetDeltaTimeSeconds();
     // Determine if we are on a client world. This will be used to guard our logs.
     const bool bIsClient = GetWorld() && GetWorld()->IsNetMode(NM_Client);
     

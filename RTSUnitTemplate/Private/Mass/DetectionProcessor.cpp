@@ -19,6 +19,7 @@ UDetectionProcessor::UDetectionProcessor(): EntityQuery()
     // Sollte vor der State Machine laufen
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
 }
 
 void UDetectionProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)

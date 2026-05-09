@@ -9,6 +9,7 @@ UUnitPresenceSignalingProcessor::UUnitPresenceSignalingProcessor()
     // Run early in the frame, before detection.
     ProcessingPhase = EMassProcessingPhase::PrePhysics;
     bAutoRegisterWithProcessingPhases = true;
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
 }
 
 void UUnitPresenceSignalingProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)

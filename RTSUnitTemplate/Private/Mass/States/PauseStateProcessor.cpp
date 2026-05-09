@@ -29,7 +29,7 @@ UPauseStateProcessor::UPauseStateProcessor(): EntityQuery()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    bRequiresGameThreadExecution = true;
 }
 
 void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -250,6 +250,12 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                 // Advance client-only prediction timer
                 Item->PredictionTimer += ExecutionInterval;
 
+                // Safety reset for the latch: if no confirmation after pause duration + buffer, release
+                if (Item->bPredictedLatch && Item->PredictionTimer > Stats.PauseDuration + 0.5f)
+                {
+                    Item->bPredictedLatch = false;
+                }
+
                 const float LeadSeconds = 0.05f; // Small lead time for prediction
                 if (Item->PredictionTimer >= FMath::Max(0.f, Stats.PauseDuration - LeadSeconds) && !Item->bPredictedLatch)
                 {
@@ -290,18 +296,18 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 
                     const float AttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
 
-                    if (bIsTargetActive && Dist <= AttackRange)
+                    if (bIsTargetActive && Dist <= AttackRange && !Item->bPredictedLatch)
                     {
                         if (SignalSubsystem)
                         {
                             // Signal triggert verzögert den Delegate (OnProjectileSignalReceived)
                             SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
+
+                            // Prediction-Zustand markieren
+                            Item->bPredictedLatch = true;
+                            Item->PredictionTimer = 0.f;
+                            Item->PredictedPendingShots++;
                         }
-    
-                        // Prediction-Zustand markieren
-                        Item->bPredictedLatch = true;
-                        Item->PredictionTimer = 0.f;
-                        Item->PredictedPendingShots++;
     
                         Context.Defer().AddTag<FMassStateAttackTag>(Entity);
                     }
@@ -313,19 +319,38 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 
 void UPauseStateProcessor::OnProjectileSignalReceived(FName SignalName, const TArray<FMassEntityHandle>& Entities)
 {
-    if (!EntitySubsystem) return;
-    
-    UWorld* World = EntitySubsystem->GetWorld();
-    if (!World || World->GetNetMode() != NM_Client) return; // FIX: Nur auf dem Client spawnen (Server spawnt via UnitBase)
+	if (!EntitySubsystem) return;
+	
+	UWorld* World = EntitySubsystem->GetWorld();
+	if (!World || World->GetNetMode() != NM_Client) return; // FIX: Nur auf dem Client spawnen (Server spawnt via UnitBase)
 
-    FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
-    for (const FMassEntityHandle& Entity : Entities)
-    {
-        if (EntityManager.IsEntityValid(Entity))
-        {
-            ExecuteProjectileSpawn(EntityManager, Entity);
-        }
-    }
+	// Schutz gegen Mehrfach-Instanzen: Nur ein Spawn pro Entity pro Frame
+	static TMap<FMassEntityHandle, uint64> LastSpawnFramePerEntity;
+	const uint64 CurrentFrame = GFrameCounter;
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		if (EntityManager.IsEntityValid(Entity))
+		{
+			if (uint64* LastFrame = LastSpawnFramePerEntity.Find(Entity))
+			{
+				if (*LastFrame == CurrentFrame) continue; // Bereits in diesem Frame gespawnt
+			}
+			LastSpawnFramePerEntity.Add(Entity, CurrentFrame);
+
+			ExecuteProjectileSpawn(EntityManager, Entity);
+		}
+	}
+
+	// Aufräumen alter Einträge
+	if (LastSpawnFramePerEntity.Num() > 2000)
+	{
+		for (auto It = LastSpawnFramePerEntity.CreateIterator(); It; ++It)
+		{
+			if (It.Value() < CurrentFrame) It.RemoveCurrent();
+		}
+	}
 }
 
 void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityManager, const FMassEntityHandle Entity)
@@ -379,8 +404,6 @@ void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityMana
     // 4. Finaler Spawn über VisualManager
     float ProjectileSpeed = (UnitActor->Attributes && UnitActor->Attributes->GetProjectileSpeed() > 0.f) ? UnitActor->Attributes->GetProjectileSpeed() : ProjCDO->MovementSpeed;
 
-    // Logging ohne Throttling für den Spawn auf dem Client
-    
     for (const FVector& Pos : SpawnPositions)
     {
         for (int32 i = 0; i < BaseCount; ++i)
@@ -438,7 +461,8 @@ void UPauseStateProcessor::ExecuteProjectileSpawn(FMassEntityManager& EntityMana
                 nullptr, // Keine Deferral hier nötig, da wir im Signal-Handler sind (Game Thread)
                 UnitActor->ProjectileScale,
                 -1.f, // Nutze CDO-Schaden via Lazy-Init
-                -1    // Nutze CDO-MaxPiercedTargets via Lazy-Init (FIX!)
+                -1,    // Nutze CDO-MaxPiercedTargets via Lazy-Init (FIX!)
+                true   // bIsPredicted
             );
         }
     }

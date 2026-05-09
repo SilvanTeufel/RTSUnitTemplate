@@ -170,7 +170,7 @@ const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProje
 	return Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 }
 
-FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale, float Damage, int32 MaxPiercedTargets)
+FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale, float Damage, int32 MaxPiercedTargets, bool bIsPredicted)
 {
     UWorld* World = GetWorld();
     bool bIsClient = World && World->GetNetMode() == NM_Client;
@@ -194,10 +194,10 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
     {
         FMassCommandBuffer& TargetBuffer = CommandBuffer ? *CommandBuffer : EntityManager->Defer();
         
-        TargetBuffer.PushCommand<FMassDeferredSetCommand>([this, ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, Scale, Damage, MaxPiercedTargets](FMassEntityManager& Manager)
+        TargetBuffer.PushCommand<FMassDeferredSetCommand>([this, ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, Scale, Damage, MaxPiercedTargets, bIsPredicted](FMassEntityManager& Manager)
         {
             // This will run in a safe state (not processing) on the main thread
-            SpawnMassProjectile(ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, nullptr, Scale, Damage, MaxPiercedTargets);
+            SpawnMassProjectile(ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, nullptr, Scale, Damage, MaxPiercedTargets, bIsPredicted);
         });
         return FMassEntityHandle();
     }
@@ -278,6 +278,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.TeamId = (ShooterTeamId != -1) ? ShooterTeamId : CDO->TeamId;
 	ProjectileFragment.IsHealing = CDO->IsHealing;
 	ProjectileFragment.MaxPiercedTargets = (MaxPiercedTargets >= 0) ? MaxPiercedTargets : CDO->MaxPiercedTargets;
+	ProjectileFragment.bIsPredicted = bIsPredicted;
 
 	ProjectileFragment.bIsHoming = bFollowTarget && CDO->HomingMissleCount > 0;
 	ProjectileFragment.HomingInitialAngle = HomingInitialAngle;

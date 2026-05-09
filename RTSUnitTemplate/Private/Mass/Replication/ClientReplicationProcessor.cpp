@@ -326,7 +326,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				FTransform& ClientXf = TransformList[EntityIdx].GetMutableTransform();
 				const FVector CurrentLocation = ClientXf.GetLocation();
 				const FVector TargetLocation = FinalXf.GetLocation();
-				const float DistanceSq = FVector::DistSquared(CurrentLocation, TargetLocation);
+				const float DistanceSq = FVector::DistSquared2D(CurrentLocation, TargetLocation);
 
 				if (bUseFullReplication || JustLinked[EntityIdx] || DistanceSq > FMath::Square(FullReplicationDistance))
 				{
@@ -344,7 +344,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					if (bIsMoving)
 					{
 						// Increase tolerance and decrease correction speed while moving to prevent stuttering
-						CurrentMinErrorSq *= 4.0f; // e.g. from 25cm to 50cm threshold
+						CurrentMinErrorSq *= 2.0f; // Toleranz während der Fahrt: 200 (ca. 14 cm) statt bisher 100 (10 cm)
 						CurrentKp *= 0.4f;
 
 						// If the server is pulling us backwards, be even more gentle
@@ -360,6 +360,12 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					{
 						// Proportional gain Kp used as interpolation speed for smooth correction
 						FVector NewLocation = FMath::VInterpTo(CurrentLocation, TargetLocation, AccumulatedDelta, CurrentKp);
+
+						if (CharList.IsValidIndex(EntityIdx) && !CharList[EntityIdx].bIsFlying)
+						{
+							// Z-Korrektur deaktivieren, da der lokale ActorTransformSyncProcessor (Ground-Trace) Vorrang hat
+							NewLocation.Z = CurrentLocation.Z; 
+						}
 
 						// Use MaxCorrectionAccel as a velocity limit (Speed Cap) for the reconciliation
 						const FVector DeltaMove = NewLocation - CurrentLocation;

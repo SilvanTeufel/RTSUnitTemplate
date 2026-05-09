@@ -1245,6 +1245,9 @@ struct FMassProjectileFragment : public FMassFragment
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 MaxPiercedTargets = 1;
 
+	UPROPERTY(Transient)
+	bool bIsPredicted = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bCanBeRepelledByEnergyWall = false;
 
@@ -1482,11 +1485,11 @@ namespace UnitTagBits
 	static constexpr uint32 PatrolIdle          = 1u << 12;
 	static constexpr uint32 PatrolRandom        = 1u << 13;
 	static constexpr uint32 Patrol              = 1u << 14;
-	static constexpr uint32 Run                 = 1u << 15;
+	static constexpr uint32 YawFollow           = 1u << 15; // Nutzt den freien Slot von 'Run'
 	// Other
 	static constexpr uint32 Pause               = 1u << 16;
 	static constexpr uint32 Evasion             = 1u << 17;
-	static constexpr uint32 Idle                = 1u << 18;
+	static constexpr uint32 Detect              = 1u << 18; // Nutzt den freien Slot von 'Idle'
 	// Always replicated control bits
 	static constexpr uint32 StopMovement        = 1u << 19;
 	static constexpr uint32 DisableObstacle     = 1u << 20;
@@ -1535,8 +1538,8 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassSoftAvoidanceTag::StaticStruct()))             Bits |= UnitTagBits::SoftAvoidance;
 	if (H(FMassRotateToMouseTag::StaticStruct()))             Bits |= UnitTagBits::RotateToMouse;
 	if (H(FRunAnimationTag::StaticStruct()))                  Bits |= UnitTagBits::RunAnimation;
-	//if (H(FMassStateRunTag::StaticStruct()))                  Bits |= UnitTagBits::Run;
-	//if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
+	if (H(FMassUnitYawFollowTag::StaticStruct()))             Bits |= UnitTagBits::YawFollow;
+	if (H(FMassStateDetectTag::StaticStruct()))               Bits |= UnitTagBits::Detect;
 	return Bits;
 }
 
@@ -1567,6 +1570,8 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::SoftAvoidance,       FMassSoftAvoidanceTag());
 	SetTag(UnitTagBits::RotateToMouse,       FMassRotateToMouseTag());
 	SetTag(UnitTagBits::RunAnimation,        FRunAnimationTag());
+	SetTag(UnitTagBits::YawFollow,           FMassUnitYawFollowTag());
+	SetTag(UnitTagBits::Detect,              FMassStateDetectTag());
 	{
 		const bool bShouldHave = (Bits & UnitTagBits::RotateToMouse) != 0;
 		const bool bHasFrag = DoesEntityHaveFragment<FMassRotateToMouseFragment>(EntityManager, Entity);
@@ -1637,8 +1642,6 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		if (!bPredicting)
 		{
 			// Skip syncing Idle tag while predicting so local fast-start isn't overridden
-			//SetTag(UnitTagBits::Run,                 FMassStateRunTag());
-			//SetTag(UnitTagBits::Idle,                FMassStateIdleTag());
 		}
 	}
 }

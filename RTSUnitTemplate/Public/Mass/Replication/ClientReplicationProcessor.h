@@ -26,7 +26,7 @@ public:
 	const float ExecutionInterval = 0.1f; // Intervall für die Detektion (z.B. 5x pro Sekunde)
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float MinErrorForCorrectionSq = FMath::Square(25.f); // 25 cm
+	float MinErrorForCorrectionSq = 100.0f; // 10 cm threshold
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float MaxCorrectionAccel = 2000.f; // cm/s^2
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
@@ -36,11 +36,11 @@ public:
 	float FullReplicationDistance = 300.f; // cm
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float MinYawErrorForCorrectionDeg = 3.0f; // deg, threshold to start correcting
+	float MinYawErrorForCorrectionDeg = 2.0f; // deg, threshold to start correcting
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float MaxRotationCorrectionDegPerSec = 30.0f; // deg/sec, weak by default
+	float MaxRotationCorrectionDegPerSec = 720.0f; // deg/sec, weak by default
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float KpRot = 0.5f; // proportional gain for yaw correction
+	float KpRot = 5.0f; // proportional gain for yaw correction
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool bRotationYawOnly = true; // correct yaw only by default
 protected:
