@@ -382,6 +382,7 @@ void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 #endif
 
 	// ***** YOUR CUSTOMIZATION GOES HERE *****
+	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassDisableAvoidanceTag>(EMassFragmentPresence::None);
 	EntityQuery.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
 	ProcessorRequirements.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
@@ -425,6 +426,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		const TConstArrayView<FAgentRadiusFragment> RadiusList = Context.GetFragmentView<FAgentRadiusFragment>();
 		const TConstArrayView<FMassAvoidanceEntitiesToIgnoreFragment> EntitiesToIgnoreList = Context.GetFragmentView<FMassAvoidanceEntitiesToIgnoreFragment>();
 		const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetFragmentView<FMassMoveTargetFragment>();
+		const TConstArrayView<FMassCombatStatsFragment> CombatList = Context.GetFragmentView<FMassCombatStatsFragment>();
 		
 		const FMassMovingAvoidanceParameters* MovingAvoidanceParamsPtr = Context.GetConstSharedFragmentPtr<FMassMovingAvoidanceParameters>();
 		const FMassMovementParameters* MovementParamsPtr = Context.GetConstSharedFragmentPtr<FMassMovementParameters>();
@@ -480,7 +482,10 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		{
 			// @todo: this check should eventually be part of the query (i.e. only handle moving agents).
 			const FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIt];
-			if (MoveTarget.GetCurrentAction() == EMassMovementAction::Animate || MoveTarget.GetCurrentAction() == EMassMovementAction::Stand)
+			const bool bHasAttack = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIt), FMassStateAttackTag::StaticStruct());
+			const bool bIsStationaryAttack = bHasAttack && CombatList.IsValidIndex(EntityIt) && !CombatList[EntityIt].bCanMoveWhileAttacking;
+
+			if (MoveTarget.GetCurrentAction() == EMassMovementAction::Animate || MoveTarget.GetCurrentAction() == EMassMovementAction::Stand || bIsStationaryAttack)
 			{
 				continue;
 			}

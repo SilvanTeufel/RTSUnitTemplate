@@ -380,8 +380,14 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateDeadTag::StaticStruct()))
 				{
 					// --- Location Reconciliation ---
-					float CurrentKp = Kp;
-					float CurrentMinErrorSq = MinErrorForCorrectionSq;
+					
+					// 1. Prüfen, ob die Einheit logisch stationär sein MUSS (Angriff/Pause ohne Bewegung)
+					const bool bHasAttackTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateAttackTag::StaticStruct());
+					const bool bHasPauseTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStatePauseTag::StaticStruct());
+					const bool bIsStationaryAttack = (bHasAttackTag || bHasPauseTag) && CombatList.IsValidIndex(EntityIdx) && !CombatList[EntityIdx].bCanMoveWhileAttacking;
+
+					float CurrentKp = bIsStationaryAttack ? 1.0f : Kp;
+					float CurrentMinErrorSq = bIsStationaryAttack ? 1.0f : MinErrorForCorrectionSq; // Nur 1cm Toleranz im Stand
 
 					const bool bIsMoving = (MoveTargetList.IsValidIndex(EntityIdx) && MoveTargetList[EntityIdx].DesiredSpeed.Get() > 10.f) || 
 										   (PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData);
@@ -441,16 +447,19 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						ClientXf.SetLocation(NewLocation);
 
 						// NEU: Verhindert, dass die lokale Physik die Korrektur sofort wieder aushebelt
-						// KORREKTUR: Nur dämpfen, wenn die Einheit laut Replikation NICHT in Bewegung ist.
-						if (!bIsMoving)
+						// KORREKTUR: Nur dämpfen, wenn die Einheit laut Replikation NICHT in Bewegung ist oder stationär angreift.
+						if (!bIsMoving || bIsStationaryAttack)
 						{
-							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.1f;
+							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.05f; // Härtere Bremse
 							if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
+							
+							// NEU: Auch die Lenkung (Avoidance/Movement) sofort unterbinden
+							if (SteeringList.IsValidIndex(EntityIdx)) SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
 						}
 					}
 
 					// --- Rotation Reconciliation ---
-					float FinalKpRot = KpRot;
+					float FinalKpRot = bIsStationaryAttack ? 1.0f : KpRot;
 					
 					// NEU: Wenn die Einheit lokal zum Ziel rotiert, dämpfen wir die Korrektur durch die Replikation stark ab.
 					// Dies verhindert das "Gegensteuern" der Replikation gegen die flüssige lokale Vorhersage.
@@ -466,12 +475,12 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						FRotator TargetRotator = FinalXf.GetRotation().Rotator();
 						float YawError = FRotator::NormalizeAxis(TargetRotator.Yaw - CurrentRotator.Yaw);
 
-						const float AbsYawError = FMath::Abs(YawError);
-						if (AbsYawError > MinYawErrorForCorrectionDeg)
-						{
-							// NEU: Auch hier fadet die Korrekturstärke sanft ein.
-							const float RotSoftWeight = FMath::Clamp((AbsYawError - MinYawErrorForCorrectionDeg) / MinYawErrorForCorrectionDeg, 0.0f, 1.0f);
-							const float FinalKpRotSoft = FinalKpRot * RotSoftWeight;
+ 					const float AbsYawError = FMath::Abs(YawError);
+ 					if (AbsYawError > (bIsStationaryAttack ? 0.1f : MinYawErrorForCorrectionDeg))
+ 					{
+ 						// NEU: Auch hier fadet die Korrekturstärke sanft ein (außer bei stationärem Angriff für sofortiges Snapping)
+ 						const float RotSoftWeight = bIsStationaryAttack ? 1.0f : FMath::Clamp((AbsYawError - MinYawErrorForCorrectionDeg) / MinYawErrorForCorrectionDeg, 0.0f, 1.0f);
+ 						const float FinalKpRotSoft = FinalKpRot * RotSoftWeight;
 
 							// Apply proportional correction limited by MaxRotationCorrectionDegPerSec
 							const float MaxStep = MaxRotationCorrectionDegPerSec * AccumulatedDelta;
