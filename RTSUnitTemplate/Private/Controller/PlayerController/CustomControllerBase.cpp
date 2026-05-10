@@ -37,7 +37,7 @@
 #include "Templates/Function.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "AbilitySystemComponent.h"
-#include "Characters\Unit\UnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Subsystems/UnitVisualManager.h"
 #include "Characters/Unit/MassUnitBase.h"
@@ -3076,8 +3076,6 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
     }
 }
 
-// In CustomControllerBase.cpp
-
 void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entities)
 {
 	if (bStopMinimapSearch) return;
@@ -3086,9 +3084,12 @@ void ACustomControllerBase::UpdateMinimap(const TArray<FMassEntityHandle>& Entit
 	if (!ensure(World)) return;
 
 	// --- Suche/Cache Logik ---
-	if (CachedMinimapActor && CachedMinimapActor->TeamId != SelectableTeamId)
+	if (CachedMinimapActor)
 	{
-		CachedMinimapActor = nullptr;
+		if (CachedMinimapActor->TeamId != SelectableTeamId)
+		{
+			CachedMinimapActor = nullptr;
+		}
 	}
 
 	if (!CachedMinimapActor)

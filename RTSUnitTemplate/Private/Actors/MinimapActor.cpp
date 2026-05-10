@@ -15,6 +15,7 @@
 #include "Actors/Pickup.h"
 #include "GameFramework/PlayerController.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 
 // Sets default values
 AMinimapActor::AMinimapActor()
@@ -178,7 +179,7 @@ bool AMinimapActor::TryGetMaterialColor(const FHitResult& Hit, FLinearColor& Out
 void AMinimapActor::CaptureMapTopography()
 {
     UWorld* World = GetWorld();
-    if (!World) return;
+    if (!World || UKismetSystemLibrary::IsDedicatedServer(World)) return;
 
     const int32 TexSize = MinimapTexSize;
     const float WorldMinX = MinimapMinBounds.X;
@@ -204,7 +205,7 @@ void AMinimapActor::CaptureMapTopography()
     float MinHeight = MAX_FLT;
     float MaxHeight = -MAX_FLT;
 
-    FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(MinimapTopo), true); // true = trace complex
+    FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(MinimapTopo), true); // true = trace complex for landscapes in builds
     TraceParams.bReturnPhysicalMaterial = true;
 
     // --- Actors ignorieren (analog zu den alten SceneCapture HiddenActors) ---
@@ -213,6 +214,11 @@ void AMinimapActor::CaptureMapTopography()
 
         // Units ignorieren (AUnitBase)
         UGameplayStatics::GetAllActorsOfClass(World, AUnitBase::StaticClass(), ActorsToIgnore);
+        TraceParams.AddIgnoredActors(ActorsToIgnore);
+
+        // EffectAreas ignorieren (AEffectArea)
+        ActorsToIgnore.Reset();
+        UGameplayStatics::GetAllActorsOfClass(World, AEffectArea::StaticClass(), ActorsToIgnore);
         TraceParams.AddIgnoredActors(ActorsToIgnore);
 
         // Visual ISM Manager der Units ignorieren
@@ -265,7 +271,13 @@ void AMinimapActor::CaptureMapTopography()
             const int32 PixelIndex = Y * TexSize + X;
             float HitZ = TraceHeightEnd;
 
-            if (World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, TraceParams))
+            if (!World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, TraceParams))
+            {
+                // Fallback to WorldStatic if Visibility trace fails (often more robust for landscapes in builds)
+                World->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams);
+            }
+
+            if (Hit.bBlockingHit)
             {
                 HitZ = Hit.ImpactPoint.Z;
                 
@@ -294,6 +306,16 @@ void AMinimapActor::CaptureMapTopography()
     // --- Pass 2: Höhen normalisieren und in Farben umwandeln ---
     TArray<FColor> Pixels;
     Pixels.SetNumUninitialized(TexSize * TexSize);
+
+    // Auto-calibrate height limits if both are zero
+    if (FMath::IsNearlyZero(MaxHeightLimit) && FMath::IsNearlyZero(MinHeightLimit))
+    {
+        if (MinHeight != MAX_FLT && MaxHeight != -MAX_FLT)
+        {
+            MaxHeightLimit = MaxHeight;
+            MinHeightLimit = MinHeight;
+        }
+    }
 
     const float HeightRange = MaxHeightLimit - MinHeightLimit;
     const float InvHeightRange = (HeightRange > KINDA_SMALL_NUMBER) ? (1.0f / HeightRange) : 0.0f;
@@ -524,25 +546,39 @@ void AMinimapActor::CaptureMapTopography()
         }
     }
 
-    // --- Pass 3: In UTexture2D schreiben ---
+    // --- Pass 3: Safe Texture Update (Async Copy) ---
     if (!TopographyTexture)
     {
         TopographyTexture = UTexture2D::CreateTransient(TexSize, TexSize, PF_B8G8R8A8);
         TopographyTexture->SRGB = true;
         TopographyTexture->AddToRoot();
-        TopographyTexture->UpdateResource();
     }
+    TopographyTexture->UpdateResource();
+
+    const int32 DataSize = TexSize * TexSize * sizeof(FColor);
+    uint8* TextureDataCopy = static_cast<uint8*>(FMemory::Malloc(DataSize));
+    FMemory::Memcpy(TextureDataCopy, Pixels.GetData(), DataSize);
 
     FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, TexSize, TexSize);
+    
+    // Cleanup-Funktion: Löscht die Daten erst, wenn der Render-Thread fertig ist
+    auto CleanupFunction = [](uint8* SrcData, const FUpdateTextureRegion2D* Regions)
+    {
+        FMemory::Free(SrcData);
+        delete Regions;
+    };
+
     TopographyTexture->UpdateTextureRegions(
-        0, 1, Region,
-        TexSize * sizeof(FColor),
-        sizeof(FColor),
-        reinterpret_cast<uint8*>(Pixels.GetData())
+        0, 
+        1, 
+        Region, 
+        TexSize * sizeof(FColor), 
+        sizeof(FColor), 
+        TextureDataCopy, 
+        CleanupFunction
     );
 
-    UE_LOG(LogTemp, Log, TEXT("Minimap topography captured via LineTrace (%dx%d, Height: %.0f - %.0f)"),
-        TexSize, TexSize, MinHeight, MaxHeight);
+    UE_LOG(LogTemp, Log, TEXT("Minimap topography safely updated (Async Copy)."));
 }
 
 void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
