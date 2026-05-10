@@ -109,6 +109,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 MoveTarget.DesiredSpeed.Set(0.f);
                 MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
 
+                /*
                 // NEU: Prädiktive Rotation zum Ziel
                 FVector LookAtDir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
                 LookAtDir.Z = 0.f;
@@ -118,6 +119,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                     FTransform& MutableTransform = ChunkContext.GetMutableFragmentView<FTransformFragment>()[i].GetMutableTransform();
                     MutableTransform.SetRotation(LookAtQuat);
                 }
+                */
             }
 
             

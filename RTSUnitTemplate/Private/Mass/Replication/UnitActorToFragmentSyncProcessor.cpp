@@ -80,6 +80,14 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				{
 					SyncEffectArea(*Area, ImpactList[EntityIndex], CombatStatsList[EntityIndex], CharacteristicsList[EntityIndex]);
 				}
+
+				// FIX: Position und Rotation für das Fragment synchronisieren
+				FMassEntityHandle EntityHandle = ChunkContext.GetEntity(EntityIndex);
+				if (FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(EntityHandle))
+				{
+					TF->GetMutableTransform().SetLocation(Area->GetActorLocation());
+					TF->GetMutableTransform().SetRotation(Area->GetActorRotation().Quaternion());
+				}
 			}
 		}
 	});

@@ -115,6 +115,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                         MoveTargetList[i].IntentAtGoal = EMassMovementAction::Stand;
                     }
 
+                    /*
                     // NEU: Prädiktive Rotation zum Ziel
                     FVector LookAtDir = (TargetList[i].LastKnownLocation - ChunkContext.GetFragmentView<FTransformFragment>()[i].GetTransform().GetLocation());
                     LookAtDir.Z = 0.f;
@@ -124,6 +125,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                         FTransform& MutableTransform = ChunkContext.GetMutableFragmentView<FTransformFragment>()[i].GetMutableTransform();
                         MutableTransform.SetRotation(LookAtQuat);
                     }
+                    */
                 }
 
                 ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i, ActorList[i].GetMutable());

@@ -70,7 +70,7 @@ AEffectArea::AEffectArea()
 
 	if (HasAuthority())
 	{
-		bReplicates = false;
+		bReplicates = true;
 	}
 	bAlwaysRelevant = true;
 	SetReplicates(true);
