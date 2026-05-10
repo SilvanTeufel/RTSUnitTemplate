@@ -57,7 +57,10 @@ struct FHealthBarSettings
 	float MaxScreenSize = 500.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
-	float RotationOffset = 180.0f;
+	float RotationOffset = 0.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	bool bFaceCamera = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	float HeightOffset = 0.0f;

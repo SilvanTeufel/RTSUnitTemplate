@@ -1359,6 +1359,10 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 		VecX_Base *= SizeScale;
 		VecY_Base *= SizeScale;
 
+		const float CamAngleRad = Settings.bFaceCamera ?
+			FMath::Atan2(PC->PlayerCameraManager->GetCameraLocation().Y - Loc.Y, PC->PlayerCameraManager->GetCameraLocation().X - Loc.X) : 0.f;
+		const float StartAngleRad = FMath::DegreesToRadians(Settings.RotationOffset) + (Settings.bFaceCamera ? (CamAngleRad - PI * 0.5f) : 0.f);
+
 		auto DrawArc2D = [&](float RadiusMult, float Pct, FColor Color)
 		{
 			FVector2D EX = VecX_Base * RadiusMult;
@@ -1374,8 +1378,6 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 			float GapAngle = (AvgRadius > 0.f) ? (ScaledGapSpace / AvgRadius) : 0.f;
 			GapAngle = FMath::Clamp(GapAngle, 0.035f, SegAngle * 0.4f);
 			const float DrawAngle = SegAngle - GapAngle;
-
-			const float StartAngleRad = FMath::DegreesToRadians(Settings.RotationOffset);
 
 			// Hintergrund-Bogen (und Outline)
 			for (int32 s = 0; s < Segments; ++s)
