@@ -316,7 +316,7 @@ void AHUDBase::SetExtensionPreviewLine(FVector Start, FVector End, FColor Color,
 	ExtensionPreviewLine.bIsActive = true;
 }
 
-void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion, int32 InSegments)
+void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, const FSelectionSettings& Settings, bool bDisableOcclusionOverride, int32 InSegments)
 {
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !PC->PlayerCameraManager || !Canvas) return;
@@ -339,7 +339,7 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 
 	// 2. Occlusion-Vorbereitung
 	float CamAngleRad = 0.f;
-	bool bOcclusionActive = bEnableOcclusion && !bDisableOcclusion;
+	bool bOcclusionActive = Settings.bEnableOcclusion && !bDisableOcclusionOverride;
 	if (bOcclusionActive) {
 		FVector DirToCam = (PC->PlayerCameraManager->GetCameraLocation() - Location).GetSafeNormal2D();
 		CamAngleRad = FMath::Atan2(DirToCam.Y, DirToCam.X);
@@ -348,15 +348,15 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 	// Höhere Segmentanzahl für rotierende Stile für weiches Fading erzwingen
 	int32 Segments = (InSegments > 0) ? InSegments : 32;
 	if (InSegments <= 0) {
-		if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon)
+		if (Settings.Style == ESelectionIndicatorStyle::RotatingPartialCircle || Settings.Style == ESelectionIndicatorStyle::RotatingOctagon)
 			Segments = 64;
-		else if (SelectionStyle == ESelectionIndicatorStyle::Octagon)
+		else if (Settings.Style == ESelectionIndicatorStyle::Octagon)
 			Segments = 8;
 	}
     
 	float AngleStep = 2.0f * PI / Segments;
-	float RotOffset = (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) 
-					  ? GetWorld()->GetTimeSeconds() * FMath::DegreesToRadians(RotatingCircleSpeed) : 0.0f;
+	float RotOffset = (Settings.Style == ESelectionIndicatorStyle::RotatingPartialCircle || Settings.Style == ESelectionIndicatorStyle::RotatingOctagon) 
+					  ? GetWorld()->GetTimeSeconds() * FMath::DegreesToRadians(Settings.RotatingSpeed) : 0.0f;
 
 	// --- OPTIMIERUNG: Iterative Trigonometrie Vorbereitung ---
 	float CosStep, SinStep;
@@ -387,7 +387,7 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 		}
 
 		// 4. Clipping Fade für Partial Circle (Exponential)
-		if (SelectionStyle == ESelectionIndicatorStyle::RotatingPartialCircle) {
+		if (Settings.Style == ESelectionIndicatorStyle::RotatingPartialCircle) {
 			float Deg = FMath::Fmod(FMath::RadiansToDegrees(i * AngleStep), 360.0f);
 			if (Deg > 240.0f) AlphaMult = 0.0f;
 			else if (Deg > 200.0f) {
@@ -398,7 +398,7 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 
 		// 5. Screen-Space Berechnung
 		float CosA, SinA;
-		if (SelectionStyle == ESelectionIndicatorStyle::Octagon || SelectionStyle == ESelectionIndicatorStyle::RotatingOctagon) {
+		if (Settings.Style == ESelectionIndicatorStyle::Octagon || Settings.Style == ESelectionIndicatorStyle::RotatingOctagon) {
 			float OctStep = 2.0f * PI / 8.0f;
 			int32 CornerIdx = FMath::FloorToInt((i * AngleStep) / OctStep);
 			float A1 = CornerIdx * OctStep + RotOffset;
@@ -417,8 +417,8 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 		if (bPrevValid && (AlphaMult > 0.001f || PrevAlphaMult > 0.001f)) {
 			float AvgAlpha = (AlphaMult + PrevAlphaMult) * 0.5f;
 			FCanvasLineItem LineItem(PrevPoint, ScreenPoint);
-			LineItem.LineThickness = Thickness * AvgAlpha;
-			FLinearColor LineColor = Color;
+			LineItem.LineThickness = Settings.Thickness * AvgAlpha;
+			FLinearColor LineColor = Settings.Color;
 			LineColor.A *= AvgAlpha;
 			LineItem.SetColor(LineColor);
 			LineItem.BlendMode = SE_BLEND_Translucent;
@@ -509,14 +509,18 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 			}
 		}
 
+		FSelectionSettings EffectiveSettings;
+		if (!Unit->CanMove) EffectiveSettings = BuildingSelectionSettings;
+		else if (bIsFlying) EffectiveSettings = FlyingSelectionSettings;
+		else EffectiveSettings = GroundSelectionSettings;
+
 		DrawSelectionIndicator(
 			Unit,
 			DrawLocation, 
-			FinalRadiusX * SelectionSizeMultiplier, 
-			FinalRadiusY * SelectionSizeMultiplier, 
+			FinalRadiusX * EffectiveSettings.SizeMultiplier, 
+			FinalRadiusY * EffectiveSettings.SizeMultiplier, 
 			UnitRotation, 
-			FLinearColor(SelectionColor), 
-			SelectionThickness,
+			EffectiveSettings,
 			bIsFlying,
 			GlobalSegments
 		);
@@ -1093,35 +1097,20 @@ void AHUDBase::DrawAllHealthBars()
 			AUnitBase* Unit = Units[i];
 			if (!IsValid(Unit) || !Unit->Attributes) continue;
 
-			// Schnelle Selektionsprüfung (O(1) via synchronisiertem Set)
 			const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
-			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !(bShowHealthOnSelected && bIsSelected)) continue;
 
-			// Sichtbarkeits-Check
+			// Sichtbarkeits-Check (Nur Team oder sichtbare Gegner)
 			if (!(Unit->IsMyTeam || Unit->IsVisibleEnemy)) continue;
 
-			// Einstellungs-Auswahl
-			FHealthBarSettings EffectiveSettings;
-			if (!Unit->CanMove) EffectiveSettings = BuildingHealthBarSettings;
-			else if (Unit->IsFlying) EffectiveSettings = FlyingHealthBarSettings;
-			else EffectiveSettings = GroundHealthBarSettings;
-
-			// 3. Einzige Projektion für diesen Frame
-			FVector2D ScreenPos;
-			FVector BaseLoc = Unit->GetActorLocation() + FVector(0, 0, EffectiveSettings.HeightOffset);
-			if (!PC->ProjectWorldLocationToScreen(BaseLoc, ScreenPos)) continue;
-			
-			// Screen-Culling
-			if (ScreenPos.X < 0.f || ScreenPos.X > (float)ViewX || ScreenPos.Y < 0.f || ScreenPos.Y > (float)ViewY) continue;
-
-			CurrentVisibleCount++;
-
+			// Einstellungs-Auswahl (Vorläufige Bestimmung)
+			bool bIsBuilding = !Unit->CanMove;
+			bool bIsFlying = Unit->IsFlying;
 			float FinalRadiusX = 60.f;
 			float FinalRadiusY = 60.f;
 			float FinalRadiusZ = 60.f;
-			bool bIsFlying = false;
+			float LastGroundLocationZ = Unit->GetActorLocation().Z;
 
-			// Direkter Komponenten-Zugriff
+			// Direkter Komponenten-Zugriff für Größe
 			if (UBoxComponent* BoxComp = Unit->BoxCollisionComponent)
 			{
 				const FVector Extent = BoxComp->GetUnscaledBoxExtent();
@@ -1147,6 +1136,7 @@ void AHUDBase::DrawAllHealthBars()
 							if (const FMassAgentCharacteristicsFragment* Frag = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
 							{
 								bIsFlying = Frag->bIsFlying;
+								LastGroundLocationZ = Frag->LastGroundLocation;
 								if (Frag->bUseBoxComponent)
 								{
 									FinalRadiusX = Frag->BoxExtent.X;
@@ -1164,6 +1154,29 @@ void AHUDBase::DrawAllHealthBars()
 				}
 			}
 
+			FHealthBarSettings EffectiveSettings;
+			if (bIsBuilding) EffectiveSettings = BuildingHealthBarSettings;
+			else if (bIsFlying) EffectiveSettings = FlyingHealthBarSettings;
+			else EffectiveSettings = GroundHealthBarSettings;
+
+			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !(EffectiveSettings.bShowHealthbarOnSelected && bIsSelected)) continue;
+
+			// 3. Einzige Projektion für diesen Frame
+			FVector2D ScreenPos;
+			FVector BaseLoc = Unit->GetActorLocation();
+			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle)
+			{
+				BaseLoc.Z = LastGroundLocationZ;
+			}
+			BaseLoc.Z += EffectiveSettings.HeightOffset;
+
+			if (!PC->ProjectWorldLocationToScreen(BaseLoc, ScreenPos)) continue;
+			
+			// Screen-Culling
+			if (ScreenPos.X < 0.f || ScreenPos.X > (float)ViewX || ScreenPos.Y < 0.f || ScreenPos.Y > (float)ViewY) continue;
+
+			CurrentVisibleCount++;
+
 			// LOD anwenden
 			int32 BaseSegments = EffectiveSettings.Segments;
 			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle && BaseSegments <= 0) BaseSegments = 32;
@@ -1176,12 +1189,11 @@ void AHUDBase::DrawAllHealthBars()
 
 			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle)
 			{
-				// Kreis parallel zum Boden: Wir brauchen einen Forward-Vektor auf der XY-Ebene
-				FVector GroundForward = FVector::CrossProduct(RightV, FVector::UpVector);
-				GroundForward.Z = 0;
-				GroundForward.Normalize();
+				// Kreis parallel zum Boden: Welt-Basisvektoren verwenden
+				FVector BasisX = FVector(1, 0, 0);
+				FVector BasisY = FVector(0, 1, 0);
 
-				DrawSemiCircleHealthBar(Unit, BaseLoc, ScreenPos, FinalRadiusX, FinalRadiusY, bIsFlying, EffectiveSettings, RightV, GroundForward);
+				DrawSemiCircleHealthBar(Unit, BaseLoc, ScreenPos, FinalRadiusX, FinalRadiusY, bIsFlying, EffectiveSettings, BasisX, BasisY);
 			}
 			else if (EffectiveSettings.Style == EHealthBarStyle::Stacked)
 			{
@@ -1323,40 +1335,43 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
 	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
 
-	float MaxWorldRadius = FMath::Max(RadiusX, RadiusY);
-	float BaseRadius = MaxWorldRadius * Settings.RadiusMultiplier;
+	float BaseRadiusX = RadiusX * Settings.RadiusMultiplier;
+	float BaseRadiusY = RadiusY * Settings.RadiusMultiplier;
 	float Thickness = Settings.Thickness * Settings.Scale;
 	float Outline = Settings.bShowOutline ? (Settings.OutlineThickness * Settings.Scale) : 0.f;
 	
 	FVector Loc = BaseLoc;
-	FVector ZOff(0, 0, 5.f);
-	if (bIsFlying) ZOff.Z = -5.f; 
+	FVector ZOff(0, 0, 10.f);
 
 	FVector2D Right2D, Up2D;
-	if (PC->ProjectWorldLocationToScreen(Loc + ZOff + RightV * BaseRadius, Right2D) &&
-		PC->ProjectWorldLocationToScreen(Loc + ZOff + UpV * BaseRadius, Up2D))
+	if (PC->ProjectWorldLocationToScreen(Loc + ZOff + RightV * BaseRadiusX, Right2D) &&
+		PC->ProjectWorldLocationToScreen(Loc + ZOff + UpV * BaseRadiusY, Up2D))
 	{
-		float ProjectedRadius = (Right2D - ScreenPos).Size() * Settings.Scale;
-		ProjectedRadius = FMath::Clamp(ProjectedRadius, Settings.MinScreenSize * 0.5f, Settings.MaxScreenSize * 0.5f);
+		FVector2D VecX_Base = (Right2D - ScreenPos) * Settings.Scale;
+		FVector2D VecY_Base = (Up2D - ScreenPos) * Settings.Scale;
 
-		FVector2D DirX = (Right2D - ScreenPos).GetSafeNormal();
-		FVector2D DirY = (Up2D - ScreenPos).GetSafeNormal();
+		// Size Culling / Clamping basierend auf der längeren Achse
+		float MaxProjSize = FMath::Max(VecX_Base.Size(), VecY_Base.Size());
+		if (MaxProjSize < 1.f) return;
 
-		FVector2D EX_Base = DirX * ProjectedRadius;
-		FVector2D EY_Base = DirY * ProjectedRadius;
+		float ClampedSize = FMath::Clamp(MaxProjSize, Settings.MinScreenSize * 0.5f, Settings.MaxScreenSize * 0.5f);
+		float SizeScale = ClampedSize / MaxProjSize;
+		VecX_Base *= SizeScale;
+		VecY_Base *= SizeScale;
 
-		auto DrawArc2D = [&](float InRadius, float Pct, FColor Color)
+		auto DrawArc2D = [&](float RadiusMult, float Pct, FColor Color)
 		{
-			const float Base = FMath::Max(1.f, BaseRadius);
-			float RadiusScale = InRadius / Base;
-			FVector2D EX = EX_Base * RadiusScale;
-			FVector2D EY = EY_Base * RadiusScale;
+			FVector2D EX = VecX_Base * RadiusMult;
+			FVector2D EY = VecY_Base * RadiusMult;
 
 			int32 Segments = Settings.Segments > 0 ? Settings.Segments : 32;
 			const float TotalAngle = PI;
 			const float SegAngle = TotalAngle / (float)Segments;
+			
+			// Gap-Berechnung basierend auf Screen-Space Radius (grob gemittelt)
+			float AvgRadius = (EX.Size() + EY.Size()) * 0.5f;
 			float ScaledGapSpace = Settings.SegmentSpace * Settings.Scale * 2.0f;
-			float GapAngle = (InRadius > 0.f) ? (ScaledGapSpace / InRadius) : 0.f;
+			float GapAngle = (AvgRadius > 0.f) ? (ScaledGapSpace / AvgRadius) : 0.f;
 			GapAngle = FMath::Clamp(GapAngle, 0.035f, SegAngle * 0.4f);
 			const float DrawAngle = SegAngle - GapAngle;
 
@@ -1402,10 +1417,15 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 			}
 		};
 
-		DrawArc2D(BaseRadius, HealthPct, Settings.HealthColor);
+		DrawArc2D(1.0f, HealthPct, Settings.HealthColor);
 		if (MaxShield > 0.f)
 		{
-			DrawArc2D(BaseRadius + Thickness + (Settings.BarPadding * Settings.Scale) + (Outline * 2.f), ShieldPct, Settings.ShieldColor);
+			// Für den Shield-Bogen berechnen wir den Radius-Multiplikator basierend auf der Screen-Dicke
+			float AvgRadius = (VecX_Base.Size() + VecY_Base.Size()) * 0.5f;
+			float ShieldRadiusOffset = Thickness + (Settings.BarPadding * Settings.Scale) + (Outline * 2.f);
+			float ShieldMult = (AvgRadius > 0.f) ? (AvgRadius + ShieldRadiusOffset) / AvgRadius : 1.1f;
+			
+			DrawArc2D(ShieldMult, ShieldPct, Settings.ShieldColor);
 		}
 
 		if (LevelUnit)

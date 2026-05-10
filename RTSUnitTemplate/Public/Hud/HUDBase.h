@@ -97,6 +97,33 @@ struct FHealthBarSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	float BarPadding = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	bool bShowHealthbarOnSelected = true;
+};
+
+USTRUCT(BlueprintType)
+struct FSelectionSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	FColor Color = FColor::Green;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	float Thickness = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	float SizeMultiplier = 1.2f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	TEnumAsByte<ESelectionIndicatorStyle> Style = Circle;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	bool bEnableOcclusion = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	float RotatingSpeed = 120.0f;
 };
 
 UCLASS()
@@ -119,7 +146,7 @@ private:
 	TArray<FClickIndicator> ClickIndicators;
 	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f, int32 InSegments = -1, bool bDisableSizeCulling = false);
 	
-	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, FLinearColor Color, float Thickness, bool bDisableOcclusion = false, int32 InSegments = -1);
+	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, const FSelectionSettings& Settings, bool bDisableOcclusionOverride = false, int32 InSegments = -1);
 	void DrawAllSelectedUnitsIndicators();
 	void DrawAllHealthBars();
 	void DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV);
@@ -136,19 +163,13 @@ public:
 	void UnregisterUnit(class AUnitBase* Unit);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	FColor SelectionColor = FColor::Green;
+	FSelectionSettings BuildingSelectionSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	float SelectionThickness = 2.0f;
+	FSelectionSettings FlyingSelectionSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	float SelectionSizeMultiplier = 1.2f;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	TEnumAsByte<ESelectionIndicatorStyle> SelectionStyle = Circle;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	bool bEnableOcclusion = true;
+	FSelectionSettings GroundSelectionSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
 	bool bEnableStandardSelection = true;
@@ -163,9 +184,6 @@ public:
 	UFont* LevelFont;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
-	bool bShowHealthOnSelected = true;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
 	FHealthBarSettings BuildingHealthBarSettings;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
@@ -173,9 +191,6 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
 	FHealthBarSettings GroundHealthBarSettings;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Selection")
-	float RotatingCircleSpeed = 120.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorRadius = 15.f;
