@@ -208,15 +208,21 @@ void UUnitActorToFragmentSyncProcessor::SyncPatrol(const AUnitBase& Unit, FMassP
 
 void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& Impact, FMassCombatStatsFragment* CombatStats, FMassAgentCharacteristicsFragment* Characteristics, FTransformFragment* TransformFragment)
 {
-    // Auf dem Client: Warten, bis der AreaIndex vom Server repliziert wurde
-    if (!Area.HasAuthority() && Area.AreaIndex == INDEX_NONE)
-    {
-        return;
-    }
+	// Auf dem Client: Warten, bis der AreaIndex vom Server repliziert wurde
+	if (!Area.HasAuthority() && Area.AreaIndex == INDEX_NONE)
+	{
+		return;
+	}
 
-    if (!Impact.bIsInitializedOnClient)
-    {
-        // Einmaliger Sync der Radien und BP-Konstanten
+	if (!Impact.bIsInitializedOnClient)
+	{
+		// Sicherheitsnetz: Falls SetupMassOnEffectArea zu früh durchkam (z.B. BaseRadius noch 0)
+		if (!Area.HasAuthority() && Area.BaseRadius <= 0.1f)
+		{
+			return; 
+		}
+
+		// Einmaliger Sync der Radien und BP-Konstanten
         Impact.StartRadius = Area.StartRadius;
         Impact.EndRadius = Area.EndRadius;
         Impact.BaseRadius = Area.BaseRadius;

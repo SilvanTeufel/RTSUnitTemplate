@@ -46,6 +46,7 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
@@ -97,7 +98,9 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         auto ForceList = ChunkContext.GetMutableFragmentView<FMassForceFragment>();
+        auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -109,15 +112,23 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                     if (VelocityList.IsValidIndex(i)) VelocityList[i].Value *= 0.1f;
                     if (ForceList.IsValidIndex(i)) ForceList[i].Value = FVector::ZeroVector;
 
+                    if (PredictionList.Num() > 0)
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[i];
+                        Pred.Location = TransformList[i].GetTransform().GetLocation();
+                        Pred.PredDesiredSpeed = 0.f;
+                        Pred.bHasData = true;
+                    }
+                    
                     if (MoveTargetList.IsValidIndex(i))
                     {
                         MoveTargetList[i].DesiredSpeed.Set(0.f);
                         MoveTargetList[i].IntentAtGoal = EMassMovementAction::Stand;
                     }
 
-                    /*
+                    
                     // NEU: Prädiktive Rotation zum Ziel
-                    FVector LookAtDir = (TargetList[i].LastKnownLocation - ChunkContext.GetFragmentView<FTransformFragment>()[i].GetTransform().GetLocation());
+                    FVector LookAtDir = (TargetList[i].LastKnownLocation - TransformList[i].GetTransform().GetLocation());
                     LookAtDir.Z = 0.f;
                     if (LookAtDir.Normalize())
                     {
@@ -125,7 +136,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                         FTransform& MutableTransform = ChunkContext.GetMutableFragmentView<FTransformFragment>()[i].GetMutableTransform();
                         MutableTransform.SetRotation(LookAtQuat);
                     }
-                    */
+                    
                 }
 
                 ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i, ActorList[i].GetMutable());

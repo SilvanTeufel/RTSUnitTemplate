@@ -135,6 +135,18 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, StartRadius);
 	DOREPLIFETIME(AEffectArea, EndRadius);
 	DOREPLIFETIME(AEffectArea, BaseRadius);
+
+	DOREPLIFETIME(AEffectArea, DuplicationId);
+	DOREPLIFETIME(AEffectArea, MaxDuplicationCount);
+	DOREPLIFETIME(AEffectArea, bUseEffectAreaImpactProcessor);
+	DOREPLIFETIME(AEffectArea, TimeToEndRadius);
+	DOREPLIFETIME(AEffectArea, bIsRadiusScaling);
+	DOREPLIFETIME(AEffectArea, bPulsate);
+	DOREPLIFETIME(AEffectArea, StartScaleTime);
+	DOREPLIFETIME(AEffectArea, MaxLifeTime);
+	DOREPLIFETIME(AEffectArea, bDestroyOnImpact);
+	DOREPLIFETIME(AEffectArea, bScaleOnImpact);
+	DOREPLIFETIME(AEffectArea, ScaleMesh);
 }
 
 FQuat AEffectArea::CalculateGroundRotationOffset(const FVector& Normal, const FVector& Forward, float RandomZRotation)

@@ -49,6 +49,7 @@ void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStatePauseTag>(EMassFragmentPresence::None);
@@ -88,8 +89,10 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         auto ForceList = ChunkContext.GetMutableFragmentView<FMassForceFragment>();
+        auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
 
         const bool bIsClient = (World->GetNetMode() == NM_Client);
+        const bool bIsServer = (World->GetNetMode() != NM_Client);
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -106,10 +109,18 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 if (VelocityList.IsValidIndex(i)) VelocityList[i].Value *= 0.1f;
                 if (ForceList.IsValidIndex(i)) ForceList[i].Value = FVector::ZeroVector;
 
+                if (PredictionList.Num() > 0)
+                {
+                    FMassClientPredictionFragment& Pred = PredictionList[i];
+                    Pred.Location = Transform.GetLocation();
+                    Pred.PredDesiredSpeed = 0.f;
+                    Pred.bHasData = true;
+                }
+                
                 MoveTarget.DesiredSpeed.Set(0.f);
                 MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
 
-                /*
+                
                 // NEU: Prädiktive Rotation zum Ziel
                 FVector LookAtDir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
                 LookAtDir.Z = 0.f;
@@ -119,7 +130,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                     FTransform& MutableTransform = ChunkContext.GetMutableFragmentView<FTransformFragment>()[i].GetMutableTransform();
                     MutableTransform.SetRotation(LookAtQuat);
                 }
-                */
+                
             }
 
             
@@ -135,11 +146,14 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
                 {
                     SightFrag.AttackerTeamOverlapsPerTeam.Empty();
                     // Queue signal instead of sending directly
-                    UpdateMoveTarget(
-                     MoveTarget,
-                     StateFrag.StoredLocation,
-                     Stats.RunSpeed,
-                     World);
+                    if (bIsServer)
+                    {
+                        UpdateMoveTarget(
+                         MoveTarget,
+                         StateFrag.StoredLocation,
+                         Stats.RunSpeed,
+                         World);
+                    }
                 
                     StateFrag.SwitchingState = true;
                     if (SignalSubsystem)

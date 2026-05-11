@@ -184,13 +184,17 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 		return;
 	}
 
-	// Only on Server!
-	/*
 	if (World->GetNetMode() == NM_Client)
 	{
-		return; // We are a client, do not create a Mass entity. Wait for replication.
+		if (!IsReadyForClientMassLink())
+		{
+			FTimerHandle RetryTimer;
+			World->GetTimerManager().SetTimer(RetryTimer, this, &UMassActorBindingComponent::SetupMassOnUnit, 0.2f, false);
+			return;
+		}
+		RequestClientMassLink();
+		return;
 	}
-	*/
 	
 	if(!MassEntitySubsystemCache)
 	{
@@ -209,13 +213,6 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 	{
 		bNeedsMassUnitSetup = true;
 	}
-
-
-	if (!World)
-	{
-		return; // World might not be valid yet
-	}
-
 
 	if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 	{
@@ -712,9 +709,15 @@ void UMassActorBindingComponent::SetupMassOnBuilding()
 		return; // World might not be valid yet
 	}
 	
-	// Clients never create Mass entities directly; they will request a safe link later
 	if (World->GetNetMode() == NM_Client)
 	{
+		if (!IsReadyForClientMassLink())
+		{
+			FTimerHandle RetryTimer;
+			World->GetTimerManager().SetTimer(RetryTimer, this, &UMassActorBindingComponent::SetupMassOnBuilding, 0.2f, false);
+			return;
+		}
+		RequestClientMassLink();
 		return;
 	}
 	
@@ -1539,6 +1542,12 @@ void UMassActorBindingComponent::SetupMassOnEffectArea()
 
 	if (World->GetNetMode() == NM_Client)
 	{
+		if (!IsReadyForClientMassLink())
+		{
+			FTimerHandle RetryTimer;
+			World->GetTimerManager().SetTimer(RetryTimer, this, &UMassActorBindingComponent::SetupMassOnEffectArea, 0.2f, false);
+			return;
+		}
 		RequestClientMassLink();
 		return;
 	}
@@ -1644,6 +1653,16 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 
 	AUnitBase* Unit = Cast<AUnitBase>(OwnerActor);
 	AEffectArea* Area = Cast<AEffectArea>(OwnerActor);
+
+	if (Unit && Unit->UnitIndex == INDEX_NONE) return false;
+	if (Area)
+	{
+		if (Area->AreaIndex == INDEX_NONE) return false;
+		if (Area->BaseRadius <= 0.1f) return false;
+		// Wenn es eine duplizierte Area ist, auf die ID warten (Falls im BP MaxDuplicationCount > 0 eingestellt ist)
+		if (Area->MaxDuplicationCount > 0 && Area->DuplicationId == 0) return false;
+	}
+
 	const FUnitRegistryItem* RegItem = nullptr;
 
 	if (Unit && Unit->UnitIndex != INDEX_NONE)

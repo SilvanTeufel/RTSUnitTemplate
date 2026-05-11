@@ -256,10 +256,9 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				
 				if (Alpha >= 1.f)
 				{
-					Impact.bIsScalingAfterImpact = false;
-
 					if (bIsServer)
 					{
+						Impact.bIsScalingAfterImpact = false;
 						Impact.bImpactVFXTriggered = true;
 
 						if (Impact.bDestroyOnImpact)
@@ -270,7 +269,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					else
 					{
 						// On client, if scaling finished and we are dead, hide visuals now
-						if (bIsDead)
+						if (bIsDead && !Impact.bHasHiddenVisual)
 						{
 							if (EffectArea)
 							{
