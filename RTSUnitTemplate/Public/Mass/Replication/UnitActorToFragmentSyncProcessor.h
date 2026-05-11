@@ -18,6 +18,7 @@ struct FMassAIStateFragment;
 struct FMassVisibilityFragment;
 struct FMassPatrolFragment;
 struct FEffectAreaImpactFragment;
+struct FTransformFragment;
 
 /**
  * Processor to synchronize data from AUnitBase actors to Mass fragments locally on both Server and Client.
@@ -46,5 +47,5 @@ private:
 	void SyncAIState(const AUnitBase& Unit, FMassAIStateFragment& AIStateFragment, FMassCombatStatsFragment& CombatStatsFragment);
 	void SyncVisibility(const AUnitBase& Unit, FMassVisibilityFragment& VisibilityFragment);
 	void SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFragment, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle);
-	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment& CombatStatsFragment, FMassAgentCharacteristicsFragment& CharacteristicsFragment);
+	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment* CombatStatsFragment, FMassAgentCharacteristicsFragment* CharacteristicsFragment, FTransformFragment* TransformFragment);
 };

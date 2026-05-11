@@ -1387,6 +1387,8 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	static constexpr int32 MaxHitCount = 32;
 	FMassEntityHandle HitEntities[MaxHitCount];
 	int32 HitCount = 0;
+
+	bool bIsInitializedOnClient = false; // Neu: Verhindert mehrfaches Synchronisieren von statischen Daten
 };
 
 USTRUCT()

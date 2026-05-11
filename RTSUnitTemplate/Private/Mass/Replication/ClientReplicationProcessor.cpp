@@ -196,8 +196,12 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					FoundID = AuthoritativeByUnitIndex.Find(AsUnit->UnitIndex);
 				}
+				else if (AEffectArea* AsArea = Cast<AEffectArea>(OwnerActor))
+				{
+					FoundID = AuthoritativeByUnitIndex.Find(AsArea->AreaIndex);
+				}
 
-				if (!FoundID) // Fallback for EffectAreas
+				if (!FoundID) // Fallback for Aktoren ohne Index
 				{
 					FoundID = AuthoritativeByOwnerName.Find(OwnerActor->GetFName());
 				}

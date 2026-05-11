@@ -84,6 +84,14 @@ void AEffectArea::BeginPlay()
 	Super::BeginPlay();
 	SetReplicateMovement(true); // Re-enabled for smooth client-side transform synchronization
 
+	if (HasAuthority() && AreaIndex == -1)
+	{
+		if (ARTSGameModeBase* GM = GetWorld()->GetAuthGameMode<ARTSGameModeBase>())
+		{
+			AreaIndex = ++GM->HighestUnitIndex;
+		}
+	}
+
 	if (MassBindingComponent)
 	{
 		MassBindingComponent->SetupMassOnEffectArea();
@@ -123,6 +131,10 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, Niagara_A);
 	DOREPLIFETIME(AEffectArea, BeaconRange);
 	DOREPLIFETIME(AEffectArea, VisualRotationOffset);
+	DOREPLIFETIME(AEffectArea, AreaIndex);
+	DOREPLIFETIME(AEffectArea, StartRadius);
+	DOREPLIFETIME(AEffectArea, EndRadius);
+	DOREPLIFETIME(AEffectArea, BaseRadius);
 }
 
 FQuat AEffectArea::CalculateGroundRotationOffset(const FVector& Normal, const FVector& Forward, float RandomZRotation)

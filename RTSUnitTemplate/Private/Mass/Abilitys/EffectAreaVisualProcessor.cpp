@@ -130,6 +130,19 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 				{
 					float LocalRadius = Visual.BaseMeshRadius;
 					float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
+
+					if (bIsClient && ScaleFactor <= 0.001f)
+					{
+						static double LastLogTime = 0;
+						const double CurrentTime = VisualContext.GetWorld()->GetTimeSeconds();
+						if (CurrentTime - LastLogTime > 2.0)
+						{
+							UE_LOG(LogTemp, Warning, TEXT("[EA_LOG] Client Visual: Entity %d should show but ScaleFactor is %.2f (CurrentRadius: %.2f)"), 
+								VisualContext.GetEntity(i).Index, ScaleFactor, Impact.CurrentRadius);
+							LastLogTime = CurrentTime;
+						}
+					}
+
 					FTransform VisualTransform = Visual.VisualRelativeTransform * BaseTransform;
 					VisualTransform.SetScale3D(FVector(ScaleFactor));
 					

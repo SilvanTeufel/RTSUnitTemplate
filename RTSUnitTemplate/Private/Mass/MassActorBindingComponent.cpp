@@ -1446,13 +1446,31 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 
 					// Use OwnerName (stable) to register
 					const FName OwnerName = GetOwner() ? GetOwner()->GetFName() : NAME_None;
-					FUnitRegistryItem* Existing = Reg->Registry.FindByOwner(OwnerName);
+					AEffectArea* EffectAreaActor = Cast<AEffectArea>(GetOwner());
+					FUnitRegistryItem* Existing = nullptr;
+
+					if (EffectAreaActor && EffectAreaActor->AreaIndex != INDEX_NONE)
+					{
+						Existing = Reg->Registry.FindByUnitIndex(EffectAreaActor->AreaIndex);
+					}
+
+					if (!Existing)
+					{
+						Existing = Reg->Registry.FindByOwner(OwnerName);
+					}
+
 					if (!Existing) {
 						int32 NewIdx = Reg->Registry.Items.AddDefaulted();
 						Existing = &Reg->Registry.Items[NewIdx];
 					}
 					Existing->OwnerName = OwnerName;
 					Existing->NetID = NetFrag->NetID;
+
+					if (EffectAreaActor)
+					{
+						Existing->UnitIndex = EffectAreaActor->AreaIndex;
+					}
+
 					Reg->Registry.MarkItemDirty(*Existing);
 					Reg->Registry.MarkArrayDirty();
 					Reg->ForceNetUpdate();
@@ -1625,11 +1643,16 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	}
 
 	AUnitBase* Unit = Cast<AUnitBase>(OwnerActor);
+	AEffectArea* Area = Cast<AEffectArea>(OwnerActor);
 	const FUnitRegistryItem* RegItem = nullptr;
 
 	if (Unit && Unit->UnitIndex != INDEX_NONE)
 	{
 		RegItem = Registry->Registry.FindByUnitIndex(Unit->UnitIndex);
+	}
+	else if (Area && Area->AreaIndex != INDEX_NONE)
+	{
+		RegItem = Registry->Registry.FindByUnitIndex(Area->AreaIndex);
 	}
 	
 	if (!RegItem && OwnerActor)
@@ -1639,8 +1662,16 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 
 	if (!RegItem)
 	{
-		// Zu viel Spam vermeiden, aber für Diagnose wichtig wenn es hakt
-		// UE_LOG(LogTemp, Verbose, TEXT("[MassLink] %s: No Registry Item found yet."), *OwnerName);
+		if (bDebugLogs)
+		{
+			static double LastLogTime = 0;
+			const double CurrentTime = MyWorld->GetTimeSeconds();
+			if (CurrentTime - LastLogTime > 2.0)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: No Registry Item found yet. (AreaIndex: %d)"), *OwnerName, Area ? Area->AreaIndex : -1);
+				LastLogTime = CurrentTime;
+			}
+		}
 		return false;
 	}
 

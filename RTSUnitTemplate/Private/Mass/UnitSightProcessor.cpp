@@ -98,7 +98,7 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EffectAreaQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EffectAreaQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EffectAreaQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
-    EffectAreaQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+    EffectAreaQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EffectAreaQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::All);
     EffectAreaQuery.RegisterWithProcessor(*this);
 
@@ -108,7 +108,7 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     ProjectileQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     ProjectileQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     ProjectileQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
-    ProjectileQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
+    ProjectileQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     ProjectileQuery.AddTagRequirement<FMassProjectileTag>(EMassFragmentPresence::All);
     ProjectileQuery.RegisterWithProcessor(*this);
 }
@@ -161,6 +161,7 @@ void UUnitSightProcessor::ExecuteServer(
             for (int32 i = 0; i < N; ++i)
             {
                 const bool bIsDead = StatsList[i].Health <= 0.f;
+                FMassAgentCharacteristicsFragment* Char = CharList ? &CharList[i] : nullptr;
 
                 if (StateList)
                 {
@@ -200,14 +201,14 @@ void UUnitSightProcessor::ExecuteServer(
                 }
 
                 AllEntities.Add({
-                    ChunkCtx.GetEntity(i),
-                    Transforms[i].GetTransform().GetLocation(),
-                    &StatsList[i],
-                    &CharList[i],
-                    StateList ? &StateList[i] : nullptr,
-                    &SightList[i],
-                    bInCanRevealFog
-                });
+                        ChunkCtx.GetEntity(i),
+                        Transforms[i].GetTransform().GetLocation(),
+                        &StatsList[i],
+                        Char,
+                        StateList ? &StateList[i] : nullptr,
+                        &SightList[i],
+                        bInCanRevealFog
+                    });
             }
         });
     };
@@ -253,7 +254,11 @@ void UUnitSightProcessor::ExecuteServer(
             
             if (Det.bCanRevealFog)
             {
-                if (Det.Char->bCanDetectInvisible || !Tgt.Char->bCanBeInvisible)
+                if (Det.Char && Tgt.Char && (Det.Char->bCanDetectInvisible || !Tgt.Char->bCanBeInvisible))
+                {
+                    Tgt.Sight->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
+                }
+                else if (Det.Char && !Tgt.Char)
                 {
                     Tgt.Sight->DetectorOverlapsPerTeam.FindOrAdd(Det.Stats->TeamId)++;
                 }
@@ -266,7 +271,7 @@ void UUnitSightProcessor::ExecuteServer(
     // 4) Update global invisibility status
     for (auto& Target : AllEntities)
     {
-        if (Target.Char->bCanBeInvisible)
+        if (Target.Char && Target.Char->bCanBeInvisible)
         {
             bool bAnyEnemyDetects = false;
             for (auto& Pair : Target.Sight->DetectorOverlapsPerTeam)
@@ -279,7 +284,7 @@ void UUnitSightProcessor::ExecuteServer(
             }
             Target.Char->bIsInvisible = !bAnyEnemyDetects;
         }
-        else
+        else if (Target.Char)
         {
             Target.Char->bIsInvisible = false;
         }

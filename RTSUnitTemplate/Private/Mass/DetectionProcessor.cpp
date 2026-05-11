@@ -85,8 +85,8 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
                 const FMassAgentCharacteristicsFragment* TgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(CurrentTargetEntity);
                 const FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(CurrentTargetEntity);
 
-                // Ensure all data is valid before adding
-                if (TgtTransformFrag && TgtState && TgtStats && TgtChar && SightFragment)
+        // Ensure all data is valid before adding
+                if (TgtTransformFrag && TgtState && TgtStats)
                 {
                     if (TgtStats->Health >= 0)
                     {
@@ -95,8 +95,8 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
                             TgtTransformFrag->GetTransform().GetLocation(),
                             TgtState,
                             TgtStats,
-                            TgtChar,
-                            SightFragment
+                            TgtChar, // Optional
+                            SightFragment // Optional
                             });
                     }
                 }
@@ -159,7 +159,7 @@ void UDetectionProcessor::Execute(
         const FMassAgentCharacteristicsFragment* TgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TgtEntity);
         const FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(TgtEntity);
 
-        if (!TgtTransformFrag || !TgtState || !TgtStats || !TgtChar || !SightFragment)
+        if (!TgtTransformFrag || !TgtState || !TgtStats)
         {
             continue;
         }
@@ -240,6 +240,14 @@ void UDetectionProcessor::Execute(
         }
         
         InjectCurrentTargetIfMissing(Det, TargetUnits, EntityManager);
+
+        // Schutz vor Client-Flapping:
+        if (World->GetNetMode() == NM_Client && Det.TargetFrag->bHasValidTarget && Det.TargetFrag->TargetEntity.IsSet())
+        {
+            // Wenn der Server bereits ein Ziel vorgibt, behalten wir dieses bei 
+            // und überspringen die lokale Suche in diesem Frame.
+            continue; 
+        }
    
         // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not already inside
         if (Det.TargetFrag->IsFocusedOnTarget)
@@ -249,8 +257,8 @@ void UDetectionProcessor::Execute(
                 if (Tgt.Entity != Det.TargetFrag->TargetEntity) 
                     continue;
                 
-                const int32* SightCount = Tgt.Sight->ConsistentTeamOverlapsPerTeam.Find(DetectorTeamId);
-                const int32* DetectorSightCount = Tgt.Sight->ConsistentDetectorOverlapsPerTeam.Find(DetectorTeamId);
+                const int32* SightCount = Tgt.Sight ? Tgt.Sight->ConsistentTeamOverlapsPerTeam.Find(DetectorTeamId) : nullptr;
+                const int32* DetectorSightCount = Tgt.Sight ? Tgt.Sight->ConsistentDetectorOverlapsPerTeam.Find(DetectorTeamId) : nullptr;
 
                 const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
                 const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
@@ -263,7 +271,7 @@ void UDetectionProcessor::Execute(
                     bCurrentTargetCanAttack = Tgt.State->CanAttack;
                 }else if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
                     Tgt.Stats->Health > 0 &&
-                    ((!Tgt.Char->bIsInvisible && SightCount && *SightCount > 0) || (Tgt.Char->bIsInvisible && DetectorSightCount && *DetectorSightCount > 0)) &&
+                    ((Tgt.Char && !Tgt.Char->bIsInvisible && SightCount && *SightCount > 0) || (Tgt.Char && Tgt.Char->bIsInvisible && DetectorSightCount && *DetectorSightCount > 0) || !Tgt.Char) &&
                     DistSq >= EffectiveMinRangeSq)
                 {
                     CurrentLocation    = Tgt.Location;

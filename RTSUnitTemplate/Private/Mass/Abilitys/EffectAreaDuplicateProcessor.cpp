@@ -14,6 +14,7 @@
 #include "Engine/World.h"
 #include "CollisionQueryParams.h"
 #include "Engine/HitResult.h"
+#include "GameModes/RTSGameModeBase.h"
 
 UMassEffectAreaDuplicateProcessor::UMassEffectAreaDuplicateProcessor()
 {
@@ -39,6 +40,7 @@ void UMassEffectAreaDuplicateProcessor::ConfigureQueries(const TSharedRef<FMassE
 	AreaQuery.AddRequirement<FEffectAreaDuplicateFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	AreaQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	AreaQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	AreaQuery.AddTagRequirement<FMassEffectAreaDuplicateTag>(EMassFragmentPresence::All);
 	AreaQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
 	AreaQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
@@ -235,6 +237,8 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		auto DuplicateList = ChunkContext.GetMutableFragmentView<FEffectAreaDuplicateFragment>();
 		auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+		auto ImpactList = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
+		bool bHasImpact = ImpactList.Num() > 0;
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
@@ -390,8 +394,19 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 						AEffectArea* NewArea = World->SpawnActorDeferred<AEffectArea>(DuplicateFrag.EffectAreaClass, FTransform(ActorYawRotation, SpawnLocation), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 						if (NewArea)
 						{
+							if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
+							{
+								NewArea->AreaIndex = ++GM->HighestUnitIndex;
+							}
+
 							// Transfer properties
 							NewArea->TeamId = DuplicateFrag.TeamId;
+							if (bHasImpact)
+							{
+								NewArea->BaseRadius = ImpactList[i].BaseRadius;
+								NewArea->StartRadius = ImpactList[i].StartRadius;
+								NewArea->EndRadius = ImpactList[i].EndRadius;
+							}
 							NewArea->DuplicationRadius = DuplicateFrag.DuplicationRadius;
 							NewArea->DuplicationTime = DuplicateFrag.DuplicationTime;
 							NewArea->RandomAngleRange = DuplicateFrag.RandomAngleRange;

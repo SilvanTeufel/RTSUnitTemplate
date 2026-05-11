@@ -30,13 +30,14 @@ void UUnitActorToFragmentSyncProcessor::ConfigureQueries(const TSharedRef<FMassE
 {
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
-	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite);
-	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
-	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -53,6 +54,7 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 		const TArrayView<FMassVisualEffectFragment> VisualEffectList = ChunkContext.GetMutableFragmentView<FMassVisualEffectFragment>();
 		const TArrayView<FEffectAreaImpactFragment> ImpactList = ChunkContext.GetMutableFragmentView<FEffectAreaImpactFragment>();
 		const TArrayView<FMassPatrolFragment> PatrolList = ChunkContext.GetMutableFragmentView<FMassPatrolFragment>();
+		const TArrayView<FTransformFragment> TransformList = ChunkContext.GetMutableFragmentView<FTransformFragment>();
 
 		for (int32 EntityIndex = 0; EntityIndex < ChunkContext.GetNumEntities(); ++EntityIndex)
 		{
@@ -61,10 +63,10 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 
 			if (const AUnitBase* Unit = Cast<AUnitBase>(Actor))
 			{
-				SyncCombatStats(*Unit, CombatStatsList[EntityIndex]);
-				SyncCharacteristics(*Unit, CharacteristicsList[EntityIndex]);
-				SyncAIState(*Unit, AIStateList[EntityIndex], CombatStatsList[EntityIndex]);
-				SyncVisibility(*Unit, VisibilityList[EntityIndex]);
+				if (CombatStatsList.Num() > 0) SyncCombatStats(*Unit, CombatStatsList[EntityIndex]);
+				if (CharacteristicsList.Num() > 0) SyncCharacteristics(*Unit, CharacteristicsList[EntityIndex]);
+				if (AIStateList.Num() > 0 && CombatStatsList.Num() > 0) SyncAIState(*Unit, AIStateList[EntityIndex], CombatStatsList[EntityIndex]);
+				if (VisibilityList.Num() > 0) SyncVisibility(*Unit, VisibilityList[EntityIndex]);
 				
 				// KORREKTUR: Zugriff über EntityManager für optionale Fragmente
 				FMassEntityHandle EntityHandle = ChunkContext.GetEntity(EntityIndex);
@@ -78,15 +80,10 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 			{
 				if (ImpactList.Num() > 0)
 				{
-					SyncEffectArea(*Area, ImpactList[EntityIndex], CombatStatsList[EntityIndex], CharacteristicsList[EntityIndex]);
-				}
-
-				// FIX: Position und Rotation für das Fragment synchronisieren
-				FMassEntityHandle EntityHandle = ChunkContext.GetEntity(EntityIndex);
-				if (FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(EntityHandle))
-				{
-					TF->GetMutableTransform().SetLocation(Area->GetActorLocation());
-					TF->GetMutableTransform().SetRotation(Area->GetActorRotation().Quaternion());
+					SyncEffectArea(*Area, ImpactList[EntityIndex], 
+						CombatStatsList.Num() > 0 ? &CombatStatsList[EntityIndex] : nullptr, 
+						CharacteristicsList.Num() > 0 ? &CharacteristicsList[EntityIndex] : nullptr, 
+						TransformList.Num() > 0 ? &TransformList[EntityIndex] : nullptr);
 				}
 			}
 		}
@@ -209,42 +206,80 @@ void UUnitActorToFragmentSyncProcessor::SyncPatrol(const AUnitBase& Unit, FMassP
 	}
 }
 
-void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& Impact, FMassCombatStatsFragment& CombatStats, FMassAgentCharacteristicsFragment& Characteristics)
+void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& Impact, FMassCombatStatsFragment* CombatStats, FMassAgentCharacteristicsFragment* Characteristics, FTransformFragment* TransformFragment)
 {
-    // Sync Scaling/Radius properties (BP constants)
-    Impact.StartRadius = Area.StartRadius;
-    Impact.EndRadius = Area.EndRadius;
-    Impact.BaseRadius = Area.BaseRadius;
-    Impact.TimeToEndRadius = Area.TimeToEndRadius;
-    Impact.bScaleOnImpact = Area.bScaleOnImpact;
-    Impact.bPulsate = Area.bPulsate;
-    Impact.bDestroyOnImpact = Area.bDestroyOnImpact;
-    Impact.bIsRadiusScaling = Area.bIsRadiusScaling;
-    Impact.bScaleMesh = Area.ScaleMesh;
-    Impact.IsHealing = Area.IsHealing;
-
-    // Sync Gameplay Effects
-    Impact.AreaEffectOne = Area.AreaEffectOne;
-    Impact.AreaEffectTwo = Area.AreaEffectTwo;
-    Impact.AreaEffectThree = Area.AreaEffectThree;
-
-    // Sync Destruction/Spawn params from Actor/Component
-    if (Area.MassBindingComponent)
+    // Auf dem Client: Warten, bis der AreaIndex vom Server repliziert wurde
+    if (!Area.HasAuthority() && Area.AreaIndex == INDEX_NONE)
     {
-        Impact.HideActorTime = Area.MassBindingComponent->HideActorTime;
-        Impact.DespawnTime = Area.MassBindingComponent->DespawnTime;
-
-        Characteristics.HideActorTime = Area.MassBindingComponent->HideActorTime;
-        Characteristics.DespawnTime = Area.MassBindingComponent->DespawnTime;
+        return;
     }
-    Impact.EarlySpawnTime = Area.EarlySpawnTime;
-    Impact.SpawnRandomOffsetMin = Area.SpawnRandomOffsetMin;
-    Impact.SpawnRandomOffsetMax = Area.SpawnRandomOffsetMax;
 
-    // Existing syncs
-    Impact.StartScaleTime = Area.StartScaleTime;
-    Impact.VisualRotationOffset = Area.VisualRotationOffset;
-    Impact.TeamId = Area.TeamId;
+    if (!Impact.bIsInitializedOnClient)
+    {
+        // Einmaliger Sync der Radien und BP-Konstanten
+        Impact.StartRadius = Area.StartRadius;
+        Impact.EndRadius = Area.EndRadius;
+        Impact.BaseRadius = Area.BaseRadius;
+        Impact.TimeToEndRadius = Area.TimeToEndRadius;
+        Impact.bScaleOnImpact = Area.bScaleOnImpact;
+        Impact.bPulsate = Area.bPulsate;
+        Impact.bDestroyOnImpact = Area.bDestroyOnImpact;
+        Impact.bIsRadiusScaling = Area.bIsRadiusScaling;
+        Impact.bScaleMesh = Area.ScaleMesh;
+        Impact.IsHealing = Area.IsHealing;
 
-    CombatStats.TeamId = Area.TeamId;
+        // Sync Gameplay Effects
+        Impact.AreaEffectOne = Area.AreaEffectOne;
+        Impact.AreaEffectTwo = Area.AreaEffectTwo;
+        Impact.AreaEffectThree = Area.AreaEffectThree;
+
+        // Sync Destruction/Spawn params from Actor/Component
+        if (Area.MassBindingComponent)
+        {
+            Impact.HideActorTime = Area.MassBindingComponent->HideActorTime;
+            Impact.DespawnTime = Area.MassBindingComponent->DespawnTime;
+
+            if (Characteristics)
+            {
+                Characteristics->HideActorTime = Area.MassBindingComponent->HideActorTime;
+                Characteristics->DespawnTime = Area.MassBindingComponent->DespawnTime;
+            }
+        }
+        Impact.EarlySpawnTime = Area.EarlySpawnTime;
+        Impact.SpawnRandomOffsetMin = Area.SpawnRandomOffsetMin;
+        Impact.SpawnRandomOffsetMax = Area.SpawnRandomOffsetMax;
+
+        // Existing syncs
+        Impact.StartScaleTime = Area.StartScaleTime;
+        Impact.VisualRotationOffset = Area.VisualRotationOffset;
+        Impact.TeamId = Area.TeamId;
+
+        if (CombatStats)
+        {
+            CombatStats->TeamId = Area.TeamId;
+            // Hinweis: Health wird NICHT synchronisiert, da dies bereits in InitStats geschah
+        }
+
+        if (TransformFragment)
+        {
+            TransformFragment->GetMutableTransform().SetLocation(Area.GetActorLocation());
+            TransformFragment->GetMutableTransform().SetRotation(Area.GetActorRotation().Quaternion());
+        }
+
+        Impact.bIsInitializedOnClient = true;
+
+        if (!Area.HasAuthority())
+        {
+            static TMap<uint32, double> LastEntityLogTimes;
+            double& LastLog = LastEntityLogTimes.FindOrAdd(Area.GetUniqueID());
+            const double CurrentTime = Area.GetWorld()->GetTimeSeconds();
+            
+            if (CurrentTime - LastLog > 2.0)
+            {
+                UE_LOG(LogTemp, Log, TEXT("Client SyncEffectArea INITIALIZED: %s (ID: %d) at %s"), 
+                    *Area.GetName(), Area.AreaIndex, *Area.GetActorLocation().ToString());
+                LastLog = CurrentTime;
+            }
+        }
+    }
 }
