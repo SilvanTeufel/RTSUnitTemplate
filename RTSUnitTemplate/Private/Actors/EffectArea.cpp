@@ -16,6 +16,7 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/PerformanceUnit.h"
 #include "System/RTSBeaconSubsystem.h"
+#include "Mass/Abilitys/EffectAreaVisualManager.h"
 
 // Sets default values
 AEffectArea::AEffectArea()
@@ -68,12 +69,8 @@ AEffectArea::AEffectArea()
 	CapsuleHeight = 50.f;
 	bLocalDeathEffectsExecuted = false;
 
-	if (HasAuthority())
-	{
-		bReplicates = true;
-	}
+	bReplicates = true;
 	bAlwaysRelevant = true;
-	SetReplicates(true);
 	SetNetUpdateFrequency(2.f);
 	SetMinNetUpdateFrequency(1.f);
 }
@@ -96,6 +93,22 @@ void AEffectArea::BeginPlay()
 	{
 		MassBindingComponent->SetupMassOnEffectArea();
 	}
+}
+
+void AEffectArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    Super::EndPlay(EndPlayReason);
+
+    if (UWorld* World = GetWorld())
+    {
+        if (UEffectAreaVisualManager* VisualManager = World->GetSubsystem<UEffectAreaVisualManager>())
+        {
+            if (MassBindingComponent)
+            {
+                VisualManager->RemoveVisualInstance(MassBindingComponent->GetEntityHandle());
+            }
+        }
+    }
 }
 
 // Called every frame

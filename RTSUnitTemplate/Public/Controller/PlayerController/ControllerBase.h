@@ -265,7 +265,7 @@ public:
 	TSubclassOf<class AEffectArea> EffectAreaClass;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn = nullptr);
+	AEffectArea* SpawnEffectArea(int TeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn = nullptr);
 	
 	UPROPERTY(Replicated, BlueprintReadWrite, meta = (DisplayName = "IsShiftPressed", Keywords = "RTSUnitTemplate IsShiftPressed"), Category = RTSUnitTemplate)
 	bool IsShiftPressed = false;

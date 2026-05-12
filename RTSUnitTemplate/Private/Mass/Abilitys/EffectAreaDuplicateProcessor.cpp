@@ -196,6 +196,9 @@ void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManage
 
 void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& EntityManager, FMassExecutionContext& Context, FMassSignalNameLookup& EntitySignals)
 {
+	UMassSignalSubsystem* SignalSubsystem = Context.GetWorld() ? Context.GetWorld()->GetSubsystem<UMassSignalSubsystem>() : nullptr;
+	if (!SignalSubsystem) return;
+
 	// 1. Pre-calculate enemy locations
 	TArray<FVector> EnemyLocations;
 	TArray<int32> EnemyTeams;
@@ -232,7 +235,7 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 
 	//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Found %d potential units in world."), EnemyLocations.Num());
 	
-	AreaQuery.ForEachEntityChunk(Context, [this, &EnemyLocations, &EnemyTeams, &EntitySignals, &IdCounts, &EntityManager](FMassExecutionContext& ChunkContext)
+	AreaQuery.ForEachEntityChunk(Context, [this, &EnemyLocations, &EnemyTeams, &EntitySignals, &IdCounts, &EntityManager, SignalSubsystem](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		auto DuplicateList = ChunkContext.GetMutableFragmentView<FEffectAreaDuplicateFragment>();
@@ -290,6 +293,11 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 				//Entity.Index, DuplicateFrag.DuplicationId, CurrentCount, DuplicateFrag.MaxDuplicationCount);
 
 			FVector CurrentLoc = TransformList[i].GetTransform().GetLocation();
+			if (CurrentLoc.ContainsNaN()) 
+			{
+				UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: skipping entity %d due to non-finite location."), Entity.Index);
+				continue; 
+			}
 			FVector AvgEnemyLoc = FVector::ZeroVector;
 			int32 EnemyCount = 0;
 
@@ -389,52 +397,21 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 					{
 						SpawnLocation.Z = HitResult.ImpactPoint.Z;
 
-						FQuat ActorYawRotation = FRotationMatrix::MakeFromX(Direction).ToQuat();
+						DuplicateFrag.PendingSpawnLocation = SpawnLocation;
 						
-						AEffectArea* NewArea = World->SpawnActorDeferred<AEffectArea>(DuplicateFrag.EffectAreaClass, FTransform(ActorYawRotation, SpawnLocation), nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
-						if (NewArea)
+						if (SignalSubsystem)
 						{
-							if (ARTSGameModeBase* GM = World->GetAuthGameMode<ARTSGameModeBase>())
-							{
-								NewArea->AreaIndex = ++GM->HighestUnitIndex;
-							}
-
-							// Transfer properties
-							NewArea->TeamId = DuplicateFrag.TeamId;
-							if (bHasImpact)
-							{
-								NewArea->BaseRadius = ImpactList[i].BaseRadius;
-								NewArea->StartRadius = ImpactList[i].StartRadius;
-								NewArea->EndRadius = ImpactList[i].EndRadius;
-							}
-							NewArea->DuplicationRadius = DuplicateFrag.DuplicationRadius;
-							NewArea->DuplicationTime = DuplicateFrag.DuplicationTime;
-							NewArea->RandomAngleRange = DuplicateFrag.RandomAngleRange;
-							NewArea->LastDuplicationDirection = Direction;
-							NewArea->MaxDuplicationCount = DuplicateFrag.MaxDuplicationCount;
-							NewArea->DuplicationId = DuplicateFrag.DuplicationId;
-
-							float RandomZ = 0.f;
-							if (NewArea->bAddRandomZRotation)
-							{
-								RandomZ = FMath::FRandRange(0.f, 360.f);
-							}
-							
-							NewArea->VisualRotationOffset = AEffectArea::CalculateGroundRotationOffset(HitResult.ImpactNormal, Direction, RandomZ);
-							
-							UGameplayStatics::FinishSpawningActor(NewArea, FTransform(ActorYawRotation, SpawnLocation));
-							DuplicateFrag.SpawnedChild = NewArea;
-							DuplicateFrag.DuplicationTimer = 0.f; // Reset timer
-							DuplicateFrag.LastDirection = Direction;
-							DuplicateFrag.ChildMassWaitTimer = 0.f; // Reset wait timer
-							
-							// Update local count for this frame to prevent over-spawning
-							IdCounts.FindOrAdd(DuplicateFrag.DuplicationId)++;
-
-							//UE_LOG(LogTemp, Warning, TEXT("EffectAreaDuplicate: Attempt %d successful at %s on Landscape %s (ID=%d, Population=%d/%d)"), 
-								//Attempt, *SpawnLocation.ToString(), *HitActor->GetName(), DuplicateFrag.DuplicationId, IdCounts[DuplicateFrag.DuplicationId], DuplicateFrag.MaxDuplicationCount);
-							break;
+							SignalSubsystem->SignalEntity(UnitSignals::SpawnEffectAreaRequested, Entity);
 						}
+						
+						DuplicateFrag.DuplicationTimer = 0.f; // Reset timer
+						DuplicateFrag.LastDirection = Direction;
+						DuplicateFrag.ChildMassWaitTimer = 0.f; // Reset wait timer
+						
+						// Update local count for this frame to prevent over-spawning
+						IdCounts.FindOrAdd(DuplicateFrag.DuplicationId)++;
+
+						break;
 					}
 					else
 					{

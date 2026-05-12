@@ -90,7 +90,59 @@ namespace UnitSignals
 	const FName CustomOverlapStart(TEXT("CustomOverlapStart"));
 	const FName CustomOverlapEnd(TEXT("CustomOverlapEnd"));
 	const FName DuplicateEffectArea(TEXT("DuplicateEffectArea"));
+	const FName SpawnEffectAreaRequested(TEXT("SpawnEffectAreaRequested"));
 }
+
+USTRUCT()
+struct FSpawnEffectAreaRequestPayload
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 TeamId = 0;
+
+	UPROPERTY()
+	FVector Location = FVector::ZeroVector;
+
+	UPROPERTY()
+	FVector Scale = FVector::OneVector;
+
+	UPROPERTY()
+	TSubclassOf<class AEffectArea> EAClass = nullptr;
+
+	UPROPERTY()
+	class AUnitBase* ActorToLockOn = nullptr;
+
+	UPROPERTY()
+	bool bHasImpact = false;
+
+	UPROPERTY()
+	float BaseRadius = 0.f;
+
+	UPROPERTY()
+	float StartRadius = 0.f;
+
+	UPROPERTY()
+	float EndRadius = 0.f;
+
+	UPROPERTY()
+	float DuplicationRadius = 0.f;
+
+	UPROPERTY()
+	float DuplicationTime = 0.f;
+
+	UPROPERTY()
+	float RandomAngleRange = 0.f;
+
+	UPROPERTY()
+	FVector LastDuplicationDirection = FVector::ZeroVector;
+
+	UPROPERTY()
+	int32 MaxDuplicationCount = 0;
+
+	UPROPERTY()
+	int32 DuplicationId = 0;
+};
 
 USTRUCT()
 struct FUnitPresenceSignal

@@ -1446,6 +1446,9 @@ struct FEffectAreaDuplicateFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Duplication")
 	int32 DuplicationId = 0;
+
+	UPROPERTY(Transient)
+	FVector PendingSpawnLocation = FVector::ZeroVector;
 };
 
 template<>
