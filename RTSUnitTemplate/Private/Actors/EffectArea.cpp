@@ -426,4 +426,13 @@ void AEffectArea::HandleDeath(bool bIsVisible)
 	}
 
 	OnEffectAreaDestructionStarted();
+	
+	if (MassBindingComponent)
+	{
+		SetLifeSpan(MassBindingComponent->DespawnTime);
+	}
+	else
+	{
+		Destroy();
+	}
 }

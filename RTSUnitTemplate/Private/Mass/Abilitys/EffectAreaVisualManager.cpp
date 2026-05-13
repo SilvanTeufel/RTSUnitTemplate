@@ -93,9 +93,26 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
     UInstancedStaticMeshComponent* ISM = GetOrCreatePooledISM(Mesh, Material, false);
     if (!ISM) return;
 
+    FMeshMaterialKey Key;
+    Key.Mesh = Mesh;
+    Key.Material = Material ? Material : Mesh->GetMaterial(0);
+    Key.bCastShadow = false; // AddVisualInstance sets bCastShadow to false in GetOrCreatePooledISM call
+
     VisualFrag->ISMComponent = ISM;
-    // Add instance with zero scale to avoid flickering before the first processor update
-    VisualFrag->InstanceIndex = ISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector));
+    
+    // Check for free index in pool
+    if (FreeIndexPool.Contains(Key) && FreeIndexPool[Key].Num() > 0)
+    {
+        VisualFrag->InstanceIndex = FreeIndexPool[Key].Pop();
+        // Ensure it's hidden and at origin before use
+        ISM->UpdateInstanceTransform(VisualFrag->InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+    }
+    else
+    {
+        // Add instance with zero scale to avoid flickering before the first processor update
+        VisualFrag->InstanceIndex = ISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector));
+    }
+
     FTransform VisualOffsetTransform(EffectAreaActor->VisualRotationOffset);
 
     VisualFrag->BaseRelativeTransform = (EffectAreaActor->ISMTemplate ? EffectAreaActor->ISMTemplate->GetRelativeTransform() : FTransform::Identity);
@@ -134,6 +151,15 @@ void UEffectAreaVisualManager::RemoveVisualInstance(FMassEntityHandle EntityHand
     {
         // Hide instance by setting scale to zero
         VisualFrag->ISMComponent->UpdateInstanceTransform(VisualFrag->InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+        
+        // Return index to pool
+        FMeshMaterialKey Key;
+        Key.Mesh = VisualFrag->ISMComponent->GetStaticMesh();
+        Key.Material = VisualFrag->ISMComponent->GetMaterial(0);
+        Key.bCastShadow = VisualFrag->ISMComponent->CastShadow;
+        
+        FreeIndexPool.FindOrAdd(Key).Add(VisualFrag->InstanceIndex);
+        
         VisualFrag->InstanceIndex = INDEX_NONE;
     }
 }

@@ -77,6 +77,24 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 		return;
 	}
 
+	FMeshMaterialKey Key;
+	Key.Mesh = Mesh;
+	Key.Material = Material;
+	Key.bCastShadow = bCastShadow;
+
+	int32 NewIndex = INDEX_NONE;
+	if (FreeIndexPool.Contains(Key) && FreeIndexPool[Key].Num() > 0)
+	{
+		NewIndex = FreeIndexPool[Key].Pop();
+		ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+	}
+	else
+	{
+		// Create a new instance with zero scale to avoid flicker
+		NewIndex = ISM->AddInstance(FTransform::Identity);
+		ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+	}
+
 	// Copy collision settings from template to the pooled ISM
 	// Note: Since ISMs are pooled by mesh/material, the last one assigned will dictate collision for all instances.
 	ISM->SetCollisionEnabled(TemplateISM->GetCollisionEnabled());
@@ -88,9 +106,6 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	ISM->SetRenderCustomDepth(TemplateISM->bRenderCustomDepth);
 	ISM->SetCustomDepthStencilValue(TemplateISM->CustomDepthStencilValue);
 	ISM->SetNumCustomDataFloats(TemplateISM->NumCustomDataFloats);
-	// Create a new instance with zero scale to avoid flicker
-	int32 NewIndex = ISM->AddInstance(FTransform::Identity);
-	ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
 
 	// Map ISM instance to MassUnitBase
 	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(ISM);
@@ -137,6 +152,14 @@ void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
 				FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
 				Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, HiddenTransform, true, true, true);
 				
+				// Return index to pool
+				FMeshMaterialKey Key;
+				Key.Mesh = Instance.TargetISM->GetStaticMesh();
+				Key.Material = Instance.TargetISM->GetMaterial(0);
+				Key.bCastShadow = Instance.TargetISM->CastShadow;
+				
+				FreeIndexPool.FindOrAdd(Key).Add(Instance.InstanceIndex);
+
 				// Clear map entry
 				if (TArray<TWeakObjectPtr<AMassUnitBase>>* UnitArray = ISMToUnitMap.Find(Instance.TargetISM.Get())) {
 					if (UnitArray->IsValidIndex(Instance.InstanceIndex)) {

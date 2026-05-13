@@ -147,9 +147,23 @@ void UResourceVisualManager::AssignResource(FMassEntityHandle Entity, EResourceT
         return;
     }
 
-    // Add new instance (Transform will be updated by Processor)
-    // Initializing with zero scale to avoid flicker at origin
-    int32 NewIndex = ISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector));
+    FMeshMaterialKey Key;
+    Key.Mesh = SelectedMesh;
+    Key.Material = SelectedMaterial;
+    Key.bCastShadow = true; // Resource ISMs use default shadow setting
+
+    int32 NewIndex = INDEX_NONE;
+    if (FreeIndexPool.Contains(Key) && FreeIndexPool[Key].Num() > 0)
+    {
+        NewIndex = FreeIndexPool[Key].Pop();
+        ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+    }
+    else
+    {
+        // Add new instance (Transform will be updated by Processor)
+        // Initializing with zero scale to avoid flicker at origin
+        NewIndex = ISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector));
+    }
     
     ResourceFrag->InstanceIndex = NewIndex;
     ResourceFrag->TargetISM = ISM;
@@ -172,9 +186,17 @@ void UResourceVisualManager::RemoveResource(FMassEntityHandle Entity) {
         // We set scale to 0 instead of RemoveInstance to avoid shifting indices for other entities
         FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
         ResourceFrag->TargetISM->UpdateInstanceTransform(ResourceFrag->InstanceIndex, HiddenTransform, true, true, true);
+        
+        // Return index to pool
+        FMeshMaterialKey Key;
+        Key.Mesh = ResourceFrag->TargetISM->GetStaticMesh();
+        Key.Material = ResourceFrag->TargetISM->GetMaterial(0);
+        Key.bCastShadow = ResourceFrag->TargetISM->CastShadow;
+        
+        FreeIndexPool.FindOrAdd(Key).Add(ResourceFrag->InstanceIndex);
+
         ResourceFrag->bIsCarrying = false;
         ResourceFrag->bWasVisible = false;
-        // Optionally: reuse index in the future
     }
 }
 

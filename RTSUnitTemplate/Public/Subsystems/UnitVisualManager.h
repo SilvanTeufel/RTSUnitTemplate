@@ -36,5 +36,7 @@ protected:
 	UPROPERTY()
 	TMap<FMeshMaterialKey, UInstancedStaticMeshComponent*> ISMPool;
 
+	TMap<FMeshMaterialKey, TArray<int32>> FreeIndexPool;
+
 	TMap<TWeakObjectPtr<UInstancedStaticMeshComponent>, TArray<TWeakObjectPtr<AMassUnitBase>>> ISMToUnitMap;
 };

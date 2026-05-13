@@ -1,4 +1,5 @@
 #include "Mass/Abilitys/EffectAreaVisualProcessor.h"
+#include "Mass/Abilitys/EffectAreaVisualManager.h"
 #include "MassReplicationFragments.h"
 #include "MassCommonFragments.h"
 #include "MassExecutionContext.h"
@@ -201,16 +202,16 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 		const int32 NumEntities = CleanupContext.GetNumEntities();
 		TArrayView<FEffectAreaVisualFragment> VisualList = CleanupContext.GetMutableFragmentView<FEffectAreaVisualFragment>();
 		TArrayView<FMassActorFragment> ActorList = CleanupContext.GetMutableFragmentView<FMassActorFragment>();
+		UEffectAreaVisualManager* VisualManager = CleanupContext.GetWorld()->GetSubsystem<UEffectAreaVisualManager>();
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
 			FEffectAreaVisualFragment& Visual = VisualList[i];
 			FMassActorFragment& ActorFrag = ActorList[i];
 
-			if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
+			if (VisualManager && Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
 			{
-				Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
-				Visual.InstanceIndex = INDEX_NONE;
+				VisualManager->RemoveVisualInstance(CleanupContext.GetEntity(i));
 			}
 
 			if (AActor* Actor = ActorFrag.GetMutable())

@@ -38,6 +38,8 @@ private:
     UPROPERTY()
     TMap<FMeshMaterialKey, UInstancedStaticMeshComponent*> ISMPool;
 
+    TMap<FMeshMaterialKey, TArray<int32>> FreeIndexPool;
+
     UPROPERTY()
     TObjectPtr<AActor> ManagerActor = nullptr;
 };
