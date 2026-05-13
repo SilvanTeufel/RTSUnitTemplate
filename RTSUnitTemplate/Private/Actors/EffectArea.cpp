@@ -286,7 +286,7 @@ bool AEffectArea::ComputeInherentVisibility() const
 		return false;
 	}
 
-	const bool bResult = VisibleByTeam && VisibleByFog;
+	const bool bResult = VisibleByTeam && VisibleByFog && bIsOnViewport;
 
 	return bResult;
 }

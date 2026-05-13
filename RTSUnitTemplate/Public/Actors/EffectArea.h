@@ -193,6 +193,9 @@ public:
 	UPROPERTY(Transient)
 	bool bIsVisibleByFog = false;
 
+	UPROPERTY(Transient)
+	bool bIsOnViewport = true;
+
 	bool bLocalDeathEffectsExecuted = false;
 
 	UPROPERTY()

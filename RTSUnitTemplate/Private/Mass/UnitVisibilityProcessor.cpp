@@ -75,6 +75,7 @@ void UUnitVisibilityProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -137,6 +138,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			IMassVisibilityInterface* VisInterface = Cast<IMassVisibilityInterface>(Actor);
 
 			APerformanceUnit* Unit = Cast<APerformanceUnit>(Actor);
+			AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 			AEffectArea* Area = Cast<AEffectArea>(Actor);
 			
 			FVector Location = Transforms[i].GetTransform().GetLocation();
@@ -192,7 +194,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					{
 						Vis.bIsVisibleEnemy = true;
 					}
-					else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(i), FMassStateStopMovementTag::StaticStruct()))
+					else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(i), FMassStateStopMovementTag::StaticStruct()) && (!UnitBase || UnitBase->CanMove))
 					{
 						Vis.bIsVisibleEnemy = false;
 					}
@@ -201,7 +203,13 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					{
 						Unit->IsOnViewport = bCalculatedOnViewport;
 						Unit->IsMyTeam = (LocalTeamId == StatsList[i].TeamId || LocalTeamId == 0);
-						Unit->IsVisibleEnemy = bIsVisibleByFog;
+						Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
+					}
+					
+					if (Area)
+					{
+						Area->bIsOnViewport = bCalculatedOnViewport;
+						Area->bIsVisibleByFog = Vis.bIsVisibleEnemy;
 					}
 				}
 				else if (World->GetNetMode() == NM_DedicatedServer)
@@ -239,7 +247,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
 				}
 				
-				if (AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
+				if (UnitBase)
 				{
 					UnitBase->bIsInvisible = CharList[i].bIsInvisible;
 				}
@@ -247,7 +255,8 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			else if (Area)
 			{
 				Area->bIsInvisible = CharList[i].bIsInvisible;
-				Area->bIsVisibleByFog = bIsVisibleByFog;
+				Area->bIsVisibleByFog = Vis.bIsVisibleEnemy;
+				Area->bIsOnViewport = Vis.bIsOnViewport;
 			}
 
 			if (bChanged)
