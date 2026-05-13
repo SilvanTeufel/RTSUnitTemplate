@@ -212,7 +212,6 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         {
             StateFrag.SwitchingState = true;
             int32 TargetTeamId = TgtStatsPtr ? TgtStatsPtr->TeamId : -1;
-
             if (Stats.bUseProjectile)
             {
                 if (TargetTeamId != -1 && SightList.Num() > 0)
@@ -222,6 +221,7 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
                 
                 if (SignalSubsystem)
                 {
+                    StateFrag.StateTimer = 0.f;
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
                     UE_LOG(LogTemp, Log, TEXT("[Server] [PauseStateProcessor] Entity[%d:%d]: Signal RangedAttack"), Entity.Index, Entity.SerialNumber);
                 }

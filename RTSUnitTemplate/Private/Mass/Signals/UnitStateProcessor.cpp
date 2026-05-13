@@ -709,6 +709,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
             }
 
 	//if (CombatStatsFrag->TeamId == 3)UE_LOG(LogTemp, Error, TEXT("Set StateFragment->SwitchingState to FALSE!"));
+	StateFragment->StateTimer = 0.f;
 	StateFragment->SwitchingState = false;
 }
 
