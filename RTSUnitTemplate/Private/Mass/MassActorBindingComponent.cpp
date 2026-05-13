@@ -435,7 +435,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FUnitReplicatedTransformFragment::StaticStruct(),
 			FMassClientPredictionFragment::StaticStruct(),
 			FMassMoveTargetFragment::StaticStruct(),
-			FMassVisualEffectFragment::StaticStruct()
+			FMassVisualEffectFragment::StaticStruct(),
+			FMassHoverFragment::StaticStruct()
 		};
 
 		if (EffectArea && EffectArea->Health <= 0.f)
