@@ -1021,9 +1021,6 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				DuplicateFrag->MaxDuplicationCount = EffectArea->MaxDuplicationCount;
 				DuplicateFrag->DuplicationId = EffectArea->DuplicationId;
 
-				UE_LOG(LogTemp, Warning, TEXT("[MassLink] EffectArea %s Initialized: Radius=%.2f, Time=%.2f, MaxCount=%d, ID=%d"), 
-					*EffectArea->GetName(), DuplicateFrag->DuplicationRadius, DuplicateFrag->DuplicationTime, 
-					DuplicateFrag->MaxDuplicationCount, DuplicateFrag->DuplicationId);
 			}
 
 			if (FMassBeaconFragment* BeaconFrag = EntityManager.GetFragmentDataPtr<FMassBeaconFragment>(EntityHandle))

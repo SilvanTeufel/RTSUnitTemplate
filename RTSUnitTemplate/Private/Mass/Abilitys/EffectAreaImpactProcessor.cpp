@@ -228,7 +228,6 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				// Detect start of impact scaling on client
 				if (!bIsServer && Impact.ImpactScalingElapsedTime == 0.f)
 				{
-					UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client: Starting impact scaling for Entity Index %d. StartRadius: %f, EndRadius: %f"), AreaContext.GetEntity(i).Index, Impact.CurrentRadius, Impact.EndRadius);
 					Impact.RadiusAtImpactStart = Impact.CurrentRadius;
 				}
 
@@ -276,7 +275,6 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 								EffectArea->SetDeathVisualState(true);
 							}
 							Impact.bHasHiddenVisual = true;
-							UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client: Impact scaling finished for Entity Index %d, hiding visuals."), AreaContext.GetEntity(i).Index);
 						}
 					}
 				}
@@ -375,7 +373,6 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					// Start post-impact scale if configured
 					if (Impact.bScaleOnImpact && !Impact.bImpactScaleTriggered)
 					{
-						UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Server: Triggering impact scaling for Entity Index %d. bIsDead: %d"), AreaContext.GetEntity(i).Index, bIsDead);
 						Impact.bImpactScaleTriggered = true;
 						Impact.bIsScalingAfterImpact = true;
 						Impact.ImpactScalingElapsedTime = 0.f;

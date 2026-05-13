@@ -211,10 +211,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					JustLinked[EntityIdx] = (NetIDList[EntityIdx].NetID.GetValue() == 0);
 					NetIDList[EntityIdx].NetID = *FoundID;
 
-					if (OwnerActor->IsA<AEffectArea>())
-					{
-						UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client: NetID synchronized for %s (ID: %d)"), *OwnerActor->GetName(), FoundID->GetValue());
-					}
 				}
 			}
 
@@ -314,10 +310,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							Impact.bPendingDestruction = (UseItem->ReplicationBits & UnitReplicationBits::EA_bPendingDestruction) != 0;
 							Impact.bImpactVFXTriggered = (UseItem->ReplicationBits & UnitReplicationBits::EA_bImpactVFXTriggered) != 0;
 
-							if (Impact.bIsScalingAfterImpact != bWasScaling)
-							{
-								UE_LOG(LogTemp, Log, TEXT("[EA_LOG] ClientReplication: Entity Index %d bIsScalingAfterImpact changed to %d"), ChunkCtx.GetEntity(EntityIdx).Index, Impact.bIsScalingAfterImpact);
-							}
 						}
 
 						// Animation

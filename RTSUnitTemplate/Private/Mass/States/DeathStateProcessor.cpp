@@ -191,10 +191,6 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
                                 Impact->bHasHiddenVisual = true;
                             }
                         }
-                        else
-                        {
-                            UE_LOG(LogTemp, Log, TEXT("[EA_LOG] DeathState: Delaying hide for Entity Index %d because it is still scaling."), Entity.Index);
-                        }
                     }
                     else
                     {

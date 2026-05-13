@@ -81,10 +81,6 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 				Visual.Niagara_A_RelativeTransform = Visual.Niagara_A_BaseRelativeTransform * VisualOffsetTransform;
 				Visual.LastAppliedRotationOffset = Impact.VisualRotationOffset;
 
-				if (bIsClient)
-				{
-					UE_LOG(LogTemp, Log, TEXT("[EA_LOG] Client Visual: Rotation Offset updated for Entity %d"), VisualContext.GetEntity(i).Index);
-				}
 			}
             
 			// 3. TRANSFORM: Use smooth Actor transform on client if available
@@ -93,12 +89,6 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 			{
 				BaseTransform = AreaActor->GetTransform();
 				
-				// Diagnostic log for jitter analysis
-				if (Impact.bIsScalingAfterImpact)
-				{
-					UE_LOG(LogTemp, VeryVerbose, TEXT("[EA_LOG] Client Visual: Entity %d, Actor Loc: %s, Mass Loc: %s"), 
-						VisualContext.GetEntity(i).Index, *BaseTransform.GetLocation().ToString(), *TransformList[i].GetTransform().GetLocation().ToString());
-				}
 			}
 			else
 			{
@@ -125,17 +115,6 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 					float LocalRadius = Visual.BaseMeshRadius;
 					float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
 
-					if (bIsClient && ScaleFactor <= 0.001f)
-					{
-						static double LastLogTime = 0;
-						const double CurrentTime = VisualContext.GetWorld()->GetTimeSeconds();
-						if (CurrentTime - LastLogTime > 2.0)
-						{
-							UE_LOG(LogTemp, Warning, TEXT("[EA_LOG] Client Visual: Entity %d should show but ScaleFactor is %.2f (CurrentRadius: %.2f)"), 
-								VisualContext.GetEntity(i).Index, ScaleFactor, Impact.CurrentRadius);
-							LastLogTime = CurrentTime;
-						}
-					}
 
 					FTransform VisualTransform = Visual.VisualRelativeTransform * BaseTransform;
 					VisualTransform.SetScale3D(FVector(ScaleFactor));

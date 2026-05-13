@@ -14,7 +14,7 @@
 
 UMassEffectAreaHoverProcessor::UMassEffectAreaHoverProcessor()
 {
-	bAutoRegisterWithProcessingPhases = true;
+	bAutoRegisterWithProcessingPhases = false;
 	ProcessingPhase = EMassProcessingPhase::PostPhysics;
 	bRequiresGameThreadExecution = true;
 	ExecutionFlags = (int32)(EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Standalone);
@@ -40,12 +40,6 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 	UWorld* World = EntityManager.GetWorld();
 	if (!World) return;
 
-	// Heartbeat log to see if the processor is alive at all
-	if (World->GetTimeSeconds() - LastHeartbeatTime > 5.f)
-	{
-		LastHeartbeatTime = World->GetTimeSeconds();
-		UE_LOG(LogTemp, Warning, TEXT("[EffectAreaDebug] Processor Heartbeat - Client Time: %.2f"), World->GetTimeSeconds());
-	}
 
 	ACustomControllerBase* LocalPC = Cast<ACustomControllerBase>(World->GetFirstPlayerController());
 	if (!LocalPC || !LocalPC->IsLocalController()) return;
@@ -121,45 +115,6 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 				const AEffectArea* Area = Cast<AEffectArea>(ActorFrag.Get());
 				FString ActorName = Area ? Area->GetName() : TEXT("None");
 
-				UE_LOG(LogTemp, Warning, TEXT("[EffectAreaDebug] Entity: %d (SN:%d), Actor: %s"), BestEntity.Index, BestEntity.SerialNumber, *ActorName);
-				UE_LOG(LogTemp, Warning, TEXT("  - Fragment Vis: bIsOnViewport=%d, bIsVisibleEnemy=%d, bAffectedByFogOfWar=%d, bIsMyTeam=%d"), 
-					Vis.bIsOnViewport, Vis.bIsVisibleEnemy, Vis.bAffectedByFogOfWar, Vis.bIsMyTeam);
-
-				FVector FragLoc = TransFrag.GetTransform().GetLocation();
-				FVector ActorLoc = Area ? Area->GetActorLocation() : FVector::ZeroVector;
-				UE_LOG(LogTemp, Warning, TEXT("  - Location: Frag=(%s), Actor=(%s)"), *FragLoc.ToString(), *ActorLoc.ToString());
-				
-				if (Area)
-				{
-					UE_LOG(LogTemp, Warning, TEXT("  - Actor Vis: IsHidden=%d, RootVisible=%d, bIsVisibleByFog=%d, bIsOnViewport=%d, bIsInvisible=%d"), 
-						Area->IsHidden(), Area->GetRootComponent() && Area->GetRootComponent()->IsVisible(), Area->bIsVisibleByFog, Area->bIsOnViewport, Area->bIsInvisible);
-				}
-
-				UE_LOG(LogTemp, Warning, TEXT("  - Visual: InstanceIndex=%d, BaseMeshRadius=%.2f"), Visual.InstanceIndex, Visual.BaseMeshRadius);
-				UE_LOG(LogTemp, Warning, TEXT("  - Impact: CurrentRadius=%.2f, bScaleMesh=%d, bPendingDestruction=%d"), Impact.CurrentRadius, Impact.bScaleMesh, Impact.bPendingDestruction);
-
-				const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(BestEntity);
-				uint32 NetID = NetIDFrag ? NetIDFrag->NetID.GetValue() : 999;
-				UE_LOG(LogTemp, Warning, TEXT("  - NetID: %u, bHasHiddenVisual: %d"), NetID, Impact.bHasHiddenVisual);
-
-				if (Visual.ISMComponent.IsValid())
-				{
-					UInstancedStaticMeshComponent* ISM = Visual.ISMComponent.Get();
-					FTransform InstanceTransform;
-					if (ISM->GetInstanceTransform(Visual.InstanceIndex, InstanceTransform, true))
-					{
-						FVector Scale = InstanceTransform.GetScale3D();
-						UE_LOG(LogTemp, Warning, TEXT("  - ISM Scale: (%s), Loc: (%s)"), *Scale.ToString(), *InstanceTransform.GetLocation().ToString());
-					}
-					else
-					{
-						UE_LOG(LogTemp, Warning, TEXT("  - ISM Scale: Failed to get transform for index %d"), Visual.InstanceIndex);
-					}
-				}
-				else
-				{
-					UE_LOG(LogTemp, Warning, TEXT("  - Visual: ISMComponent is NULL"));
-				}
 			}
 		}
 	}

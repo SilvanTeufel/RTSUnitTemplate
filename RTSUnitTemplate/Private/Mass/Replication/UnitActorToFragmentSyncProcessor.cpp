@@ -274,19 +274,6 @@ void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, 
 
         Impact.bIsInitializedOnClient = true;
 
-        if (!Area.HasAuthority())
-        {
-            static TMap<uint32, double> LastEntityLogTimes;
-            double& LastLog = LastEntityLogTimes.FindOrAdd(Area.GetUniqueID());
-            const double CurrentTime = Area.GetWorld()->GetTimeSeconds();
-            
-            if (CurrentTime - LastLog > 2.0)
-            {
-                UE_LOG(LogTemp, Log, TEXT("Client SyncEffectArea INITIALIZED: %s (ID: %d) at %s"), 
-                    *Area.GetName(), Area.AreaIndex, *Area.GetActorLocation().ToString());
-                LastLog = CurrentTime;
-            }
-        }
     }
 
     // Persistent safety check: If the transform is still at 0,0,0 but the actor has moved, re-sync.
@@ -299,11 +286,6 @@ void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, 
             TransformFragment->GetMutableTransform().SetLocation(ActorLoc);
             TransformFragment->GetMutableTransform().SetRotation(Area.GetActorRotation().Quaternion());
             
-            if (!Area.HasAuthority())
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Client SyncEffectArea RE-SYNCED location for %s: Fragment was 0, Actor is %s"), 
-                    *Area.GetName(), *ActorLoc.ToString());
-            }
         }
     }
 }
