@@ -141,17 +141,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
-            // NEW: If already in attack/pause sequence at the actor level, ignore chase logic 
-            // (prevents re-triggering chase and resetting timers if server still sends chase tag)
-            if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
-            {
-                const UnitData::EState CurrentState = UnitBase->GetUnitState();
-                if (CurrentState == UnitData::Attack || CurrentState == UnitData::Pause)
-                {
-                    continue;
-                }
-            }
-
             // If health zero or below, mark dead and skip further changes
             if (Stats.Health <= 0.f)
             {
@@ -163,22 +152,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             // Case 1: Hold position => switch to Idle locally
             if (StateFrag.HoldPosition)
             {
-                StateFrag.SwitchingState = true;
-                auto& Defer = ChunkContext.Defer();
-                Defer.RemoveTag<FMassStateRunTag>(Entity);
-                Defer.RemoveTag<FMassStateChaseTag>(Entity);
-                Defer.RemoveTag<FMassStateAttackTag>(Entity);
-                Defer.RemoveTag<FMassStatePauseTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                Defer.RemoveTag<FMassStateCastingTag>(Entity);
-                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
-                Defer.AddTag<FMassStateIdleTag>(Entity);
+                SwitchToIdleState(ChunkContext, Entity, StateFrag);
                 continue;
             }
 
@@ -187,22 +161,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             {
                 if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
                 {
-                    StateFrag.SwitchingState = true;
-                    auto& Defer = ChunkContext.Defer();
-                    Defer.RemoveTag<FMassStateRunTag>(Entity);
-                    Defer.RemoveTag<FMassStateChaseTag>(Entity);
-                    Defer.RemoveTag<FMassStateAttackTag>(Entity);
-                    Defer.RemoveTag<FMassStatePauseTag>(Entity);
-                    Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                    Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                    Defer.RemoveTag<FMassStateCastingTag>(Entity);
-                    Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
-                    Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
-                    Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
-                    Defer.RemoveTag<FMassStateBuildTag>(Entity);
-                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                    Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
-                    Defer.AddTag<FMassStateIdleTag>(Entity);
+                    SwitchToIdleState(ChunkContext, Entity, StateFrag);
                     continue;
                 }
             }
@@ -221,27 +180,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 float AttackerRadius = CharFrag.CapsuleRadius;
                 float TargetRadius = 0.f;
 
-                FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-                if (TargetCharFrag)
-                {
-                    TargetRadius = TargetCharFrag->CapsuleRadius;
-                    if (CharFrag.bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
-                    {
-                        FVector Dir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
-                        Dir.Z = 0.f;
-                        if (!Dir.IsNearlyZero())
-                        {
-                            Dir.Normalize();
-                            AttackerRadius = CharFrag.GetRadiusInDirection(Dir, Transform.GetRotation().Rotator());
-
-                            FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity);
-                            if (TargetTransformFrag)
-                            {
-                                TargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
-                            }
-                        }
-                    }
-                }
+                CalculateRadii(EntityManager, TargetFrag.TargetEntity, CharFrag, Transform, TargetFrag.LastKnownLocation, AttackerRadius, TargetRadius);
 
                 const float EffectiveAttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
@@ -352,27 +291,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             float AttackerRadius = CharFrag.CapsuleRadius;
             float TargetRadius = 0.f;
 
-            FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
-            if (TargetCharFrag)
-            {
-                TargetRadius = TargetCharFrag->CapsuleRadius;
-                if (CharFrag.bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
-                {
-                    FVector Dir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
-                    Dir.Z = 0.f;
-                    if (!Dir.IsNearlyZero())
-                    {
-                        Dir.Normalize();
-                        AttackerRadius = CharFrag.GetRadiusInDirection(Dir, Transform.GetRotation().Rotator());
-                        
-                        FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity);
-                        if (TargetTransformFrag)
-                        {
-                            TargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
-                        }
-                    }
-                }
-            }
+            CalculateRadii(EntityManager, TargetFrag.TargetEntity, CharFrag, Transform, TargetFrag.LastKnownLocation, AttackerRadius, TargetRadius);
             
             const float EffectiveAttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
@@ -394,6 +313,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             
            FVector TargetLocation = TargetFrag.LastKnownLocation;
 
+           FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
            if (TargetCharFrag  && !Stats.bCanMoveWhileAttacking) //  && !Stats.bCanMoveWhileAttacking
            {
                TargetLocation.Z = TargetCharFrag->LastGroundLocation;
@@ -402,4 +322,54 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
            UpdateMoveTarget(MoveTarget, TargetLocation, Stats.RunSpeed, World);
         }
     }); // End ForEachEntityChunk
+}
+
+void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag) const
+{
+    StateFrag.SwitchingState = true;
+    auto& Defer = Context.Defer();
+    Defer.RemoveTag<FMassStateRunTag>(Entity);
+    Defer.RemoveTag<FMassStateChaseTag>(Entity);
+    Defer.RemoveTag<FMassStateAttackTag>(Entity);
+    Defer.RemoveTag<FMassStatePauseTag>(Entity);
+    Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+    Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+    Defer.RemoveTag<FMassStateCastingTag>(Entity);
+    Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+    Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+    Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+    Defer.RemoveTag<FMassStateBuildTag>(Entity);
+    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+    Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+    Defer.AddTag<FMassStateIdleTag>(Entity);
+}
+
+void UChaseStateProcessor::CalculateRadii(const FMassEntityManager& EntityManager, const FMassEntityHandle TargetEntity,
+                                         const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
+                                         const FVector& TargetLocation, float& OutAttackerRadius, float& OutTargetRadius) const
+{
+    OutAttackerRadius = AttackerChar.CapsuleRadius;
+    OutTargetRadius = 0.f;
+
+    const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetEntity);
+    if (TargetCharFrag)
+    {
+        OutTargetRadius = TargetCharFrag->CapsuleRadius;
+        if (AttackerChar.bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
+        {
+            FVector Dir = (TargetLocation - AttackerTransform.GetLocation());
+            Dir.Z = 0.f;
+            if (!Dir.IsNearlyZero())
+            {
+                Dir.Normalize();
+                OutAttackerRadius = AttackerChar.GetRadiusInDirection(Dir, AttackerTransform.GetRotation().Rotator());
+
+                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
+                if (TargetTransformFrag)
+                {
+                    OutTargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
+                }
+            }
+        }
+    }
 }

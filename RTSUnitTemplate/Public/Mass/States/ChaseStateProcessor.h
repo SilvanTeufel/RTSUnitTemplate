@@ -13,6 +13,8 @@ struct FMassAITargetFragment;
 struct FMassTransformFragment;
 struct FMassCombatStatsFragment;
 struct FMassMoveTargetFragment;
+struct FMassAgentCharacteristicsFragment;
+struct FMassEntityHandle;
 struct FMassStatePauseTag; // Zielzustand
 struct FMassStateIdleTag; // Zielzustand
 
@@ -31,6 +33,11 @@ protected:
 
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+
+	void SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag) const;
+	void CalculateRadii(const FMassEntityManager& EntityManager, const FMassEntityHandle TargetEntity,
+						const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
+						const FVector& TargetLocation, float& OutAttackerRadius, float& OutTargetRadius) const;
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
