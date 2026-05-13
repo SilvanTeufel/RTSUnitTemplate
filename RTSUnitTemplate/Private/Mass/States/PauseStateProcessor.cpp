@@ -183,14 +183,12 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
             if (SignalSubsystem)
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
-                UE_LOG(LogTemp, Log, TEXT("[Server] [PauseStateProcessor] Entity[%d:%d]: Target Lost -> Placeholder Signal"), Entity.Index, Entity.SerialNumber);
             }
         }
         return;
     }
 
     StateFrag.StateTimer += ExecutionInterval;
-    UE_LOG(LogTemp, Log, TEXT("[Server] [PauseStateProcessor] StateTimer: %f, ExecutionInterval: %f"), StateFrag.StateTimer, ExecutionInterval);
 
     const auto TransformList = Context.GetFragmentView<FTransformFragment>();
     const FTransform& Transform = TransformList[EntityIdx].GetTransform();
@@ -223,7 +221,6 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
                 {
                     StateFrag.StateTimer = 0.f;
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
-                    UE_LOG(LogTemp, Log, TEXT("[Server] [PauseStateProcessor] Entity[%d:%d]: Signal RangedAttack"), Entity.Index, Entity.SerialNumber);
                 }
             }
             else
@@ -236,7 +233,6 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Attack, Entity);
-                    UE_LOG(LogTemp, Log, TEXT("[Server] [PauseStateProcessor] Entity[%d:%d]: Signal Attack (Melee)"), Entity.Index, Entity.SerialNumber);
                 }
             }
         }
@@ -250,12 +246,10 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
             if (!Stats.bCanMoveWhileAttacking)
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
-                UE_LOG(LogTemp, Log, TEXT("[Server] [PauseStateProcessor] Entity[%d:%d]: Signal Chase (Target out of range)"), Entity.Index, Entity.SerialNumber);
             }
             else
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
-                UE_LOG(LogTemp, Log, TEXT("[Server] [PauseStateProcessor] Entity[%d:%d]: Signal Run (Target out of range)"), Entity.Index, Entity.SerialNumber);
             }
         }
     }
@@ -269,7 +263,6 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     if (!World) return;
 
     StateFrag.StateTimerClient += ExecutionInterval;
-    UE_LOG(LogTemp, Log, TEXT("[Client] [PauseStateProcessor] StateTimerClient: %f, ExecutionInterval: %f"), StateFrag.StateTimerClient, ExecutionInterval);
     
             const auto TransformList = Context.GetFragmentView<FTransformFragment>();
             const FTransform& Transform = TransformList[EntityIdx].GetTransform();

@@ -104,10 +104,6 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             const FMassNetworkID& NetID = NetIDList[i].NetID;
 
             StateFrag.StateTimer += ExecutionInterval;
-            if (bIsServer)
-            {
-                UE_LOG(LogTemp, Log, TEXT("[Server] [AttackStateProcessor] StateTimer: %f, ExecutionInterval: %f"), StateFrag.StateTimer, ExecutionInterval);
-            }
 
             if (bIsClient)
             {
@@ -130,7 +126,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     if (!World) return;
 
     StateFrag.StateTimerClient += ExecutionInterval;
-    UE_LOG(LogTemp, Log, TEXT("[Client] [AttackStateProcessor] StateTimerClient: %f, ExecutionInterval: %f"), StateFrag.StateTimerClient, ExecutionInterval);
 
     FUnitReplicationItem* Item = nullptr;
     if (URTSWorldCacheSubsystem* CacheSubsystem = World->GetSubsystem<URTSWorldCacheSubsystem>())
@@ -261,12 +256,10 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
         if (StateFrag.PlaceholderSignal != NAME_None)
         {
             Defer.AddTag<FMassStatePauseTag>(Entity);
-            UE_LOG(LogTemp, Log, TEXT("[Server] [AttackStateProcessor] Entity[%d:%d]: Target Lost -> Pause (Placeholder)"), Entity.Index, Entity.SerialNumber);
         }
         else
         {
             Defer.AddTag<FMassStateIdleTag>(Entity);
-            UE_LOG(LogTemp, Log, TEXT("[Server] [AttackStateProcessor] Entity[%d:%d]: Target Lost -> Idle"), Entity.Index, Entity.SerialNumber);
         }
         return;
     }
@@ -292,7 +285,6 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::MeleeAttack, Entity);
-                    UE_LOG(LogTemp, Log, TEXT("[Server] [AttackStateProcessor] Entity[%d:%d]: Signal MeleeAttack"), Entity.Index, Entity.SerialNumber);
                 }
                 StateFrag.HasAttacked = true;
             }
@@ -303,7 +295,6 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
             if (SignalSubsystem)
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Pause, Entity);
-                UE_LOG(LogTemp, Log, TEXT("[Server] [AttackStateProcessor] Entity[%d:%d]: Signal Pause (AttackDuration over)"), Entity.Index, Entity.SerialNumber);
             }
             StateFrag.HasAttacked = false;
         }
@@ -316,12 +307,10 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
             if (!Stats.bCanMoveWhileAttacking)
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
-                UE_LOG(LogTemp, Log, TEXT("[Server] [AttackStateProcessor] Entity[%d:%d]: Signal Chase (Target out of range)"), Entity.Index, Entity.SerialNumber);
             }
             else
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
-                UE_LOG(LogTemp, Log, TEXT("[Server] [AttackStateProcessor] Entity[%d:%d]: Signal Run (Target out of range)"), Entity.Index, Entity.SerialNumber);
             }
         }
     }

@@ -184,9 +184,18 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
 
                 const float EffectiveAttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
+                
+                if (DistSq > AttackRangeSq)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[Client] [ChaseStateProcessor] Entity[%d:%d] Out of Range: DistSq: %f > AttackRangeSq: %f (Range: %f, R1: %f, R2: %f)"), 
+                        Entity.Index, Entity.SerialNumber, DistSq, AttackRangeSq, Stats.AttackRange, AttackerRadius, TargetRadius);
+                }
 
                 if (DistSq <= AttackRangeSq)
                 {
+                    UE_LOG(LogTemp, Log, TEXT("[Client] [ChaseStateProcessor] Entity[%d:%d] In Range! DistSq: %f <= AttackRangeSq: %f (Range: %f, R1: %f, R2: %f)"), 
+                        Entity.Index, Entity.SerialNumber, DistSq, AttackRangeSq, Stats.AttackRange, AttackerRadius, TargetRadius);
+                    
                     StateFrag.StateTimerClient = 0.f;
 
                     // Tags lokal manipulieren, damit der PauseStateProcessor übernimmt
@@ -246,7 +255,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
             // --- Target Lost ---
             StateFrag.StateTimer += ExecutionInterval;
-            UE_LOG(LogTemp, Log, TEXT("[Server] [ChaseStateProcessor] StateTimer: %f, ExecutionInterval: %f"), StateFrag.StateTimer, ExecutionInterval);
 
             if (!Stats.bUseProjectile) // && TargetFrag.bHasValidTarget
             {
@@ -279,7 +287,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SetUnitStatePlaceholder, Entity);
-                    UE_LOG(LogTemp, Log, TEXT("[Server] [ChaseStateProcessor] Entity[%d:%d]: Signal Placeholder (Target Lost)"), Entity.Index, Entity.SerialNumber);
                 }
                 continue;
             }
@@ -305,7 +312,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Pause, Entity);
-                    UE_LOG(LogTemp, Log, TEXT("[Server] [ChaseStateProcessor] Entity[%d:%d]: Signal Pause (In Range)"), Entity.Index, Entity.SerialNumber);
                 }
                 StateFrag.SwitchingState = true;
                 continue;
