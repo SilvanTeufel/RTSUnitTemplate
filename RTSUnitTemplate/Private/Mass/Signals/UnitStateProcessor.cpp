@@ -656,31 +656,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
                         }
                     	
-                    	if (SignalName == UnitSignals::Idle) { UnitBase->SetUnitState(UnitData::Idle); }
-                        else if (SignalName == UnitSignals::Chase) { UnitBase->SetUnitState(UnitData::Chase); }
-                        else if (SignalName == UnitSignals::Attack) { UnitBase->SetUnitState(UnitData::Attack); }
-                        else if (SignalName == UnitSignals::Dead)
+						if (SignalName == UnitSignals::GoToBase)
                         {
-	                        UnitBase->SetUnitState(UnitData::Dead);
-                        }
-                        else if (SignalName == UnitSignals::PatrolIdle)
-                        {
-	                        UnitBase->SetUnitState(UnitData::PatrolIdle);
-                        }
-                        else if (SignalName == UnitSignals::PatrolRandom){ UnitBase->SetUnitState(UnitData::PatrolRandom); }
-                        else if (SignalName == UnitSignals::Pause)
-                        {
-                        	UnitBase->SetUnitState(UnitData::Pause);
-                        }
-                        else if (SignalName == UnitSignals::Run) { UnitBase->SetUnitState(UnitData::Run); }
-                        else if (SignalName == UnitSignals::Casting) { UnitBase->SetUnitState(UnitData::Casting); }
-                        else if (SignalName == UnitSignals::IsAttacked)
-                        {
-                        	UnitBase->SetUnitState(UnitData::IsAttacked);
-                        }
-                        else if (SignalName == UnitSignals::GoToBase)
-                        {
-	                        UnitBase->SetUnitState(UnitData::GoToBase);
                         	UpdateUnitMovement(Entity , UnitBase);
                         }
                     	else if (SignalName == UnitSignals::GoToBuild )
@@ -692,7 +669,6 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     			{
                     				if (Worker->BuildArea && Worker->BuildArea->Workers.Num() > Worker->BuildArea->MaxWorkerCount)
                     				{
-                    					UnitBase->SetUnitState(UnitData::GoToBase);
                     					UpdateUnitMovement(Entity , UnitBase);
                     					SetTag = true;
                     				}
@@ -701,32 +677,19 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 
                     		if (!SetTag)
                     		{
-                    			UnitBase->SetUnitState(UnitData::GoToBuild);
                     			UpdateUnitMovement(Entity , UnitBase);
                     		}
                     	}
-                    	else if (SignalName == UnitSignals::Build)
-                    	{
-                    		UnitBase->SetUnitState(UnitData::Build);
-                    	}
                     	else if (SignalName == UnitSignals::GoToResourceExtraction)
                     	{
-                    		UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
                     		UpdateUnitMovement(Entity , UnitBase);
                     	}
-                  		else if (SignalName == UnitSignals::ResourceExtraction) { UnitBase->SetUnitState(UnitData::ResourceExtraction); }
                   		else if (SignalName == UnitSignals::GoToRepair)
                   		{
-                  			UnitBase->SetUnitState(UnitData::GoToRepair);
                   			UpdateUnitMovement(Entity , UnitBase);
                   		}
-                  		else if (SignalName == UnitSignals::Repair)
-                  		{
-                  			UnitBase->SetUnitState(UnitData::Repair);
-                  		}
 
-                    	//FMassAIStateFragment* State = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-                    	//State->StateTimer = 0.f;
+
                     }
                     else if (EffectArea)
                     {
@@ -740,18 +703,11 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                             EntityManager.Defer().AddTag<FMassStateDeadTag>(Entity);
                         }
                     }
-                    // ... rest of your else logs for invalid casts/actors ...
+
                 }
-                 else
-                 {
-	                 //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Actor pointer in ActorFragment for Entity %d:%d is invalid."), Entity.Index, Entity.SerialNumber);
-                 }
+
             }
-             else
-             {
-	             //UE_LOG(LogTemp, Warning, TEXT("ChangeUnitState (GameThread): Entity %d:%d has no ActorFragment."), Entity.Index, Entity.SerialNumber);
-             }
-	
+
 	//if (CombatStatsFrag->TeamId == 3)UE_LOG(LogTemp, Error, TEXT("Set StateFragment->SwitchingState to FALSE!"));
 	StateFragment->SwitchingState = false;
 }
@@ -1227,9 +1183,6 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 
     	FMassEntityManager& GTEntityManager = EntitySubsystem->GetMutableEntityManager();
     	
-    	if( StrongUnitActor->GetUnitState() != UnitData::PatrolRandom && StrongUnitActor->GetUnitState() != UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())){
-			StrongUnitActor->SetUnitState(UnitData::Idle);
-		}
     	
     	if( StrongUnitActor->GetUnitState() == UnitData::PatrolRandom && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolRandomTag::StaticStruct())){
     		SwitchState(UnitSignals::PatrolRandom, CapturedEntity, GTEntityManager);
@@ -1275,14 +1228,17 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 				TArray<FMassEntityHandle> CapturedEntitys;
 				CapturedEntitys.Emplace(CapturedEntity);
     	
+    
     			if (WorkerStats && WorkerStats->AutoMining && !StrongUnitActor->Base->IsFlying
 						   && !StrongUnitActor->FollowUnit
 						   && !StrongUnitActor->bHoldPosition
 						   && ((DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())
 						   && StrongUnitActor->GetUnitState() == UnitData::Idle) || (DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStatePatrolIdleTag::StaticStruct())))){
-    				StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
+    				//StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
+    				SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
 				}
-
+    	
+				/*
     			if(StrongUnitActor->GetUnitState() != UnitData::GoToBuild && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
     				StrongUnitActor->SetUnitState(UnitData::GoToBuild);
 				}else if(StrongUnitActor->GetUnitState() != UnitData::ResourceExtraction && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
@@ -1293,7 +1249,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 					StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
 				}else if(StrongUnitActor->GetUnitState() != UnitData::GoToBase && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
 					StrongUnitActor->SetUnitState(UnitData::GoToBase);
-				}
+				}*/
     	
     			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
@@ -2620,14 +2576,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 	}
 	
     UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
-
-
-    // 6) Ab hier folgt dein bisheriger Setup-Code
-    if (UnitBase->UnitToChase)
-    {
-        UnitBase->UnitToChase = UnitToChase;
-        UnitBase->SetUnitState(UnitData::Chase);
-    }
+	
 
     if (TeamId)
     {
@@ -2637,10 +2586,7 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
     UnitBase->OnRep_MeshAssetPath();
     UnitBase->OnRep_MeshMaterialPath();
-
-    //UnitBase->SetReplicateMovement(true);
-	//UnitBase->SetReplicates(true);
-    //UnitBase->GetMesh()->SetIsReplicated(true);
+	
 
     // Meshrotation-Server
     UnitBase->SetMeshRotationServer();
@@ -2653,8 +2599,6 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
     AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
     if (!GameMode)
     {
-        UnitBase->SetUEPathfinding = true;
-        UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
         return nullptr;
     }
 

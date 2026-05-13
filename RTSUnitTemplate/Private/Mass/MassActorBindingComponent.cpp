@@ -56,6 +56,7 @@
 #include "EngineUtils.h"
 #include "Mass/Replication/MassUnitReplicatorBase.h"
 #include "Mass/Replication/ReplicationBootstrap.h"
+#include "Animations/UnitAnimationProcessor.h"
 #include "GameStates/ResourceGameState.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 
@@ -422,6 +423,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FMassSightFragment::StaticStruct(),
 			FMassCombatStatsFragment::StaticStruct(),
 			FMassAIStateFragment::StaticStruct(),
+			FUnitAnimationFragment::StaticStruct(),
 			FMassAgentCharacteristicsFragment::StaticStruct(),
 			FMassVelocityFragment::StaticStruct(),
 
@@ -519,6 +521,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
     	FMassUnitPathFragment::StaticStruct(), 
     	
 		FMassAIStateFragment::StaticStruct(),
+		FUnitAnimationFragment::StaticStruct(),
     	FMassSightFragment::StaticStruct(),
 		FMassAITargetFragment::StaticStruct(), 
 		FMassCombatStatsFragment::StaticStruct(), 

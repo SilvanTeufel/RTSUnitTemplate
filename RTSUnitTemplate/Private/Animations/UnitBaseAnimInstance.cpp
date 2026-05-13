@@ -8,6 +8,11 @@
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Core/UnitData.h"
 #include "Net/UnrealNetwork.h"
+#include "MassEntitySubsystem.h"
+#include "Mass/MassActorBindingComponent.h"
+#include "Animations/UnitAnimationProcessor.h"
+#include "MassExecutionContext.h"
+#include "Components/SkeletalMeshComponent.h"
 
 UUnitBaseAnimInstance::UUnitBaseAnimInstance() {
 	CharAnimState = UnitData::Idle;
@@ -22,21 +27,6 @@ void UUnitBaseAnimInstance::NativeInitializeAnimation()
 void UUnitBaseAnimInstance::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(UUnitBaseAnimInstance, CharAnimState);
-	DOREPLIFETIME(UUnitBaseAnimInstance, LastAnimState);
-	
-	DOREPLIFETIME(UUnitBaseAnimInstance, BlendPoint_1);
-	DOREPLIFETIME(UUnitBaseAnimInstance, BlendPoint_2);
-	DOREPLIFETIME(UUnitBaseAnimInstance, CurrentBlendPoint_1);
-	DOREPLIFETIME(UUnitBaseAnimInstance, CurrentBlendPoint_2);
-	DOREPLIFETIME(UUnitBaseAnimInstance, TransitionRate_1);
-	DOREPLIFETIME(UUnitBaseAnimInstance, TransitionRate_2);
-	DOREPLIFETIME(UUnitBaseAnimInstance, Resolution_1);
-	DOREPLIFETIME(UUnitBaseAnimInstance, Resolution_2);
-	DOREPLIFETIME(UUnitBaseAnimInstance, Sound);
-	
-	DOREPLIFETIME(UUnitBaseAnimInstance, SoundTimer);
 	DOREPLIFETIME(UUnitBaseAnimInstance, AnimDataTable);
 }
 
@@ -53,13 +43,54 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 	if (OwningActor != nullptr) {
 		AUnitBase* UnitBase = Cast<AUnitBase>(OwningActor);
 		if (UnitBase != nullptr && UnitBase->IsOnViewport) {
+			
+			if (UnitBase->MassActorBindingComponent)
+			{
+				const FMassEntityHandle Entity = UnitBase->MassActorBindingComponent->GetEntityHandle();
+				if (Entity.IsValid())
+				{
+					UWorld* World = UnitBase->GetWorld();
+					UMassEntitySubsystem* EntitySubsystem = World ? World->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+					if (EntitySubsystem)
+					{
+						FUnitAnimationFragment* AnimFrag = EntitySubsystem->GetEntityManager().GetFragmentDataPtr<FUnitAnimationFragment>(Entity);
+						if (AnimFrag)
+						{
+							BlendPoint_1 = AnimFrag->TargetBlendPoint_1;
+							BlendPoint_2 = AnimFrag->TargetBlendPoint_2;
+							CurrentBlendPoint_1 = AnimFrag->CurrentBlendPoint_1;
+							CurrentBlendPoint_2 = AnimFrag->CurrentBlendPoint_2;
+							TransitionRate_1 = AnimFrag->TransitionRate_1;
+							TransitionRate_2 = AnimFrag->TransitionRate_2;
+							Resolution_1 = AnimFrag->Resolution_1;
+							Resolution_2 = AnimFrag->Resolution_2;
+
+							/*
+							if (World && World->GetNetMode() == NM_Client)
+							{
+								UE_LOG(LogTemp, VeryVerbose, TEXT("[AnimInstance] %s: Updated from Mass. CBP1: %.2f"), *UnitBase->GetName(), CurrentBlendPoint_1);
+							}
+							*/
+						}
+						else
+						{
+							UE_LOG(LogTemp, Warning, TEXT("[AnimInstance] %s: No AnimFrag found on Entity!"), *UnitBase->GetName());
+						}
+					}
+				}
+			}
+
 			CharAnimState = UnitBase->GetUnitState();
-			SetBlendPoints(UnitBase, Deltaseconds);
+			// SetBlendPoints(UnitBase, Deltaseconds); // Processor übernimmt das jetzt
 
 			if(LastAnimState != CharAnimState)
 			{
 				SoundTimer = 0.f;
 				LastAnimState = CharAnimState;
+
+				// Wenn wir nicht über Mass laufen, oder Sound vom Processor nicht gesetzt wird, 
+				// müssen wir Sound hier aktualisieren. Da Sound nur bei Zustandswechsel wichtig ist:
+				SetBlendPoints(UnitBase, Deltaseconds);
 			}
 			
 			if(Sound && UnitBase)
@@ -70,17 +101,6 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 				SoundTimer += Deltaseconds;
 				
 			}
-			
-			
-			if(abs(CurrentBlendPoint_1-BlendPoint_1) <= Resolution_1) CurrentBlendPoint_1 = BlendPoint_1;
-			else if(CurrentBlendPoint_1 < BlendPoint_1) CurrentBlendPoint_1 += TransitionRate_1;
-			else if(CurrentBlendPoint_1 > BlendPoint_1) CurrentBlendPoint_1 += TransitionRate_1*(-1);
-
-			if(abs(CurrentBlendPoint_2-BlendPoint_2) <= Resolution_2) CurrentBlendPoint_2 = BlendPoint_2;
-			else if(CurrentBlendPoint_2 < BlendPoint_2) CurrentBlendPoint_2 += TransitionRate_2;
-			else if(CurrentBlendPoint_2 > BlendPoint_2) CurrentBlendPoint_2 += TransitionRate_2*(-1);
-
-			
 		}
 	}
 }

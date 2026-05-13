@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -13,6 +13,8 @@ struct FMassStatePauseTag;
 struct FMassAIStateFragment;
 struct FMassAITargetFragment;
 struct FMassCombatStatsFragment;
+struct FMassAgentCharacteristicsFragment;
+struct FMassEntityHandle;
 struct FMassStateAttackTag;
 struct FMassStateChaseTag;
 
@@ -36,6 +38,10 @@ protected:
 	// Kapselung der Spawn-Logik
 	void ExecuteProjectileSpawn(FMassEntityManager& EntityManager, const FMassEntityHandle Entity);
 
+	static float GetCombinedRadii(const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform, 
+								  const FMassAgentCharacteristicsFragment* TargetChar, const FTransform* TargetTransform, 
+								  const FVector& TargetLocation);
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
 	
@@ -45,8 +51,8 @@ private:
 		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx);
 
 	void ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
-		const FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
-		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor);
+		FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
+		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx);
 
 	FMassEntityQuery EntityQuery;
 

@@ -1523,7 +1523,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateCastingTag::StaticStruct()))              Bits |= UnitTagBits::Casting;
 	if (H(FMassStateChargingTag::StaticStruct()))             Bits |= UnitTagBits::Charging;
 	if (H(FMassStateIsAttackedTag::StaticStruct()))           Bits |= UnitTagBits::IsAttacked;
-	if (H(FMassStateAttackTag::StaticStruct()))               Bits |= UnitTagBits::Attack;
+	// if (H(FMassStateAttackTag::StaticStruct()))               Bits |= UnitTagBits::Attack;
 	if (H(FMassStateChaseTag::StaticStruct()))                Bits |= UnitTagBits::Chase;
 	if (H(FMassStateBuildTag::StaticStruct()))                Bits |= UnitTagBits::Build;
 	if (H(FMassStateResourceExtractionTag::StaticStruct()))   Bits |= UnitTagBits::ResourceExtraction;
@@ -1536,7 +1536,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStatePatrolIdleTag::StaticStruct()))           Bits |= UnitTagBits::PatrolIdle;
 	if (H(FMassStatePatrolRandomTag::StaticStruct()))         Bits |= UnitTagBits::PatrolRandom;
 	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
-	if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
+	// if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
 	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
 	// Always replicated control bits
 	if (H(FMassStateStopMovementTag::StaticStruct()))         Bits |= UnitTagBits::StopMovement;
@@ -1640,8 +1640,8 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
 		SetTag(UnitTagBits::Charging,            FMassStateChargingTag());
 		SetTag(UnitTagBits::IsAttacked,          FMassStateIsAttackedTag());
-		SetTagPredictive(UnitTagBits::Attack,              FMassStateAttackTag());
-		SetTag(UnitTagBits::Chase,               FMassStateChaseTag());
+		// SetTagPredictive(UnitTagBits::Attack,              FMassStateAttackTag());
+		SetTagPredictive(UnitTagBits::Chase,               FMassStateChaseTag());
 		SetTag(UnitTagBits::Build,               FMassStateBuildTag());
 		SetTag(UnitTagBits::ResourceExtraction,  FMassStateResourceExtractionTag());
 		SetTag(UnitTagBits::GoToResource,        FMassStateGoToResourceExtractionTag());
@@ -1653,7 +1653,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 		SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 		SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
-		SetTagPredictive(UnitTagBits::Pause,               FMassStatePauseTag());
+		// SetTagPredictive(UnitTagBits::Pause,               FMassStatePauseTag());
 		SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
 
 		if (!bPredicting)

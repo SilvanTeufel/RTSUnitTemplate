@@ -23,171 +23,106 @@ UUnitClientTagSyncProcessor::UUnitClientTagSyncProcessor()
 void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	EntityQuery.Initialize(EntityManager);
+	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	EntityQuery.RegisterWithProcessor(*this);
 }
 
 void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	// Respect global replication mode: only run in Mass mode
 	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass)
 	{
 		return;
 	}
 
-	// Iterate all AbilityUnit actors and mirror their Mass tag-derived state
 	UWorld* World = GetWorld();
-	if (!World)
-	{
-		return;
-	}
-
-	const bool bIsServer = World->GetNetMode() != NM_Client;
-	
-	if (bShowLogs)
-	{
-		UE_LOG(LogTemp, Log, TEXT("UnitClientTagSyncProcessor: Execute (World=%s Time=%.2f)"), *World->GetName(), World->GetTimeSeconds());
-	}
+	if (!World) return;
 
 	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
 
-	for (TActorIterator<AAbilityUnit> It(World); It; ++It)
+	EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, &EntityManager, SignalSubsystem, &Context](FMassExecutionContext& ChunkContext)
 	{
-		AAbilityUnit* Ability = *It;
-		if (!Ability) { continue; }
-		if (UMassActorBindingComponent* Bind = Ability->FindComponentByClass<UMassActorBindingComponent>())
-		{
-			const FMassEntityHandle Entity = Bind->GetEntityHandle();
-			if (Entity.IsValid())
-			{
-				const TEnumAsByte<UnitData::EState> NewState = bIsServer ? ComputeStateServer(EntityManager, Entity) : ComputeState(EntityManager, Entity);
+		const int32 NumEntities = ChunkContext.GetNumEntities();
+		auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+		auto CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+		auto AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
 
-				if (NewState == UnitData::Casting && SignalSubsystem)
+		for (int32 i = 0; i < NumEntities; ++i)
+		{
+			if (AAbilityUnit* AbilityUnit = Cast<AAbilityUnit>(ActorList[i].GetMutable()))
+			{
+				const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+				const TEnumAsByte<UnitData::EState> NewState = ComputeState(EntityManager, Entity);
+
+				// Spezialfall Casting: Wenn Timer abgelaufen, Signal senden
+				if (NewState == UnitData::Casting && SignalSubsystem && !AIStateList.IsEmpty())
 				{
-					const FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
-					const FMassCombatStatsFragment* StatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
-					if (StateFrag && StatsFrag && StateFrag->StateTimer >= StatsFrag->CastTime)
+					const FMassAIStateFragment& StateFrag = AIStateList[i];
+					const FMassCombatStatsFragment& StatsFrag = CombatStatsList[i];
+					if (StateFrag.StateTimer >= StatsFrag.CastTime)
 					{
 						SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::ClientSetToPlaceholder, Entity);
 					}
 				}
 
-				ApplyStateToActor(Ability, NewState);
+				ApplyStateToActor(AbilityUnit, NewState);
 			}
 		}
-	}
-}
-
-TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeStateServer(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const
-{
-	using namespace UnitData;
-	if (DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct()))
-	{
-		return EState::Aim;
-	}
-	if (DoesEntityHaveTag(EntityManager, Entity, FRunAnimationTag::StaticStruct()))
-	{
-		if (const FRunAnimationFragment* RunAnimFrag = EntityManager.GetFragmentDataPtr<FRunAnimationFragment>(Entity))
-		{
-			return RunAnimFrag->AnimationState;
-		}
-		return EState::Attack;
-	}
-	return EState::None;
+	});
 }
 
 TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const
 {
 	using namespace UnitData;
-	// Helper lambda for tag checks via composition (client-safe)
+
 	auto HasTag = [&EntityManager, &Entity](const UScriptStruct* TagStruct) -> bool
 	{
 		return DoesEntityHaveTag(EntityManager, Entity, TagStruct);
 	};
 
-	if (HasTag(FMassStateDeadTag::StaticStruct()))
-	{
-		return EState::Dead;
-	}
-	if (HasTag(FMassStateRootedTag::StaticStruct()))
-	{
-		return EState::Rooted;
-	}
-	if (HasTag(FMassStateCastingTag::StaticStruct()) || HasTag(FMassStateChargingTag::StaticStruct()))
-	{
-		return EState::Casting;
-	}
-	if (HasTag(FMassStateIsAttackedTag::StaticStruct()))
-	{
-		return EState::IsAttacked;
-	}
-	if (HasTag(FMassStateAttackTag::StaticStruct()))
-	{
-		return EState::Attack;
-	}
-	if (HasTag(FMassStateChaseTag::StaticStruct()))
-	{
-		return EState::Chase;
-	}
-	if (HasTag(FMassStateBuildTag::StaticStruct()))
-	{
-		return EState::Build;
-	}
-	if (HasTag(FMassStateResourceExtractionTag::StaticStruct()))
-	{
-		return EState::ResourceExtraction;
-	}
-	if (HasTag(FMassStateGoToResourceExtractionTag::StaticStruct()))
-	{
-		return EState::GoToResourceExtraction;
-	}
-	if (HasTag(FMassStateGoToBuildTag::StaticStruct()))
-	{
-		return EState::GoToBuild;
-	}
-	if (HasTag(FMassStateGoToBaseTag::StaticStruct()))
-	{
-		return EState::GoToBase;
-	}
-	if (HasTag(FMassStateGoToRepairTag::StaticStruct()))
-	{
-		return EState::GoToRepair;
-	}
-	if (HasTag(FMassStateRepairTag::StaticStruct()))
-	{
-		return EState::Repair;
-	}
-	if (HasTag(FMassStatePatrolIdleTag::StaticStruct()))
-	{
-		return EState::PatrolIdle;
-	}
-	if (HasTag(FMassStatePatrolRandomTag::StaticStruct()))
-	{
-		return EState::PatrolRandom;
-	}
-	if (HasTag(FMassStatePatrolTag::StaticStruct()))
-	{
-		return EState::Patrol;
-	}
-	/*
-	if (HasTag(FMassStateRunTag::StaticStruct()))
-	{
-		return EState::Run;
-	}*/
-	if (HasTag(FMassStatePauseTag::StaticStruct()))
-	{
-		return EState::Pause;
-	}
-	if (HasTag(FMassStateEvasionTag::StaticStruct()))
-	{
-		return EState::Evasion;
-	}
+	// 1. Dead (Höchste Priorität)
+	if (HasTag(FMassStateDeadTag::StaticStruct())) return EState::Dead;
+
+	// 2. IsAttacked
+	if (HasTag(FMassStateIsAttackedTag::StaticStruct())) return EState::IsAttacked;
+
+	// 3. Casting / Charging
+	if (HasTag(FMassStateCastingTag::StaticStruct()) || HasTag(FMassStateChargingTag::StaticStruct())) return EState::Casting;
+
+	// 4. Attack
+	if (HasTag(FMassStateAttackTag::StaticStruct())) return EState::Attack;
+
+	// 5. Worker: Build / Repair / Extraction
+	if (HasTag(FMassStateBuildTag::StaticStruct())) return EState::Build;
+	if (HasTag(FMassStateRepairTag::StaticStruct())) return EState::Repair;
+	if (HasTag(FMassStateResourceExtractionTag::StaticStruct())) return EState::ResourceExtraction;
+
+	// 6. Pause (WICHTIG: Muss vor Chase/Run stehen!)
+	if (HasTag(FMassStatePauseTag::StaticStruct())) return EState::Pause;
+
+	// 7. Worker Movement
+	if (HasTag(FMassStateGoToBaseTag::StaticStruct())) return EState::GoToBase;
+	if (HasTag(FMassStateGoToBuildTag::StaticStruct())) return EState::GoToBuild;
+	if (HasTag(FMassStateGoToRepairTag::StaticStruct())) return EState::GoToRepair;
+	if (HasTag(FMassStateGoToResourceExtractionTag::StaticStruct())) return EState::GoToResourceExtraction;
+
+	// 8. General Movement
+	if (HasTag(FMassStateChaseTag::StaticStruct())) return EState::Chase;
+	if (HasTag(FMassStateRunTag::StaticStruct())) return EState::Run;
+
+	// 9. Patrol
+	if (HasTag(FMassStatePatrolRandomTag::StaticStruct())) return EState::PatrolRandom;
+	if (HasTag(FMassStatePatrolIdleTag::StaticStruct())) return EState::PatrolIdle;
+	if (HasTag(FMassStatePatrolTag::StaticStruct())) return EState::Patrol;
+
+	// 10. Utility / Other
+	if (HasTag(FMassStateEvasionTag::StaticStruct())) return EState::Evasion;
+	if (HasTag(FMassStateRootedTag::StaticStruct())) return EState::Rooted;
 	
-	if (HasTag(FMassRotateToMouseTag::StaticStruct()))
-	{
-		return EState::Aim;
-	}
+	if (HasTag(FMassRotateToMouseTag::StaticStruct())) return EState::Aim;
+
 	if (HasTag(FRunAnimationTag::StaticStruct()))
 	{
 		if (const FRunAnimationFragment* RunAnimFrag = EntityManager.GetFragmentDataPtr<FRunAnimationFragment>(Entity))
@@ -196,11 +131,10 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 		}
 		return EState::Attack;
 	}
-	/*
-	if (HasTag(FMassStateIdleTag::StaticStruct()))
-	{
-		return EState::Idle;
-	}*/
+
+	// 11. Idle (Niedrigste Priorität)
+	if (HasTag(FMassStateIdleTag::StaticStruct())) return EState::Idle;
+
 	return EState::None;
 }
 

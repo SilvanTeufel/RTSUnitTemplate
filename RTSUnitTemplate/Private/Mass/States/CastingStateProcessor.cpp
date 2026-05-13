@@ -191,28 +191,24 @@ void UCastingStateProcessor::HandleClientSetToPlaceholder(FName SignalName, TArr
                 if (Placeholder == UnitSignals::PatrolIdle)
                 {
                     Defer.AddTag<FMassStatePatrolIdleTag>(Entity);
-                    if (UnitBase) UnitBase->SetUnitState(UnitData::PatrolIdle);
                     StateFrag->PlaceholderSignal = UnitSignals::PatrolIdle;
                     if (UnitBase) UnitBase->UnitStatePlaceholder = UnitData::PatrolIdle;
                 }
                 else if (Placeholder == UnitSignals::PatrolRandom)
                 {
                     Defer.AddTag<FMassStatePatrolRandomTag>(Entity);
-                    if (UnitBase) UnitBase->SetUnitState(UnitData::PatrolRandom);
                     StateFrag->PlaceholderSignal = UnitSignals::PatrolRandom;
                     if (UnitBase) UnitBase->UnitStatePlaceholder = UnitData::PatrolRandom;
                 }
                 else if (Placeholder == UnitSignals::Run)
                 {
                     Defer.AddTag<FMassStateRunTag>(Entity);
-                    if (UnitBase) UnitBase->SetUnitState(UnitData::Run);
                     StateFrag->PlaceholderSignal = UnitSignals::Run;
                     if (UnitBase) UnitBase->UnitStatePlaceholder = UnitData::Run;
                 }
                 else // Default to Idle
                 {
                     Defer.AddTag<FMassStateIdleTag>(Entity);
-                    if (UnitBase) UnitBase->SetUnitState(UnitData::Idle);
                     StateFrag->PlaceholderSignal = UnitSignals::Idle;
                     if (UnitBase) UnitBase->UnitStatePlaceholder = UnitData::Idle;
                 }

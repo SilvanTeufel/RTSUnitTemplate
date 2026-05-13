@@ -17,6 +17,7 @@ struct FMassStateAttackTag;
 struct FMassAIStateFragment;
 struct FMassAITargetFragment;
 struct FMassCombatStatsFragment;
+struct FMassAgentCharacteristicsFragment;
 struct FMassVelocityFragment;
 struct FMassActorFragment;
 struct FTransformFragment;
@@ -57,7 +58,14 @@ protected:
 
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;
+
+    static float GetCombinedRadii(const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
+                                  const FMassAgentCharacteristicsFragment* TargetChar, const FTransform* TargetTransform,
+                                  const FVector& TargetLocation);
 	
+    void ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor);
+    void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx);
+
 private:
     FMassEntityQuery EntityQuery;
 

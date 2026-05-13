@@ -369,29 +369,8 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
         LookAtDir.Z = 0.f;
         if (LookAtDir.Normalize())
         {
-            const bool bIsAttackingOrPaused = (UnitBase->GetUnitState() == UnitData::Attack || UnitBase->GetUnitState() == UnitData::Pause);
-
-            if (!bIsAttackingOrPaused &&
-                UnitBase->GetUnitState() != UnitData::Run &&
-                UnitBase->GetUnitState() != UnitData::GoToRepair &&
-                UnitBase->GetUnitState() != UnitData::GoToBase &&
-                UnitBase->GetUnitState() != UnitData::GoToResourceExtraction &&
-                UnitBase->GetUnitState() != UnitData::ResourceExtraction &&
-                UnitBase->GetUnitState() != UnitData::GoToBuild &&
-                UnitBase->GetUnitState() != UnitData::Build &&
-                UnitBase->GetUnitState() != UnitData::Repair &&
-                UnitBase->GetUnitState() != UnitData::Casting &&
-                 UnitBase->GetUnitState() != UnitData::PatrolRandom && 
-                 UnitBase->GetUnitState() != UnitData::PatrolIdle)
-            {
-                UnitBase->SetUnitState(UnitData::Run);
-            }
-
             FQuat DesiredQuat = LookAtDir.ToOrientationQuat();
-
-            //if (!UnitBase->bUseSkeletalMovement)
-                //DesiredQuat *= UnitBase->MeshRotationOffset;
-
+            
             TargetYaw = DesiredQuat.Rotator().Yaw;
         }
     }else if (UnitBase->GetUnitState() == UnitData::Run)
