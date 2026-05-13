@@ -67,13 +67,6 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 				{
 					continue;
 				}
-
-				if (NetIDList.Num() > 0 && NetIDList[i].NetID.GetValue() == 0)
-				{
-					// Optional diagnostic log
-					// UE_LOG(LogTemp, VeryVerbose, TEXT("[EA_LOG] Skipping local entity Index %d"), VisualContext.GetEntity(i).Index);
-					continue;
-				}
 			}
 
 			FEffectAreaVisualFragment& Visual = VisualList[i];

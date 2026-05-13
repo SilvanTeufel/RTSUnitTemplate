@@ -1662,6 +1662,7 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 		if (Area->BaseRadius <= 0.1f) return false;
 		// Wenn es eine duplizierte Area ist, auf die ID warten (Falls im BP MaxDuplicationCount > 0 eingestellt ist)
 		if (Area->MaxDuplicationCount > 0 && Area->DuplicationId == 0) return false;
+		if (Area->GetActorLocation().IsNearlyZero()) return false;
 	}
 
 	const FUnitRegistryItem* RegItem = nullptr;

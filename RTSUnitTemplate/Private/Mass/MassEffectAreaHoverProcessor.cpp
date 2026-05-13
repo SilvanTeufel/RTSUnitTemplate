@@ -10,6 +10,7 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Mass/Abilitys/EffectAreaVisualManager.h"
+#include "MassReplicationFragments.h"
 
 UMassEffectAreaHoverProcessor::UMassEffectAreaHoverProcessor()
 {
@@ -29,6 +30,7 @@ void UMassEffectAreaHoverProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 	EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassHoverFragment>(EMassFragmentAccess::ReadWrite);
+	EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::All);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -38,9 +40,12 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 	UWorld* World = EntityManager.GetWorld();
 	if (!World) return;
 
-	AccumulatedTime += Context.GetDeltaTimeSeconds();
-	if (AccumulatedTime < 0.2f) return;
-	AccumulatedTime = 0.f;
+	// Heartbeat log to see if the processor is alive at all
+	if (World->GetTimeSeconds() - LastHeartbeatTime > 5.f)
+	{
+		LastHeartbeatTime = World->GetTimeSeconds();
+		UE_LOG(LogTemp, Warning, TEXT("[EffectAreaDebug] Processor Heartbeat - Client Time: %.2f"), World->GetTimeSeconds());
+	}
 
 	ACustomControllerBase* LocalPC = Cast<ACustomControllerBase>(World->GetFirstPlayerController());
 	if (!LocalPC || !LocalPC->IsLocalController()) return;
@@ -56,18 +61,31 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 	{
 		const auto Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
 		const auto CharFrags = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+		const auto ActorFrags = ChunkContext.GetFragmentView<FMassActorFragment>();
+		const auto ImpactFrags = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
 
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
 		{
 			const FTransform& EntityTransform = Transforms[i].GetTransform();
 			const FMassAgentCharacteristicsFragment& CharFrag = CharFrags[i];
+			const FEffectAreaImpactFragment& ImpactFrag = ImpactFrags[i];
 
 			FVector BaseLocation = EntityTransform.GetLocation();
-			float Radius = CharFrag.CapsuleRadius > 0.f ? CharFrag.CapsuleRadius : 100.f;
+			const AActor* Actor = ActorFrags[i].Get();
+
+			// Always prefer Actor location for debugging if available, as it's the "truth" for projectiles etc.
+			if (Actor)
+			{
+				BaseLocation = Actor->GetActorLocation();
+			}
+
+			// Prefer CurrentRadius from ImpactFragment, fallback to CapsuleRadius or default 100
+			float Radius = ImpactFrag.CurrentRadius > 0.f ? ImpactFrag.CurrentRadius : (CharFrag.CapsuleRadius > 0.f ? CharFrag.CapsuleRadius : 100.f);
 			
 			FVector OutP1, OutP2;
-			FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, BaseLocation - FVector(0,0,100), BaseLocation + FVector(0,0,100), OutP1, OutP2);
-			float DistSq = FVector::DistSquared(OutP1, OutP2);
+			// Use a very long vertical segment to detect the area even if Z is wrong (2D Hover)
+			FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, BaseLocation - FVector(0,0,100000.f), BaseLocation + FVector(0,0,100000.f), OutP1, OutP2);
+			float DistSq = FVector::DistSquared2D(OutP1, OutP2);
 
 			if (DistSq <= FMath::Square(Radius))
 			{
@@ -89,7 +107,6 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 			HoverFrag->bIsHovered = true;
 			
 			// Logging only when hovered entity changes or every 0.5s while hovering
-			static float LastLogTime = 0.f;
 			if (BestEntity != LastHoveredEntity || World->GetTimeSeconds() - LastLogTime > 0.5f)
 			{
 				LastLogTime = World->GetTimeSeconds();
@@ -99,6 +116,7 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 				const FEffectAreaVisualFragment& Visual = EntityManager.GetFragmentDataChecked<FEffectAreaVisualFragment>(BestEntity);
 				const FEffectAreaImpactFragment& Impact = EntityManager.GetFragmentDataChecked<FEffectAreaImpactFragment>(BestEntity);
 				const FMassActorFragment& ActorFrag = EntityManager.GetFragmentDataChecked<FMassActorFragment>(BestEntity);
+				const FTransformFragment& TransFrag = EntityManager.GetFragmentDataChecked<FTransformFragment>(BestEntity);
 				
 				const AEffectArea* Area = Cast<AEffectArea>(ActorFrag.Get());
 				FString ActorName = Area ? Area->GetName() : TEXT("None");
@@ -106,6 +124,10 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 				UE_LOG(LogTemp, Warning, TEXT("[EffectAreaDebug] Entity: %d (SN:%d), Actor: %s"), BestEntity.Index, BestEntity.SerialNumber, *ActorName);
 				UE_LOG(LogTemp, Warning, TEXT("  - Fragment Vis: bIsOnViewport=%d, bIsVisibleEnemy=%d, bAffectedByFogOfWar=%d, bIsMyTeam=%d"), 
 					Vis.bIsOnViewport, Vis.bIsVisibleEnemy, Vis.bAffectedByFogOfWar, Vis.bIsMyTeam);
+
+				FVector FragLoc = TransFrag.GetTransform().GetLocation();
+				FVector ActorLoc = Area ? Area->GetActorLocation() : FVector::ZeroVector;
+				UE_LOG(LogTemp, Warning, TEXT("  - Location: Frag=(%s), Actor=(%s)"), *FragLoc.ToString(), *ActorLoc.ToString());
 				
 				if (Area)
 				{
@@ -115,6 +137,10 @@ void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, F
 
 				UE_LOG(LogTemp, Warning, TEXT("  - Visual: InstanceIndex=%d, BaseMeshRadius=%.2f"), Visual.InstanceIndex, Visual.BaseMeshRadius);
 				UE_LOG(LogTemp, Warning, TEXT("  - Impact: CurrentRadius=%.2f, bScaleMesh=%d, bPendingDestruction=%d"), Impact.CurrentRadius, Impact.bScaleMesh, Impact.bPendingDestruction);
+
+				const FMassNetworkIDFragment* NetIDFrag = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(BestEntity);
+				uint32 NetID = NetIDFrag ? NetIDFrag->NetID.GetValue() : 999;
+				UE_LOG(LogTemp, Warning, TEXT("  - NetID: %u, bHasHiddenVisual: %d"), NetID, Impact.bHasHiddenVisual);
 
 				if (Visual.ISMComponent.IsValid())
 				{

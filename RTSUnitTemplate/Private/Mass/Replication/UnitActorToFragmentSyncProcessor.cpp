@@ -288,4 +288,22 @@ void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, 
             }
         }
     }
+
+    // Persistent safety check: If the transform is still at 0,0,0 but the actor has moved, re-sync.
+    if (TransformFragment)
+    {
+        FVector FragLoc = TransformFragment->GetTransform().GetLocation();
+        FVector ActorLoc = Area.GetActorLocation();
+        if (FragLoc.IsNearlyZero() && !ActorLoc.IsNearlyZero())
+        {
+            TransformFragment->GetMutableTransform().SetLocation(ActorLoc);
+            TransformFragment->GetMutableTransform().SetRotation(Area.GetActorRotation().Quaternion());
+            
+            if (!Area.HasAuthority())
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Client SyncEffectArea RE-SYNCED location for %s: Fragment was 0, Actor is %s"), 
+                    *Area.GetName(), *ActorLoc.ToString());
+            }
+        }
+    }
 }

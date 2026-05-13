@@ -28,5 +28,6 @@ protected:
 	FMassEntityHandle LastHoveredEntity;
 
 	FMassEntityQuery EntityQuery;
-	float AccumulatedTime = 0.f;
+	float LastLogTime = 0.f;
+	float LastHeartbeatTime = 0.f;
 };
