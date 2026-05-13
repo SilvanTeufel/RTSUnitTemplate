@@ -39,6 +39,10 @@
 #include "MassEntitySubsystem.h"
 #include "MassCommandBuffer.h"
 #include "MassCommonFragments.h"
+#include "MassNavigationFragments.h"
+#include "MassReplicationFragments.h"
+#include "MassMovementFragments.h"
+#include "MassActorSubsystem.h"
 #include "Core/UnitData.h"
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
@@ -109,18 +113,52 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 	{
 		if (UWorld* World = GetWorld())
 		{
-			if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+			const float CurrentTime = World->GetTimeSeconds();
+			if (CurrentTime - LastDebugLogTime >= 1.0f)
 			{
-				const FMassEntityManager& EntityManager = MassSubsystem->GetEntityManager();
-				const UEnum* UnitStateEnum = StaticEnum<UnitData::EState>();
-				for (AUnitBase* Unit : SelectedUnits)
+				if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 				{
-					if (Unit)
+					const FMassEntityManager& EntityManager = MassSubsystem->GetEntityManager();
+					const UEnum* UnitStateEnum = StaticEnum<UnitData::EState>();
+					for (AUnitBase* Unit : SelectedUnits)
 					{
-						FString UnitStateStr = UnitStateEnum ? UnitStateEnum->GetNameStringByValue(Unit->GetUnitState().GetValue()) : TEXT("Unknown");
-						UE_LOG(LogTemp, Log, TEXT("Unit: %s | State: %s"), *Unit->Name, *UnitStateStr);
-						UE::Mass::Debug::LogEntityTags(Unit->MassActorBindingComponent->GetEntityHandle(), EntityManager, this);
+						if (Unit && Unit->MassActorBindingComponent)
+						{
+							FString UnitStateStr = UnitStateEnum ? UnitStateEnum->GetNameStringByValue(Unit->GetUnitState().GetValue()) : TEXT("Unknown");
+							UE_LOG(LogTemp, Log, TEXT("Unit: %s | State: %s"), *Unit->Name, *UnitStateStr);
+
+							FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetEntityHandle();
+							if (Entity.IsValid() && EntityManager.IsEntityValid(Entity))
+							{
+								UE::Mass::Debug::LogEntityTags(Entity, EntityManager, this);
+
+								const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntityUnsafe(Entity);
+								const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
+								const FMassFragmentBitSet& Fragments = Composition.GetFragments();
+
+								FString FragLog = TEXT("Fragments:");
+								bool bFound = false;
+								if (Fragments.Contains<FMassAIStateFragment>()) { FragLog += TEXT(" AIState"); bFound = true; }
+								if (Fragments.Contains<FMassAITargetFragment>()) { FragLog += TEXT(" AITarget"); bFound = true; }
+								if (Fragments.Contains<FTransformFragment>()) { FragLog += TEXT(" Transform"); bFound = true; }
+								if (Fragments.Contains<FMassCombatStatsFragment>()) { FragLog += TEXT(" CombatStats"); bFound = true; }
+								if (Fragments.Contains<FMassAgentCharacteristicsFragment>()) { FragLog += TEXT(" AgentCharacteristics"); bFound = true; }
+								if (Fragments.Contains<FMassMoveTargetFragment>()) { FragLog += TEXT(" MoveTarget"); bFound = true; }
+								if (Fragments.Contains<FMassVelocityFragment>()) { FragLog += TEXT(" Velocity"); bFound = true; }
+								if (Fragments.Contains<FMassActorFragment>()) { FragLog += TEXT(" Actor"); bFound = true; }
+								if (Fragments.Contains<FMassNetworkIDFragment>()) { FragLog += TEXT(" NetworkID"); bFound = true; }
+
+								if (!bFound) { FragLog += TEXT(" [None Found]"); }
+
+								UE_LOG(LogTemp, Log, TEXT("Entity [%d:%d] %s"), Entity.Index, Entity.SerialNumber, *FragLog);
+							}
+							else
+							{
+								UE_LOG(LogTemp, Warning, TEXT("Unit %s has an invalid Mass Entity handle!"), *Unit->Name);
+							}
+						}
 					}
+					LastDebugLogTime = CurrentTime;
 				}
 			}
 		}

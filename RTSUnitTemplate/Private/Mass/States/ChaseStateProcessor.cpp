@@ -42,8 +42,8 @@ void UChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); // Eigene Position lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Bewegungsziel setzen
-    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Geschwindigkeit setzen (zum Stoppen)
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional); // Bewegungsziel setzen
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional); // Geschwindigkeit setzen (zum Stoppen)
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -112,16 +112,13 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
 void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UWorld* World = Context.GetWorld();
-    if (!World)
-    {
-        return;
-    }
+    //UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Executing Client Loop"));
 
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager, World](FMassExecutionContext& ChunkContext)
+        [this, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
+        UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Processing Chunk with %d entities"), NumEntities);
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
@@ -134,6 +131,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Processing Entity %d"), Entity.Index);
 
             // If already dead, skip any client-side tag manipulation
             if (DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct()))
@@ -152,7 +150,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             // Case 1: Hold position => switch to Idle locally
             if (StateFrag.HoldPosition)
             {
-                SwitchToIdleState(ChunkContext, Entity, StateFrag);
+                SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 continue;
             }
 
@@ -161,7 +159,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             {
                 if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
                 {
-                    SwitchToIdleState(ChunkContext, Entity, StateFrag);
+                    SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                     continue;
                 }
             }
@@ -173,29 +171,28 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
 
             bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            if (!bIsTargetActive)
+            {
+                 UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d - Target is NOT Active"), Entity.Index);
+            }
+
             if (bIsTargetActive)
             {
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-                float AttackerRadius = CharFrag.CapsuleRadius;
-                float TargetRadius = 0.f;
+                const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
+                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity);
+                const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
-                CalculateRadii(EntityManager, TargetFrag.TargetEntity, CharFrag, Transform, TargetFrag.LastKnownLocation, AttackerRadius, TargetRadius);
-
-                const float EffectiveAttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
+                const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
+                const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
                 
-                if (DistSq > AttackRangeSq)
-                {
-                    UE_LOG(LogTemp, Log, TEXT("[Client] [ChaseStateProcessor] Entity[%d:%d] Out of Range: DistSq: %f > AttackRangeSq: %f (Range: %f, R1: %f, R2: %f)"), 
-                        Entity.Index, Entity.SerialNumber, DistSq, AttackRangeSq, Stats.AttackRange, AttackerRadius, TargetRadius);
-                }
+                UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d - DistSq: %f, AttackRangeSq: %f, AttackRange: %f, CombinedRadii: %f"), Entity.Index, DistSq, AttackRangeSq, Stats.AttackRange, CombinedRadii);
 
                 if (DistSq <= AttackRangeSq)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("[Client] [ChaseStateProcessor] Entity[%d:%d] In Range! DistSq: %f <= AttackRangeSq: %f (Range: %f, R1: %f, R2: %f)"), 
-                        Entity.Index, Entity.SerialNumber, DistSq, AttackRangeSq, Stats.AttackRange, AttackerRadius, TargetRadius);
-                    
+                    UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d - Switching to PauseState locally"), Entity.Index);
                     StateFrag.StateTimerClient = 0.f;
 
                     // Tags lokal manipulieren, damit der PauseStateProcessor übernimmt
@@ -203,14 +200,18 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                     Defer.RemoveTag<FMassStateChaseTag>(Entity);
                     Defer.AddTag<FMassStatePauseTag>(Entity);
 
-                    if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+                    UWorld* World = ChunkContext.GetWorld();
+                    if (World)
                     {
-                        if (AUnitClientBubbleInfo* Bubble = Cache->GetBubble(false))
+                        if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
                         {
-                            if (FUnitReplicationItem* Item = Bubble->Agents.FindItemByNetID(NetIDList[i].NetID))
+                            if (AUnitClientBubbleInfo* Bubble = Cache->GetBubble(false))
                             {
-                                Item->PredictionTimer = 0.f;
-                                Item->bPredictedLatch = false;
+                                if (FUnitReplicationItem* Item = Bubble->Agents.FindItemByNetID(NetIDList[i].NetID))
+                                {
+                                    Item->PredictionTimer = 0.f;
+                                    Item->bPredictedLatch = false;
+                                }
                             }
                         }
                     }
@@ -240,6 +241,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
+        const bool bHasMoveTarget = MoveTargetList.Num() > 0;
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
             
@@ -249,7 +251,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassCombatStatsFragment& Stats = StatsList[i];
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i]; // Mutable for Update/Stop
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
@@ -277,11 +278,14 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             if (!bIsTargetActive || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
             {
                 // Queue signal instead of sending directly
-                UpdateMoveTarget(
-                 MoveTarget,
-                 StateFrag.StoredLocation,
-                 Stats.RunSpeed,
-                 World);
+                if (bHasMoveTarget)
+                {
+                    UpdateMoveTarget(
+                     MoveTargetList[i],
+                     StateFrag.StoredLocation,
+                     Stats.RunSpeed,
+                     World);
+                }
                 
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)
@@ -295,19 +299,21 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
     
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-            float AttackerRadius = CharFrag.CapsuleRadius;
-            float TargetRadius = 0.f;
+            const FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+            const FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
+            const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
-            CalculateRadii(EntityManager, TargetFrag.TargetEntity, CharFrag, Transform, TargetFrag.LastKnownLocation, AttackerRadius, TargetRadius);
-            
-            const float EffectiveAttackRange = Stats.AttackRange + AttackerRadius + TargetRadius;
+            const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
+            const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
             const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
             // --- In Attack Range ---
             if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
             {
-
-                StopMovement(MoveTarget, World);
+                if (bHasMoveTarget)
+                {
+                    StopMovement(MoveTargetList[i], World);
+                }
                 
                 if (SignalSubsystem)
                 {
@@ -319,63 +325,60 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             
            FVector TargetLocation = TargetFrag.LastKnownLocation;
 
-           FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
-           if (TargetCharFrag  && !Stats.bCanMoveWhileAttacking) //  && !Stats.bCanMoveWhileAttacking
+           const FMassAgentCharacteristicsFragment* TargetCharFragPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+           if (TargetCharFragPtr  && !Stats.bCanMoveWhileAttacking) //  && !Stats.bCanMoveWhileAttacking
            {
-               TargetLocation.Z = TargetCharFrag->LastGroundLocation;
+               TargetLocation.Z = TargetCharFragPtr->LastGroundLocation;
            }
 
-           UpdateMoveTarget(MoveTarget, TargetLocation, Stats.RunSpeed, World);
+           if (bHasMoveTarget)
+           {
+               UpdateMoveTarget(MoveTargetList[i], TargetLocation, Stats.RunSpeed, World);
+           }
         }
     }); // End ForEachEntityChunk
 }
 
-void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag) const
+void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
 {
     StateFrag.SwitchingState = true;
     auto& Defer = Context.Defer();
-    Defer.RemoveTag<FMassStateRunTag>(Entity);
-    Defer.RemoveTag<FMassStateChaseTag>(Entity);
-    Defer.RemoveTag<FMassStateAttackTag>(Entity);
-    Defer.RemoveTag<FMassStatePauseTag>(Entity);
-    Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
-    Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
-    Defer.RemoveTag<FMassStateCastingTag>(Entity);
-    Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
-    Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
-    Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
-    Defer.RemoveTag<FMassStateBuildTag>(Entity);
-    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-    Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
-    Defer.AddTag<FMassStateIdleTag>(Entity);
-}
 
-void UChaseStateProcessor::CalculateRadii(const FMassEntityManager& EntityManager, const FMassEntityHandle TargetEntity,
-                                         const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
-                                         const FVector& TargetLocation, float& OutAttackerRadius, float& OutTargetRadius) const
-{
-    OutAttackerRadius = AttackerChar.CapsuleRadius;
-    OutTargetRadius = 0.f;
-
-    const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetEntity);
-    if (TargetCharFrag)
+    if (StateFrag.CanAttack && StateFrag.IsInitialized)
     {
-        OutTargetRadius = TargetCharFrag->CapsuleRadius;
-        if (AttackerChar.bUseBoxComponent || TargetCharFrag->bUseBoxComponent)
+        Defer.AddTag<FMassStateDetectTag>(Entity);
+    }
+    
+    StateFrag.PlaceholderSignal = UnitSignals::Idle;
+    if (AUnitBase* UnitBase = Cast<AUnitBase>(UnitActor))
+    {
+        UnitBase->UnitStatePlaceholder = UnitData::Idle;
+    }
+    
+    if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
+    {
+        Defer.RemoveTag<FMassStateRunTag>(Entity);
+        Defer.RemoveTag<FMassStateChaseTag>(Entity);
+        Defer.RemoveTag<FMassStateAttackTag>(Entity);
+        Defer.RemoveTag<FMassStatePauseTag>(Entity);
+        Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+        Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+        Defer.RemoveTag<FMassStateCastingTag>(Entity);
+        Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+        Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+        Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+        Defer.RemoveTag<FMassStateBuildTag>(Entity);
+        Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+        Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+        Defer.AddTag<FMassStateIdleTag>(Entity);
+    }
+    else
+    {
+        if (SignalSubsystem)
         {
-            FVector Dir = (TargetLocation - AttackerTransform.GetLocation());
-            Dir.Z = 0.f;
-            if (!Dir.IsNearlyZero())
-            {
-                Dir.Normalize();
-                OutAttackerRadius = AttackerChar.GetRadiusInDirection(Dir, AttackerTransform.GetRotation().Rotator());
-
-                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetEntity);
-                if (TargetTransformFrag)
-                {
-                    OutTargetRadius = TargetCharFrag->GetRadiusInDirection(-Dir, TargetTransformFrag->GetTransform().GetRotation().Rotator());
-                }
-            }
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Idle, Entity);
         }
     }
 }
+
+// void UChaseStateProcessor::CalculateRadii...

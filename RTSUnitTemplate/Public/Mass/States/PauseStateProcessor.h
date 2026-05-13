@@ -48,11 +48,11 @@ protected:
 private:
 	void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
 		FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
-		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx);
+		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor);
 
 	void ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
 		FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
-		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx);
+		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor);
 
 	FMassEntityQuery EntityQuery;
 

@@ -61,12 +61,13 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 // 1. Check for State Change and Update Targets
                 if (AnimFrag.LastProcessedState != CurrentState)
                 {
+                    /*
                     UE_LOG(LogTemp, Log, TEXT("%s [AnimationProcessor] State Change for %s: %s -> %s"), 
                         *NetModeStr,
                         *UnitBase->GetName(), 
                         *UEnum::GetValueAsString(AnimFrag.LastProcessedState.GetValue()), 
                         *UEnum::GetValueAsString(CurrentState.GetValue()));
-
+                    */
                     if (UUnitBaseAnimInstance* AnimInst = Cast<UUnitBaseAnimInstance>(UnitBase->GetMesh()->GetAnimInstance()))
                     {
                         if (AnimInst->AnimDataTable)
@@ -86,21 +87,21 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                          AnimFrag.Resolution_2 = RowData->Resolution_2;
                                          bFound = true;
 
-                                         UE_LOG(LogTemp, Log, TEXT("%s [AnimationProcessor] Loaded Row for %s: BP1=%.2f, BP2=%.2f"), 
-                                             *NetModeStr, *UnitBase->GetName(), AnimFrag.TargetBlendPoint_1, AnimFrag.TargetBlendPoint_2);
+                                         //UE_LOG(LogTemp, Log, TEXT("%s [AnimationProcessor] Loaded Row for %s: BP1=%.2f, BP2=%.2f"), 
+                                            // *NetModeStr, *UnitBase->GetName(), AnimFrag.TargetBlendPoint_1, AnimFrag.TargetBlendPoint_2);
                                          break;
                                      }
                                  }
                              }
                              if (!bFound)
                              {
-                                 UE_LOG(LogTemp, Warning, TEXT("%s [AnimationProcessor] No Row found in DataTable for State %s (Unit: %s)"), 
-                                     *NetModeStr, *UEnum::GetValueAsString(CurrentState.GetValue()), *UnitBase->GetName());
+                                 //UE_LOG(LogTemp, Warning, TEXT("%s [AnimationProcessor] No Row found in DataTable for State %s (Unit: %s)"), 
+                                    // *NetModeStr, *UEnum::GetValueAsString(CurrentState.GetValue()), *UnitBase->GetName());
                              }
                         }
                         else
                         {
-                            UE_LOG(LogTemp, Warning, TEXT("%s [AnimationProcessor] AnimDataTable is NULL for %s"), *NetModeStr, *UnitBase->GetName());
+                           // UE_LOG(LogTemp, Warning, TEXT("%s [AnimationProcessor] AnimDataTable is NULL for %s"), *NetModeStr, *UnitBase->GetName());
                         }
                     }
                     AnimFrag.LastProcessedState = CurrentState;

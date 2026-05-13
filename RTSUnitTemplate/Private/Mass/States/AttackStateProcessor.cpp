@@ -17,6 +17,7 @@
 #include "MassArchetypeTypes.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
+#include "Core/RTSUnitUtils.h"
 #include "Async/Async.h"
 #include "Controller\PlayerController\CustomControllerBase.h"
 
@@ -112,7 +113,7 @@ void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExec
             
             if (bIsServer)
             {
-                ServerExecute(EntityManager, ChunkContext, StateFrag, TargetFrag, Stats, Entity, i);
+                ServerExecute(EntityManager, ChunkContext, StateFrag, TargetFrag, Stats, Entity, i, ActorList[i].GetMutable());
             }
         }
     }); // End ForEachEntityChunk
@@ -184,7 +185,17 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
         StateFrag.StateTimerClient = 0.f;
         if (Item) Item->PredictionTimer = 0.f;
 
+        StateFrag.PlaceholderSignal = UnitSignals::Idle;
+        if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+        {
+            UnitBase->UnitStatePlaceholder = UnitData::Idle;
+        }
+
         auto& Defer = Context.Defer();
+        if (StateFrag.CanAttack && StateFrag.IsInitialized)
+        {
+            Defer.AddTag<FMassStateDetectTag>(Entity);
+        }
         Defer.RemoveTag<FMassStateAttackTag>(Entity);
         Defer.AddTag<FMassStateIdleTag>(Entity);
         return;
@@ -198,7 +209,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
-    const float CombinedRadii = GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
+    const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
     const float AttackRange = Stats.AttackRange + CombinedRadii;
 
     if (Dist <= AttackRange)
@@ -217,7 +228,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
 
 void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
     FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
-    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx)
+    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor)
 {
     auto TransformList = Context.GetFragmentView<FTransformFragment>();
     const FTransform& Transform = TransformList[EntityIdx].GetTransform();
@@ -251,9 +262,21 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     if (!bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead)
     {
         StateFrag.SwitchingState = true;
+        
+        StateFrag.PlaceholderSignal = UnitSignals::Idle;
+        if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+        {
+            UnitBase->UnitStatePlaceholder = UnitData::Idle;
+        }
+        
         auto& Defer = Context.Defer();
+        if (StateFrag.CanAttack && StateFrag.IsInitialized)
+        {
+            Defer.AddTag<FMassStateDetectTag>(Entity);
+        }
+        
         Defer.RemoveTag<FMassStateAttackTag>(Entity);
-        if (StateFrag.PlaceholderSignal != NAME_None)
+        if (StateFrag.PlaceholderSignal != NAME_None && StateFrag.PlaceholderSignal != UnitSignals::Idle)
         {
             Defer.AddTag<FMassStatePauseTag>(Entity);
         }
@@ -272,7 +295,7 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
-    const float CombinedRadii = GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
+    const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
     const float AttackRange = Stats.AttackRange + CombinedRadii;
 
     if (Dist <= AttackRange)
@@ -316,30 +339,4 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     }
 }
 
-float UAttackStateProcessor::GetCombinedRadii(const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
-    const FMassAgentCharacteristicsFragment* TargetChar, const FTransform* TargetTransform, const FVector& TargetLocation)
-{
-    float AttackerRadius = AttackerChar.CapsuleRadius;
-    float TargetRadius = 0.f;
-
-    if (TargetChar)
-    {
-        TargetRadius = TargetChar->CapsuleRadius;
-        if (AttackerChar.bUseBoxComponent || TargetChar->bUseBoxComponent)
-        {
-            FVector Dir = (TargetLocation - AttackerTransform.GetLocation());
-            Dir.Z = 0.f;
-            if (!Dir.IsNearlyZero())
-            {
-                Dir.Normalize();
-                AttackerRadius = AttackerChar.GetRadiusInDirection(Dir, AttackerTransform.GetRotation().Rotator());
-                
-                if (TargetTransform)
-                {
-                    TargetRadius = TargetChar->GetRadiusInDirection(-Dir, TargetTransform->GetRotation().Rotator());
-                }
-            }
-        }
-    }
-    return AttackerRadius + TargetRadius;
-}
+// float UAttackStateProcessor::GetCombinedRadii...

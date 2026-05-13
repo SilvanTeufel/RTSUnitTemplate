@@ -208,7 +208,12 @@ namespace UE::Mass::Debug // Optional: Use a namespace for organization
      */
     static void LogEntityTags(const FMassEntityHandle& Entity, const FMassEntityManager& EntityManager, const UObject* LogOwner = nullptr)
     {
-    
+        if (!Entity.IsValid() || !EntityManager.IsEntityValid(Entity))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("LogEntityTags: Entity [%d:%d] is not valid!"), Entity.Index, Entity.SerialNumber);
+            return;
+        }
+
         FString PresentTags = TEXT("Tags:");
         bool bFoundTags = false;
 

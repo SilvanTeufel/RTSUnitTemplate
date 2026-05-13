@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "NavigationSystem.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Mass/UnitMassTag.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/World.h"
 #include "Engine/HitResult.h"
@@ -114,5 +115,33 @@ namespace RTSUnitUtils
 		}
 
 		return TargetPos;
+	}
+
+	inline float GetCombinedRadii(const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
+		const FMassAgentCharacteristicsFragment* TargetChar, const FTransform* TargetTransform, const FVector& TargetLocation)
+	{
+		float AttackerRadius = AttackerChar.CapsuleRadius;
+		float TargetRadius = 0.f;
+
+		if (TargetChar)
+		{
+			TargetRadius = TargetChar->CapsuleRadius;
+			if (AttackerChar.bUseBoxComponent || TargetChar->bUseBoxComponent)
+			{
+				FVector Dir = (TargetLocation - AttackerTransform.GetLocation());
+				Dir.Z = 0.f;
+				if (!Dir.IsNearlyZero())
+				{
+					Dir.Normalize();
+					AttackerRadius = AttackerChar.GetRadiusInDirection(Dir, AttackerTransform.GetRotation().Rotator());
+                
+					if (TargetTransform)
+					{
+						TargetRadius = TargetChar->GetRadiusInDirection(-Dir, TargetTransform->GetRotation().Rotator());
+					}
+				}
+			}
+		}
+		return AttackerRadius + TargetRadius;
 	}
 }

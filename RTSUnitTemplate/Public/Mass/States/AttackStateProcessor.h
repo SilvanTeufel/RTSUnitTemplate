@@ -64,7 +64,7 @@ protected:
                                   const FVector& TargetLocation);
 	
     void ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor);
-    void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx);
+    void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor);
 
 private:
     FMassEntityQuery EntityQuery;

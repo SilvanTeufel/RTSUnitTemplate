@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
+#include "Core/RTSUnitUtils.h"
 #include "RunStateProcessor.generated.h"
 
 /**
@@ -23,6 +24,10 @@ public:
 
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+
+	void SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor);
+	void SwitchToChaseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToPauseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)

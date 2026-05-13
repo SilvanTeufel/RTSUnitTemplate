@@ -943,6 +943,8 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		{
 			AiStatePtr->HoldPosition = false;
 		}
+		
+		if (!bIsMovingWhileAttacking) EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
 		// Reset local path state to avoid stale path following from previous order
 		if (FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(MassEntityHandle))
 		{

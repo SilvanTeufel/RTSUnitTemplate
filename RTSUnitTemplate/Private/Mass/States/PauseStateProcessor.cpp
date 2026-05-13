@@ -12,6 +12,7 @@
 #include "MassEntitySubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
+#include "Core/RTSUnitUtils.h"
 #include "Async/Async.h"
 #include "Controller\PlayerController\CustomControllerBase.h"
 #include "Mass/Projectile/ProjectileVisualManager.h"
@@ -49,6 +50,7 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -99,6 +101,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -137,11 +140,11 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
                     
                 }
 
-                ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i);
+                ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i, ActorList[i].GetMutable());
             }
             else
             {
-                ServerExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i);
+                ServerExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i, ActorList[i].GetMutable());
             }
         }
     });
@@ -149,7 +152,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
 void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
     FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
-    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx)
+    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor)
 {
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
@@ -180,6 +183,19 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
             }
 
             StateFrag.SwitchingState = true;
+            
+            StateFrag.PlaceholderSignal = UnitSignals::Idle;
+            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+            {
+                UnitBase->UnitStatePlaceholder = UnitData::Idle;
+            }
+
+            auto& Defer = Context.Defer();
+            if (StateFrag.CanAttack && StateFrag.IsInitialized)
+            {
+                Defer.AddTag<FMassStateDetectTag>(Entity);
+            }
+            
             if (SignalSubsystem)
             {
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
@@ -201,7 +217,7 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
 
     const float Dist = FVector::Dist2D(Transform.GetLocation(), MutableTargetFrag.LastKnownLocation);
     
-    const float CombinedRadii = GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, MutableTargetFrag.LastKnownLocation);
+    const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, MutableTargetFrag.LastKnownLocation);
     const float AttackRange = Stats.AttackRange + CombinedRadii;
 
     if (Dist <= AttackRange)
@@ -257,7 +273,7 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
 
 void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
     FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
-    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx)
+    const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor)
 {
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
@@ -276,7 +292,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 
             const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
             
-            const float CombinedRadii = GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
+            const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
             const float AttackRange = Stats.AttackRange + CombinedRadii;
 
             if (bIsTargetActive)
@@ -293,40 +309,19 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                 else if (Dist > AttackRange + 150.f)
                 {
                     StateFrag.StateTimerClient = 0.f;
-                    Context.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                    Context.Defer().AddTag<FMassStateChaseTag>(Entity);
+                    auto& Defer = Context.Defer();
+                    if (StateFrag.CanAttack && StateFrag.IsInitialized)
+                    {
+                        Defer.AddTag<FMassStateDetectTag>(Entity);
+                    }
+                    Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                    Defer.AddTag<FMassStateChaseTag>(Entity);
                 }
             }
     
 }
 
-float UPauseStateProcessor::GetCombinedRadii(const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
-    const FMassAgentCharacteristicsFragment* TargetChar, const FTransform* TargetTransform, const FVector& TargetLocation)
-{
-    float AttackerRadius = AttackerChar.CapsuleRadius;
-    float TargetRadius = 0.f;
-
-    if (TargetChar)
-    {
-        TargetRadius = TargetChar->CapsuleRadius;
-        if (AttackerChar.bUseBoxComponent || TargetChar->bUseBoxComponent)
-        {
-            FVector Dir = (TargetLocation - AttackerTransform.GetLocation());
-            Dir.Z = 0.f;
-            if (!Dir.IsNearlyZero())
-            {
-                Dir.Normalize();
-                AttackerRadius = AttackerChar.GetRadiusInDirection(Dir, AttackerTransform.GetRotation().Rotator());
-                
-                if (TargetTransform)
-                {
-                    TargetRadius = TargetChar->GetRadiusInDirection(-Dir, TargetTransform->GetRotation().Rotator());
-                }
-            }
-        }
-    }
-    return AttackerRadius + TargetRadius;
-}
+// float UPauseStateProcessor::GetCombinedRadii...
 
 void UPauseStateProcessor::OnProjectileSignalReceived(FName SignalName, const TArray<FMassEntityHandle>& Entities)
 {

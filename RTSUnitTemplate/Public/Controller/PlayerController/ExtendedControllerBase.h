@@ -484,5 +484,8 @@ public:
 	float LastMouseRPCTime = 0.f;
 
 	UPROPERTY(Transient)
+	float LastDebugLogTime = 0.f;
+
+	UPROPERTY(Transient)
 	FVector LastSentMouseLocation = FVector::ZeroVector;
 };

@@ -8,15 +8,28 @@
 #include "IdleStateProcessor.generated.h"
 
 // Forward declare Fragments and Tags used
-struct FMassStateIdleTag;
-struct FMassVelocityFragment;
 struct FMassAITargetFragment;
+struct FMassAIStateFragment;
 struct FMassCombatStatsFragment;
 struct FMassPatrolFragment;
 struct FMassStateTimerFragment;
+struct FMassUnitPathFragment;
+struct FMassStateIdleTag;
 struct FMassStateChaseTag;
-struct FMassStatePatrolTag;
-// struct FMassStateEvasionTag; // Falls Evasion hier ausgelöst wird
+struct FMassStateRunTag;
+struct FMassStatePauseTag;
+struct FMassStatePatrolRandomTag;
+struct FMassStatePatrolIdleTag;
+struct FMassStateCastingTag;
+struct FMassStateIsAttackedTag;
+struct FMassStateGoToBaseTag;
+struct FMassStateGoToBuildTag;
+struct FMassStateBuildTag;
+struct FMassStateGoToResourceExtractionTag;
+struct FMassStateResourceExtractionTag;
+struct FMassStateDetectTag;
+struct FMassVelocityFragment;
+struct FTransformFragment;
 
 
 UCLASS()
@@ -31,6 +44,13 @@ protected:
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+
+	void SwitchToChaseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToPauseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToRunState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToPatrolRandomState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
@@ -40,6 +60,8 @@ private:
 
 	float TimeSinceLastRun = 0.0f;
 
+	bool bFollowTickThisFrame = false;
+	
 	// --- Konfigurationswerte ---
 	// Besser: Diese Werte aus einem Shared Fragment lesen (z.B. FMassAIConfigSharedFragment)
 	UPROPERTY(EditDefaultsOnly, Category = "AI")

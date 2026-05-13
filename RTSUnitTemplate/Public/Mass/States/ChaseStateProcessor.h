@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
+#include "Core/RTSUnitUtils.h"
 #include "ChaseStateProcessor.generated.h"
 
 struct FMassExecutionContext;
@@ -34,10 +35,10 @@ protected:
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 
-	void SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag) const;
-	void CalculateRadii(const FMassEntityManager& EntityManager, const FMassEntityHandle TargetEntity,
-						const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
-						const FVector& TargetLocation, float& OutAttackerRadius, float& OutTargetRadius) const;
+	void SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor);
+	// void CalculateRadii(const FMassEntityManager& EntityManager, const FMassEntityHandle TargetEntity,
+	//					const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
+	//					const FVector& TargetLocation, float& OutAttackerRadius, float& OutTargetRadius) const;
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
