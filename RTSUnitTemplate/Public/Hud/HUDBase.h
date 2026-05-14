@@ -277,11 +277,7 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DeselectAllUnits", Keywords = "RTSUnitTemplate DeselectAllUnits"), Category = "TopDownRTSTemplate")
 	void DeselectAllUnits();
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DetectUnit", Keywords = "RTSUnitTemplate DetectUnit"), Category = "TopDownRTSTemplate")
-	void DetectUnit(AUnitBase* DetectingUnit, TArray <AActor*> &DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId);
 
-	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ControllDirectionToMouse", Keywords = "RTSUnitTemplate ControllDirectionToMouse"), Category = "TopDownRTSTemplate")
-	void ControllDirectionToMouse(AActor* Units, FHitResult Hit);
 
 	bool IsActorInsideRec(FVector InPoint, FVector CuPoint, FVector ALocation);
 

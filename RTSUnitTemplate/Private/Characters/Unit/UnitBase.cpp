@@ -313,12 +313,9 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, MeshAssetPath);
 	DOREPLIFETIME(AUnitBase, MeshMaterialPath);
 	// DOREPLIFETIME(AUnitBase, UnitControlTimer); // Fragment Timer is source of truth
-	DOREPLIFETIME(AUnitBase, LineTraceZDistance);
 	DOREPLIFETIME(AUnitBase, CanActivateAbilities);
 	DOREPLIFETIME(AUnitBase, NavObstaclePadding);
 
-	DOREPLIFETIME(AUnitBase, EvadeDistance); // Added for Build
-	DOREPLIFETIME(AUnitBase, EvadeDistanceChase); // Added for Build
 	DOREPLIFETIME(AUnitBase, CastTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, PauseDuration);
 	DOREPLIFETIME(AUnitBase, AttackDuration);

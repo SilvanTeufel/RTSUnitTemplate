@@ -1003,60 +1003,6 @@ void AHUDBase::DeselectAllUnits()
 	}
 }
 
-void AHUDBase::DetectUnit(AUnitBase* DetectingUnit, TArray<AActor*>& DetectedUnits, float Sight, float LoseSight, bool DetectFriendlyUnits, int PlayerTeamId)
-{
-
-	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode());
-	
-	for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
-	{
-		AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
-		
-
-		if (Unit && !DetectFriendlyUnits && Unit->TeamId != DetectingUnit->TeamId)
-		{
-			const float DistSq = FVector::DistSquared(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
-			
-			if (DistSq <= FMath::Square(Sight) &&
-				Unit->GetUnitState() != UnitData::Dead &&
-				DetectingUnit->GetUnitState() != UnitData::Dead)
-			{
-
-				DetectedUnits.Emplace(Unit);
-			}
-		}else if (Unit && DetectFriendlyUnits && Unit->TeamId == DetectingUnit->TeamId)
-		{
-
-			const float DistSq = FVector::DistSquared(DetectingUnit->GetActorLocation(), Unit->GetActorLocation());
-
-			if (DistSq <= FMath::Square(Sight))
-				DetectedUnits.Emplace(Unit);
-
-		}
-	}
-	
-}
-
-void AHUDBase::ControllDirectionToMouse(AActor* Units, FHitResult Hit)
-{
-	FVector CharacterDirectionVector = Units->GetActorForwardVector();
-	FVector ActorLocation = Units->GetActorLocation();
-
-	float AngleDiff = CalcAngle(CharacterDirectionVector, Hit.Location - ActorLocation);
-
-	FQuat QuadRotation;
-
-	if ((AngleDiff > 2.f && AngleDiff < 179) || (AngleDiff <= -179.f && AngleDiff > -359.f)) {
-		AngleDiff > 50.f || AngleDiff < -50.f ? QuadRotation = FQuat(FRotator(0.f, -20.0f, 0.f)) : QuadRotation = FQuat(FRotator(0.f, -4.0f, 0.f));
-		
-		Units->AddActorLocalRotation(QuadRotation, false, 0, ETeleportType::None);
-	}
-	else if ((AngleDiff < -2.f && AngleDiff > -179.f) || (AngleDiff >= 180.f && AngleDiff < 359.f)) {
-		AngleDiff > 50.f || AngleDiff < -50.f ? QuadRotation = FQuat(FRotator(0.f, 20.0f, 0.f)) : QuadRotation = FQuat(FRotator(0.f, 4.0f, 0.f));
-		Units->AddActorLocalRotation(QuadRotation, false, 0, ETeleportType::None);
-	}
-}
-
 bool AHUDBase::IsActorInsideRec(FVector InPoint, FVector CuPoint, FVector ALocation)
 {	
 	if(InPoint.X < ALocation.X && ALocation.X < CuPoint.X && InPoint.Y < ALocation.Y && ALocation.Y < CuPoint.Y) return true;

@@ -301,14 +301,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector RandomPatrolLocation;
 
-	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float LineTraceZDistance = 80.f;
-
-	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float EvadeDistance = 70.f;
-	
-	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float EvadeDistanceChase = 150.f;
 	/////////////////////////////
 	
 	// Projectile related /////////
@@ -434,10 +426,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAbilityEnabledByKey(const FString& Key, bool bEnable);
-
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool DetectFriendlyUnits = false;
 
 	UPROPERTY()
 	float DisplayedHealthPct = -1.f;
