@@ -39,6 +39,7 @@ USTRUCT() struct FMassStateIdleTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateChaseTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateAttackTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStatePauseTag : public FMassTag { GENERATED_BODY() }; // Fr Pause nach Angriff
+USTRUCT() struct FMassStatePauseKickAppliedTag : public FMassTag { GENERATED_BODY() }; // NEU: Nur lokal auf dem Client
 USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (fr Run/Patrol)
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
@@ -1539,7 +1540,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStatePatrolIdleTag::StaticStruct()))           Bits |= UnitTagBits::PatrolIdle;
 	if (H(FMassStatePatrolRandomTag::StaticStruct()))         Bits |= UnitTagBits::PatrolRandom;
 	if (H(FMassStatePatrolTag::StaticStruct()))               Bits |= UnitTagBits::Patrol;
-	// if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
+	if (H(FMassStatePauseTag::StaticStruct()))                Bits |= UnitTagBits::Pause;
 	if (H(FMassStateEvasionTag::StaticStruct()))              Bits |= UnitTagBits::Evasion;
 	// Always replicated control bits
 	if (H(FMassStateStopMovementTag::StaticStruct()))         Bits |= UnitTagBits::StopMovement;
@@ -1658,6 +1659,29 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
 		// SetTagPredictive(UnitTagBits::Pause,               FMassStatePauseTag());
 		SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
+
+		// Latency kick for Pause state: Nur den Timer setzen, wenn der Server Pause meldet und der Client bereits lokal in Pause ist
+		const bool bServerPause = (Bits & UnitTagBits::Pause) != 0;
+		const bool bClientPause = DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+		const bool bKickApplied = DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseKickAppliedTag::StaticStruct());
+
+		if (bServerPause && bClientPause && !bKickApplied)
+		{
+			if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+			{
+				StateFrag->StateTimerClient = 0.1f; // Latenz-Ausgleich
+				EntityManager.Defer().AddTag<FMassStatePauseKickAppliedTag>(Entity);
+			}
+		}
+
+		// Reset-Logik: Wenn der Client in Attack geht, den Kick-Status fr den nchsten Zyklus frei machen
+		if (DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()))
+		{
+			if (bKickApplied)
+			{
+				EntityManager.Defer().RemoveTag<FMassStatePauseKickAppliedTag>(Entity);
+			}
+		}
 
 		if (!bPredicting)
 		{

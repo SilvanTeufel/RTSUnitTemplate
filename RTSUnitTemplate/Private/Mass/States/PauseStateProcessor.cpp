@@ -247,7 +247,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
         StateFrag.SwitchingStateClient = false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Comparison: ClientTimer: %.2f | ServerTimer: %.2f"), StateFrag.StateTimerClient, StateFrag.StateTimer);
+    UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor: ClientTimer: %.2f"), StateFrag.StateTimerClient);
 
     ApplyAttackStopLogic(Context, Stats, TargetFrag, Entity, EntityIdx);
 
