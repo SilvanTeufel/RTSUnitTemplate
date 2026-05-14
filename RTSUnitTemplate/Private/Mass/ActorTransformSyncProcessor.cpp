@@ -441,6 +441,13 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
 
     FVector Dir = TargetLocation - CurrentActorLocation;
     Dir.Z = 0.f;
+    
+    // Skip rotation if too close to target to avoid jittering/instability
+    if (Dir.SizeSquared() < 25.f) // 5cm threshold
+    {
+        return;
+    }
+
     if (!Dir.Normalize())
     {
         return;
@@ -453,6 +460,14 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
     
     float TargetYaw = DesiredQuat.Rotator().Yaw;
     FRotator CurrentRot = InOutMassTransform.GetRotation().Rotator();
+
+    // Deadzone: If already pointing mostly towards target, don't rotate to avoid micro-adjustments/jitter
+    const float YawDelta = FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentRot.Yaw, TargetYaw));
+    if (YawDelta < 2.5f)
+    {
+        return;
+    }
+
     const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
     
     if (RotationSpeedDeg > KINDA_SMALL_NUMBER * 10.f)
@@ -473,6 +488,12 @@ bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, con
     FVector Dir = AbilityTarget.AbilityTargetLocation - CurrentActorLocation;
     Dir.Z = 0.f;  // Flatten to the XY plane for rotation
 
+    // Skip rotation if too close to target to avoid jittering
+    if (Dir.SizeSquared() < 25.f)
+    {
+        return true;
+    }
+
     if (!Dir.Normalize())
     {
         return true; // No direction to rotate => treat as reached to prevent stuck state
@@ -487,6 +508,14 @@ bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, con
 
     float TargetYaw = DesiredQuat.Rotator().Yaw;
     FRotator CurrentRot = InOutMassTransform.GetRotation().Rotator();
+
+    // Deadzone: If already pointing mostly towards target, don't rotate
+    const float YawDelta = FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentRot.Yaw, TargetYaw));
+    if (YawDelta < 2.5f)
+    {
+        return true;
+    }
+
     const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
 
     if (RotationSpeedDeg > KINDA_SMALL_NUMBER * 10.f)
@@ -501,10 +530,10 @@ bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, con
     InOutMassTransform.SetRotation(CurrentRot.Quaternion());
 
     // Determine if we reached the desired facing (yaw only)
-    const float YawDelta = FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentRot.Yaw, TargetYaw));
+    const float FinalYawDelta = FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentRot.Yaw, TargetYaw));
     const float ReachedToleranceDeg = 2.0f; // tolerance for considering rotation reached
 
-    return YawDelta <= ReachedToleranceDeg;
+    return FinalYawDelta <= ReachedToleranceDeg;
 }
 
 void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransformUpdatePayload>&& PendingUpdates)

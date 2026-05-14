@@ -105,7 +105,7 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 					bIsDead = DoesEntityHaveTag(EntityManager, TargetFrag.TargetEntity, FMassStateDeadTag::StaticStruct());
 				}
 
-					const float Distance = FVector::Dist(CurrentLocation, TargetLocation);
+					const float DistanceSq = FVector::DistSquared(CurrentLocation, TargetLocation);
 					float MaxRange = 2500.f;
 					if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
 					{
@@ -115,7 +115,7 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 						}
 					}
 
-					if (!bIsDead && Distance <= MaxRange)
+					if (!bIsDead && DistanceSq <= FMath::Square(MaxRange) && DistanceSq > 25.f)
 					{
 						FVector Dir = TargetLocation - CurrentLocation;
 					Dir.Z = 0.f;
@@ -123,7 +123,13 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 					{
 						FQuat DesiredQuat = Dir.ToOrientationQuat();
 						float TargetYaw = DesiredQuat.Rotator().Yaw + FollowFrag.OffsetDegrees;
-						TargetQuat = FRotator(0.f, TargetYaw, 0.f).Quaternion();
+						
+						// Deadzone check to avoid jitter
+						const float CurrentYaw = CurrentQuat.Rotator().Yaw;
+						if (FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentYaw, TargetYaw)) > 2.5f)
+						{
+							TargetQuat = FRotator(0.f, TargetYaw, 0.f).Quaternion();
+						}
 					}
 				}
 			}
