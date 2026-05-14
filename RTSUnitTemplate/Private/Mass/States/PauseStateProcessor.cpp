@@ -107,39 +107,6 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
         {
             if (bIsClient)
             {
-                // Prediction-Bremse: Wenn wir nicht während des Angriffs laufen dürfen, Momentum killen
-                if (!StatsList[i].bCanMoveWhileAttacking)
-                {
-                    if (VelocityList.IsValidIndex(i)) VelocityList[i].Value *= 0.1f;
-                    if (ForceList.IsValidIndex(i)) ForceList[i].Value = FVector::ZeroVector;
-
-                    if (PredictionList.Num() > 0)
-                    {
-                        FMassClientPredictionFragment& Pred = PredictionList[i];
-                        Pred.Location = TransformList[i].GetTransform().GetLocation();
-                        Pred.PredDesiredSpeed = 0.f;
-                        Pred.bHasData = true;
-                    }
-                    
-                    if (MoveTargetList.IsValidIndex(i))
-                    {
-                        MoveTargetList[i].DesiredSpeed.Set(0.f);
-                        MoveTargetList[i].IntentAtGoal = EMassMovementAction::Stand;
-                    }
-
-                    
-                    // NEU: Prädiktive Rotation zum Ziel
-                    FVector LookAtDir = (TargetList[i].LastKnownLocation - TransformList[i].GetTransform().GetLocation());
-                    LookAtDir.Z = 0.f;
-                    if (LookAtDir.Normalize())
-                    {
-                        FQuat LookAtQuat = LookAtDir.ToOrientationQuat();
-                        FTransform& MutableTransform = ChunkContext.GetMutableFragmentView<FTransformFragment>()[i].GetMutableTransform();
-                        MutableTransform.SetRotation(LookAtQuat);
-                    }
-                    
-                }
-
                 ClientExecute(EntityManager, ChunkContext, StateList[i], TargetList[i], StatsList[i], ChunkContext.GetEntity(i), i, ActorList[i].GetMutable());
             }
             else
@@ -275,50 +242,115 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
     const FMassCombatStatsFragment& Stats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor)
 {
-    UWorld* World = EntityManager.GetWorld();
-    if (!World) return;
+    if (StateFrag.SwitchingStateClient)
+    {
+        UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
+        StateFrag.SwitchingStateClient = false;
+    }
+
+    ApplyAttackStopLogic(Context, Stats, TargetFrag, Entity, EntityIdx);
 
     StateFrag.StateTimerClient += ExecutionInterval;
     
-            const auto TransformList = Context.GetFragmentView<FTransformFragment>();
-            const FTransform& Transform = TransformList[EntityIdx].GetTransform();
-            const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
-            const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
+    const auto TransformList = Context.GetFragmentView<FTransformFragment>();
+    const FTransform& Transform = TransformList[EntityIdx].GetTransform();
+    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+    const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
 
-            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
-            FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
-            FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
-            const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
+    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+    FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
+    const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
-            const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-            
-            const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
-            const float AttackRange = Stats.AttackRange + CombinedRadii;
+    const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+    
+    const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
+    const float AttackRange = Stats.AttackRange + CombinedRadii;
 
-            if (bIsTargetActive)
+    UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Entity %d | Timer: %.2f | Dist: %.2f | AttackRange: %.2f | TargetActive: %d"), 
+        Entity.Index, StateFrag.StateTimerClient, Dist, AttackRange, bIsTargetActive);
+
+    if (bIsTargetActive)
+    {
+        if (Dist <= AttackRange)
+        {
+            if (StateFrag.StateTimerClient >= Stats.PauseDuration)
             {
-                if (Dist <= AttackRange)
+                if (!StateFrag.SwitchingStateClient)
                 {
-                    if (StateFrag.StateTimerClient >= Stats.PauseDuration)
-                    {
-                        StateFrag.StateTimerClient = 0.f;
-                        Context.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-                        Context.Defer().AddTag<FMassStateAttackTag>(Entity);
-                    }
-                }
-                else if (Dist > AttackRange + 150.f)
-                {
+                    UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Switching to AttackState for Entity %d"), Entity.Index);
+                    StateFrag.SwitchingStateClient = true;
                     StateFrag.StateTimerClient = 0.f;
-                    auto& Defer = Context.Defer();
-                    if (StateFrag.CanAttack && StateFrag.IsInitialized)
-                    {
-                        Defer.AddTag<FMassStateDetectTag>(Entity);
-                    }
-                    Defer.RemoveTag<FMassStatePauseTag>(Entity);
-                    Defer.AddTag<FMassStateChaseTag>(Entity);
+                    Context.Defer().RemoveTag<FMassStatePauseTag>(Entity);
+                    Context.Defer().AddTag<FMassStateAttackTag>(Entity);
                 }
             }
-    
+        }
+        else if (Dist > AttackRange + 150.f)
+        {
+            if (!StateFrag.SwitchingStateClient)
+            {
+                UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Target too far, switching to ChaseState for Entity %d"), Entity.Index);
+                StateFrag.SwitchingStateClient = true;
+                StateFrag.StateTimerClient = 0.f;
+                auto& Defer = Context.Defer();
+                if (StateFrag.CanAttack && StateFrag.IsInitialized)
+                {
+                    Defer.AddTag<FMassStateDetectTag>(Entity);
+                }
+                Defer.RemoveTag<FMassStatePauseTag>(Entity);
+                Defer.AddTag<FMassStateChaseTag>(Entity);
+            }
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Warning, TEXT("PauseStateProcessor Client: Target NOT active for Entity %d"), Entity.Index);
+    }
+}
+
+void UPauseStateProcessor::ApplyAttackStopLogic(FMassExecutionContext& Context, 
+    const FMassCombatStatsFragment& Stats, const FMassAITargetFragment& TargetFrag, 
+    const FMassEntityHandle Entity, const int32 EntityIdx)
+{
+    if (!Stats.bCanMoveWhileAttacking)
+    {
+        auto VelocityList = Context.GetMutableFragmentView<FMassVelocityFragment>();
+        auto ForceList = Context.GetMutableFragmentView<FMassForceFragment>();
+        auto PredictionList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
+        auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const auto TransformList = Context.GetFragmentView<FTransformFragment>();
+
+        if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.1f;
+        if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
+
+        if (PredictionList.Num() > 0 && PredictionList.IsValidIndex(EntityIdx))
+        {
+            FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+            Pred.Location = TransformList[EntityIdx].GetTransform().GetLocation();
+            Pred.PredDesiredSpeed = 0.f;
+            Pred.bHasData = true;
+        }
+        
+        if (MoveTargetList.IsValidIndex(EntityIdx))
+        {
+            MoveTargetList[EntityIdx].DesiredSpeed.Set(0.f);
+            MoveTargetList[EntityIdx].IntentAtGoal = EMassMovementAction::Stand;
+        }
+
+        // NEU: Prädiktive Rotation zum Ziel
+        FVector LookAtDir = (TargetFrag.LastKnownLocation - TransformList[EntityIdx].GetTransform().GetLocation());
+        LookAtDir.Z = 0.f;
+        if (LookAtDir.Normalize())
+        {
+            FQuat LookAtQuat = LookAtDir.ToOrientationQuat();
+            auto TransformMutableList = Context.GetMutableFragmentView<FTransformFragment>();
+            if (TransformMutableList.IsValidIndex(EntityIdx))
+            {
+                TransformMutableList[EntityIdx].GetMutableTransform().SetRotation(LookAtQuat);
+            }
+        }
+    }
 }
 
 // float UPauseStateProcessor::GetCombinedRadii...

@@ -126,6 +126,14 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     UWorld* World = Context.GetWorld();
     if (!World) return;
 
+    if (StateFrag.SwitchingStateClient)
+    {
+        UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
+        StateFrag.SwitchingStateClient = false;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Processing Entity %d | Timer: %.2f"), Entity.Index, StateFrag.StateTimerClient);
+
     StateFrag.StateTimerClient += ExecutionInterval;
 
     FUnitReplicationItem* Item = nullptr;
@@ -182,22 +190,27 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
 
     if (!bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead)
     {
-        StateFrag.StateTimerClient = 0.f;
-        if (Item) Item->PredictionTimer = 0.f;
-
-        StateFrag.PlaceholderSignal = UnitSignals::Idle;
-        if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+        if (!StateFrag.SwitchingStateClient)
         {
-            UnitBase->UnitStatePlaceholder = UnitData::Idle;
-        }
+            UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d - Target lost or dead, switching to Idle"), Entity.Index);
+            StateFrag.SwitchingStateClient = true;
+            StateFrag.StateTimerClient = 0.f;
+            if (Item) Item->PredictionTimer = 0.f;
 
-        auto& Defer = Context.Defer();
-        if (StateFrag.CanAttack && StateFrag.IsInitialized)
-        {
-            Defer.AddTag<FMassStateDetectTag>(Entity);
+            StateFrag.PlaceholderSignal = UnitSignals::Idle;
+            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+            {
+                UnitBase->UnitStatePlaceholder = UnitData::Idle;
+            }
+
+            auto& Defer = Context.Defer();
+            if (StateFrag.CanAttack && StateFrag.IsInitialized)
+            {
+                Defer.AddTag<FMassStateDetectTag>(Entity);
+            }
+            Defer.RemoveTag<FMassStateAttackTag>(Entity);
+            Defer.AddTag<FMassStateIdleTag>(Entity);
         }
-        Defer.RemoveTag<FMassStateAttackTag>(Entity);
-        Defer.AddTag<FMassStateIdleTag>(Entity);
         return;
     }
 
@@ -216,13 +229,25 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     {
         if (StateFrag.StateTimerClient >= Stats.AttackDuration)
         {
-            StateFrag.StateTimerClient = 0.f;
-            if (Item) Item->PredictionTimer = 0.f;
+            if (!StateFrag.SwitchingStateClient)
+            {
+                UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d - Attack duration over, switching to Pause"), Entity.Index);
+                StateFrag.SwitchingStateClient = true;
+                StateFrag.StateTimerClient = 0.f;
+                if (Item) Item->PredictionTimer = 0.f;
 
-            auto& Defer = Context.Defer();
-            Defer.RemoveTag<FMassStateAttackTag>(Entity);
-            Defer.AddTag<FMassStatePauseTag>(Entity);
+                auto& Defer = Context.Defer();
+                Defer.RemoveTag<FMassStateAttackTag>(Entity);
+                Defer.AddTag<FMassStatePauseTag>(Entity);
+            }
         }
+    }
+    else if (!StateFrag.SwitchingStateClient)
+    {
+        UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d - Target out of range (Dist: %.2f, Range: %.2f), switching to Chase/Run logic should happen in next tick"), Entity.Index, Dist, AttackRange);
+        // Note: The original code didn't have an explicit switch to Chase here for client, 
+        // usually it relies on the next processor or tag sync, but for consistency:
+        // However, looking at server logic, it switches to Chase/Run.
     }
 }
 

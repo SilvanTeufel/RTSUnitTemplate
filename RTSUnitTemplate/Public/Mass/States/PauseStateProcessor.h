@@ -54,6 +54,10 @@ private:
 		FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
 		const FMassCombatStatsFragment& CombatStats, const FMassEntityHandle Entity, const int32 EntityIdx, AActor* Actor);
 
+	void ApplyAttackStopLogic(FMassExecutionContext& Context, 
+		const FMassCombatStatsFragment& Stats, const FMassAITargetFragment& TargetFrag, 
+		const FMassEntityHandle Entity, const int32 EntityIdx);
+
 	FMassEntityQuery EntityQuery;
 
 	float TimeSinceLastRun = 0.0f;

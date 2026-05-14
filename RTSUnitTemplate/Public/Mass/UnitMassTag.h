@@ -411,6 +411,9 @@ struct FMassAIStateFragment : public FMassFragment
 	bool SwitchingState = false;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool SwitchingStateClient = false;
+	
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	float BirthTime = TNumericLimits<float>::Max();
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
@@ -1524,7 +1527,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateChargingTag::StaticStruct()))             Bits |= UnitTagBits::Charging;
 	if (H(FMassStateIsAttackedTag::StaticStruct()))           Bits |= UnitTagBits::IsAttacked;
 	// if (H(FMassStateAttackTag::StaticStruct()))               Bits |= UnitTagBits::Attack;
-	if (H(FMassStateChaseTag::StaticStruct()))                Bits |= UnitTagBits::Chase;
+	// if (H(FMassStateChaseTag::StaticStruct()))                Bits |= UnitTagBits::Chase;
 	if (H(FMassStateBuildTag::StaticStruct()))                Bits |= UnitTagBits::Build;
 	if (H(FMassStateResourceExtractionTag::StaticStruct()))   Bits |= UnitTagBits::ResourceExtraction;
 	if (H(FMassStateGoToResourceExtractionTag::StaticStruct())) Bits |= UnitTagBits::GoToResource;
@@ -1641,7 +1644,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::Charging,            FMassStateChargingTag());
 		SetTag(UnitTagBits::IsAttacked,          FMassStateIsAttackedTag());
 		// SetTagPredictive(UnitTagBits::Attack,              FMassStateAttackTag());
-		SetTagPredictive(UnitTagBits::Chase,               FMassStateChaseTag());
+		// SetTagPredictive(UnitTagBits::Chase,               FMassStateChaseTag());
 		SetTag(UnitTagBits::Build,               FMassStateBuildTag());
 		SetTag(UnitTagBits::ResourceExtraction,  FMassStateResourceExtractionTag());
 		SetTag(UnitTagBits::GoToResource,        FMassStateGoToResourceExtractionTag());

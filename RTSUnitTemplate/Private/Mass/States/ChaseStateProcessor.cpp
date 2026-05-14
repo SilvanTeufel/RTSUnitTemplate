@@ -131,6 +131,13 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            if (StateFrag.SwitchingStateClient)
+            {
+                UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
+                StateFrag.SwitchingStateClient = false;
+            }
+
             UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Processing Entity %d"), Entity.Index);
 
             // If already dead, skip any client-side tag manipulation
@@ -150,16 +157,24 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             // Case 1: Hold position => switch to Idle locally
             if (StateFrag.HoldPosition)
             {
-                SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                if (!StateFrag.SwitchingStateClient)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d - HoldPosition is true, switching to Idle"), Entity.Index);
+                    SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                }
                 continue;
             }
 
             // Case 2: Lost/invalid target AND placeholder is Idle => switch to Idle locally
-            if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
+            if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget))
             {
                 if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
                 {
-                    SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                    if (!StateFrag.SwitchingStateClient)
+                    {
+                        UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d - Target lost and Placeholder is Idle, switching to Idle"), Entity.Index);
+                        SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                    }
                     continue;
                 }
             }
@@ -192,25 +207,29 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
 
                 if (DistSq <= AttackRangeSq)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d - Switching to PauseState locally"), Entity.Index);
-                    StateFrag.StateTimerClient = 0.f;
-
-                    // Tags lokal manipulieren, damit der PauseStateProcessor übernimmt
-                    auto& Defer = ChunkContext.Defer();
-                    Defer.RemoveTag<FMassStateChaseTag>(Entity);
-                    Defer.AddTag<FMassStatePauseTag>(Entity);
-
-                    UWorld* World = ChunkContext.GetWorld();
-                    if (World)
+                    if (!StateFrag.SwitchingStateClient)
                     {
-                        if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
+                        UE_LOG(LogTemp, Log, TEXT("ChaseStateProcessor Client: Entity %d - Switching to PauseState locally"), Entity.Index);
+                        StateFrag.SwitchingStateClient = true;
+                        StateFrag.StateTimerClient = 0.f;
+
+                        // Tags lokal manipulieren, damit der PauseStateProcessor übernimmt
+                        auto& Defer = ChunkContext.Defer();
+                        Defer.RemoveTag<FMassStateChaseTag>(Entity);
+                        Defer.AddTag<FMassStatePauseTag>(Entity);
+
+                        UWorld* World = ChunkContext.GetWorld();
+                        if (World)
                         {
-                            if (AUnitClientBubbleInfo* Bubble = Cache->GetBubble(false))
+                            if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
                             {
-                                if (FUnitReplicationItem* Item = Bubble->Agents.FindItemByNetID(NetIDList[i].NetID))
+                                if (AUnitClientBubbleInfo* Bubble = Cache->GetBubble(false))
                                 {
-                                    Item->PredictionTimer = 0.f;
-                                    Item->bPredictedLatch = false;
+                                    if (FUnitReplicationItem* Item = Bubble->Agents.FindItemByNetID(NetIDList[i].NetID))
+                                    {
+                                        Item->PredictionTimer = 0.f;
+                                        Item->bPredictedLatch = false;
+                                    }
                                 }
                             }
                         }
@@ -341,7 +360,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
 void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
 {
-    StateFrag.SwitchingState = true;
     auto& Defer = Context.Defer();
 
     if (StateFrag.CanAttack && StateFrag.IsInitialized)
@@ -357,6 +375,7 @@ void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, con
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateChaseTag>(Entity);
         Defer.RemoveTag<FMassStateAttackTag>(Entity);
@@ -374,6 +393,7 @@ void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, con
     }
     else
     {
+        StateFrag.SwitchingState = true;
         if (SignalSubsystem)
         {
             SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Idle, Entity);

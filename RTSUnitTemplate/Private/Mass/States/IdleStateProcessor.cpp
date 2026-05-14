@@ -102,12 +102,24 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
 
+            if (StateFrag.SwitchingStateClient)
+            {
+                UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
+                StateFrag.SwitchingStateClient = false;
+            }
+
+            UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Processing Entity %d"), Entity.Index);
+
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
             
             if (TargetFrag.bHasValidTarget && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
             {
-                SwitchToChaseState(ChunkContext, Entity, StateFrag);
+                if (!StateFrag.SwitchingStateClient)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity %d - Valid target found, switching to Chase"), Entity.Index);
+                    SwitchToChaseState(ChunkContext, Entity, StateFrag);
+                }
                 continue;
             }
 
@@ -119,7 +131,11 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
 
                 if (DistSq <= AttackRangeSq)
                 {
-                    SwitchToPauseState(ChunkContext, Entity, StateFrag);
+                    if (!StateFrag.SwitchingStateClient)
+                    {
+                        UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity %d - Target in range while HoldPosition, switching to Pause"), Entity.Index);
+                        SwitchToPauseState(ChunkContext, Entity, StateFrag);
+                    }
                     continue;
                 }
             }
@@ -291,6 +307,7 @@ void UIdleStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, con
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateIdleTag>(Entity);
         Defer.RemoveTag<FMassStateAttackTag>(Entity);
@@ -320,6 +337,7 @@ void UIdleStateProcessor::SwitchToPauseState(FMassExecutionContext& Context, con
     StateFrag.SwitchingState = true;
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        StateFrag.SwitchingStateClient = true;
         auto& Defer = Context.Defer();
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateIdleTag>(Entity);
@@ -350,6 +368,7 @@ void UIdleStateProcessor::SwitchToRunState(FMassExecutionContext& Context, const
     StateFrag.SwitchingState = true;
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        StateFrag.SwitchingStateClient = true;
         auto& Defer = Context.Defer();
         Defer.RemoveTag<FMassStateIdleTag>(Entity);
         Defer.RemoveTag<FMassStateChaseTag>(Entity);
@@ -380,6 +399,7 @@ void UIdleStateProcessor::SwitchToPatrolRandomState(FMassExecutionContext& Conte
     StateFrag.SwitchingState = true;
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        StateFrag.SwitchingStateClient = true;
         auto& Defer = Context.Defer();
         Defer.RemoveTag<FMassStateIdleTag>(Entity);
         Defer.RemoveTag<FMassStateRunTag>(Entity);
