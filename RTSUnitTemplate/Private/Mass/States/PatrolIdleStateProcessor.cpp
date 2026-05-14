@@ -78,7 +78,6 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
 
-           // UE_LOG(LogTemp, Log, TEXT("UPatrolIdleStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable for timer update

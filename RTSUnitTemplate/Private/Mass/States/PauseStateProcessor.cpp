@@ -244,9 +244,10 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 {
     if (StateFrag.SwitchingStateClient)
     {
-        UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
         StateFrag.SwitchingStateClient = false;
     }
+
+    UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Comparison: ClientTimer: %.2f | ServerTimer: %.2f"), StateFrag.StateTimerClient, StateFrag.StateTimer);
 
     ApplyAttackStopLogic(Context, Stats, TargetFrag, Entity, EntityIdx);
 
@@ -267,9 +268,6 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
     const float AttackRange = Stats.AttackRange + CombinedRadii;
 
-    UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Entity %d | Timer: %.2f | Dist: %.2f | AttackRange: %.2f | TargetActive: %d"), 
-        Entity.Index, StateFrag.StateTimerClient, Dist, AttackRange, bIsTargetActive);
-
     if (bIsTargetActive)
     {
         if (Dist <= AttackRange)
@@ -278,7 +276,6 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Switching to AttackState for Entity %d"), Entity.Index);
                     StateFrag.SwitchingStateClient = true;
                     StateFrag.StateTimerClient = 0.f;
                     Context.Defer().RemoveTag<FMassStatePauseTag>(Entity);
@@ -290,7 +287,6 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
         {
             if (!StateFrag.SwitchingStateClient)
             {
-                UE_LOG(LogTemp, Log, TEXT("PauseStateProcessor Client: Target too far, switching to ChaseState for Entity %d"), Entity.Index);
                 StateFrag.SwitchingStateClient = true;
                 StateFrag.StateTimerClient = 0.f;
                 auto& Defer = Context.Defer();
@@ -305,7 +301,6 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     }
     else
     {
-        UE_LOG(LogTemp, Warning, TEXT("PauseStateProcessor Client: Target NOT active for Entity %d"), Entity.Index);
     }
 }
 

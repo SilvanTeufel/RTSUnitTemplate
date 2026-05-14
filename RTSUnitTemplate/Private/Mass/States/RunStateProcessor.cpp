@@ -96,7 +96,6 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
         [this, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Processing Chunk with %d entities"), NumEntities);
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
@@ -115,11 +114,8 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
             if (StateFrag.SwitchingStateClient)
             {
-                UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
                 StateFrag.SwitchingStateClient = false;
             }
-
-            UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Processing Entity %d"), Entity.Index);
 
             // If already dead, do not modify any tags on client
             if (DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct()))
@@ -129,7 +125,6 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             // If health is zero or below, mark as dead and skip further processing
             if (Stats.Health <= 0.f)
             {
-                UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Entity %d Health <= 0, marking as Dead"), Entity.Index);
                 auto& Defer = ChunkContext.Defer();
                 Defer.AddTag<FMassStateDeadTag>(Entity);
                 continue;
@@ -148,7 +143,6 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Entity %d Arrived at destination. Switching to Idle"), Entity.Index);
                     VelocityList[i].Value = FVector::ZeroVector;
                     SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
@@ -158,14 +152,12 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             const bool bHasDetectTag = DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct());
             if (bHasDetectTag)
             {
-                UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Entity %d Has DetectTag. bHasValidTarget: %d"), Entity.Index, TargetFrag.bHasValidTarget);
                 if (TargetFrag.bHasValidTarget)
                 {
                     if (!Stats.bCanMoveWhileAttacking)
                     {
                         if (!StateFrag.SwitchingStateClient)
                         {
-                            UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Entity %d Switching to ChaseState"), Entity.Index);
                             SwitchToChaseState(ChunkContext, Entity, StateFrag);
                         }
                         continue;
@@ -185,14 +177,10 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                         const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
                         const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
 
-                        UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Entity %d MoveWhileAttacking. DistSq: %f, AttackRangeSq: %f, TargetEntityActive: %d"), 
-                            Entity.Index, DistSq, AttackRangeSq, bIsEnemyActive);
-
                         if (DistSq <= AttackRangeSq)
                         {
                             if (!StateFrag.SwitchingStateClient)
                             {
-                                UE_LOG(LogTemp, Log, TEXT("RunStateProcessor Client: Entity %d Switching to PauseState"), Entity.Index);
                                 SwitchToPauseState(ChunkContext, Entity, StateFrag);
                             }
                             continue;
@@ -434,7 +422,6 @@ void URunStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, cons
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
-        UE_LOG(LogTemp, Log, TEXT("!!!URunStateProcessor::SwitchToChaseState!!!"));
         StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateIdleTag>(Entity);

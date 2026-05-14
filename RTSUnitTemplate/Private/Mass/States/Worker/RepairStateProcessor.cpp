@@ -108,7 +108,6 @@ void URepairStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
 
     if ((!bIsTargetActive || !bIsTargetAlive) && !StateFrag.SwitchingState)
     {
-        UE_LOG(LogTemp, Log, TEXT("[Repair] Target invalid or dead -> GoToBase for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
         StateFrag.SwitchingState = true;
         if (SignalSubsystem)
         {
@@ -161,7 +160,6 @@ void URepairStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
 
         if (Dist2D > (EffectiveReach + ExitBuffer) && !StateFrag.SwitchingState)
         {
-            UE_LOG(LogTemp, Log, TEXT("[Repair] Out of range (%.1f > %.1f) -> GoToRepair for Entity [%d:%d]"), Dist2D, (EffectiveReach + ExitBuffer), Entity.Index, Entity.SerialNumber);
             StateFrag.SwitchingState = true;
             if (SignalSubsystem)
             {
@@ -182,7 +180,6 @@ void URepairStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     // 2) Cast time reached -> GoToBase
     if (StateFrag.StateTimer >= StatsFrag.CastTime && !StateFrag.SwitchingState)
     {
-        UE_LOG(LogTemp, Log, TEXT("[Repair] Cast complete (%.2f/%.2f) -> GoToBase for Entity [%d:%d]"), StateFrag.StateTimer, StatsFrag.CastTime, Entity.Index, Entity.SerialNumber);
         StateFrag.SwitchingState = true;
         if (SignalSubsystem)
         {

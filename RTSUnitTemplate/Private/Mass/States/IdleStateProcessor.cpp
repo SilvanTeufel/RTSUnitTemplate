@@ -104,11 +104,8 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
 
             if (StateFrag.SwitchingStateClient)
             {
-                UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
                 StateFrag.SwitchingStateClient = false;
             }
-
-            UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Processing Entity %d"), Entity.Index);
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
@@ -117,7 +114,6 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity %d - Valid target found, switching to Chase"), Entity.Index);
                     SwitchToChaseState(ChunkContext, Entity, StateFrag);
                 }
                 continue;
@@ -133,7 +129,6 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 {
                     if (!StateFrag.SwitchingStateClient)
                     {
-                        UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity %d - Target in range while HoldPosition, switching to Pause"), Entity.Index);
                         SwitchToPauseState(ChunkContext, Entity, StateFrag);
                     }
                     continue;

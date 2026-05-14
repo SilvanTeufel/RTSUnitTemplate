@@ -99,7 +99,6 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
         const TArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         const int32 NumEntities = ChunkContext.GetNumEntities();
-            //UE_LOG(LogTemp, Log, TEXT("UGoToBaseStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);

@@ -75,7 +75,6 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
-           // UE_LOG(LogTemp, Log, TEXT("UGoToRepairStateProcessor NumEntities: %d"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -101,7 +100,6 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
             if (!bIsTargetActive || (!bIsTargetAlive && !StateFrag.SwitchingState))
             {
-                UE_LOG(LogTemp, Log, TEXT("[GoToRepair] Target invalid or dead -> GoToBase for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
                 StateFrag.SwitchingState = true;
                 if (SignalSubsystem)
                 {

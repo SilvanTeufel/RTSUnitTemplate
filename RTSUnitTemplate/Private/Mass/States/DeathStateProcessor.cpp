@@ -159,7 +159,6 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
 
             if (VisualManager)
             {
-                //UE_LOG(LogTemp, Log, TEXT("DeathStateProcessor: Hiding unit visual for entity %s"), *Entity.DebugGetDescription());
                 VisualManager->SetUnitVisualVisible(Entity, false);
             }
 
@@ -232,7 +231,6 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto AgentFragList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
-            // UE_LOG(LogTemp, Log, TEXT("UDeathStateProcessor ExecuteClient %i"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];
@@ -241,8 +239,6 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
 
             const float PrevTimer = StateFrag.StateTimer;
             StateFrag.StateTimer += ExecutionInterval;
-            
-            // UE_LOG(LogTemp, Log, TEXT("ExecutionInterval %f"), ExecutionInterval);
             
             if (PrevTimer <= KINDA_SMALL_NUMBER)
             {
@@ -255,8 +251,6 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 }
             }
 
-            // UE_LOG(LogTemp, Log, TEXT("CharacteristicsFragment.HideActorTime %f"), CharacteristicsFragment.HideActorTime);
-            // UE_LOG(LogTemp, Log, TEXT("StateFrag.StateTimer %f"), StateFrag.StateTimer);
             if (PrevTimer < CharacteristicsFragment.HideActorTime && StateFrag.StateTimer >= CharacteristicsFragment.HideActorTime)
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::HideUnit, Entity);
@@ -277,7 +271,6 @@ void UDeathStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto AgentFragList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
-           // UE_LOG(LogTemp, Log, TEXT("UDeathStateProcessor ExecuteServer %i"), NumEntities);
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassAIStateFragment& StateFrag = StateList[i];

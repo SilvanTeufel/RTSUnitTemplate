@@ -128,11 +128,10 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
 
     if (StateFrag.SwitchingStateClient)
     {
-        UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d reset SwitchingStateClient"), Entity.Index);
         StateFrag.SwitchingStateClient = false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Processing Entity %d | Timer: %.2f"), Entity.Index, StateFrag.StateTimerClient);
+    UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Comparison: ClientTimer: %.2f | ServerTimer: %.2f"), StateFrag.StateTimerClient, StateFrag.StateTimer);
 
     StateFrag.StateTimerClient += ExecutionInterval;
 
@@ -192,7 +191,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     {
         if (!StateFrag.SwitchingStateClient)
         {
-            UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d - Target lost or dead, switching to Idle"), Entity.Index);
             StateFrag.SwitchingStateClient = true;
             StateFrag.StateTimerClient = 0.f;
             if (Item) Item->PredictionTimer = 0.f;
@@ -231,7 +229,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
         {
             if (!StateFrag.SwitchingStateClient)
             {
-                UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d - Attack duration over, switching to Pause"), Entity.Index);
                 StateFrag.SwitchingStateClient = true;
                 StateFrag.StateTimerClient = 0.f;
                 if (Item) Item->PredictionTimer = 0.f;
@@ -244,7 +241,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     }
     else if (!StateFrag.SwitchingStateClient)
     {
-        UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor Client: Entity %d - Target out of range (Dist: %.2f, Range: %.2f), switching to Chase/Run logic should happen in next tick"), Entity.Index, Dist, AttackRange);
         // Note: The original code didn't have an explicit switch to Chase here for client, 
         // usually it relies on the next processor or tag sync, but for consistency:
         // However, looking at server logic, it switches to Chase/Run.
