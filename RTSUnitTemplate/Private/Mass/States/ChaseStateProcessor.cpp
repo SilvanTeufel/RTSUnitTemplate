@@ -13,6 +13,7 @@
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
 #include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Core/RTSUnitUtils.h"
 
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
@@ -116,11 +117,13 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
         [this, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        const auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
+        const auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         const auto NetIDList = ChunkContext.GetFragmentView<FMassNetworkIDFragment>();
+        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -143,6 +146,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             // If health zero or below, mark dead and skip further changes
             if (Stats.Health <= 0.f)
             {
+                UE_LOG(LogTemp, Log, TEXT("[ChaseClient] Entity[%d:%d] Health=%.2f -> Dead"), Entity.Index, Entity.SerialNumber, Stats.Health);
                 auto& Defer = ChunkContext.Defer();
                 Defer.AddTag<FMassStateDeadTag>(Entity);
                 continue;
@@ -153,6 +157,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
+                    UE_LOG(LogTemp, Log, TEXT("[ChaseClient] Entity[%d:%d] HoldPosition -> SwitchToIdle"), Entity.Index, Entity.SerialNumber);
                     SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
                 continue;
@@ -165,6 +170,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 {
                     if (!StateFrag.SwitchingStateClient)
                     {
+                        UE_LOG(LogTemp, Log, TEXT("[ChaseClient] Entity[%d:%d] Target Invalid & Idle Placeholder -> SwitchToIdle"), Entity.Index, Entity.SerialNumber);
                         SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                     }
                     continue;
@@ -172,9 +178,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             }
 
             // Case 3: In range check for local state switch to Pause
-            const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
             const FTransform& Transform = TransformList[i].GetTransform();
-            const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
 
             bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
@@ -190,11 +194,15 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
                 const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
+
+                UE_LOG(LogTemp, Log, TEXT("[ChaseClient] Entity[%d:%d] NetID[%u] DistSq=%.2f AttackRangeSq=%.2f (Range=%.2f, Radii=%.2f)"), 
+                    Entity.Index, Entity.SerialNumber, (uint32)NetIDList[i].NetID.GetValue(), DistSq, AttackRangeSq, Stats.AttackRange, CombinedRadii);
                 
                 if (DistSq <= AttackRangeSq)
                 {
                     if (!StateFrag.SwitchingStateClient)
                     {
+                        UE_LOG(LogTemp, Log, TEXT("[ChaseClient] Entity[%d:%d] In Range -> SwitchToPause"), Entity.Index, Entity.SerialNumber);
                         StateFrag.SwitchingStateClient = true;
                         StateFrag.StateTimerClient = 0.f;
 
@@ -220,6 +228,11 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                         }
                     }
                 }
+            }
+            else
+            {
+                UE_LOG(LogTemp, Log, TEXT("[ChaseClient] Entity[%d:%d] Target[%d:%d] NOT ACTIVE (bHasValidTarget=%d)"), 
+                    Entity.Index, Entity.SerialNumber, TargetFrag.TargetEntity.Index, TargetFrag.TargetEntity.SerialNumber, TargetFrag.bHasValidTarget);
             }
         }
     });

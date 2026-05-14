@@ -784,7 +784,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                         {
                             // Slot 1: Target (Move)
                             NewItem.TargetLoc = FVector(MT->Center);
-                            NewItem.ReplicationBits |= UnitReplicationBits::Slot_TargetIsMove;
+                            NewItem.TagBits |= UnitReplicationBits::Slot_TargetIsMove;
                             
                             // MoveData bundling
                             const uint8 QSlack = (uint8)FMath::Clamp(MT->SlackRadius, 0.f, 255.f);
@@ -808,7 +808,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (AIT->IsFocusedOnTarget) NewPackedEnums |= UnitReplicationBits::Packed_IsFocusedOnTarget;
                             
                             // If Slot 1 is NOT taken by Move, use it for AI Target
-                            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_TargetIsMove))
+                            if (!(NewItem.TagBits & UnitReplicationBits::Slot_TargetIsMove))
                             {
                                 NewItem.TargetLoc = FVector(AIT->LastKnownLocation);
                                 uint32 TargetNetIDVal = 0u;
@@ -826,11 +826,11 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                             if (AIT->AbilityTargetLocation.SizeSquared() > 0.1f)
                             {
                                 NewItem.ActionLoc = FVector(AIT->AbilityTargetLocation);
-                                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsAbility;
+                                NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsAbility;
                             }
 
                             // Sync friendly target (Alternative for Slot 2 if no Ability)
-                            if (!(NewItem.ReplicationBits & UnitReplicationBits::Slot_ActionIsAbility))
+                            if (!(NewItem.TagBits & UnitReplicationBits::Slot_ActionIsAbility))
                             {
                                 uint32 FriendlyTargetNetIDVal = 0u;
                                 if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
@@ -844,7 +844,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 {
                                     NewItem.ActionID = FriendlyTargetNetIDVal;
                                     NewItem.ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
-                                    NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsFriendly;
+                                    NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsFriendly;
                                 }
                             }
                         }
@@ -857,7 +857,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 // We always sync Projectile data if it's active
                                 NewItem.ActionLoc = FVector(AIS->LastProjectileTargetLocation);
                                 NewItem.ActionID = AIS->LastTargetNetID;
-                                NewItem.ReplicationBits |= UnitReplicationBits::Slot_ActionIsProjectile;
+                                NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsProjectile;
                                 
                                 // AuxData: ProjectileFireCounter (Bits 16-23)
                                 NewItem.AuxData |= ((uint32)AIS->ProjectileFireCounter << 16);

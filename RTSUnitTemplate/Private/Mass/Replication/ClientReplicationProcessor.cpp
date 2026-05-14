@@ -241,7 +241,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							FMassAITargetFragment& AIT = AITargetList[EntityIdx];
 							AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
 							AIT.IsFocusedOnTarget = (PE & UnitReplicationBits::Packed_IsFocusedOnTarget) != 0;
-							if (!(UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove))
+							if (!(UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove) || AIT.bHasValidTarget)
 							{
 								AIT.LastKnownLocation = FVector(UseItem->TargetLoc);
 							}
