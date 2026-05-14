@@ -131,7 +131,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
         StateFrag.SwitchingStateClient = false;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("AttackStateProcessor: ClientTimer: %.2f"), StateFrag.StateTimerClient);
 
     StateFrag.StateTimerClient += ExecutionInterval;
 

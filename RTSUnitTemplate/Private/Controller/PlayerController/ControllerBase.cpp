@@ -1368,13 +1368,6 @@ void AControllerBase::Multi_SetControllerDefaultWaypoint_Implementation(AWaypoin
 		DefaultWaypoint = Waypoint;
 }
 
-void AControllerBase::AddUnitToChase_Implementation(AUnitBase* DetectingUnit, AActor* OtherActor)
-{
-	if (DetectingUnit)
-	{
-		DetectingUnit->AddUnitToChase(OtherActor);
-	}
-}
 
 
 void AControllerBase::RemoveUnitToChase_Implementation(AUnitBase* DetectingUnit, AActor* OtherActor)

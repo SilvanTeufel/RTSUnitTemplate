@@ -239,40 +239,40 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						if (AITargetList.IsValidIndex(EntityIdx))
 						{
 							FMassAITargetFragment& AIT = AITargetList[EntityIdx];
-							AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
-							AIT.IsFocusedOnTarget = (PE & UnitReplicationBits::Packed_IsFocusedOnTarget) != 0;
-							if (!(UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove) || AIT.bHasValidTarget)
-							{
-								AIT.LastKnownLocation = FVector(UseItem->TargetLoc);
-							}
+							// AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
+							// AIT.IsFocusedOnTarget = (PE & UnitReplicationBits::Packed_IsFocusedOnTarget) != 0;
+							// if (!(UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove) || AIT.bHasValidTarget)
+							// {
+							// 	AIT.LastKnownLocation = FVector(UseItem->TargetLoc);
+							// }
 
-							if (UseItem->TargetID != 0)
-							{
-								if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->TargetID))
-								{
-									AIT.TargetEntity = *Found;
-								}
-								else
-								{
-									AIT.TargetEntity.Reset();
-								}
-							}
-							else
-							{
-								AIT.TargetEntity.Reset();
-							}
+							// if (UseItem->TargetID != 0)
+							// {
+							// 	if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->TargetID))
+							// 	{
+							// 		AIT.TargetEntity = *Found;
+							// 	}
+							// 	else
+							// 	{
+							// 		AIT.TargetEntity.Reset();
+							// 	}
+							// }
+							// else
+							// {
+							// 	AIT.TargetEntity.Reset();
+							// }
 							
 							// Action Slot 2
-							if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsAbility) AIT.AbilityTargetLocation = FVector(UseItem->ActionLoc);
-							else if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsFriendly)
-							{
-								AIT.LastKnownFriendlyLocation = FVector(UseItem->ActionLoc);
-								if (UseItem->ActionID != 0)
-								{
-									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->ActionID)) AIT.FriendlyTargetEntity = *Found;
-								}
-								else AIT.FriendlyTargetEntity.Reset();
-							}
+							// if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsAbility) AIT.AbilityTargetLocation = FVector(UseItem->ActionLoc);
+							// else if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsFriendly)
+							// {
+							// 	AIT.LastKnownFriendlyLocation = FVector(UseItem->ActionLoc);
+							// 	if (UseItem->ActionID != 0)
+							// 	{
+							// 		if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->ActionID)) AIT.FriendlyTargetEntity = *Found;
+							// 	}
+							// 	else AIT.FriendlyTargetEntity.Reset();
+							// }
 						}
 
 						// AI State & Projectile

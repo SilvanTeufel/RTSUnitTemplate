@@ -3,6 +3,7 @@
 #include "MassExecutionContext.h"
 #include "GameFramework/Actor.h"
 #include "Characters/Unit/AbilityUnit.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
 #include "Core/UnitData.h"
 #include "Mass/Replication/ReplicationSettings.h"
@@ -51,9 +52,10 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
-			if (AAbilityUnit* AbilityUnit = Cast<AAbilityUnit>(ActorList[i].GetMutable()))
+			if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
 			{
 				const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
 				const TEnumAsByte<UnitData::EState> NewState = ComputeState(EntityManager, Entity);
 
 				// Spezialfall Casting: Wenn Timer abgelaufen, Signal senden
@@ -67,7 +69,7 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					}
 				}
 
-				ApplyStateToActor(AbilityUnit, NewState);
+				ApplyStateToActor(UnitBase, NewState);
 			}
 		}
 	});
