@@ -31,6 +31,7 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
     
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);       // Aktuelle Position lesen
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel-Daten lesen, Stoppen erfordert Schreiben
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
@@ -99,6 +100,8 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const auto PredictionList = ChunkContext.GetFragmentView<FMassClientPredictionFragment>();
+        const bool bHasPredList = PredictionList.Num() > 0;
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
@@ -132,8 +135,19 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
-            const FVector FinalDestination = MoveTarget.Center;
-            const float AcceptanceRadius = MoveTarget.SlackRadius;
+            
+            FVector FinalDestination = MoveTarget.Center;
+            float AcceptanceRadius = MoveTarget.SlackRadius;
+
+            if (bHasPredList)
+            {
+                const FMassClientPredictionFragment& Pred = PredictionList[i];
+                if (Pred.bHasData)
+                {
+                    FinalDestination = Pred.Location;
+                    AcceptanceRadius = Pred.PredAcceptanceRadius;
+                }
+            }
 
             // No legacy follow signal; client-side prediction may be handled elsewhere
 
