@@ -117,7 +117,6 @@ void UUnitStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
    		// Intentionally not binding here to avoid server-only handling.
      if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
      {
-         UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] Sight signals are handled by UnitSightProcessor now (NetMode=%d)."), World ? (int32)World->GetNetMode() : -1);
      }
     	
     	SyncUnitBaseDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SyncUnitBase)
@@ -439,12 +438,10 @@ void UUnitStateProcessor::HandleCheckFollowAssigned(FName SignalName, TArray<FMa
 
 void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entity, const FMassEntityManager& EntityManager)
 {
-	UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Signal=%s, Entity=[%d:%d]"), *SignalName.ToString(), Entity.Index, Entity.SerialNumber);
 	
 	        // Check entity validity *on the game thread*
             if (!EntityManager.IsEntityActive(Entity)) 
             {
-            	UE_LOG(LogTemp, Error, TEXT("Entity or Manager is not Active!"));
                 return;
             }
             // Get fragments and actors *on the game thread*
@@ -493,10 +490,8 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                      // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
                     	{
-                    		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Handling Idle Signal for %s"), *UnitBase->GetName());
                     		if (StateFragment->CanAttack && StateFragment->IsInitialized)
                     		{
-                    			UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *UnitBase->GetName());
                     			EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
                     		}
                     		
@@ -567,14 +562,12 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	StateFragment->PlaceholderSignal = UnitSignals::PatrolIdle;
                         	UnitBase->UnitStatePlaceholder = UnitData::PatrolIdle;
                         }
-                        else if (SignalName == UnitSignals::PatrolRandom)
-                        {
-                        	UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Handling PatrolRandom Signal for %s"), *UnitBase->GetName());
-                        	if (StateFragment->CanAttack && StateFragment->IsInitialized)
-                        	{
-                        		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *UnitBase->GetName());
-                        		EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
-                        	}
+                       	else if (SignalName == UnitSignals::PatrolRandom)
+                       	{
+                       		if (StateFragment->CanAttack && StateFragment->IsInitialized)
+                       		{
+                       			EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                       		}
 
                         	EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
                         	StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
@@ -1368,14 +1361,6 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
                                 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
                             }
 
-                            if (bIsActivated)
-                            {
-                                UE_LOG(LogTemp, Verbose, TEXT("Unit %s activated a ranged/offensive ability."), *StrongAttacker->GetName());
-                            }
-                            else
-                            {
-                                // UE_LOG(LogTemp, Verbose, TEXT("Unit %s did not activate Throw or Offensive ability."), *StrongAttacker->GetName());
-                            }
                         }
                     }); // End AsyncTask Lambda
                 } // End if (UnitBase)
@@ -2998,12 +2983,10 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,
 	TArray<FMassEntityHandle>& Entities)
 {
-	UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Signal=%s, Count=%d"), *SignalName.ToString(), Entities.Num());
 	const float Now = World->GetTimeSeconds();
 	
-	if (!EntitySubsystem) 
+	if (!EntitySubsystem)
 	{ 
-		UE_LOG(LogTemp, Error, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: EntitySubsystem is NULL"));
 		return; 
 	}
 
@@ -3016,7 +2999,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	//TArray<FMassEntityHandle> Worker;
 	for (FMassEntityHandle& E : Entities)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Processing Entity [%d:%d]"), E.Index, E.SerialNumber);
 		// Grab the *target* fragment on that entity and stamp it
 		FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(E);
 		FTransformFragment* TransformFragPtr = EntityManager.GetFragmentDataPtr<FTransformFragment>(E);
@@ -3032,12 +3014,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 
 				if (!Unit || !IsValid(TargetActor)) 
 				{
-					UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Entity [%d:%d] has invalid Unit or Actor"), E.Index, E.SerialNumber);
 					return;
 				}
-
-				UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Unit %s initialized for Entity [%d:%d]. State=%d, Placeholder=%d, IsWorker=%d"), 
-					*Unit->GetName(), E.Index, E.SerialNumber, (int32)Unit->UnitState, (int32)Unit->UnitStatePlaceholder, (int32)Unit->IsWorker);
 
 
 				// --- Hole benötigte Fragmente für DIESE Entity ---
@@ -3049,8 +3027,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				// Prüfe, ob alle nötigen Fragmente vorhanden sind
 				if (!StateFragPtr || !PatrolFragPtr || !MoveTargetPtr || !StatsFragPtr)
 				{
-					UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Entity [%d:%d] missing fragments! (State=%p, Patrol=%p, Move=%p, Stats=%p)"), 
-						E.Index, E.SerialNumber, StateFragPtr, PatrolFragPtr, MoveTargetPtr, StatsFragPtr);
 					continue;
 				}
 
@@ -3067,7 +3043,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 
 				if (Unit->UnitState == UnitData::PatrolRandom)
 				{
-					UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Entity [%d:%d] is in PatrolRandom"), E.Index, E.SerialNumber);
 					if (!EntityManager.IsEntityValid(E))
 					{
 						continue;
@@ -3089,8 +3064,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					}
 				}
 				
-				UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Calling SwitchEntityTagByState for Entity [%d:%d] with State=%d, Placeholder=%d"), 
-					E.Index, E.SerialNumber, (int32)Unit->UnitState, (int32)Unit->UnitStatePlaceholder);
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 
 				if (Unit->IsWorker && ResourceGameMode)
@@ -3101,7 +3074,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					{
 						SwitchState(UnitSignals::PatrolRandom, E, EntityManager);
 						Unit->SetUnitState(UnitData::PatrolRandom);
-						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] is in PatrolRandom, keeping it."), E.Index, E.SerialNumber);
 					}
 					else if (Unit->ResourcePlace)
 					{
@@ -3110,7 +3082,6 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					      StateFrag.StoredLocation = ResourcePosition;
 						
 					    UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
-						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] has ResourcePlace, switching to GoToResourceExtraction"), E.Index, E.SerialNumber);
 						SwitchState(UnitSignals::GoToResourceExtraction, E, EntityManager);
 						Unit->SetUnitState(UnitData::GoToResourceExtraction);
 					}else if (Unit->Base)
@@ -3120,12 +3091,10 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					    StateFrag.StoredLocation = BasePosition;
 						
 					    UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
-						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] has Base, switching to GoToBase"), E.Index, E.SerialNumber);
 						SwitchState(UnitSignals::GoToBase, E, EntityManager);
 						Unit->SetUnitState(UnitData::GoToBase);
 					}else
 					{
-						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] fallback to Idle"), E.Index, E.SerialNumber);
 						SwitchState(UnitSignals::Idle, E, EntityManager);
 						Unit->SetUnitState(UnitData::Idle);
 					}
@@ -3179,7 +3148,6 @@ void UUnitStateProcessor::HandleLoadUnit(FName SignalName, TArray<FMassEntityHan
 
 	for (FMassEntityHandle Entity : Entities)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleLoadUnit received signal for Entity [%d:%d]"), Entity.Index, Entity.SerialNumber);
 		if (FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
 		{
 			if (EntityManager.IsEntityValid(TargetFrag->FriendlyTargetEntity))
@@ -3194,14 +3162,12 @@ void UUnitStateProcessor::HandleLoadUnit(FName SignalName, TArray<FMassEntityHan
 							{
 								if (UnitToLoad->HasAuthority())
 								{
-									UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] Entity [%d:%d] Calling Transporter->LoadUnit for Unit %s"), Entity.Index, Entity.SerialNumber, *UnitToLoad->GetName());
 									Transporter->LoadUnit(UnitToLoad);
 								}
 								
 								// Reset friendly target and stop following since we are now loaded
 								TargetFrag->FriendlyTargetEntity.Reset();
 								UnitToLoad->FollowUnit = nullptr;
-								UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] Entity [%d:%d] Reset FriendlyTargetEntity and FollowUnit after loading."), Entity.Index, Entity.SerialNumber);
 								
 								// Remove the active transport tag from the loaded unit
 								EntityManager.Defer().RemoveTag<FMassTransportProcessorActiveTag>(Entity);
@@ -3210,7 +3176,6 @@ void UUnitStateProcessor::HandleLoadUnit(FName SignalName, TArray<FMassEntityHan
 								if (Transporter->CurrentUnitsLoaded >= Transporter->MaxTransportUnits)
 								{
 									EntityManager.Defer().RemoveTag<FMassTransportProcessorActiveTag>(TargetFrag->FriendlyTargetEntity);
-									UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] Transporter [%d:%d] is full, deactivating TransportProcessor tag."), TargetFrag->FriendlyTargetEntity.Index, TargetFrag->FriendlyTargetEntity.SerialNumber);
 								}
 							}
 							else

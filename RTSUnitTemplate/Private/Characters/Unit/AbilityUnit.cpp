@@ -163,7 +163,6 @@ void AAbilityUnit::TeleportToValidLocation_Implementation(const FVector& Destina
 		                   }
 		                   else
 		                   {
-		                      UE_LOG(LogTemp, Warning, TEXT("UnloadNextUnit: Entity %s does not have an FMassAIStateFragment."), *MassEntityHandle.DebugGetDescription());
 		                   }
 
                 			// Allow the unit to move again by removing the tag.
@@ -341,7 +340,6 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
-	UE_LOG(LogTemp, Log, TEXT("[AbilityUnit] SetUnitState: Unit=%s, Old=%d, New=%d"), *GetName(), (int32)UnitState, (int32)NewUnitState);
 	// Avoid executing Blueprint events on dedicated servers to prevent crashes from server-side BP-only logic
 	const ENetMode NetMode = GetNetMode();
 	const bool bCanCallBPEvents = (NetMode != NM_DedicatedServer);
@@ -407,7 +405,6 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	
 	if (NewUnitState == UnitData::Idle && UnitState == UnitData::PatrolRandom)
 	{
-		UE_LOG(LogTemp, Log, TEXT("[AbilityUnit] SetUnitState: Unit=%s Early return from PatrolRandom to Idle prevention"), *GetName());
 		return;
 	}
 	
@@ -452,17 +449,14 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int AbilityI
 	// Ensure the AbilityIndex is within the expected range before proceeding
 	if (AbilityIndex < 0 || AbilityIndex >= LevelData.UsedAbilityPointsArray.Num())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("SpendAbilityPoints called with an out of bounds AbilityIndex: %d"), AbilityIndex);
 		return; // Exit the function as we have an invalid index
 	}
 	
-	//UE_LOG(LogTemp, Log, TEXT("SpendAbilityPoints called with AbilityID: %d, Ability: %d"), static_cast<int32>(AbilityID), AbilityIndex);
 
 	int32 AbilityIDIndex = static_cast<int32>(AbilityID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 	int32 AbilityCost = (1 + AbilityCostIncreaser*AbilityIDIndex);
 	if (LevelData.AbilityPoints <= 0 || !IsAbilityAllowed(AbilityID, AbilityIndex) || LevelData.AbilityPoints < AbilityCost) return;
 
-	//UE_LOG(LogTemp, Log, TEXT("Ability point spent. Remaining: %d, Used: %d"), LevelData.AbilityPoints, LevelData.UsedAbilityPoints);
 	
 	switch (AbilityIndex)
 	{

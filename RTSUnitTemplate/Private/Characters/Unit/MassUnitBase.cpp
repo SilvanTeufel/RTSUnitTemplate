@@ -461,7 +461,6 @@ bool AMassUnitBase::AddStopGameplayEffectTagToEntity()
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
-	UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Unit=%s, State=%d, Placeholder=%d"), *GetName(), (int32)UState, (int32)UStatePlaceholder);
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 
@@ -538,11 +537,9 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	{
 	    case UnitData::Idle:
 		    {
-			    UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Setting Idle for %s"), *GetName());
 			    Defer.AddTag<FMassStateIdleTag>(EntityHandle);
 					if (StateFrag->CanAttack && StateFrag->IsInitialized)
 					{
-						UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *GetName());
 						Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 					}
 		    }
@@ -570,11 +567,9 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	
 	    case UnitData::PatrolRandom:
 		    {
-			    UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Setting PatrolRandom for %s"), *GetName());
 			    Defer.AddTag<FMassStatePatrolRandomTag>(EntityHandle);
 					if (StateFrag->CanAttack && StateFrag->IsInitialized)
 					{
-						UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *GetName());
 						Defer.AddTag<FMassStateDetectTag>(EntityHandle);
 					}
 		    }
@@ -1161,7 +1156,6 @@ bool AMassUnitBase::GetMassEntityData(FMassEntityManager*& OutEntityManager, FMa
 		const bool bSettingUp = MassActorBindingComponent->bNeedsMassUnitSetup || MassActorBindingComponent->bNeedsMassBuildingSetup;
 		if (bSettingUp || Now < 2.2f)
 		{
-			UE_LOG(LogTemp, Verbose, TEXT("AMassUnitBase (%s): Mass Entity Handle not set yet (initializing)."), *GetName());
 			return false;
 		}
 		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Cannot get Mass Entity Data - Entity Handle is not set in Binding Component."), *GetName());
@@ -1391,8 +1385,6 @@ bool AMassUnitBase::RegisterAdditionalVisualsToMass()
 
 	if (AdditionalISMComponents.Num() == 0) return true;
 
-	UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterAdditionalVisualsToMass: Called for unit %s with %d additional ISMs"), *GetName(), AdditionalISMComponents.Num());
-
 	UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>();
 	if (VisualManager && MassActorBindingComponent)
 	{
@@ -1403,7 +1395,6 @@ bool AMassUnitBase::RegisterAdditionalVisualsToMass()
 			{
 				if (Comp)
 				{
-					UE_LOG(LogTemp, Log, TEXT("AMassUnitBase::RegisterAdditionalVisualsToMass: Assigning additional ISM %s for unit %s to entity %s"), *Comp->GetName(), *GetName(), *EntityHandle.DebugGetDescription());
 					VisualManager->AssignUnitVisual(EntityHandle, Comp, this);
 				}
 			}

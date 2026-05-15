@@ -147,7 +147,6 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             if (StateFrag.BirthTime == TNumericLimits<float>::Max())
             {
                 StateFrag.BirthTime = World->GetTimeSeconds();
-                UE_LOG(LogTemp, Log, TEXT("MainStateProcessor: Client BirthTime initialized to %.2f"), StateFrag.BirthTime);
                 
                 if (SignalSubsystem)
                 {
