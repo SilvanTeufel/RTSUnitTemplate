@@ -59,7 +59,7 @@ private:
 	FMassEntityQuery EntityQuery;
 
 	float TimeSinceLastRun = 0.0f;
-
+	float FollowAccum = 0.0f;
 	bool bFollowTickThisFrame = false;
 	
 	// --- Konfigurationswerte ---

@@ -62,8 +62,9 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     }
     TimeSinceLastRun -= ExecutionInterval;
 
+    const bool bIsClient = Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client);
+
     // Throttle follow assignment checks to once per second
-    static float FollowAccum = 0.0f;
     FollowAccum += ExecutionInterval;
     this->bFollowTickThisFrame = (FollowAccum >= 1.0f);
     if (this->bFollowTickThisFrame)
@@ -71,7 +72,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
         FollowAccum = 0.0f;
     }
     
-    if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
+    if (bIsClient)
     {
         ExecuteClient(EntityManager, Context);
     }
@@ -134,7 +135,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     continue;
                 }
             }
-            /*
+            
             if (this->bFollowTickThisFrame)
             {
                 const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
@@ -170,14 +171,17 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     }
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
-                    const float Threshold = 20.f;
+                    const float Threshold = 200.f;
                     if (Dist2D > Threshold)
                     {
                         SwitchToRunState(ChunkContext, Entity, StateFrag);
                         continue;
                     }
                 }
-            }*/
+                else
+                {
+                }
+            }
         }
     });
 }
@@ -273,6 +277,9 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         SwitchToRunState(ChunkContext, Entity, StateFrag);
                         continue;
                     }
+                }
+                else
+                {
                 }
             }
 
