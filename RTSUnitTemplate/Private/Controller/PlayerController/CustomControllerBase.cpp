@@ -481,7 +481,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		if (bResetFollowTarget)
 		{
 			Unit->ApplyFollowTarget(nullptr);
-			Unit->RemoveFocusEntityTarget();
+			if (!Unit->MassActorBindingComponent->CanMoveWhileAttacking) Unit->RemoveFocusEntityTarget();
 		}
 
 		// Mass entity handle
@@ -881,7 +881,7 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 		if (bResetFollowTarget)
 		{
 			Unit->ApplyFollowTarget(nullptr);
-			Unit->RemoveFocusEntityTarget();
+			if (!Unit->MassActorBindingComponent->CanMoveWhileAttacking) Unit->RemoveFocusEntityTarget();
 		}
 
 		const FVector& NewTargetLocation = NewTargetLocations[Index];
