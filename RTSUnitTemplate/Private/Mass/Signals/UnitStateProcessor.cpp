@@ -483,13 +483,12 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 
                     	if (SignalName != UnitSignals::GoToBase) EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(Entity);
                     	if (SignalName != UnitSignals::GoToBuild) EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(Entity);
-                    	if (SignalName != UnitSignals::Build) EntityManager.Defer().RemoveTag<FMassStateBuildTag>(Entity);
-                     if (SignalName != UnitSignals::GoToResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                     if (SignalName != UnitSignals::ResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
+						if (SignalName != UnitSignals::Build) EntityManager.Defer().RemoveTag<FMassStateBuildTag>(Entity);if (SignalName != UnitSignals::GoToResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+						if (SignalName != UnitSignals::ResourceExtraction) EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
                         
-                     // Repair-specific
-                     if (SignalName != UnitSignals::GoToRepair) EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(Entity);
-                     if (SignalName != UnitSignals::Repair) EntityManager.Defer().RemoveTag<FMassStateRepairTag>(Entity);
+						// Repair-specific
+						if (SignalName != UnitSignals::GoToRepair) EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(Entity);
+						if (SignalName != UnitSignals::Repair) EntityManager.Defer().RemoveTag<FMassStateRepairTag>(Entity);
                         	
                      // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
