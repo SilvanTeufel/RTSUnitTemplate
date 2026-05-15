@@ -37,6 +37,7 @@ void UUnitActorToFragmentSyncProcessor::ConfigureQueries(const TSharedRef<FMassE
 	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -73,6 +74,14 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				if (FMassPatrolFragment* PatrolFrag = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(EntityHandle))
 				{
 					SyncPatrol(*Unit, *PatrolFrag, EntityManager, EntityHandle);
+				}
+
+				if (FMassWorkerStatsFragment* WorkerStats = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(EntityHandle))
+				{
+					if (Unit->IsWorker)
+					{
+						WorkerStats->BaseAvailable = IsValid(Unit->Base) && (Unit->Base->GetUnitState() != UnitData::Dead);
+					}
 				}
 			
 			}

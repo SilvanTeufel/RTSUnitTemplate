@@ -2177,6 +2177,19 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 	}); 
 }
 
+void UUnitStateProcessor::HandleReachedBaseClient(FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, FMassEntityManager& EntityManager)
+{
+	if (StateFrag.PlaceholderSignal != NAME_None)
+	{
+		SwitchState(StateFrag.PlaceholderSignal, Entity, EntityManager);
+	}
+	else
+	{
+		SwitchState(UnitSignals::Idle, Entity, EntityManager);
+	}
+	StateFrag.SwitchingState = false;
+}
+
 void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**

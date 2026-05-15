@@ -212,6 +212,8 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
+	void HandleReachedBaseClient(FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, FMassEntityManager& EntityManager);
+
 	UFUNCTION()
 	void HandleGetClosestBaseArea(
 		FName SignalName,

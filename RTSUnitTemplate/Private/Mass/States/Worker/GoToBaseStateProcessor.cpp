@@ -172,34 +172,29 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
             const FTransform& CurrentTransform = TransformList[i].GetTransform();
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-            // If base not available, switch to Idle locally
+            bool bReachedBaseOrNoBase = false;
+
+            // If base not available, switch to next state locally
             if (!WorkerStats.BaseAvailable)
             {
-                StateFrag.SwitchingState = true;
-                auto& Defer = ChunkContext.Defer();
-                Defer.RemoveTag<FMassStateRunTag>(Entity);
-                Defer.RemoveTag<FMassStateChaseTag>(Entity);
-                Defer.RemoveTag<FMassStateAttackTag>(Entity);
-                Defer.RemoveTag<FMassStatePauseTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                Defer.RemoveTag<FMassStateCastingTag>(Entity);
-                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
-                Defer.AddTag<FMassStateIdleTag>(Entity);
-                continue;
+                bReachedBaseOrNoBase = true;
+            }
+            else
+            {
+                // Arrival check using GoToBase conditions
+                const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
+                if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !StateFrag.SwitchingState)
+                {
+                    bReachedBaseOrNoBase = true;
+                }
             }
 
-            // Arrival check using GoToBase conditions
-            const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
-            if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !StateFrag.SwitchingState)
+            if (bReachedBaseOrNoBase)
             {
                 StateFrag.SwitchingState = true;
                 auto& Defer = ChunkContext.Defer();
+
+                // Remove movement and action tags
                 Defer.RemoveTag<FMassStateRunTag>(Entity);
                 Defer.RemoveTag<FMassStateChaseTag>(Entity);
                 Defer.RemoveTag<FMassStateAttackTag>(Entity);
@@ -213,7 +208,26 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
                 Defer.RemoveTag<FMassStateBuildTag>(Entity);
                 Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
                 Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
-                Defer.AddTag<FMassStateIdleTag>(Entity);
+                Defer.RemoveTag<FMassStateGoToRepairTag>(Entity);
+                Defer.RemoveTag<FMassStateRepairTag>(Entity);
+                Defer.RemoveTag<FMassStateIdleTag>(Entity);
+
+                // Add next tag based on prediction / server-intended next state
+                if (StateFrag.PlaceholderSignal == UnitSignals::GoToResourceExtraction)
+                    Defer.AddTag<FMassStateGoToResourceExtractionTag>(Entity);
+                else if (StateFrag.PlaceholderSignal == UnitSignals::GoToBuild)
+                    Defer.AddTag<FMassStateGoToBuildTag>(Entity);
+                else if (StateFrag.PlaceholderSignal == UnitSignals::Build)
+                    Defer.AddTag<FMassStateBuildTag>(Entity);
+                else if (StateFrag.PlaceholderSignal == UnitSignals::ResourceExtraction)
+                    Defer.AddTag<FMassStateResourceExtractionTag>(Entity);
+                else if (StateFrag.PlaceholderSignal == UnitSignals::GoToRepair)
+                    Defer.AddTag<FMassStateGoToRepairTag>(Entity);
+                else if (StateFrag.PlaceholderSignal == UnitSignals::Repair)
+                    Defer.AddTag<FMassStateRepairTag>(Entity);
+                else
+                    Defer.AddTag<FMassStateIdleTag>(Entity);
+
                 continue;
             }
         }
