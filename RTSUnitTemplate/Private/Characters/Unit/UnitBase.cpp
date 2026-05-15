@@ -1633,6 +1633,7 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 			UnitBase->SetMeshRotationServer();
 		
 			UnitBase->UnitState = SpawnParameter.State;
+			UnitBase->StoredUnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
 			UnitBase->ConstructionCost = UsedConstructionCost;
 			

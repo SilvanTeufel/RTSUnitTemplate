@@ -156,12 +156,18 @@ void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FM
 		AUnitBase* Unit = Cast<AUnitBase>(ActorFrag->GetMutable());
 		if (Unit)
 		{
+			// Initialize the local actor state from the replicated StoredUnitState on the client
+			if (Unit->GetNetMode() == NM_Client)
+			{
+				Unit->SetUnitState(Unit->StoredUnitState);
+			}
+
 			StateFrag->CanMove = Unit->CanMove;
 			StateFrag->CanAttack = Unit->CanAttack;
 			StateFrag->IsInitialized = Unit->IsInitialized;
 			StateFrag->StoredLocation = Unit->GetActorLocation();
 
-			Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
+			Unit->SwitchEntityTagByState(Unit->StoredUnitState, Unit->UnitStatePlaceholder);
 		}
 	}
 }

@@ -414,6 +414,11 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	}
 	
 	UnitState = NewUnitState;
+
+	if (HasAuthority())
+	{
+		StoredUnitState = NewUnitState;
+	}
 }
 
 TEnumAsByte<UnitData::EState> AAbilityUnit::GetUnitState() const
