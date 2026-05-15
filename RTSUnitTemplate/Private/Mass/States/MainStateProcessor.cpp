@@ -24,7 +24,7 @@ void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite); // Eigene Stats lesen/schreiben
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
+    //EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
     
@@ -91,17 +91,22 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     StateFrag.ExtendedLoseSightTimer = 0.f;
                 }
             }
-            
-            if (SignalSubsystem)
-            {
-                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SyncUnitBase, Entity);
-            }
 
             if (StateFrag.BirthTime == TNumericLimits<float>::Max())
             {
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UnitSpawned, Entity);
+                }
+                StateFrag.BirthTime = World->GetTimeSeconds();
+            }else
+            {
+                const float Age = World->GetTimeSeconds() - StateFrag.BirthTime;
+                const bool bIsOldEnough =  Age >= 1.f;
+                
+                if (SignalSubsystem && bIsOldEnough)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SyncUnitBase, Entity);
                 }
             }
 
@@ -127,15 +132,28 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
     }
 
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            FMassAIStateFragment& StateFrag = StateList[i];
+
+            if (StateFrag.BirthTime == TNumericLimits<float>::Max())
+            {
+                StateFrag.BirthTime = World->GetTimeSeconds();
+                UE_LOG(LogTemp, Log, TEXT("MainStateProcessor: Client BirthTime initialized to %.2f"), StateFrag.BirthTime);
+                
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UnitSpawned, Entity);
+                }
+            }
 
             if (StatsFrag.Health <= 0.f)
             {

@@ -439,7 +439,7 @@ void UUnitStateProcessor::HandleCheckFollowAssigned(FName SignalName, TArray<FMa
 
 void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entity, const FMassEntityManager& EntityManager)
 {
-
+	UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Signal=%s, Entity=[%d:%d]"), *SignalName.ToString(), Entity.Index, Entity.SerialNumber);
 	
 	        // Check entity validity *on the game thread*
             if (!EntityManager.IsEntityActive(Entity)) 
@@ -493,7 +493,12 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                      // --- Add new tag ---
                     	if (SignalName == UnitSignals::Idle)
                     	{
-                    		if (StateFragment->CanAttack && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                    		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Handling Idle Signal for %s"), *UnitBase->GetName());
+                    		if (StateFragment->CanAttack && StateFragment->IsInitialized)
+                    		{
+                    			UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *UnitBase->GetName());
+                    			EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                    		}
                     		
                     		EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
                     		StateFragment->PlaceholderSignal = UnitSignals::Idle;
@@ -564,7 +569,12 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }
                         else if (SignalName == UnitSignals::PatrolRandom)
                         {
-                        	if (StateFragment->CanAttack && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Handling PatrolRandom Signal for %s"), *UnitBase->GetName());
+                        	if (StateFragment->CanAttack && StateFragment->IsInitialized)
+                        	{
+                        		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] SwitchState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *UnitBase->GetName());
+                        		EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
+                        	}
 
                         	EntityManager.Defer().AddTag<FMassStatePatrolRandomTag>(Entity);
                         	StateFragment->PlaceholderSignal = UnitSignals::PatrolRandom;
@@ -2240,7 +2250,7 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 				if (IsValid(Actor))
 				{
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
-					if (UnitBase )
+					if (UnitBase && ResourceGameMode)
 					{
 						UnitBase->Base = ResourceGameMode->GetClosestBaseFromArray(UnitBase, ResourceGameMode->WorkAreaGroups.BaseAreas);
 						StateFrag->SwitchingState = false;
@@ -2988,9 +2998,14 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,
 	TArray<FMassEntityHandle>& Entities)
 {
+	UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Signal=%s, Count=%d"), *SignalName.ToString(), Entities.Num());
 	const float Now = World->GetTimeSeconds();
 	
-	if (!EntitySubsystem) { return; }
+	if (!EntitySubsystem) 
+	{ 
+		UE_LOG(LogTemp, Error, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: EntitySubsystem is NULL"));
+		return; 
+	}
 
 	if (!ResourceGameMode)
 		ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
@@ -3001,13 +3016,12 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	//TArray<FMassEntityHandle> Worker;
 	for (FMassEntityHandle& E : Entities)
 	{
-		;
+		UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Processing Entity [%d:%d]"), E.Index, E.SerialNumber);
 		// Grab the *target* fragment on that entity and stamp it
 		FMassAIStateFragment* StateFragment = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(E);
 		FTransformFragment* TransformFragPtr = EntityManager.GetFragmentDataPtr<FTransformFragment>(E);
 		if (StateFragment)
 		{
-			StateFragment->BirthTime = Now;
 			
 			FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(E);
 	
@@ -3016,7 +3030,14 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				AActor* TargetActor = ActorFragPtr->GetMutable();
 				AUnitBase* Unit = Cast<AUnitBase>(TargetActor);
 
-				if (!Unit || !IsValid(TargetActor)) return;
+				if (!Unit || !IsValid(TargetActor)) 
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Entity [%d:%d] has invalid Unit or Actor"), E.Index, E.SerialNumber);
+					return;
+				}
+
+				UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Unit %s initialized for Entity [%d:%d]. State=%d, Placeholder=%d, IsWorker=%d"), 
+					*Unit->GetName(), E.Index, E.SerialNumber, (int32)Unit->UnitState, (int32)Unit->UnitStatePlaceholder, (int32)Unit->IsWorker);
 
 
 				// --- Hole benötigte Fragmente für DIESE Entity ---
@@ -3028,6 +3049,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				// Prüfe, ob alle nötigen Fragmente vorhanden sind
 				if (!StateFragPtr || !PatrolFragPtr || !MoveTargetPtr || !StatsFragPtr)
 				{
+					UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Entity [%d:%d] missing fragments! (State=%p, Patrol=%p, Move=%p, Stats=%p)"), 
+						E.Index, E.SerialNumber, StateFragPtr, PatrolFragPtr, MoveTargetPtr, StatsFragPtr);
 					continue;
 				}
 
@@ -3044,6 +3067,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 
 				if (Unit->UnitState == UnitData::PatrolRandom)
 				{
+					UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Entity [%d:%d] is in PatrolRandom"), E.Index, E.SerialNumber);
 					if (!EntityManager.IsEntityValid(E))
 					{
 						continue;
@@ -3065,6 +3089,8 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					}
 				}
 				
+				UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Calling SwitchEntityTagByState for Entity [%d:%d] with State=%d, Placeholder=%d"), 
+					E.Index, E.SerialNumber, (int32)Unit->UnitState, (int32)Unit->UnitStatePlaceholder);
 				Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
 
 				if (Unit->IsWorker && ResourceGameMode)
@@ -3073,6 +3099,9 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					ResourceGameMode->AssignWorkAreasToWorker(Unit);
 					if (Unit->GetUnitState() == UnitData::PatrolRandom)
 					{
+						SwitchState(UnitSignals::PatrolRandom, E, EntityManager);
+						Unit->SetUnitState(UnitData::PatrolRandom);
+						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] is in PatrolRandom, keeping it."), E.Index, E.SerialNumber);
 					}
 					else if (Unit->ResourcePlace)
 					{
@@ -3081,7 +3110,9 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					      StateFrag.StoredLocation = ResourcePosition;
 						
 					    UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] has ResourcePlace, switching to GoToResourceExtraction"), E.Index, E.SerialNumber);
 						SwitchState(UnitSignals::GoToResourceExtraction, E, EntityManager);
+						Unit->SetUnitState(UnitData::GoToResourceExtraction);
 					}else if (Unit->Base)
 					{
 						FVector BasePosition = FindGroundLocationForActor(this, Unit->Base, {Unit, Unit->Base});
@@ -3089,10 +3120,14 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 					    StateFrag.StoredLocation = BasePosition;
 						
 					    UpdateMoveTarget(MoveTarget, StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] has Base, switching to GoToBase"), E.Index, E.SerialNumber);
 						SwitchState(UnitSignals::GoToBase, E, EntityManager);
+						Unit->SetUnitState(UnitData::GoToBase);
 					}else
 					{
+						UE_LOG(LogTemp, Log, TEXT("[UnitStateProcessor] HandleUnitSpawnedSignal: Worker Entity [%d:%d] fallback to Idle"), E.Index, E.SerialNumber);
 						SwitchState(UnitSignals::Idle, E, EntityManager);
+						Unit->SetUnitState(UnitData::Idle);
 					}
 					//Worker.Emplace(E);
 				}

@@ -14,6 +14,7 @@
 
 UUnitClientTagSyncProcessor::UUnitClientTagSyncProcessor()
 	: EntityQuery(*this)
+	, InitialKickCleanupQuery(*this)
 {
 	bAutoRegisterWithProcessingPhases = true;
 	ExecutionFlags = (int32)EProcessorExecutionFlags::All; // Allow Client and Server execution
@@ -28,7 +29,14 @@ void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::None);
+	
 	EntityQuery.RegisterWithProcessor(*this);
+
+	InitialKickCleanupQuery.Initialize(EntityManager);
+	InitialKickCleanupQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::All);
+	InitialKickCleanupQuery.RegisterWithProcessor(*this);
 }
 
 void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -41,9 +49,27 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	UWorld* World = GetWorld();
 	if (!World) return;
 
+	// Client-side cleanup for the Initial Kick tag
+	if (World->GetNetMode() == NM_Client)
+	{
+		InitialKickCleanupQuery.ForEachEntityChunk(EntityManager, Context, [](FMassExecutionContext& KickCtx)
+		{
+			const int32 Num = KickCtx.GetNumEntities();
+			for (int32 i = 0; i < Num; ++i)
+			{
+				const FMassEntityHandle Entity = KickCtx.GetEntity(i);
+				KickCtx.Defer().RemoveTag<FMassStateNeedsInitialKickTag>(Entity);
+				
+				// Also remove StopSeparation tag if it was added during spawn 
+				// to prevent units from being stuck in place.
+				KickCtx.Defer().RemoveTag<FMassStateStopSeparationTag>(Entity);
+			}
+		});
+	}
+
 	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
 
-	EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, &EntityManager, SignalSubsystem, &Context](FMassExecutionContext& ChunkContext)
+	EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, &EntityManager, SignalSubsystem, &Context, World](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
@@ -52,6 +78,22 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
+		
+			const FMassAIStateFragment* StateFragPtr = !AIStateList.IsEmpty() ? &AIStateList[i] : nullptr;
+			if (StateFragPtr)
+			{
+				const float Age = World->GetTimeSeconds() - StateFragPtr->BirthTime;
+				if (bShowLogs)
+				{
+					UE_LOG(LogTemp, Log, TEXT("UnitClientTagSyncProcessor: Entity Age: %.2f (BirthTime: %.2f, WorldTime: %.2f)"), 
+						Age, StateFragPtr->BirthTime, World->GetTimeSeconds());
+				}
+				if (Age < 1.f)
+				{
+					continue;
+				}
+			}
+
 			if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
 			{
 				const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -59,11 +101,10 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				const TEnumAsByte<UnitData::EState> NewState = ComputeState(EntityManager, Entity);
 
 				// Spezialfall Casting: Wenn Timer abgelaufen, Signal senden
-				if (NewState == UnitData::Casting && SignalSubsystem && !AIStateList.IsEmpty())
+				if (NewState == UnitData::Casting && SignalSubsystem && StateFragPtr)
 				{
-					const FMassAIStateFragment& StateFrag = AIStateList[i];
 					const FMassCombatStatsFragment& StatsFrag = CombatStatsList[i];
-					if (StateFrag.StateTimer >= StatsFrag.CastTime)
+					if (StateFragPtr->StateTimer >= StatsFrag.CastTime)
 					{
 						SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::ClientSetToPlaceholder, Entity);
 					}
@@ -137,7 +178,7 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	// 11. Idle (Niedrigste Priorität)
 	if (HasTag(FMassStateIdleTag::StaticStruct())) return EState::Idle;
 
-	return EState::Idle; 
+	return EState::None; 
 }
 
 void UUnitClientTagSyncProcessor::ApplyStateToActor(AAbilityUnit* AbilityUnit, TEnumAsByte<UnitData::EState> NewState) const

@@ -341,6 +341,7 @@ void AAbilityUnit::GetAbilitiesArrays()
 
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
+	UE_LOG(LogTemp, Log, TEXT("[AbilityUnit] SetUnitState: Unit=%s, Old=%d, New=%d"), *GetName(), (int32)UnitState, (int32)NewUnitState);
 	// Avoid executing Blueprint events on dedicated servers to prevent crashes from server-side BP-only logic
 	const ENetMode NetMode = GetNetMode();
 	const bool bCanCallBPEvents = (NetMode != NM_DedicatedServer);
@@ -404,7 +405,11 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		}
 	}
 	
-	if (NewUnitState == UnitData::Idle && UnitState == UnitData::PatrolRandom) return;
+	if (NewUnitState == UnitData::Idle && UnitState == UnitData::PatrolRandom)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[AbilityUnit] SetUnitState: Unit=%s Early return from PatrolRandom to Idle prevention"), *GetName());
+		return;
+	}
 	
 	if (bCanCallBPEvents && NewUnitState != UnitState)
 	{

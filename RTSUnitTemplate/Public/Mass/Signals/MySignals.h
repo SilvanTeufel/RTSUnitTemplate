@@ -274,6 +274,7 @@ namespace UE::Mass::Debug // Optional: Use a namespace for organization
    		if (Tags.Contains<FMassStopGameplayEffectTag>())           { PresentTags += TEXT(" StopGameplayEffect"); bFoundTags = true; }
    		if (Tags.Contains<FMassStopUnitDetectionTag>())            { PresentTags += TEXT(" StopUnitDetection"); bFoundTags = true; }
    		if (Tags.Contains<FMassDisableAvoidanceTag>())             { PresentTags += TEXT(" DisableAvoidance"); bFoundTags = true; }
+   		if (Tags.Contains<FMassStateNeedsInitialKickTag>())        { PresentTags += TEXT(" NeedsInitialKick"); bFoundTags = true; }
 
     	//if (Composition.Tags.Contains<FNeedsActorBindingInitTag>()){ PresentTags += TEXT(" ActorBindingInit"); bFoundTags = true; }
     	

@@ -461,6 +461,7 @@ bool AMassUnitBase::AddStopGameplayEffectTagToEntity()
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
+	UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Unit=%s, State=%d, Placeholder=%d"), *GetName(), (int32)UState, (int32)UStatePlaceholder);
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 
@@ -537,8 +538,13 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	{
 	    case UnitData::Idle:
 		    {
+			    UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Setting Idle for %s"), *GetName());
 			    Defer.AddTag<FMassStateIdleTag>(EntityHandle);
-					if (StateFrag->CanAttack && StateFrag->IsInitialized) Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+					if (StateFrag->CanAttack && StateFrag->IsInitialized)
+					{
+						UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *GetName());
+						Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+					}
 		    }
 	        break;
 	
@@ -564,8 +570,13 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	
 	    case UnitData::PatrolRandom:
 		    {
+			    UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Setting PatrolRandom for %s"), *GetName());
 			    Defer.AddTag<FMassStatePatrolRandomTag>(EntityHandle);
-					if (StateFrag->CanAttack && StateFrag->IsInitialized)Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+					if (StateFrag->CanAttack && StateFrag->IsInitialized)
+					{
+						UE_LOG(LogTemp, Log, TEXT("[MassUnitBase] SwitchEntityTagByState: Adding DetectTag for %s (CanAttack=1, IsInitialized=1)"), *GetName());
+						Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+					}
 		    }
 	        break;
 	
