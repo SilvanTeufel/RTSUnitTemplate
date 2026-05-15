@@ -151,7 +151,8 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
             // Only arrival check on client (skip if following a unit)
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
-            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+         
+            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius*2.f)
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -249,7 +250,6 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             
             // Follow friendly target directly if assigned
             const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
-            
             
             if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && !Stats.bCanMoveWhileAttacking)
             {
@@ -349,6 +349,15 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
                 UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);  
                 
+                if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius)
+                {
+                    if (!StateFrag.SwitchingState)
+                    {
+                        VelocityList[i].Value = FVector::ZeroVector;
+                        SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                    }
+                    continue;
+                }
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
             }else if ( DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) &&
                     TargetFrag.bHasValidTarget && Stats.bCanMoveWhileAttacking)

@@ -171,7 +171,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     }
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
-                    const float Threshold = 200.f;
+                    const float Threshold = 100.f;
                     if (Dist2D > Threshold)
                     {
                         SwitchToRunState(ChunkContext, Entity, StateFrag);
@@ -271,7 +271,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     }
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
-                    const float Threshold = 20.f;
+                    const float Threshold = 50.f;
                     if (Dist2D > Threshold)
                     {
                         SwitchToRunState(ChunkContext, Entity, StateFrag);
