@@ -3000,32 +3000,6 @@ void UUnitStateProcessor::HandleSightSignals(FName /*SignalName*/, TArray<FMassE
 }
 
 
-void UUnitStateProcessor::HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities)
-{
-	if (!EntitySubsystem || !World) return;
-
-	APlayerController* PC = World->GetFirstPlayerController(); // Local controller
-	if (!PC) return;
-
-	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
-	if (!CustomPC) return;
-
-	// Must be run on GameThread to access UObjects
-	TArray<FMassEntityHandle> CopiedEntities = Entities;
-	TWeakObjectPtr<ACustomControllerBase> WeakCustomPC = CustomPC;
-
-	AsyncTask(ENamedThreads::GameThread, [WeakCustomPC, CopiedEntities = MoveTemp(CopiedEntities)]()
-	{
-		if (ACustomControllerBase* StrongPC = WeakCustomPC.Get())
-		{
-			//StrongPC->UpdateFogMaskWithCircles(CopiedEntities);
-			//StrongPC->UpdateMinimap(CopiedEntities);
-		}
-	});
-}
-
-
-
 void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,
 	TArray<FMassEntityHandle>& Entities)

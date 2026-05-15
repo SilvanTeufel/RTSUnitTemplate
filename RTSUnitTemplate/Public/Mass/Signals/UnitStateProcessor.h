@@ -269,10 +269,7 @@ private:
 
 	UFUNCTION()
 	void HandleSightSignals(FName SignalName, TArray<FMassEntityHandle>& Entities);
-
-	UFUNCTION()
-	void HandleUpdateFogMask(FName SignalName, TArray<FMassEntityHandle>& Entities);
-
+	
 	UFUNCTION()
 	void HandleUnitSpawnedSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
