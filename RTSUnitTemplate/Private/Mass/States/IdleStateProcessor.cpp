@@ -110,8 +110,9 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
+            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
             
-            if (TargetFrag.bHasValidTarget && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -120,7 +121,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 continue;
             }
 
-            if (TargetFrag.bHasValidTarget && StateFrag.HoldPosition)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition)
             {
                 const float EffectiveAttackRange = StatsFrag.AttackRange;
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
@@ -171,7 +172,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     }
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
-                    const float Threshold = 100.f;
+                    const float Threshold = 50.f;
                     if (Dist2D > Threshold)
                     {
                         SwitchToRunState(ChunkContext, Entity, StateFrag);
@@ -216,14 +217,15 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
+            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
 
-            if (TargetFrag.bHasValidTarget && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
             {
                 SwitchToChaseState(ChunkContext, Entity, StateFrag);
                 continue;
             }
 
-            if (TargetFrag.bHasValidTarget && StateFrag.HoldPosition)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition)
             {
                 const float EffectiveAttackRange = StatsFrag.AttackRange;
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);

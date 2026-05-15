@@ -859,6 +859,7 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 	
 	TargetFrag->IsFocusedOnTarget = false;
 	TargetFrag->TargetEntity.Reset();
+	TargetFrag->FriendlyTargetEntity.Reset();
 	
 	return true;
 }

@@ -165,7 +165,8 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             const bool bHasDetectTag = DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct());
             if (bHasDetectTag)
             {
-                if (TargetFrag.bHasValidTarget)
+                const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+                if (TargetFrag.bHasValidTarget && bIsTargetActive)
                 {
                     if (!Stats.bCanMoveWhileAttacking)
                     {
@@ -250,8 +251,9 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             
             // Follow friendly target directly if assigned
             const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
             
-            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && !Stats.bCanMoveWhileAttacking)
+            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && bIsTargetActive && !Stats.bCanMoveWhileAttacking)
             {
                 SwitchToChaseState(ChunkContext, Entity, StateFrag);
                 continue;
@@ -360,11 +362,10 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 }
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
             }else if ( DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) &&
-                    TargetFrag.bHasValidTarget && Stats.bCanMoveWhileAttacking)
+                    TargetFrag.bHasValidTarget && bIsTargetActive && Stats.bCanMoveWhileAttacking)
             {
                     const float DistSq = FVector::DistSquared2D(CurrentLocation, TargetFrag.LastKnownLocation);
                     
-                    const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
                     const FMassAgentCharacteristicsFragment* TargetCharFragPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
                     const FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
                     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;

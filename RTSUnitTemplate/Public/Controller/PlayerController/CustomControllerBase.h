@@ -111,7 +111,8 @@ public:
 		const TArray<float>& DesiredSpeeds,
 		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false,
-		bool bResetHoldPosition = true);
+		bool bResetHoldPosition = true,
+		bool bResetFollowTarget = true);
 
 	// Server wrapper to validate and then trigger the multicast from the authority
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
@@ -122,7 +123,8 @@ public:
 		const TArray<float>& DesiredSpeeds,
 		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false,
-		bool bResetHoldPosition = true);
+		bool bResetHoldPosition = true,
+		bool bResetFollowTarget = true);
 
 	// Client-side prediction: apply Run tag and local MoveTarget updates on each client
 	UFUNCTION(Client, Reliable)
@@ -133,7 +135,8 @@ public:
 		const TArray<float>& DesiredSpeeds,
 		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false,
-		bool bResetHoldPosition = true);
+		bool bResetHoldPosition = true,
+		bool bResetFollowTarget = true);
 
 	// Batch initialization of units without formation logic, projecting each to its own position on NavMesh.
 	void Batch_KickUnits(const TArray<AUnitBase*>& Units);
