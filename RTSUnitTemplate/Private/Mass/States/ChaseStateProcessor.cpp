@@ -135,11 +135,9 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-            UE_LOG(LogTemp, Log, TEXT("[Chase] ExecuteClient for Entity %d"), Entity.Index);
 
             if (StateFrag.SwitchingStateClient)
             {
-                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: SwitchingStateClient is true, skipping logic."), Entity.Index);
                 StateFrag.SwitchingStateClient = false;
                 continue;
             }
@@ -161,7 +159,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             // Case 1: Hold position => switch to Idle locally
             if (StateFrag.HoldPosition)
             {
-                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: HoldPosition is true."), Entity.Index);
                 if (!StateFrag.SwitchingStateClient)
                 {
                     SwitchToPlaceholderState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
@@ -172,8 +169,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             // Case 2: Lost/invalid target or inactive => switch to Placeholder locally
             if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget))
             {
-                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d lost target (Active: %d, Valid: %d). Signal: %s | TargetLastKnown: %s"), 
-                       Entity.Index, EntityManager.IsEntityActive(TargetFrag.TargetEntity), TargetFrag.bHasValidTarget, *StateFrag.PlaceholderSignal.ToString(), *TargetFrag.LastKnownLocation.ToString());
                        
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -184,10 +179,8 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                         Pred.PredDesiredSpeed = Stats.RunSpeed;
                         Pred.PredAcceptanceRadius = 100.f;
                         Pred.bHasData = true;
-                        UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Set Prediction to StoredLocation %s"), Entity.Index, *StateFrag.StoredLocation.ToString());
                     }
 
-                    UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Calling SwitchToPlaceholderState"), Entity.Index);
                     SwitchToPlaceholderState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
                 continue;
@@ -201,7 +194,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
 
             if (bIsTargetActive)
             {
-                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d Client TargetFrag.LastKnownLocation: %s"), Entity.Index, *TargetFrag.LastKnownLocation.ToString());
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
                 const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
@@ -214,13 +206,9 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange + Tolerance);
                 
-                // Diagnoselog
-                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Dist %.2f / Range %.2f (+Tol %.2f) (Radii: %.2f)"), 
-                       Entity.Index, FMath::Sqrt(DistSq), EffectiveAttackRange, Tolerance, CombinedRadii);
 
                 if (DistSq <= AttackRangeSq)
                 {
-                    UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: In Attack Range (Client). Switching to Pause."), Entity.Index);
                     if (!StateFrag.SwitchingStateClient)
                     {
                         StateFrag.SwitchingStateClient = true;
@@ -291,7 +279,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
             // --- Target Lost ---
             StateFrag.StateTimer += ExecutionInterval;
-            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d Server TargetFrag.LastKnownLocation: %s"), Entity.Index, *TargetFrag.LastKnownLocation.ToString());
 
             if (!Stats.bUseProjectile) // && TargetFrag.bHasValidTarget
             {
@@ -379,7 +366,6 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassExecutionContext& Conte
 {
     auto& Defer = Context.Defer();
 
-    UE_LOG(LogTemp, Log, TEXT("[Chase] SwitchToPlaceholderState for Entity %d (NetMode: %d)"), Entity.Index, Context.GetWorld() ? (int32)Context.GetWorld()->GetNetMode() : -1);
 
     if (StateFrag.CanAttack && StateFrag.IsInitialized)
     {
@@ -388,7 +374,6 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassExecutionContext& Conte
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
-        UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d Client-Side Prediction: Switching to %s"), Entity.Index, *StateFrag.PlaceholderSignal.ToString());
         StateFrag.SwitchingStateClient = true;
         
         // --- PRÄZISES TAG-MANAGEMENT ---
@@ -413,22 +398,18 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassExecutionContext& Conte
         // Prediction: Setzen des korrekten Placeholder-Tags basierend auf dem Signal
         if (StateFrag.PlaceholderSignal == UnitSignals::PatrolRandom)
         {
-            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding PatrolRandomTag"), Entity.Index);
             Defer.AddTag<FMassStatePatrolRandomTag>(Entity);
         }
         else if (StateFrag.PlaceholderSignal == UnitSignals::PatrolIdle)
         {
-            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding PatrolIdleTag"), Entity.Index);
             Defer.AddTag<FMassStatePatrolIdleTag>(Entity);
         }
         else if (StateFrag.PlaceholderSignal == UnitSignals::Run)
         {
-            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding RunTag"), Entity.Index);
             Defer.AddTag<FMassStateRunTag>(Entity);
         }
         else
         {
-            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding IdleTag"), Entity.Index);
             Defer.AddTag<FMassStateIdleTag>(Entity);
         }
         
