@@ -228,6 +228,8 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool RemoveFocusEntityTarget();
+
+	bool RemoveFriendlyFocusEntityTarget();
 	
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	bool UpdateEntityHealth(float NewHealth, float CurrentShield = -1.f);

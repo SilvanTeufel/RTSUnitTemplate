@@ -864,6 +864,35 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 	return true;
 }
 
+bool AMassUnitBase::RemoveFriendlyFocusEntityTarget()
+{
+
+	FMassEntityManager* EntityManager;
+	FMassEntityHandle EntityHandle;
+	
+	if (!GetMassEntityData(EntityManager, EntityHandle))
+	{
+		// Error already logged in GetMassEntityData
+		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
+	
+		return false;
+	}
+
+	if (!EntityManager->IsEntityValid(EntityHandle))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
+		return false;
+	}
+	
+	FMassAITargetFragment* TargetFrag = EntityManager->GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle);
+	
+	if (!TargetFrag) return false;
+	
+	TargetFrag->FriendlyTargetEntity.Reset();
+	
+	return true;
+}
+
 
 bool AMassUnitBase::UpdateEntityHealth(float NewHealth, float CurrentShield)
 {

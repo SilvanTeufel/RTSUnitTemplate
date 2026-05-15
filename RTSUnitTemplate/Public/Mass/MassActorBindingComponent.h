@@ -197,7 +197,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool UseRotateToTargetProcessor = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool CanMoveWhileAttacking = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
