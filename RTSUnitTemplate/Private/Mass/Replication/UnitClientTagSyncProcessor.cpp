@@ -22,6 +22,15 @@ UUnitClientTagSyncProcessor::UUnitClientTagSyncProcessor()
 	ProcessingPhase = EMassProcessingPhase::PrePhysics;
 }
 
+void UUnitClientTagSyncProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)
+{
+	Super::InitializeInternal(Owner, EntityManager);
+	if (UMassSignalSubsystem* SignalSubsystem = UWorld::GetSubsystem<UMassSignalSubsystem>(Owner.GetWorld()))
+	{
+		SubscribeToSignal(*SignalSubsystem, UnitSignals::UnitSpawned);
+	}
+}
+
 void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	EntityQuery.Initialize(EntityManager);
@@ -114,6 +123,47 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			}
 		}
 	});
+
+	Super::Execute(EntityManager, Context);
+}
+
+void UUnitClientTagSyncProcessor::SignalEntities(FMassEntityManager& EntityManager, FMassExecutionContext& Context,
+	FMassSignalNameLookup& EntitySignals)
+{
+	EntityQuery.ForEachEntityChunk(Context, [this, &EntitySignals, &EntityManager](FMassExecutionContext& ChunkContext)
+	{
+		const int32 NumEntities = ChunkContext.GetNumEntities();
+		for (int32 i = 0; i < NumEntities; ++i)
+		{
+			const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+			TArray<FName> Signals;
+			EntitySignals.GetSignalsForEntity(Entity, Signals);
+			if (Signals.Contains(UnitSignals::UnitSpawned))
+			{
+				HandleUnitSpawned(Entity, EntityManager);
+			}
+		}
+	});
+}
+
+void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FMassEntityManager& EntityManager)
+{
+	FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
+	FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+
+	if (StateFrag && ActorFrag)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(ActorFrag->GetMutable());
+		if (Unit)
+		{
+			StateFrag->CanMove = Unit->CanMove;
+			StateFrag->CanAttack = Unit->CanAttack;
+			StateFrag->IsInitialized = Unit->IsInitialized;
+			StateFrag->StoredLocation = Unit->GetActorLocation();
+
+			Unit->SwitchEntityTagByState(Unit->UnitState, Unit->UnitStatePlaceholder);
+		}
+	}
 }
 
 TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const

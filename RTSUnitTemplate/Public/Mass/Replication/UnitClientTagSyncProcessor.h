@@ -1,15 +1,16 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "MassProcessor.h"
+#include "MassSignalProcessorBase.h"
 #include "MassEntityTypes.h"
 #include "Core/UnitData.h"
 #include "UnitClientTagSyncProcessor.generated.h"
 
 class AAbilityUnit;
+struct FMassSignalNameLookup;
 
 UCLASS()
-class RTSUNITTEMPLATE_API UUnitClientTagSyncProcessor : public UMassProcessor
+class RTSUNITTEMPLATE_API UUnitClientTagSyncProcessor : public UMassSignalProcessorBase
 {
 	GENERATED_BODY()
 public:
@@ -19,8 +20,10 @@ public:
 	bool bShowLogs = false;
 
 protected:
+	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+	virtual void SignalEntities(FMassEntityManager& EntityManager, FMassExecutionContext& Context, FMassSignalNameLookup& EntitySignals) override;
 
 private:
 	FMassEntityQuery EntityQuery;
@@ -30,4 +33,6 @@ private:
 
 	// Apply to owning actor if it's an AbilityUnit
 	void ApplyStateToActor(AAbilityUnit* AbilityUnit, TEnumAsByte<UnitData::EState> NewState) const;
+
+	void HandleUnitSpawned(FMassEntityHandle Entity, FMassEntityManager& EntityManager);
 };

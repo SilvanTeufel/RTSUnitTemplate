@@ -6,6 +6,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Characters/Unit/UnitBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 
 UMainStateProcessor::UMainStateProcessor(): EntityQuery()
@@ -80,17 +81,7 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable ref needed
             FMassCombatStatsFragment& StatsFrag = StatsList[i];
 
-            // Handle LoseSightRadius extension revert
-            if (StateFrag.bHasExtendedLoseSight)
-            {
-                StateFrag.ExtendedLoseSightTimer -= ExecutionInterval;
-                if (StateFrag.ExtendedLoseSightTimer <= 0.f)
-                {
-                    StatsFrag.LoseSightRadius /= StatsFrag.LoseSightRadiusFaktor;
-                    StateFrag.bHasExtendedLoseSight = false;
-                    StateFrag.ExtendedLoseSightTimer = 0.f;
-                }
-            }
+            HandleLoseSightExtension(StateFrag, StatsFrag);
 
             if (StateFrag.BirthTime == TNumericLimits<float>::Max())
             {
@@ -135,19 +126,20 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        auto StatsList = ChunkContext.GetMutableFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            const FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i];
 
+            HandleLoseSightExtension(StateFrag, StatsFrag);
+            
             if (StateFrag.BirthTime == TNumericLimits<float>::Max())
             {
                 StateFrag.BirthTime = World->GetTimeSeconds();
-                
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UnitSpawned, Entity);
@@ -156,24 +148,47 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
 
             if (StatsFrag.Health <= 0.f)
             {
-                auto& Defer = ChunkContext.Defer();
-                // Set Dead tag
-                Defer.AddTag<FMassStateDeadTag>(Entity);
-                // Remove other state tags on client side
-                Defer.RemoveTag<FMassStateRunTag>(Entity);
-                Defer.RemoveTag<FMassStateChaseTag>(Entity);
-                Defer.RemoveTag<FMassStateAttackTag>(Entity);
-                Defer.RemoveTag<FMassStatePauseTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                Defer.RemoveTag<FMassStateCastingTag>(Entity);
-                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                HandleUnitDeathClient(Entity, ChunkContext);
             }
         }
     });
+}
+
+
+void UMainStateProcessor::HandleUnitDeathClient(FMassEntityHandle Entity, FMassExecutionContext& Context)
+{
+    auto& Defer = Context.Defer();
+    // Set Dead tag
+    Defer.AddTag<FMassStateDeadTag>(Entity);
+    // Remove other state tags on client side
+    Defer.RemoveTag<FMassStateRunTag>(Entity);
+    Defer.RemoveTag<FMassStateChaseTag>(Entity);
+    Defer.RemoveTag<FMassStateAttackTag>(Entity);
+    Defer.RemoveTag<FMassStatePauseTag>(Entity);
+    Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+    Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+    Defer.RemoveTag<FMassStateCastingTag>(Entity);
+    Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
+    Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
+    Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
+    Defer.RemoveTag<FMassStateBuildTag>(Entity);
+    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+    Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+    Defer.RemoveTag<FMassStateGoToRepairTag>(Entity);
+    Defer.RemoveTag<FMassStateRepairTag>(Entity);
+}
+
+void UMainStateProcessor::HandleLoseSightExtension(FMassAIStateFragment& StateFrag,
+    FMassCombatStatsFragment& StatsFrag)
+{
+    if (StateFrag.bHasExtendedLoseSight)
+    {
+        StateFrag.ExtendedLoseSightTimer -= ExecutionInterval;
+        if (StateFrag.ExtendedLoseSightTimer <= 0.f)
+        {
+            StatsFrag.LoseSightRadius /= StatsFrag.LoseSightRadiusFaktor;
+            StateFrag.bHasExtendedLoseSight = false;
+            StateFrag.ExtendedLoseSightTimer = 0.f;
+        }
+    }
 }

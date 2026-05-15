@@ -6,6 +6,7 @@
 #include "MassSignalSubsystem.h"
 #include "MassEntityManager.h"
 #include "MassExecutionContext.h"
+#include "Mass/UnitMassTag.h"
 #include "MainStateProcessor.generated.h"
 
 /**
@@ -25,6 +26,9 @@ public:
 	// Split execution paths
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+
+	void HandleUnitDeathClient(FMassEntityHandle Entity, FMassExecutionContext& Context);
+	void HandleLoseSightExtension(FMassAIStateFragment& StateFrag, FMassCombatStatsFragment& StatsFrag);
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.5f;
