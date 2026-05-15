@@ -2984,21 +2984,6 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 	});
 }
 
-
-void UUnitStateProcessor::HandleSightSignals(FName /*SignalName*/, TArray<FMassEntityHandle>& /*Entities*/)
-{
-	// Sight handling moved to UnitSightProcessor to run on both client and server.
-	if (World)
-	{
- 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
- 	{
- 		UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor::HandleSightSignals] Deprecated. Sight signals are now handled by UnitSightProcessor. NetMode=%d"), (int32)World->GetNetMode());
- 	}
-	}
-	return;
-}
-
-
 void UUnitStateProcessor::HandleUnitSpawnedSignal(
 	FName SignalName,
 	TArray<FMassEntityHandle>& Entities)
