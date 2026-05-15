@@ -246,10 +246,20 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							{
 								if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->TargetID))
 								{
-									if (AIT.TargetEntity != *Found)
+									// Prüfung auf lokale Validität
+									if (EntityManager.IsEntityActive(*Found))
 									{
-										AIT.TargetEntity = *Found;
-										AIT.bHasValidTarget = true;
+										if (AIT.TargetEntity != *Found)
+										{
+											AIT.TargetEntity = *Found;
+											AIT.bHasValidTarget = true;
+
+											// Sofort-Initialisierung der Location aus dem Entity-Transform
+											if (const FTransformFragment* TgtXf = EntityManager.GetFragmentDataPtr<FTransformFragment>(*Found))
+											{
+												AIT.LastKnownLocation = TgtXf->GetTransform().GetLocation();
+											}
+										}
 									}
 								}
 							}

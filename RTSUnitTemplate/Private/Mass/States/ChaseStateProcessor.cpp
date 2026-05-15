@@ -47,6 +47,7 @@ void UChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional); // Geschwindigkeit setzen (zum Stoppen)
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateCastingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateAttackTag>(EMassFragmentPresence::None);
@@ -124,6 +125,8 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
         const auto NetIDList = ChunkContext.GetFragmentView<FMassNetworkIDFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
+        const bool bHasPrediction = PredictionList.Num() > 0;
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -132,9 +135,13 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
+            UE_LOG(LogTemp, Log, TEXT("[Chase] ExecuteClient for Entity %d"), Entity.Index);
+
             if (StateFrag.SwitchingStateClient)
             {
+                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: SwitchingStateClient is true, skipping logic."), Entity.Index);
                 StateFrag.SwitchingStateClient = false;
+                continue;
             }
 
             // If already dead, skip any client-side tag manipulation
@@ -154,24 +161,36 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             // Case 1: Hold position => switch to Idle locally
             if (StateFrag.HoldPosition)
             {
+                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: HoldPosition is true."), Entity.Index);
                 if (!StateFrag.SwitchingStateClient)
                 {
-                    SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                    SwitchToPlaceholderState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
                 continue;
             }
 
-            // Case 2: Lost/invalid target AND placeholder is Idle => switch to Idle locally
+            // Case 2: Lost/invalid target or inactive => switch to Placeholder locally
             if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget))
             {
-                if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
+                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d lost target (Active: %d, Valid: %d). Signal: %s | TargetLastKnown: %s"), 
+                       Entity.Index, EntityManager.IsEntityActive(TargetFrag.TargetEntity), TargetFrag.bHasValidTarget, *StateFrag.PlaceholderSignal.ToString(), *TargetFrag.LastKnownLocation.ToString());
+                       
+                if (!StateFrag.SwitchingStateClient)
                 {
-                    if (!StateFrag.SwitchingStateClient)
+                    if (bHasPrediction)
                     {
-                        SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                        FMassClientPredictionFragment& Pred = PredictionList[i];
+                        Pred.Location = StateFrag.StoredLocation;
+                        Pred.PredDesiredSpeed = Stats.RunSpeed;
+                        Pred.PredAcceptanceRadius = 100.f;
+                        Pred.bHasData = true;
+                        UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Set Prediction to StoredLocation %s"), Entity.Index, *StateFrag.StoredLocation.ToString());
                     }
-                    continue;
+
+                    UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Calling SwitchToPlaceholderState"), Entity.Index);
+                    SwitchToPlaceholderState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
+                continue;
             }
 
             // Case 3: In range check for local state switch to Pause
@@ -182,6 +201,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
 
             if (bIsTargetActive)
             {
+                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d Client TargetFrag.LastKnownLocation: %s"), Entity.Index, *TargetFrag.LastKnownLocation.ToString());
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
                 const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
@@ -189,11 +209,18 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
                 const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
-                const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
-                const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
                 
+                const float Tolerance = 10.f; // Client-Side Prediction Bias
+                const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
+                const float AttackRangeSq = FMath::Square(EffectiveAttackRange + Tolerance);
+                
+                // Diagnoselog
+                UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Dist %.2f / Range %.2f (+Tol %.2f) (Radii: %.2f)"), 
+                       Entity.Index, FMath::Sqrt(DistSq), EffectiveAttackRange, Tolerance, CombinedRadii);
+
                 if (DistSq <= AttackRangeSq)
                 {
+                    UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: In Attack Range (Client). Switching to Pause."), Entity.Index);
                     if (!StateFrag.SwitchingStateClient)
                     {
                         StateFrag.SwitchingStateClient = true;
@@ -264,6 +291,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
             // --- Target Lost ---
             StateFrag.StateTimer += ExecutionInterval;
+            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d Server TargetFrag.LastKnownLocation: %s"), Entity.Index, *TargetFrag.LastKnownLocation.ToString());
 
             if (!Stats.bUseProjectile) // && TargetFrag.bHasValidTarget
             {
@@ -347,30 +375,33 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
     }); // End ForEachEntityChunk
 }
 
-void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
+void UChaseStateProcessor::SwitchToPlaceholderState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
 {
     auto& Defer = Context.Defer();
+
+    UE_LOG(LogTemp, Log, TEXT("[Chase] SwitchToPlaceholderState for Entity %d (NetMode: %d)"), Entity.Index, Context.GetWorld() ? (int32)Context.GetWorld()->GetNetMode() : -1);
 
     if (StateFrag.CanAttack && StateFrag.IsInitialized)
     {
         Defer.AddTag<FMassStateDetectTag>(Entity);
     }
     
-    StateFrag.PlaceholderSignal = UnitSignals::Idle;
-    if (AUnitBase* UnitBase = Cast<AUnitBase>(UnitActor))
-    {
-        UnitBase->UnitStatePlaceholder = UnitData::Idle;
-    }
-    
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d Client-Side Prediction: Switching to %s"), Entity.Index, *StateFrag.PlaceholderSignal.ToString());
         StateFrag.SwitchingStateClient = true;
-        Defer.RemoveTag<FMassStateRunTag>(Entity);
+        
+        // --- PRÄZISES TAG-MANAGEMENT ---
+        // Entferne nur die Tags, die definitiv NICHT dem Ziel-Zustand entsprechen
+        if (StateFrag.PlaceholderSignal != UnitSignals::Run) Defer.RemoveTag<FMassStateRunTag>(Entity);
+        if (StateFrag.PlaceholderSignal != UnitSignals::PatrolRandom) Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
+        if (StateFrag.PlaceholderSignal != UnitSignals::PatrolIdle) Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
+        if (StateFrag.PlaceholderSignal != UnitSignals::Idle) Defer.RemoveTag<FMassStateIdleTag>(Entity);
+
+        // Diese Tags können immer entfernt werden, da sie nicht als Placeholder dienen
         Defer.RemoveTag<FMassStateChaseTag>(Entity);
         Defer.RemoveTag<FMassStateAttackTag>(Entity);
         Defer.RemoveTag<FMassStatePauseTag>(Entity);
-        Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
-        Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
         Defer.RemoveTag<FMassStateCastingTag>(Entity);
         Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
         Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
@@ -378,14 +409,44 @@ void UChaseStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, con
         Defer.RemoveTag<FMassStateBuildTag>(Entity);
         Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
         Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
-        Defer.AddTag<FMassStateIdleTag>(Entity);
+
+        // Prediction: Setzen des korrekten Placeholder-Tags basierend auf dem Signal
+        if (StateFrag.PlaceholderSignal == UnitSignals::PatrolRandom)
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding PatrolRandomTag"), Entity.Index);
+            Defer.AddTag<FMassStatePatrolRandomTag>(Entity);
+        }
+        else if (StateFrag.PlaceholderSignal == UnitSignals::PatrolIdle)
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding PatrolIdleTag"), Entity.Index);
+            Defer.AddTag<FMassStatePatrolIdleTag>(Entity);
+        }
+        else if (StateFrag.PlaceholderSignal == UnitSignals::Run)
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding RunTag"), Entity.Index);
+            Defer.AddTag<FMassStateRunTag>(Entity);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Log, TEXT("[Chase] Entity %d: Adding IdleTag"), Entity.Index);
+            Defer.AddTag<FMassStateIdleTag>(Entity);
+        }
+        
+        // Lokale Actor-Synchronisation (UnitStatePlaceholder)
+        if (AUnitBase* UnitBase = Cast<AUnitBase>(UnitActor))
+        {
+            if (StateFrag.PlaceholderSignal == UnitSignals::PatrolRandom) UnitBase->UnitStatePlaceholder = UnitData::Patrol;
+            else if (StateFrag.PlaceholderSignal == UnitSignals::PatrolIdle) UnitBase->UnitStatePlaceholder = UnitData::PatrolIdle;
+            else if (StateFrag.PlaceholderSignal == UnitSignals::Run) UnitBase->UnitStatePlaceholder = UnitData::Run;
+            else UnitBase->UnitStatePlaceholder = UnitData::Idle;
+        }
     }
     else
     {
         StateFrag.SwitchingState = true;
         if (SignalSubsystem)
         {
-            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Idle, Entity);
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
         }
     }
 }

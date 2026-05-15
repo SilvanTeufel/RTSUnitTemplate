@@ -244,6 +244,14 @@ void UDetectionProcessor::Execute(
         // Schutz vor Client-Flapping:
         if (World->GetNetMode() == NM_Client && Det.TargetFrag->bHasValidTarget && Det.TargetFrag->TargetEntity.IsSet())
         {
+            // AKTUALISIERUNG: Position lokal nachführen, falls Ziel aktiv ist
+            if (EntityManager.IsEntityActive(Det.TargetFrag->TargetEntity))
+            {
+                if (const FTransformFragment* TgtXf = EntityManager.GetFragmentDataPtr<FTransformFragment>(Det.TargetFrag->TargetEntity))
+                {
+                    Det.TargetFrag->LastKnownLocation = TgtXf->GetTransform().GetLocation();
+                }
+            }
             // Wenn der Server bereits ein Ziel vorgibt, behalten wir dieses bei 
             // und überspringen die lokale Suche in diesem Frame.
             continue; 

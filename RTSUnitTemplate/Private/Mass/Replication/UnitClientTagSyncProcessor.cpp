@@ -137,7 +137,7 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	// 11. Idle (Niedrigste Priorität)
 	if (HasTag(FMassStateIdleTag::StaticStruct())) return EState::Idle;
 
-	return EState::None;
+	return EState::Idle; 
 }
 
 void UUnitClientTagSyncProcessor::ApplyStateToActor(AAbilityUnit* AbilityUnit, TEnumAsByte<UnitData::EState> NewState) const
