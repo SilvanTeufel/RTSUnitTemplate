@@ -45,7 +45,6 @@ void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
@@ -240,9 +239,21 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     }
     else if (!StateFrag.SwitchingStateClient)
     {
-        // Note: The original code didn't have an explicit switch to Chase here for client, 
-        // usually it relies on the next processor or tag sync, but for consistency:
-        // However, looking at server logic, it switches to Chase/Run.
+        StateFrag.SwitchingStateClient = true;
+        StateFrag.StateTimerClient = 0.f;
+        if (Item) Item->PredictionTimer = 0.f;
+
+        auto& Defer = Context.Defer();
+        Defer.RemoveTag<FMassStateAttackTag>(Entity);
+        
+        if (Stats.bCanMoveWhileAttacking)
+        {
+            Defer.AddTag<FMassStateRunTag>(Entity);
+        }
+        else
+        {
+            Defer.AddTag<FMassStateChaseTag>(Entity);
+        }
     }
 }
 
@@ -347,13 +358,13 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
         StateFrag.SwitchingState = true;
         if (SignalSubsystem)
         {
-            if (!Stats.bCanMoveWhileAttacking)
+            if (Stats.bCanMoveWhileAttacking)
             {
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
             }
             else
             {
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
             }
         }
     }

@@ -48,7 +48,6 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
-    EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 
@@ -136,14 +135,12 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MutableTargetFrag.TargetEntity) : nullptr;
     const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
-    auto SightList = Context.GetMutableFragmentView<FMassSightFragment>();
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     
     if (!bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
     {
         if (!StateFrag.SwitchingState)
         {
-            if (SightList.Num() > 0) SightList[EntityIdx].AttackerTeamOverlapsPerTeam.Empty();
             if (MoveTargetList.Num() > 0)
             {
                 UpdateMoveTarget(MoveTargetList[EntityIdx], StateFrag.StoredLocation, Stats.RunSpeed, World);
@@ -192,14 +189,8 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         if (StateFrag.StateTimer >= Stats.PauseDuration && !StateFrag.SwitchingState)
         {
             StateFrag.SwitchingState = true;
-            int32 TargetTeamId = TgtStatsPtr ? TgtStatsPtr->TeamId : -1;
             if (Stats.bUseProjectile)
             {
-                if (TargetTeamId != -1 && SightList.Num() > 0)
-                {
-                    SightList[EntityIdx].AttackerTeamOverlapsPerTeam.FindOrAdd(TargetTeamId)++;
-                }
-                
                 if (SignalSubsystem)
                 {
                     StateFrag.StateTimer = 0.f;
@@ -208,11 +199,6 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
             }
             else
             {
-                if (TargetTeamId != -1 && SightList.Num() > 0)
-                {
-                    SightList[EntityIdx].AttackerTeamOverlapsPerTeam.FindOrAdd(TargetTeamId)++;
-                }
-                
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Attack, Entity);
@@ -222,17 +208,16 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     }
     else if (!StateFrag.SwitchingState)
     {
-        if (SightList.Num() > 0) SightList[EntityIdx].AttackerTeamOverlapsPerTeam.Empty();
         StateFrag.SwitchingState = true;
         if (SignalSubsystem)
         {
-            if (!Stats.bCanMoveWhileAttacking)
+            if (Stats.bCanMoveWhileAttacking)
             {
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
             }
             else
             {
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
             }
         }
     }
@@ -294,12 +279,33 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                     Defer.AddTag<FMassStateDetectTag>(Entity);
                 }
                 Defer.RemoveTag<FMassStatePauseTag>(Entity);
-                Defer.AddTag<FMassStateChaseTag>(Entity);
+                
+                if (Stats.bCanMoveWhileAttacking)
+                {
+                    Defer.AddTag<FMassStateRunTag>(Entity);
+                }
+                else
+                {
+                    Defer.AddTag<FMassStateChaseTag>(Entity);
+                }
             }
         }
     }
     else
     {
+        if (!StateFrag.SwitchingStateClient)
+        {
+            StateFrag.SwitchingStateClient = true;
+            StateFrag.StateTimerClient = 0.f;
+            auto& Defer = Context.Defer();
+            
+            Defer.RemoveTag<FMassStatePauseTag>(Entity);
+            
+            if (StateFrag.PlaceholderSignal == UnitSignals::Run)
+                Defer.AddTag<FMassStateRunTag>(Entity);
+            else
+                Defer.AddTag<FMassStateIdleTag>(Entity);
+        }
     }
 }
 

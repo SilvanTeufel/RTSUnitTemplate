@@ -166,6 +166,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
+
             // Case 2: Lost/invalid target or inactive => switch to Placeholder locally
             if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget))
             {

@@ -242,26 +242,24 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							
 							// Synchronize Target Entity if server has one
 							// Note: We avoid resetting to zero here to prevent "flapping" with client-side detection.
-							if (UseItem->TargetID != 0)
+							const FMassEntityHandle* FoundTarget = (UseItem->TargetID != 0) ? GlobalNetToEntity.Find(UseItem->TargetID) : nullptr;
+							if (FoundTarget && EntityManager.IsEntityActive(*FoundTarget))
 							{
-								if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->TargetID))
+								if (!AIT.TargetEntity.IsSet() || AIT.TargetEntity != *FoundTarget)
 								{
-									// Prüfung auf lokale Validität
-									if (EntityManager.IsEntityActive(*Found))
-									{
-										if (AIT.TargetEntity != *Found)
-										{
-											AIT.TargetEntity = *Found;
-											AIT.bHasValidTarget = true;
+									AIT.TargetEntity = *FoundTarget;
+									AIT.bHasValidTarget = true;
 
-											// Sofort-Initialisierung der Location aus dem Entity-Transform
-											if (const FTransformFragment* TgtXf = EntityManager.GetFragmentDataPtr<FTransformFragment>(*Found))
-											{
-												AIT.LastKnownLocation = TgtXf->GetTransform().GetLocation();
-											}
-										}
+									// Sofort-Initialisierung der Location aus dem Entity-Transform
+									if (const FTransformFragment* TgtXf = EntityManager.GetFragmentDataPtr<FTransformFragment>(*FoundTarget))
+									{
+										AIT.LastKnownLocation = TgtXf->GetTransform().GetLocation();
 									}
 								}
+							}
+							else
+							{
+								AIT.TargetEntity.Reset();
 							}
 
 							// Synchronize LastKnownLocation if provided and not a movement target
@@ -276,7 +274,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 							// Synchronize other flags from packed bits
 							AIT.IsFocusedOnTarget = (PE & UnitReplicationBits::Packed_IsFocusedOnTarget) != 0;
-							if ((PE & UnitReplicationBits::Packed_HasValidTarget) != 0) AIT.bHasValidTarget = true;
+							AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
 							
 							// Action Slot 2 (Abilities and Friendly Targets)
 							if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsAbility)
@@ -286,9 +284,14 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							else if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsFriendly)
 							{
 								AIT.LastKnownFriendlyLocation = FVector(UseItem->ActionLoc);
-								if (UseItem->ActionID != 0)
+								const FMassEntityHandle* FoundFriendly = (UseItem->ActionID != 0) ? GlobalNetToEntity.Find(UseItem->ActionID) : nullptr;
+								if (FoundFriendly && EntityManager.IsEntityActive(*FoundFriendly))
 								{
-									if (const FMassEntityHandle* Found = GlobalNetToEntity.Find(UseItem->ActionID)) AIT.FriendlyTargetEntity = *Found;
+									AIT.FriendlyTargetEntity = *FoundFriendly;
+								}
+								else
+								{
+									AIT.FriendlyTargetEntity.Reset();
 								}
 							}
 						}

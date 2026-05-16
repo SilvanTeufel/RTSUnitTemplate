@@ -244,17 +244,22 @@ void UDetectionProcessor::Execute(
         // Schutz vor Client-Flapping:
         if (World->GetNetMode() == NM_Client && Det.TargetFrag->bHasValidTarget && Det.TargetFrag->TargetEntity.IsSet())
         {
-            // AKTUALISIERUNG: Position lokal nachführen, falls Ziel aktiv ist
             if (EntityManager.IsEntityActive(Det.TargetFrag->TargetEntity))
             {
                 if (const FTransformFragment* TgtXf = EntityManager.GetFragmentDataPtr<FTransformFragment>(Det.TargetFrag->TargetEntity))
                 {
-                    Det.TargetFrag->LastKnownLocation = TgtXf->GetTransform().GetLocation();
+                    const FVector TgtLoc = TgtXf->GetTransform().GetLocation();
+                    Det.TargetFrag->LastKnownLocation = TgtLoc;
+
+                    // Prüfe, ob das Ziel noch grob in Sichtweite ist (mit Puffer für Replikations-Differenzen)
+                    const float DistSq = FVector::DistSquared2D(Det.Location, TgtLoc);
+                    const float LoseSightSq = FMath::Square(Det.Stats->LoseSightRadius * 1.5f); 
+                    if (DistSq < LoseSightSq)
+                    {
+                        continue; // Bleibe beim vom Server vorgegebenen Ziel
+                    }
                 }
             }
-            // Wenn der Server bereits ein Ziel vorgibt, behalten wir dieses bei 
-            // und überspringen die lokale Suche in diesem Frame.
-            continue; 
         }
    
         // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not already inside

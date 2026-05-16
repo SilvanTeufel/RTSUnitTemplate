@@ -361,7 +361,14 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                     continue;
                 }
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
-            }else if ( DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) &&
+            }
+            else if (FVector::Dist2D(CurrentLocation, FinalDestination) <= (AcceptanceRadius))
+            {
+                VelocityList[i].Value = FVector::ZeroVector;
+                SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                continue;
+            }
+            else if ( DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) &&
                     TargetFrag.bHasValidTarget && bIsTargetActive && Stats.bCanMoveWhileAttacking)
             {
                     const float DistSq = FVector::DistSquared2D(CurrentLocation, TargetFrag.LastKnownLocation);
@@ -379,12 +386,6 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                         SwitchToPauseState(ChunkContext, Entity, StateFrag);
                         continue;
                     }
-            }
-            else if (FVector::Dist2D(CurrentLocation, FinalDestination) <= (AcceptanceRadius))
-            {
-                VelocityList[i].Value = FVector::ZeroVector;
-                SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
-                continue;
             }
             
         }
