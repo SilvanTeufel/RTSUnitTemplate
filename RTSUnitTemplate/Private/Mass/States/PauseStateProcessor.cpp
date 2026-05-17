@@ -141,11 +141,6 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     {
         if (!StateFrag.SwitchingState)
         {
-            if (MoveTargetList.Num() > 0)
-            {
-                UpdateMoveTarget(MoveTargetList[EntityIdx], StateFrag.StoredLocation, Stats.RunSpeed, World);
-            }
-
             StateFrag.SwitchingState = true;
             
             StateFrag.PlaceholderSignal = UnitSignals::Idle;
@@ -336,19 +331,6 @@ void UPauseStateProcessor::ApplyAttackStopLogic(FMassExecutionContext& Context,
         {
             MoveTargetList[EntityIdx].DesiredSpeed.Set(0.f);
             MoveTargetList[EntityIdx].IntentAtGoal = EMassMovementAction::Stand;
-        }
-
-        // NEU: Prädiktive Rotation zum Ziel
-        FVector LookAtDir = (TargetFrag.LastKnownLocation - TransformList[EntityIdx].GetTransform().GetLocation());
-        LookAtDir.Z = 0.f;
-        if (LookAtDir.Normalize())
-        {
-            FQuat LookAtQuat = LookAtDir.ToOrientationQuat();
-            auto TransformMutableList = Context.GetMutableFragmentView<FTransformFragment>();
-            if (TransformMutableList.IsValidIndex(EntityIdx))
-            {
-                TransformMutableList[EntityIdx].GetMutableTransform().SetRotation(LookAtQuat);
-            }
         }
     }
 }

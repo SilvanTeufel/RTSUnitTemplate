@@ -36,8 +36,6 @@ void UUnitRotateToTargetProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 
 void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-	static int32 LogCounter = 0;
-
 	EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -76,7 +74,6 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 
 			const FMassAITargetFragment& TargetFrag = TargetList[i];
 			const FMassUnitYawFollowFragment& FollowFrag = FollowList[i];
-			FString ActorName = Actor->GetName();
 
 			FVector TargetLocation = FVector::ZeroVector;
 			bool bHasTarget = false;
@@ -105,28 +102,29 @@ void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FM
 					bIsDead = DoesEntityHaveTag(EntityManager, TargetFrag.TargetEntity, FMassStateDeadTag::StaticStruct());
 				}
 
-					const float DistanceSq = FVector::DistSquared(CurrentLocation, TargetLocation);
-					float MaxRange = 2500.f;
-					if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
+				const float DistanceSq = FVector::DistSquared(CurrentLocation, TargetLocation);
+				float MaxRange = 2500.f;
+				if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
+				{
+					if (MassUnit->MassActorBindingComponent)
 					{
-						if (MassUnit->MassActorBindingComponent)
-						{
-							MaxRange = MassUnit->MassActorBindingComponent->LoseSightRadius;
-						}
+						MaxRange = MassUnit->MassActorBindingComponent->LoseSightRadius;
 					}
+				}
 
-					if (!bIsDead && DistanceSq <= FMath::Square(MaxRange) && DistanceSq > 25.f)
-					{
-						FVector Dir = TargetLocation - CurrentLocation;
+				if (!bIsDead && DistanceSq <= FMath::Square(MaxRange) && DistanceSq > 25.f)
+				{
+					FVector Dir = TargetLocation - CurrentLocation;
 					Dir.Z = 0.f;
 					if (Dir.Normalize())
 					{
 						FQuat DesiredQuat = Dir.ToOrientationQuat();
 						float TargetYaw = DesiredQuat.Rotator().Yaw + FollowFrag.OffsetDegrees;
-						
+
 						// Deadzone check to avoid jitter
 						const float CurrentYaw = CurrentQuat.Rotator().Yaw;
-						if (FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentYaw, TargetYaw)) > 2.5f)
+						float DeltaAngle = FMath::FindDeltaAngleDegrees(CurrentYaw, TargetYaw);
+						if (FMath::Abs(DeltaAngle) > 2.5f)
 						{
 							TargetQuat = FRotator(0.f, TargetYaw, 0.f).Quaternion();
 						}

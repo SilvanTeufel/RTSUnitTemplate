@@ -170,15 +170,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
                 
         MoveTarget.DesiredSpeed.Set(0.f);
         MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
-
-        FVector LookAtDir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
-        LookAtDir.Z = 0.f;
-        if (LookAtDir.Normalize())
-        {
-            FQuat LookAtQuat = LookAtDir.ToOrientationQuat();
-            FTransform& MutableTransform = Context.GetMutableFragmentView<FTransformFragment>()[EntityIdx].GetMutableTransform();
-            MutableTransform.SetRotation(LookAtQuat);
-        }
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
@@ -275,15 +266,6 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
                 
         MoveTarget.DesiredSpeed.Set(0.f);
         MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
-
-        FVector LookAtDir = (TargetFrag.LastKnownLocation - Transform.GetLocation());
-        LookAtDir.Z = 0.f;
-        if (LookAtDir.Normalize())
-        {
-            FQuat LookAtQuat = LookAtDir.ToOrientationQuat();
-            FTransform& MutableTransform = Context.GetMutableFragmentView<FTransformFragment>()[EntityIdx].GetMutableTransform();
-            MutableTransform.SetRotation(LookAtQuat);
-        }
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
