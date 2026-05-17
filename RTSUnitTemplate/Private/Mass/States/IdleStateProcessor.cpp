@@ -35,8 +35,8 @@ void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); 
-    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassUnitPathFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
@@ -99,7 +99,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         const bool bHasPathFrag = PathList.Num() > 0;
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         const bool bHasPatrolFrag = PatrolList.Num() > 0;
-        const auto PredictionList = ChunkContext.GetFragmentView<FMassClientPredictionFragment>();
+        auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
         const bool bHasPredList = PredictionList.Num() > 0;
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -195,27 +195,58 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     }
                 }
             }
+
+            if (!StateFrag.StoredLocation.IsNearlyZero())
+            {
+                const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
+                float Threshold = 50.f;
+                if (bHasPredList)
+                {
+                    const FMassClientPredictionFragment& Pred = PredictionList[i];
+                    Threshold = Pred.PredAcceptanceRadius * 3.f;
+                }
+
+                if (Dist2D > Threshold)
+                {
+                    if (bHasPredList)
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[i];
+                        if (Pred.bHasData)
+                        {
+                            Pred.Location = StateFrag.StoredLocation;
+                            Pred.PredAcceptanceRadius = Threshold / 3.f;
+                        }
+                    }
+                    if (!StateFrag.SwitchingStateClient)
+                    {
+                        SwitchToRunState(ChunkContext, Entity, StateFrag);
+                    }
+                    continue;
+                }
+            }
         }
     });
 }
 
 void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    const UWorld* World = EntityManager.GetWorld();
+    UWorld* World = EntityManager.GetWorld();
     if (!World || !SignalSubsystem) return;
 
-    EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager](FMassExecutionContext& ChunkContext)
+    EntityQuery.ForEachEntityChunk(Context, [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        const auto MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
         const bool bHasPathFrag = PathList.Num() > 0;
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         const bool bHasPatrolFrag = PatrolList.Num() > 0;
+        auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
+        const bool bHasPredList = PredictionList.Num() > 0;
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -307,6 +338,31 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 if (!bIsOnPlattform && PatrolFrag->bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag->SetUnitsBackToPatrolTime)
                 {
                     SwitchToPatrolRandomState(ChunkContext, Entity, StateFrag);
+                    continue;
+                }
+            }
+
+            if (!StateFrag.StoredLocation.IsNearlyZero())
+            {
+                const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
+                const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                const float Threshold = MoveTarget.SlackRadius * 2.f;
+
+                if (Dist2D > Threshold)
+                {
+                    UpdateMoveTarget(MoveTargetList[i], StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
+
+                    if (bHasPredList)
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[i];
+                        if (Pred.bHasData)
+                        {
+                            Pred.Location = StateFrag.StoredLocation;
+                            Pred.PredAcceptanceRadius = Threshold / 3.f;
+                        }
+                    }
+
+                    SwitchToRunState(ChunkContext, Entity, StateFrag);
                     continue;
                 }
             }
