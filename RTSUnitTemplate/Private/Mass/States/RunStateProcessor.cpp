@@ -152,7 +152,8 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             // Only arrival check on client (skip if following a unit)
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
          
-            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius*2.f)
+            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius*2.f || 
+                (FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -362,7 +363,8 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 }
                 // Update MoveTarget towards the adjusted desired position; skip Idle arrival while following
             }
-            else if (FVector::Dist2D(CurrentLocation, FinalDestination) <= (AcceptanceRadius))
+            else if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius || 
+                     (FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
             {
                 VelocityList[i].Value = FVector::ZeroVector;
                 SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());

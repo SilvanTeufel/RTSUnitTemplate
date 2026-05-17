@@ -373,9 +373,6 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
             
             TargetYaw = DesiredQuat.Rotator().Yaw;
         }
-    }else if (UnitBase->GetUnitState() == UnitData::Run)
-    {
-        UnitBase->SetUnitState(UnitData::Idle);
     }
 
     if (Char.RotatesToMovement)

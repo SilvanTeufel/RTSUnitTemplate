@@ -35,6 +35,12 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool bShowLogs = false;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float VelocityDistanceCheck = 150.f;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float VelocityToIdle = 50.f;
 private:
 	FMassEntityQuery EntityQuery;
 
