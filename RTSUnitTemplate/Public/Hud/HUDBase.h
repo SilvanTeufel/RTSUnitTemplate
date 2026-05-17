@@ -277,8 +277,6 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DeselectAllUnits", Keywords = "RTSUnitTemplate DeselectAllUnits"), Category = "TopDownRTSTemplate")
 	void DeselectAllUnits();
 
-
-
 	bool IsActorInsideRec(FVector InPoint, FVector CuPoint, FVector ALocation);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Selection")
