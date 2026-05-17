@@ -15,6 +15,7 @@ AConstructionUnit::AConstructionUnit(const FObjectInitializer& ObjectInitializer
 	Name = TEXT("ConstructionSite");
 	// Likely stationary
 	CanMove = false;
+	bIsConstructionUnit = true;
 }
 
 void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

@@ -195,6 +195,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
 	FHealthBarSettings GroundHealthBarSettings;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
+	FHealthBarSettings ConstructionHealthBarSettings;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorRadius = 15.f;
 

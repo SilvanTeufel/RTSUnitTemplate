@@ -1101,7 +1101,8 @@ void AHUDBase::DrawAllHealthBars()
 			}
 
 			FHealthBarSettings EffectiveSettings;
-			if (bIsBuilding) EffectiveSettings = BuildingHealthBarSettings;
+			if (Unit->bIsConstructionUnit) EffectiveSettings = ConstructionHealthBarSettings;
+			else if (bIsBuilding) EffectiveSettings = BuildingHealthBarSettings;
 			else if (bIsFlying) EffectiveSettings = FlyingHealthBarSettings;
 			else EffectiveSettings = GroundHealthBarSettings;
 
