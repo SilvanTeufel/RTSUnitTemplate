@@ -116,15 +116,6 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
             
-            if (this->bFollowTickThisFrame)
-            {
-                if (TargetFrag.bHasValidTarget)
-                {
-                    UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity [%d] has target, but no chase. bIsTargetActive: %d, HoldPosition: %d, bShouldIgnoreEnemies: %d, SwitchingStateClient: %d"), 
-                        Entity.Index, bIsTargetActive, StateFrag.HoldPosition, bShouldIgnoreEnemies, StateFrag.SwitchingStateClient);
-                }
-            }
-            
             if (StateFrag.SwitchingStateClient)
             {
                 StateFrag.SwitchingStateClient = false;
@@ -203,9 +194,6 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         continue;
                     }
                 }
-                else
-                {
-                }
             }
         }
     });
@@ -242,15 +230,6 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
-
-            if (this->bFollowTickThisFrame)
-            {
-                if (TargetFrag.bHasValidTarget)
-                {
-                    UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Server: Entity [%d] has target, but no chase. bIsTargetActive: %d, HoldPosition: %d, bShouldIgnoreEnemies: %d, SwitchingState: %d"), 
-                        Entity.Index, bIsTargetActive, StateFrag.HoldPosition, bShouldIgnoreEnemies, StateFrag.SwitchingState);
-                }
-            }
 
             if (StateFrag.SwitchingState) continue;
 
@@ -315,9 +294,6 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         SwitchToRunState(ChunkContext, Entity, StateFrag);
                         continue;
                     }
-                }
-                else
-                {
                 }
             }
 
