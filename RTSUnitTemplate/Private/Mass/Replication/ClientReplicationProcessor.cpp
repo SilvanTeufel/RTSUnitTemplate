@@ -259,7 +259,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							}
 							else
 							{
-								AIT.TargetEntity.Reset();
+								// AIT.TargetEntity.Reset(); // Keep as memory for DetectionProcessor hysteresis
 							}
 
 							// Synchronize LastKnownLocation if provided and not a movement target
@@ -291,7 +291,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 								}
 								else
 								{
-									AIT.FriendlyTargetEntity.Reset();
+									// AIT.FriendlyTargetEntity.Reset(); // Keep as memory
 								}
 							}
 						}

@@ -383,6 +383,12 @@ void UDetectionProcessor::Execute(
                 // “new” target if within effective sight radius and closer than previous best, and alive
                 if (DistSq < EffectiveSightSq && DistSq >= EffectiveMinRangeSq && Tgt.Stats->Health > 0)
                 {
+                    // NEU: Verhindere sofortiges Wiederfinden von vom Server verworfenen Zielen (Hysterese am Sichtrand)
+                    if (World->GetNetMode() == NM_Client && !Det.TargetFrag->bHasValidTarget && Det.TargetFrag->TargetEntity == Tgt.Entity)
+                    {
+                        continue;
+                    }
+
                     bool bBetterPriority = false;
                     if (!bHasBestCandidate)
                     {
@@ -423,6 +429,13 @@ void UDetectionProcessor::Execute(
                     const float EffectiveLoseSightSq = FMath::Square(EffectiveLoseSight);
                     if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < EffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq && Tgt.Stats->Health > 0)
                     {
+                        // NEU: Auf dem Client respektieren wir den Server-Verlust. 
+                        // Wenn der Server das Ziel verworfen hat (bHasValidTarget == false), beleben wir es hier nicht lokal wieder.
+                        if (World->GetNetMode() == NM_Client && !Det.TargetFrag->bHasValidTarget)
+                        {
+                            continue;
+                        }
+
                         CurrentLocation      = Tgt.Location;
                         bCurrentStillViable  = true;
                         // Note: bCurrentTargetCanAttack was already updated at the start for the current target
@@ -469,7 +482,11 @@ void UDetectionProcessor::Execute(
         }
         else
         {
-            Det.TargetFrag->TargetEntity.Reset();
+            // Auf dem Client behalten wir das TargetEntity als Gedächtnis für die Hysterese am Sichtrand
+            if (World->GetNetMode() != NM_Client)
+            {
+                Det.TargetFrag->TargetEntity.Reset();
+            }
             Det.TargetFrag->bHasValidTarget = false;
         }
     }

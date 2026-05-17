@@ -123,6 +123,8 @@ void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, F
 	Stats.IsInitialized = Unit.IsInitialized;
 	Stats.bIsInitializedOnClient = true;
 	Stats.bCanMoveWhileAttacking = Unit.MassActorBindingComponent->CanMoveWhileAttacking;
+	Stats.SightRadius = Unit.MassActorBindingComponent->SightRadius;
+	Stats.LoseSightRadius = Unit.MassActorBindingComponent->LoseSightRadius;
 }
 
 void UUnitActorToFragmentSyncProcessor::SyncCharacteristics(const AUnitBase& Unit, FMassAgentCharacteristicsFragment& Characteristics)
