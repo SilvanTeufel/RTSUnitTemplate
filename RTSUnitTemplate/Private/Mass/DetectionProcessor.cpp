@@ -13,6 +13,8 @@
 #include "Async/Async.h"
 #include "Mass/Signals/UnitSignalingProcessor.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogDetection, Log, All);
+
 
 UDetectionProcessor::UDetectionProcessor(): EntityQuery()
 {
@@ -54,9 +56,8 @@ void UDetectionProcessor::BeginDestroy()
 // Called by the Signal Subsystem when the corresponding signal is processed
 void UDetectionProcessor::HandleUnitPresenceSignal(FName SignalName, TConstArrayView<FMassEntityHandle> Entities)
 {
-
-  ReceivedSignalsBuffer.FindOrAdd(SignalName).Append(Entities.GetData(), Entities.Num());
-
+    UE_LOG(LogDetection, VeryVerbose, TEXT("[DetectionProcessor] Received Signal %s for %d entities"), *SignalName.ToString(), Entities.Num());
+    ReceivedSignalsBuffer.FindOrAdd(SignalName).Append(Entities.GetData(), Entities.Num());
 }
 
 void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& DetectorInfo,
@@ -85,10 +86,10 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
                 const FMassAgentCharacteristicsFragment* TgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(CurrentTargetEntity);
                 const FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(CurrentTargetEntity);
 
-        // Ensure all data is valid before adding
+                // Ensure all data is valid before adding
                 if (TgtTransformFrag && TgtState && TgtStats)
                 {
-                    if (TgtStats->Health >= 0)
+                    if (TgtStats->Health > 0)
                     {
                         InOutTargetUnits.Add({
                             CurrentTargetEntity,
@@ -99,7 +100,20 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
                             SightFragment // Optional
                             });
                     }
+                    else
+                    {
+                        UE_LOG(LogDetection, Log, TEXT("[DetectionProcessor] Detector %d: Current target %d not injected because Health <= 0 (%f)"), DetectorInfo.Entity.Index, CurrentTargetEntity.Index, TgtStats->Health);
+                    }
                 }
+                else
+                {
+                    UE_LOG(LogDetection, Warning, TEXT("[DetectionProcessor] Detector %d: Current target %d has missing fragments (Xf:%d, State:%d, Stats:%d)"), 
+                        DetectorInfo.Entity.Index, CurrentTargetEntity.Index, TgtTransformFrag != nullptr, TgtState != nullptr, TgtStats != nullptr);
+                }
+            }
+            else
+            {
+                 UE_LOG(LogDetection, Verbose, TEXT("[DetectionProcessor] Detector %d: Current target %d not injected because it is inactive or has StopDetection tag"), DetectorInfo.Entity.Index, CurrentTargetEntity.Index);
             }
         }
     }
@@ -140,6 +154,7 @@ void UDetectionProcessor::Execute(
     if (const TArray<FMassEntityHandle>* ReceivedEntities = ReceivedSignalsBuffer.Find(UnitSignals::UnitInDetectionRange))
     {
         PotentialTargets = *ReceivedEntities;
+        UE_LOG(LogDetection, Verbose, TEXT("[DetectionProcessor] Execute: Found %d potential targets in buffer"), PotentialTargets.Num());
     }
     
     // NEW: Clear the buffer for the next frame.
@@ -150,7 +165,11 @@ void UDetectionProcessor::Execute(
     
     for (const FMassEntityHandle& TgtEntity : PotentialTargets)
     {
-        if (!EntityManager.IsEntityActive(TgtEntity) || DoesEntityHaveTag(EntityManager, TgtEntity, FMassStopUnitDetectionTag::StaticStruct())) continue;
+        if (!EntityManager.IsEntityActive(TgtEntity) || DoesEntityHaveTag(EntityManager, TgtEntity, FMassStopUnitDetectionTag::StaticStruct()))
+        {
+             UE_LOG(LogDetection, VeryVerbose, TEXT("[DetectionProcessor] Target %d skipped: Inactive or StopDetection"), TgtEntity.Index);
+             continue;
+        }
 
         // Fetch all required fragments for this target
         FTransformFragment* TgtTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TgtEntity);
@@ -161,12 +180,22 @@ void UDetectionProcessor::Execute(
 
         if (!TgtTransformFrag || !TgtState || !TgtStats)
         {
+            UE_LOG(LogDetection, Warning, TEXT("[DetectionProcessor] Target %d skipped: Missing fragments"), TgtEntity.Index);
             continue;
         }
         
         const float Age = World->GetTimeSeconds() - TgtState->BirthTime;
         if (Age < 0.1f && Age >= 0.f) 
+        {
+            UE_LOG(LogDetection, VeryVerbose, TEXT("[DetectionProcessor] Target %d skipped: Too young (%f)"), TgtEntity.Index, Age);
             continue;
+        }
+
+        if (TgtStats->Health <= 0)
+        {
+            UE_LOG(LogDetection, VeryVerbose, TEXT("[DetectionProcessor] Target %d skipped: Health <= 0 (%f)"), TgtEntity.Index, TgtStats->Health);
+            continue;
+        }
         
         TargetUnits.Add({
                 TgtEntity,
@@ -177,6 +206,7 @@ void UDetectionProcessor::Execute(
                 SightFragment
             });
     }
+    UE_LOG(LogDetection, Verbose, TEXT("[DetectionProcessor] Execute: %d valid TargetUnits collected"), TargetUnits.Num());
     
     TArray<FDetectorUnitInfo> DetectorUnits;
     DetectorUnits.Reserve(256);
@@ -234,6 +264,10 @@ void UDetectionProcessor::Execute(
 
         if (!Det.State->CanAttack)
         {
+            if (Det.TargetFrag->bHasValidTarget)
+            {
+                UE_LOG(LogDetection, Log, TEXT("[DetectionProcessor] Detector %d: Cleared target because CanAttack is false"), Det.Entity.Index);
+            }
             Det.TargetFrag->TargetEntity.Reset();
             Det.TargetFrag->bHasValidTarget = false;
             continue;
@@ -256,9 +290,18 @@ void UDetectionProcessor::Execute(
                     const float LoseSightSq = FMath::Square(Det.Stats->LoseSightRadius * 1.5f); 
                     if (DistSq < LoseSightSq)
                     {
+                        // UE_LOG(LogDetection, VeryVerbose, TEXT("[DetectionProcessor] Detector %d: Client flapping protection active for target %d"), Det.Entity.Index, Det.TargetFrag->TargetEntity.Index);
                         continue; // Bleibe beim vom Server vorgegebenen Ziel
                     }
+                    else
+                    {
+                        UE_LOG(LogDetection, Log, TEXT("[DetectionProcessor] Detector %d: Client flapping protection released target %d due to distance"), Det.Entity.Index, Det.TargetFrag->TargetEntity.Index);
+                    }
                 }
+            }
+            else
+            {
+                 UE_LOG(LogDetection, Log, TEXT("[DetectionProcessor] Detector %d: Client target %d inactive, releasing flapping protection"), Det.Entity.Index, Det.TargetFrag->TargetEntity.Index);
             }
         }
    
@@ -292,6 +335,8 @@ void UDetectionProcessor::Execute(
                     bCurrentTargetCanAttack = Tgt.State->CanAttack;
                 }else
                 {
+                    UE_LOG(LogDetection, Log, TEXT("[DetectionProcessor] Detector %d: Focused target %d lost viability (H:%f, DistSq:%f, MinRangeSq:%f)"), 
+                        Det.Entity.Index, Tgt.Entity.Index, Tgt.Stats->Health, DistSq, EffectiveMinRangeSq);
                     Det.TargetFrag->IsFocusedOnTarget = false;
                     bCurrentTargetCanAttack = true;
                 }
@@ -467,9 +512,13 @@ void UDetectionProcessor::Execute(
         // 4) Update target fragment
         if (bFoundNew && (!Det.TargetFrag->IsFocusedOnTarget || (BestEntity != Det.TargetFrag->TargetEntity)))
         {
+            UE_LOG(LogDetection, Log, TEXT("[DetectionProcessor] Detector %d: Found new/better target %d (Old: %d)"), 
+                Det.Entity.Index, BestEntity.Index, Det.TargetFrag->TargetEntity.IsValid() ? Det.TargetFrag->TargetEntity.Index : -1);
+            
             Det.TargetFrag->TargetEntity      = BestEntity;
             Det.TargetFrag->LastKnownLocation = BestLocation;
             Det.TargetFrag->bHasValidTarget   = true;
+            Det.TargetFrag->IsFocusedOnTarget = true;
             if (!Det.State->SwitchingState)
             {
                 PendingSignals.Emplace(Det.Entity, UnitSignals::SetUnitToChase);
@@ -482,12 +531,19 @@ void UDetectionProcessor::Execute(
         }
         else
         {
+            if (Det.TargetFrag->bHasValidTarget)
+            {
+                UE_LOG(LogDetection, Log, TEXT("[DetectionProcessor] Detector %d: Lost target %d (No longer viable)"), 
+                    Det.Entity.Index, Det.TargetFrag->TargetEntity.IsValid() ? Det.TargetFrag->TargetEntity.Index : -1);
+            }
+            
             // Auf dem Client behalten wir das TargetEntity als Gedächtnis für die Hysterese am Sichtrand
             if (World->GetNetMode() != NM_Client)
             {
                 Det.TargetFrag->TargetEntity.Reset();
             }
             Det.TargetFrag->bHasValidTarget = false;
+            Det.TargetFrag->IsFocusedOnTarget = false;
         }
     }
     

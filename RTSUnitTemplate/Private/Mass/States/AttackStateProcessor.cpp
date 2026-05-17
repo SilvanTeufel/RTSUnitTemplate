@@ -293,27 +293,16 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     if (!bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead)
     {
         StateFrag.SwitchingState = true;
-        
         StateFrag.PlaceholderSignal = UnitSignals::Idle;
+
         if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
         {
             UnitBase->UnitStatePlaceholder = UnitData::Idle;
         }
-        
-        auto& Defer = Context.Defer();
-        if (StateFrag.CanAttack && StateFrag.IsInitialized)
+
+        if (SignalSubsystem)
         {
-            Defer.AddTag<FMassStateDetectTag>(Entity);
-        }
-        
-        Defer.RemoveTag<FMassStateAttackTag>(Entity);
-        if (StateFrag.PlaceholderSignal != NAME_None && StateFrag.PlaceholderSignal != UnitSignals::Idle)
-        {
-            Defer.AddTag<FMassStatePauseTag>(Entity);
-        }
-        else
-        {
-            Defer.AddTag<FMassStateIdleTag>(Entity);
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
         }
         return;
     }

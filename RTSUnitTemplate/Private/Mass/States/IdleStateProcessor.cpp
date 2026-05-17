@@ -33,7 +33,7 @@ void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-    EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); 
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
@@ -97,6 +97,8 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
         const bool bHasPathFrag = PathList.Num() > 0;
+        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
+        const bool bHasPatrolFrag = PatrolList.Num() > 0;
         const auto PredictionList = ChunkContext.GetFragmentView<FMassClientPredictionFragment>();
         const bool bHasPredList = PredictionList.Num() > 0;
 
@@ -108,15 +110,26 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
-
-            if (StateFrag.SwitchingStateClient)
-            {
-                StateFrag.SwitchingStateClient = false;
-            }
+            const FMassPatrolFragment* PatrolFrag = bHasPatrolFrag ? &PatrolList[i] : nullptr;
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            
+            if (this->bFollowTickThisFrame)
+            {
+                if (TargetFrag.bHasValidTarget)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Client: Entity [%d] has target, but no chase. bIsTargetActive: %d, HoldPosition: %d, bShouldIgnoreEnemies: %d, SwitchingStateClient: %d"), 
+                        Entity.Index, bIsTargetActive, StateFrag.HoldPosition, bShouldIgnoreEnemies, StateFrag.SwitchingStateClient);
+                }
+            }
+            
+            if (StateFrag.SwitchingStateClient)
+            {
+                StateFrag.SwitchingStateClient = false;
+                continue;
+            }
             
             if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
             {
@@ -208,12 +221,13 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
         const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
         const bool bHasPathFrag = PathList.Num() > 0;
+        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
+        const bool bHasPatrolFrag = PatrolList.Num() > 0;
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -221,15 +235,24 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
-            const FMassPatrolFragment& PatrolFrag = PatrolList[i];
+            const FMassPatrolFragment* PatrolFrag = bHasPatrolFrag ? &PatrolList[i] : nullptr;
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
-
-            if (StateFrag.SwitchingState) continue;
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+
+            if (this->bFollowTickThisFrame)
+            {
+                if (TargetFrag.bHasValidTarget)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("IdleStateProcessor Server: Entity [%d] has target, but no chase. bIsTargetActive: %d, HoldPosition: %d, bShouldIgnoreEnemies: %d, SwitchingState: %d"), 
+                        Entity.Index, bIsTargetActive, StateFrag.HoldPosition, bShouldIgnoreEnemies, StateFrag.SwitchingState);
+                }
+            }
+
+            if (StateFrag.SwitchingState) continue;
 
             if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
             {
@@ -300,13 +323,16 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
             StateFrag.StateTimer += ExecutionInterval;
             
-            bool bHasPatrolRoute = PatrolFrag.CurrentWaypointIndex != INDEX_NONE;
-            bool bIsOnPlattform = false;
-            
-            if (!bIsOnPlattform && PatrolFrag.bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag.SetUnitsBackToPatrolTime)
+            if (PatrolFrag)
             {
-                SwitchToPatrolRandomState(ChunkContext, Entity, StateFrag);
-                continue;
+                bool bHasPatrolRoute = PatrolFrag->CurrentWaypointIndex != INDEX_NONE;
+                bool bIsOnPlattform = false;
+            
+                if (!bIsOnPlattform && PatrolFrag->bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag->SetUnitsBackToPatrolTime)
+                {
+                    SwitchToPatrolRandomState(ChunkContext, Entity, StateFrag);
+                    continue;
+                }
             }
         }
     });
