@@ -24,6 +24,7 @@ void URepairStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
@@ -92,6 +93,18 @@ void URepairStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     
     FTransform& CurrentTransform = TransformList[EntityIdx].GetMutableTransform();
     const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
+    const auto WorkerStatsList = Context.GetFragmentView<FMassWorkerStatsFragment>();
+    const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[EntityIdx];
+
+    if (WorkerStats.BuildingAreaAvailable && !StateFrag.SwitchingState)
+    {
+        StateFrag.SwitchingState = true;
+        if (SignalSubsystem)
+        {
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::GoToBuild, Entity);
+        }
+        return;
+    }
 
     // 1) Distance regression/out-of-range check with hysteresis
     const FMassEntityHandle TargetEntity = TargetFrag.FriendlyTargetEntity;

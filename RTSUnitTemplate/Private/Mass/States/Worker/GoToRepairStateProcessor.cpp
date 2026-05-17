@@ -27,6 +27,7 @@ void UGoToRepairStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 
@@ -72,6 +73,7 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+        const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
@@ -80,10 +82,21 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             FMassAIStateFragment& StateFrag = StateList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[i];
             const FTransform& CurrentTransform = TransformList[i].GetTransform();
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            if (WorkerStats.BuildingAreaAvailable && !StateFrag.SwitchingState)
+            {
+                StateFrag.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBuild, Entity);
+                }
+                continue;
+            }
 
             // Validate friendly target
             const FMassEntityHandle TargetEntity = TargetFrag.FriendlyTargetEntity;

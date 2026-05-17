@@ -113,9 +113,9 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 continue;
             }
             
-            if (WorkerStatsFrag.BuildingAreaAvailable)
+            if (WorkerStatsFrag.BuildingAreaAvailable && !AIState.SwitchingState)
             {
-                // Target is lost or invalid. Signal to go idle or find a new task.
+                AIState.SwitchingState = true; 
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBuild, Entity);

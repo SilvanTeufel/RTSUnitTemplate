@@ -110,6 +110,16 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
             // Increment state timer
             AIState.StateTimer += ExecutionInterval;
             
+            if (WorkerStats.BuildingAreaAvailable && !AIState.SwitchingState)
+            {
+                AIState.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBuild, Entity);
+                }
+                continue;
+            }
+
             if (!WorkerStats.BaseAvailable)
             {
                 AIState.SwitchingState = true;
@@ -175,7 +185,7 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
             bool bReachedBaseOrNoBase = false;
 
             // If base not available, switch to next state locally
-            if (!WorkerStats.BaseAvailable)
+            if (!WorkerStats.BaseAvailable || WorkerStats.BuildingAreaAvailable)
             {
                 bReachedBaseOrNoBase = true;
             }
