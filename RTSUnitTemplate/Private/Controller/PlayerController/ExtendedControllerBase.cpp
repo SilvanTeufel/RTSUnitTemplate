@@ -44,6 +44,9 @@
 #include "MassMovementFragments.h"
 #include "MassActorSubsystem.h"
 #include "Core/UnitData.h"
+#include "Core/RTSUnitUtils.h"
+
+using namespace RTSUnitUtils;
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
@@ -4106,6 +4109,45 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 			ResourceGameMode->ModifyResource(EResourceType::Rare, Worker->TeamId, -Worker->BuildArea->ConstructionCost.RareCost);
 			ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, -Worker->BuildArea->ConstructionCost.EpicCost);
 			ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, -Worker->BuildArea->ConstructionCost.LegendaryCost);
+		}
+
+		// --- NEU: Sofortiges Update der Mass-Fragmente ---
+		FMassEntityManager* EntityManager;
+		FMassEntityHandle EntityHandle;
+		if (Worker->GetMassEntityData(EntityManager, EntityHandle))
+		{
+			FMassWorkerStatsFragment* WorkerStats = EntityManager->GetFragmentDataPtr<FMassWorkerStatsFragment>(EntityHandle);
+			const FMassAgentCharacteristicsFragment* CharFragment = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle);
+			FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
+
+			if (WorkerStats && Worker->BuildArea)
+			{
+				WorkerStats->BuildingAreaAvailable = true;
+
+				FVector WorkerLoc = Worker->GetActorLocation();
+				FVector AreaLoc = Worker->BuildArea->GetActorLocation();
+				FVector DirToWorker = (WorkerLoc - AreaLoc);
+				DirToWorker.Z = 0.f;
+				DirToWorker = DirToWorker.GetSafeNormal();
+
+				float AreaRadius = Worker->BuildArea->GetCollisionRadiusInDirection(DirToWorker);
+				float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, Worker->GetActorRotation()) : 0.f;
+
+				FVector TargetXY = AreaLoc + DirToWorker * (AreaRadius + AgentRadius);
+				TargetXY = ProjectLocationToNavMeshOnEdge(Worker->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
+
+				WorkerStats->BuildAreaRadius = AreaRadius;
+				WorkerStats->BuildAreaArrivalDistance = 5.f * Worker->MovementAcceptanceRadius; 
+				WorkerStats->BuildingAvailable = Worker->BuildArea->Building ? true : false;
+				WorkerStats->BuildAreaPosition = FindGroundLocationAtPosition(this, TargetXY, {Worker, Worker->BuildArea});
+				WorkerStats->BuildTime = Worker->BuildArea->BuildTime;
+			}
+
+			if (StateFrag)
+			{
+				StateFrag->StateTimer = 0.f;
+				StateFrag->SwitchingState = false; // Setzen auf false, damit der neue State im Processor sofort greift
+			}
 		}
 	
 		// Check if the worker is overlapping with the build area

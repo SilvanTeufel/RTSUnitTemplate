@@ -118,6 +118,16 @@ void UResourceExtractionStateProcessor::ServerExecute(FMassExecutionContext& Con
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
 
+            if (WorkerStatsFrag.BuildingAreaAvailable && !StateFrag.SwitchingState)
+            {
+                StateFrag.SwitchingState = true;
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBuild, Entity);
+                }
+                continue;
+            }
+
             if (!WorkerStatsFrag.ResourceAvailable && !StateFrag.SwitchingState)
             {
                 StateFrag.SwitchingState = true;
@@ -187,8 +197,15 @@ void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Con
             }
             
             FMassAIStateFragment& StateFrag = StateList[i];
-            StateFrag.StateTimerClient += ExecutionInterval;
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
+
+            if (WorkerStatsFrag.BuildingAreaAvailable)
+            {
+                StateFrag.StateTimerClient = 0.f; // Timer zurücksetzen
+                continue; // Springe zur nächsten Entity, sende kein ResourceExtraction Signal
+            }
+            
+            StateFrag.StateTimerClient += ExecutionInterval;
 
             if (StateFrag.StateTimerClient >= (WorkerStatsFrag.ResourceExtractionTime-ExecutionInterval))
             {

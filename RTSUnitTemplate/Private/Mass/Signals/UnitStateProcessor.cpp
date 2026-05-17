@@ -2146,7 +2146,7 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 
 						
-						if (!UnitBase->ResourcePlace)
+						if (!UnitBase->ResourcePlace && !UnitBase->BuildArea)
 						{
 							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
 							StateFrag->SwitchingState = false;

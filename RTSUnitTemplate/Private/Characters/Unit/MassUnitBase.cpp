@@ -501,6 +501,7 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	// Reset state timers
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
 	StateFrag->StateTimer = 0.f;
+	StateFrag->SwitchingState = false;
 	UnitControlTimer = 0.f;
 
 	// Set PlaceholderSignal using UnitStatePlaceholder

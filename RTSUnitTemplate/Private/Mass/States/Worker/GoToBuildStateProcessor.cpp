@@ -102,7 +102,7 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             AIState.StateTimer += ExecutionInterval;
             
             // Basic validation of data from fragment (more robust checks should be external)
-            if (WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) // Example basic check
+            if ((WorkerStats.BuildingAvailable || !WorkerStats.BuildingAreaAvailable) && !AIState.SwitchingState) // Example basic check
             {
                  if (SignalSubsystem)
                  {

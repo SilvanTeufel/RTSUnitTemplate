@@ -1059,7 +1059,7 @@ void AHUDBase::DrawAllHealthBars()
 			// Direkter Komponenten-Zugriff für Größe
 			if (UBoxComponent* BoxComp = Unit->BoxCollisionComponent)
 			{
-				const FVector Extent = BoxComp->GetScaledBoxExtent();
+				const FVector Extent = BoxComp->GetUnscaledBoxExtent();
 				FinalRadiusX = Extent.X;
 				FinalRadiusY = Extent.Y;
 				FinalRadiusZ = Extent.Z;
@@ -1289,13 +1289,12 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 	FVector Loc = BaseLoc;
 	FVector ZOff(0, 0, 10.f);
 
-	FVector2D Right2D, Up2D, Center2D;
-	if (PC->ProjectWorldLocationToScreen(Loc + ZOff, Center2D) &&
-		PC->ProjectWorldLocationToScreen(Loc + ZOff + RightV * BaseRadiusX, Right2D) &&
+	FVector2D Right2D, Up2D;
+	if (PC->ProjectWorldLocationToScreen(Loc + ZOff + RightV * BaseRadiusX, Right2D) &&
 		PC->ProjectWorldLocationToScreen(Loc + ZOff + UpV * BaseRadiusY, Up2D))
 	{
-		FVector2D VecX_Base = (Right2D - Center2D) * Settings.Scale;
-		FVector2D VecY_Base = (Up2D - Center2D) * Settings.Scale;
+		FVector2D VecX_Base = (Right2D - ScreenPos) * Settings.Scale;
+		FVector2D VecY_Base = (Up2D - ScreenPos) * Settings.Scale;
 
 		// Size Culling / Clamping basierend auf der längeren Achse
 		float MaxProjSize = FMath::Max(VecX_Base.Size(), VecY_Base.Size());
@@ -1332,8 +1331,8 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 				const float A0 = StartAngleRad + s * SegAngle;
 				const float CurrentAngle = (s < Segments - 1) ? DrawAngle : SegAngle;
 				const float A1 = A0 + CurrentAngle;
-				const FVector2D P0 = Center2D + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
-				const FVector2D P1 = Center2D + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
+				const FVector2D P0 = ScreenPos + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
+				const FVector2D P1 = ScreenPos + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
 
 				if (Settings.bShowOutline)
 				{
@@ -1356,8 +1355,8 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 				const float A0 = StartAngleRad + s * SegAngle;
 				const float CurrentAngle = (s < Segments - 1) ? DrawAngle : SegAngle;
 				const float A1 = A0 + CurrentAngle;
-				const FVector2D P0 = Center2D + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
-				const FVector2D P1 = Center2D + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
+				const FVector2D P0 = ScreenPos + EX * FMath::Cos(A0) + EY * FMath::Sin(A0);
+				const FVector2D P1 = ScreenPos + EX * FMath::Cos(A1) + EY * FMath::Sin(A1);
 
 				FCanvasLineItem LineItem(P0, P1);
 				LineItem.LineThickness = Thickness;
@@ -1379,7 +1378,7 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 
 		if (LevelUnit)
 		{
-			DrawLevelText(Unit, Center2D, Settings);
+			DrawLevelText(Unit, ScreenPos, Settings);
 		}
 	}
 }
