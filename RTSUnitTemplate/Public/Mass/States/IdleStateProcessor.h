@@ -8,6 +8,7 @@
 #include "IdleStateProcessor.generated.h"
 
 // Forward declare Fragments and Tags used
+struct FMassEntityManager;
 struct FMassAITargetFragment;
 struct FMassAIStateFragment;
 struct FMassCombatStatsFragment;
@@ -47,10 +48,10 @@ protected:
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 
-	void SwitchToChaseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
-	void SwitchToPauseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
-	void SwitchToRunState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
-	void SwitchToPatrolRandomState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToChaseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToPauseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToRunState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToPatrolRandomState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;

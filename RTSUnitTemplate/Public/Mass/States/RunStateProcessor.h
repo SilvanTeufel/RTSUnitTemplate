@@ -7,6 +7,9 @@
 #include "Core/RTSUnitUtils.h"
 #include "RunStateProcessor.generated.h"
 
+struct FMassEntityManager;
+struct FMassExecutionContext;
+
 /**
  * 
  */
@@ -25,9 +28,9 @@ public:
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 
-	void SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor);
-	void SwitchToChaseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
-	void SwitchToPauseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToIdleState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor);
+	void SwitchToChaseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
+	void SwitchToPauseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)

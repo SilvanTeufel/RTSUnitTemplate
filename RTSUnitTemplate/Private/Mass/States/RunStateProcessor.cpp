@@ -31,7 +31,7 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
     
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);       // Aktuelle Position lesen
 	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel-Daten lesen, Stoppen erfordert Schreiben
-    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
@@ -94,13 +94,13 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
     // On client, only check for arrival and switch to Idle locally by adjusting tags via deferred commands.
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
-        const auto PredictionList = ChunkContext.GetFragmentView<FMassClientPredictionFragment>();
+        auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
         const bool bHasPredList = PredictionList.Num() > 0;
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
@@ -135,6 +135,26 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
+
+            if (StateFrag.HoldPosition)
+            {
+                if (!StateFrag.SwitchingStateClient)
+                {
+                    StateFrag.StoredLocation = CurrentLocation;
+
+                    if (bHasPredList)
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[i];
+                        Pred.Location = StateFrag.StoredLocation;
+                        Pred.PredDesiredSpeed = Stats.RunSpeed;
+                        Pred.PredAcceptanceRadius = 100.f;
+                        Pred.bHasData = true;
+                    }
+                    
+                    SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                }
+                continue;
+            }
             
             FVector FinalDestination = MoveTarget.Center;
             float AcceptanceRadius = MoveTarget.SlackRadius;
@@ -158,7 +178,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                 if (!StateFrag.SwitchingStateClient)
                 {
                     VelocityList[i].Value = FVector::ZeroVector;
-                    SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                    SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
                 continue;
             }
@@ -173,7 +193,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                     {
                         if (!StateFrag.SwitchingStateClient)
                         {
-                            SwitchToChaseState(ChunkContext, Entity, StateFrag);
+                            SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                         }
                         continue;
                     }
@@ -196,7 +216,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                         {
                             if (!StateFrag.SwitchingStateClient)
                             {
-                                SwitchToPauseState(ChunkContext, Entity, StateFrag);
+                                SwitchToPauseState(EntityManager, ChunkContext, Entity, StateFrag);
                             }
                             continue;
                         }
@@ -244,6 +264,15 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
+
+            if (StateFrag.HoldPosition)
+            {
+                StateFrag.StoredLocation = CurrentLocation;
+                StopMovement(MoveTargetList[i], World);
+                SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                continue;
+            }
+            
             const FVector FinalDestination = MoveTarget.Center;
             const float AcceptanceRadius = MoveTarget.SlackRadius; //150.f;
 
@@ -256,7 +285,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             
             if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && bIsTargetActive && !Stats.bCanMoveWhileAttacking)
             {
-                SwitchToChaseState(ChunkContext, Entity, StateFrag);
+                SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                 continue;
             }else if (bIsFriendlyActive && !StateFrag.SwitchingState)
             {
@@ -357,7 +386,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                     if (!StateFrag.SwitchingState)
                     {
                         VelocityList[i].Value = FVector::ZeroVector;
-                        SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                        SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                     }
                     continue;
                 }
@@ -367,7 +396,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                      (FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
             {
                 VelocityList[i].Value = FVector::ZeroVector;
-                SwitchToIdleState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 continue;
             }
             else if ( DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) &&
@@ -385,7 +414,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
                     if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
                     {
-                        SwitchToPauseState(ChunkContext, Entity, StateFrag);
+                        SwitchToPauseState(EntityManager, ChunkContext, Entity, StateFrag);
                         continue;
                     }
             }
@@ -395,7 +424,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
 }
 
-void URunStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
+void URunStateProcessor::SwitchToIdleState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
 {
     auto& Defer = Context.Defer();
 
@@ -412,6 +441,16 @@ void URunStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+        {
+            if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+            {
+                Pred->Location = TransformFrag->GetTransform().GetLocation();
+            }
+            Pred->PredDesiredSpeed = 0.f;
+            Pred->bHasData = true;
+        }
+        
         StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateChaseTag>(Entity);
@@ -438,7 +477,7 @@ void URunStateProcessor::SwitchToIdleState(FMassExecutionContext& Context, const
     }
 }
 
-void URunStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
+void URunStateProcessor::SwitchToChaseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
 {
     auto& Defer = Context.Defer();
     
@@ -449,6 +488,19 @@ void URunStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, cons
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+        {
+            if (const FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
+            {
+                Pred->Location = TargetFrag->LastKnownLocation;
+                if (const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+                {
+                    Pred->PredDesiredSpeed = Stats->RunSpeed;
+                }
+                Pred->bHasData = true;
+            }
+        }
+        
         StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateIdleTag>(Entity);
@@ -475,10 +527,20 @@ void URunStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, cons
     }
 }
 
-void URunStateProcessor::SwitchToPauseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
+void URunStateProcessor::SwitchToPauseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
 {
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+        {
+            if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+            {
+                Pred->Location = TransformFrag->GetTransform().GetLocation();
+            }
+            Pred->PredDesiredSpeed = 0.f;
+            Pred->bHasData = true;
+        }
+        
         auto& Defer = Context.Defer();
         StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);

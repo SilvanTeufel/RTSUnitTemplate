@@ -2429,8 +2429,9 @@ void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
 	for (AUnitBase* U : SelectedUnits)
 	{
 		if (!U) continue;
-		if (!U->bHoldPosition)
-			SetHoldPositionOnUnit(U);
+
+		SetHoldPositionOnUnit(U);
+		SetHoldPositionOnUnit_Implementation(U);
 	}
 }
 

@@ -114,8 +114,11 @@ void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
 
 void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+    UWorld* World = Context.GetWorld();
+    if (!World) return;
+
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
@@ -135,7 +138,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-
+            // [DEBUG_LOG] ChaseStateProcessor.cpp: ExecuteClient
             if (StateFrag.SwitchingStateClient)
             {
                 StateFrag.SwitchingStateClient = false;
@@ -156,16 +159,20 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
+            const FTransform& Transform = TransformList[i].GetTransform();
+            
             // Case 1: Hold position => switch to Idle locally
             if (StateFrag.HoldPosition)
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
-                    SwitchToPlaceholderState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                    StateFrag.StoredLocation = Transform.GetLocation();
+                    StateFrag.PlaceholderSignal = UnitSignals::Idle;
+
+                    SwitchToPlaceholderState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
                 continue;
             }
-
 
             // Case 2: Lost/invalid target or inactive => switch to Placeholder locally
             if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget))
@@ -173,22 +180,12 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                        
                 if (!StateFrag.SwitchingStateClient)
                 {
-                    if (bHasPrediction)
-                    {
-                        FMassClientPredictionFragment& Pred = PredictionList[i];
-                        Pred.Location = StateFrag.StoredLocation;
-                        Pred.PredDesiredSpeed = Stats.RunSpeed;
-                        Pred.PredAcceptanceRadius = 100.f;
-                        Pred.bHasData = true;
-                    }
-
-                    SwitchToPlaceholderState(ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                    SwitchToPlaceholderState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 }
                 continue;
             }
 
             // Case 3: In range check for local state switch to Pause
-            const FTransform& Transform = TransformList[i].GetTransform();
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
 
             bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
@@ -220,7 +217,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                         Defer.RemoveTag<FMassStateChaseTag>(Entity);
                         Defer.AddTag<FMassStatePauseTag>(Entity);
 
-                        UWorld* World = ChunkContext.GetWorld();
                         if (World)
                         {
                             if (URTSWorldCacheSubsystem* Cache = World->GetSubsystem<URTSWorldCacheSubsystem>())
@@ -291,6 +287,14 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
             if (StateFrag.HoldPosition)
             {
+                StateFrag.StoredLocation = Transform.GetLocation();
+                StateFrag.SwitchingState = true;
+
+                if (bHasMoveTarget)
+                {
+                    StopMovement(MoveTargetList[i], World);
+                }
+
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Idle, Entity);
@@ -363,10 +367,10 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
     }); // End ForEachEntityChunk
 }
 
-void UChaseStateProcessor::SwitchToPlaceholderState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
+void UChaseStateProcessor::SwitchToPlaceholderState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
 {
+    UE_LOG(LogTemp, Warning, TEXT("[SwitchToPlaceholderState] Entity [%d:%d] PlaceholderSignal: %s"), Entity.Index, Entity.SerialNumber, *StateFrag.PlaceholderSignal.ToString());
     auto& Defer = Context.Defer();
-
 
     if (StateFrag.CanAttack && StateFrag.IsInitialized)
     {
@@ -375,6 +379,16 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassExecutionContext& Conte
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+        {
+            if (const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+            {
+                Pred->Location = TF->GetTransform().GetLocation();
+            }
+            Pred->PredDesiredSpeed = 0.f;
+            Pred->bHasData = true;
+        }
+
         StateFrag.SwitchingStateClient = true;
         
         // --- PRÄZISES TAG-MANAGEMENT ---

@@ -167,9 +167,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
             Pred.PredDesiredSpeed = 0.f;
             Pred.bHasData = true;
         }
-                
-        MoveTarget.DesiredSpeed.Set(0.f);
-        MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
@@ -223,6 +220,13 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
                 if (Item) Item->PredictionTimer = 0.f;
 
                 auto& Defer = Context.Defer();
+                if (PredictionList.Num() > 0)
+                {
+                    FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+                    Pred.Location = Transform.GetLocation();
+                    Pred.PredDesiredSpeed = 0.f;
+                    Pred.bHasData = true;
+                }
                 Defer.RemoveTag<FMassStateAttackTag>(Entity);
                 Defer.AddTag<FMassStatePauseTag>(Entity);
             }
@@ -235,6 +239,20 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
         if (Item) Item->PredictionTimer = 0.f;
 
         auto& Defer = Context.Defer();
+        if (PredictionList.Num() > 0)
+        {
+            FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+            if (const FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+            {
+                Pred.Location = MoveTargetFrag->Center;
+            }
+            else
+            {
+                Pred.Location = TargetFrag.LastKnownLocation;
+            }
+            Pred.PredDesiredSpeed = Stats.RunSpeed;
+            Pred.bHasData = true;
+        }
         Defer.RemoveTag<FMassStateAttackTag>(Entity);
         
         if (Stats.bCanMoveWhileAttacking)

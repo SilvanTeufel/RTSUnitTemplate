@@ -126,7 +126,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
-                    SwitchToChaseState(ChunkContext, Entity, StateFrag);
+                    SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                 }
                 continue;
             }
@@ -141,13 +141,13 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 {
                     if (!StateFrag.SwitchingStateClient)
                     {
-                        SwitchToPauseState(ChunkContext, Entity, StateFrag);
+                        SwitchToPauseState(EntityManager, ChunkContext, Entity, StateFrag);
                     }
                     continue;
                 }
             }
             
-            if (this->bFollowTickThisFrame)
+            if (this->bFollowTickThisFrame && !StateFrag.HoldPosition)
             {
                 const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
                 if (bIsFriendlyActive)
@@ -190,7 +190,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     }
                     if (Dist2D > Threshold)
                     {
-                        SwitchToRunState(ChunkContext, Entity, StateFrag);
+                        SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                         continue;
                     }
                 }
@@ -219,7 +219,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     }
                     if (!StateFrag.SwitchingStateClient)
                     {
-                        SwitchToRunState(ChunkContext, Entity, StateFrag);
+                        SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                     }
                     continue;
                 }
@@ -266,7 +266,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
             if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
             {
-                SwitchToChaseState(ChunkContext, Entity, StateFrag);
+                SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                 continue;
             }
 
@@ -278,12 +278,12 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
                 if (DistSq <= AttackRangeSq)
                 {
-                    SwitchToPauseState(ChunkContext, Entity, StateFrag);
+                    SwitchToPauseState(EntityManager, ChunkContext, Entity, StateFrag);
                     continue;
                 }
             }
 
-            if (this->bFollowTickThisFrame)
+            if (this->bFollowTickThisFrame && !StateFrag.HoldPosition)
             {
                 const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
                 if (bIsFriendlyActive)
@@ -322,7 +322,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     const float Threshold = MoveTarget.SlackRadius * 2.f;
                     if (Dist2D > Threshold)
                     {
-                        SwitchToRunState(ChunkContext, Entity, StateFrag);
+                        SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                         continue;
                     }
                 }
@@ -337,7 +337,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             
                 if (!bIsOnPlattform && PatrolFrag->bSetUnitsBackToPatrol && bHasPatrolRoute && StateFrag.StateTimer >= PatrolFrag->SetUnitsBackToPatrolTime)
                 {
-                    SwitchToPatrolRandomState(ChunkContext, Entity, StateFrag);
+                    SwitchToPatrolRandomState(EntityManager, ChunkContext, Entity, StateFrag);
                     continue;
                 }
             }
@@ -362,7 +362,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         }
                     }
 
-                    SwitchToRunState(ChunkContext, Entity, StateFrag);
+                    SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                     continue;
                 }
             }
@@ -370,7 +370,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
     });
 }
 
-void UIdleStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
+void UIdleStateProcessor::SwitchToChaseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
 {
     StateFrag.SwitchingState = true;
     auto& Defer = Context.Defer();
@@ -382,6 +382,19 @@ void UIdleStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, con
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+        {
+            if (const FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity))
+            {
+                Pred->Location = TargetFrag->LastKnownLocation;
+                if (const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+                {
+                    Pred->PredDesiredSpeed = Stats->RunSpeed;
+                }
+                Pred->bHasData = true;
+            }
+        }
+        
         StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateIdleTag>(Entity);
@@ -407,11 +420,21 @@ void UIdleStateProcessor::SwitchToChaseState(FMassExecutionContext& Context, con
     }
 }
 
-void UIdleStateProcessor::SwitchToPauseState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
+void UIdleStateProcessor::SwitchToPauseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
 {
     StateFrag.SwitchingState = true;
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+        {
+            if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+            {
+                Pred->Location = TransformFrag->GetTransform().GetLocation();
+            }
+            Pred->PredDesiredSpeed = 0.f;
+            Pred->bHasData = true;
+        }
+        
         StateFrag.SwitchingStateClient = true;
         auto& Defer = Context.Defer();
         Defer.RemoveTag<FMassStateRunTag>(Entity);
@@ -438,11 +461,24 @@ void UIdleStateProcessor::SwitchToPauseState(FMassExecutionContext& Context, con
     }
 }
 
-void UIdleStateProcessor::SwitchToRunState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
+void UIdleStateProcessor::SwitchToRunState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
 {
     StateFrag.SwitchingState = true;
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+        {
+            if (const FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+            {
+                Pred->Location = MoveTarget->Center;
+                if (const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+                {
+                    Pred->PredDesiredSpeed = Stats->RunSpeed;
+                }
+                Pred->bHasData = true;
+            }
+        }
+        
         StateFrag.SwitchingStateClient = true;
         auto& Defer = Context.Defer();
         Defer.RemoveTag<FMassStateIdleTag>(Entity);
@@ -469,7 +505,7 @@ void UIdleStateProcessor::SwitchToRunState(FMassExecutionContext& Context, const
     }
 }
 
-void UIdleStateProcessor::SwitchToPatrolRandomState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
+void UIdleStateProcessor::SwitchToPatrolRandomState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
 {
     StateFrag.SwitchingState = true;
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))

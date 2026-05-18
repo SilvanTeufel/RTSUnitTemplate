@@ -257,6 +257,14 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                 {
                     StateFrag.SwitchingStateClient = true;
                     StateFrag.StateTimerClient = 0.f;
+                    auto PredictionList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
+                    if (PredictionList.Num() > 0 && PredictionList.IsValidIndex(EntityIdx))
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+                        Pred.Location = TargetFrag.LastKnownLocation;
+                        Pred.PredDesiredSpeed = 0.f;
+                        Pred.bHasData = true;
+                    }
                     Context.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                     Context.Defer().AddTag<FMassStateAttackTag>(Entity);
                 }
@@ -269,6 +277,21 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                 StateFrag.SwitchingStateClient = true;
                 StateFrag.StateTimerClient = 0.f;
                 auto& Defer = Context.Defer();
+                auto PredictionList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
+                if (PredictionList.Num() > 0 && PredictionList.IsValidIndex(EntityIdx))
+                {
+                    FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+                    if (const FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+                    {
+                        Pred.Location = MoveTargetFrag->Center;
+                    }
+                    else
+                    {
+                        Pred.Location = TargetFrag.LastKnownLocation;
+                    }
+                    Pred.PredDesiredSpeed = Stats.RunSpeed;
+                    Pred.bHasData = true;
+                }
                 if (StateFrag.CanAttack && StateFrag.IsInitialized)
                 {
                     Defer.AddTag<FMassStateDetectTag>(Entity);
@@ -293,6 +316,25 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
             StateFrag.SwitchingStateClient = true;
             StateFrag.StateTimerClient = 0.f;
             auto& Defer = Context.Defer();
+            auto PredictionList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
+            if (PredictionList.Num() > 0 && PredictionList.IsValidIndex(EntityIdx))
+            {
+                FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+                if (StateFrag.PlaceholderSignal == UnitSignals::Run)
+                {
+                    if (const FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+                    {
+                        Pred.Location = MoveTargetFrag->Center;
+                    }
+                    Pred.PredDesiredSpeed = Stats.RunSpeed;
+                }
+                else
+                {
+                    Pred.Location = Transform.GetLocation();
+                    Pred.PredDesiredSpeed = 0.f;
+                }
+                Pred.bHasData = true;
+            }
             
             Defer.RemoveTag<FMassStatePauseTag>(Entity);
             
@@ -325,12 +367,6 @@ void UPauseStateProcessor::ApplyAttackStopLogic(FMassExecutionContext& Context,
             Pred.Location = TransformList[EntityIdx].GetTransform().GetLocation();
             Pred.PredDesiredSpeed = 0.f;
             Pred.bHasData = true;
-        }
-        
-        if (MoveTargetList.IsValidIndex(EntityIdx))
-        {
-            MoveTargetList[EntityIdx].DesiredSpeed.Set(0.f);
-            MoveTargetList[EntityIdx].IntentAtGoal = EMassMovementAction::Stand;
         }
     }
 }

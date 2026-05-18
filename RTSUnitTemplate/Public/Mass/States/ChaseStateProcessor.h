@@ -7,6 +7,7 @@
 #include "Core/RTSUnitUtils.h"
 #include "ChaseStateProcessor.generated.h"
 
+struct FMassEntityManager;
 struct FMassExecutionContext;
 struct FMassStateChaseTag; // Tag für diesen Zustand
 struct FMassAIStateFragment;
@@ -35,7 +36,7 @@ protected:
 	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
 
-	void SwitchToPlaceholderState(FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor);
+	void SwitchToPlaceholderState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor);
 	// void CalculateRadii(const FMassEntityManager& EntityManager, const FMassEntityHandle TargetEntity,
 	//					const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
 	//					const FVector& TargetLocation, float& OutAttackerRadius, float& OutTargetRadius) const;
