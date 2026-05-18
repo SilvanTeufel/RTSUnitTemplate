@@ -623,6 +623,10 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
 
+            const bool bIsIdleHold = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) && StateList[i].HoldPosition;
+            const bool bHasValidTarget = TargetList[i].bHasValidTarget && EntityManager.IsEntityActive(TargetList[i].TargetEntity);
+            const bool bShouldRotateToTarget = bIsAttackingOrPaused || (bIsIdleHold && bHasValidTarget);
+
             const bool bRotatesToMovementWhileAttacking = StatsList[i].bCanMoveWhileAttacking && StatsList[i].bRotatesToMovementIfMoveWhileAttacking;
             const bool bIsMoving = !VelocityList[i].Value.IsNearlyZero(50.f);
 
@@ -641,7 +645,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if ((!bIsAttackingOrPaused && UnitBase->GetUnitState() != UnitData::Casting) || (bRotatesToMovementWhileAttacking && bIsMoving))
+            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting) || (bRotatesToMovementWhileAttacking && bIsMoving))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], FinalLocation, ActualDeltaTime, MassTransform);
             }
@@ -828,6 +832,10 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
 
+            const bool bIsIdleHold = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) && StateList[i].HoldPosition;
+            const bool bHasValidTarget = TargetList[i].bHasValidTarget && EntityManager.IsEntityActive(TargetList[i].TargetEntity);
+            const bool bShouldRotateToTarget = bIsAttackingOrPaused || (bIsIdleHold && bHasValidTarget);
+
             const bool bRotatesToMovementWhileAttacking = StatsList[i].bCanMoveWhileAttacking && StatsList[i].bRotatesToMovementIfMoveWhileAttacking;
             const bool bIsMoving = !VelocityList[i].Value.IsNearlyZero(50.f);
 
@@ -847,7 +855,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if ((!bIsAttackingOrPaused && UnitBase->GetUnitState() != UnitData::Casting) || (bRotatesToMovementWhileAttacking && bIsMoving))
+            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting) || (bRotatesToMovementWhileAttacking && bIsMoving))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }

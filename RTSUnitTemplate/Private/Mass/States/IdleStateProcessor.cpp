@@ -115,7 +115,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
-            
+
             if (StateFrag.SwitchingStateClient)
             {
                 StateFrag.SwitchingStateClient = false;
@@ -188,6 +188,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         const FMassClientPredictionFragment& Pred = PredictionList[i];
                         Threshold = Pred.PredAcceptanceRadius * 3.f;
                     }
+
                     if (Dist2D > Threshold)
                     {
                         SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
@@ -205,6 +206,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     const FMassClientPredictionFragment& Pred = PredictionList[i];
                     Threshold = Pred.PredAcceptanceRadius * 3.f;
                 }
+                
 
                 if (Dist2D > Threshold)
                 {
@@ -223,6 +225,17 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     }
                     continue;
                 }
+            }
+
+            // --- NEU: Prediction für Idle-Einheiten sicherstellen ---
+            // Wenn wir hier ankommen, bleibt die Einheit im Idle-Zustand.
+            // Wir setzen die Prediction auf Stop, um lokales Drift zu verhindern.
+            if (bHasPredList)
+            {
+                FMassClientPredictionFragment& Pred = PredictionList[i];
+                Pred.Location = Transform.GetLocation();
+                Pred.PredDesiredSpeed = 0.f;
+                Pred.bHasData = true;
             }
         }
     });
