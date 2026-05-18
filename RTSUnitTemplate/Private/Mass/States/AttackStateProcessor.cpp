@@ -222,10 +222,13 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
                 auto& Defer = Context.Defer();
                 if (PredictionList.Num() > 0)
                 {
-                    FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
-                    Pred.Location = Transform.GetLocation();
-                    Pred.PredDesiredSpeed = 0.f;
-                    Pred.bHasData = true;
+                    if (!Stats.bCanMoveWhileAttacking)
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+                        Pred.Location = Transform.GetLocation();
+                        Pred.PredDesiredSpeed = 0.f;
+                        Pred.bHasData = true;
+                    }
                 }
                 Defer.RemoveTag<FMassStateAttackTag>(Entity);
                 Defer.AddTag<FMassStatePauseTag>(Entity);

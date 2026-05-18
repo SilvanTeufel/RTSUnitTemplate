@@ -531,14 +531,18 @@ void URunStateProcessor::SwitchToPauseState(FMassEntityManager& EntityManager, F
 {
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity);
         if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
         {
-            if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+            if (!Stats || !Stats->bCanMoveWhileAttacking)
             {
-                Pred->Location = TransformFrag->GetTransform().GetLocation();
+                if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+                {
+                    Pred->Location = TransformFrag->GetTransform().GetLocation();
+                }
+                Pred->PredDesiredSpeed = 0.f;
+                Pred->bHasData = true;
             }
-            Pred->PredDesiredSpeed = 0.f;
-            Pred->bHasData = true;
         }
         
         auto& Defer = Context.Defer();

@@ -260,10 +260,13 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                     auto PredictionList = Context.GetMutableFragmentView<FMassClientPredictionFragment>();
                     if (PredictionList.Num() > 0 && PredictionList.IsValidIndex(EntityIdx))
                     {
-                        FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
-                        Pred.Location = TargetFrag.LastKnownLocation;
-                        Pred.PredDesiredSpeed = 0.f;
-                        Pred.bHasData = true;
+                        if (!Stats.bCanMoveWhileAttacking)
+                        {
+                            FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
+                            Pred.Location = TargetFrag.LastKnownLocation;
+                            Pred.PredDesiredSpeed = 0.f;
+                            Pred.bHasData = true;
+                        }
                     }
                     Context.Defer().RemoveTag<FMassStatePauseTag>(Entity);
                     Context.Defer().AddTag<FMassStateAttackTag>(Entity);
