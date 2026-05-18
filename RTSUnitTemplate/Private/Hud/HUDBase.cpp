@@ -1041,7 +1041,7 @@ void AHUDBase::DrawAllHealthBars()
 		for (int32 i = Units.Num() - 1; i >= 0; --i)
 		{
 			AUnitBase* Unit = Units[i];
-			if (!IsValid(Unit) || !Unit->Attributes) continue;
+			if (!IsValid(Unit) || !Unit->Attributes || Unit->Attributes->GetHealth() <= 0.f) continue;
 
 			const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
 
@@ -1079,6 +1079,8 @@ void AHUDBase::DrawAllHealthBars()
 						FMassEntityHandle Entity = MassUnit->MassActorBindingComponent->GetEntityHandle();
 						if (EM->IsEntityValid(Entity))
 						{
+							if (DoesEntityHaveTag(*EM, Entity, FMassStateDeadTag::StaticStruct())) continue;
+
 							if (const FMassAgentCharacteristicsFragment* Frag = EM->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
 							{
 								bIsFlying = Frag->bIsFlying;
