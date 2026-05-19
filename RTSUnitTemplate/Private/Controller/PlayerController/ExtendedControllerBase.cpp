@@ -117,7 +117,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 		if (UWorld* World = GetWorld())
 		{
 			const float CurrentTime = World->GetTimeSeconds();
-			if (CurrentTime - LastDebugLogTime >= 1.0f)
+			if (CurrentTime - LastDebugLogTime >= 0.1f)
 			{
 				if (UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
 				{
