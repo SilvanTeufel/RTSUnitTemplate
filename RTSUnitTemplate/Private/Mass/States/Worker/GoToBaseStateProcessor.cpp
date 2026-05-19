@@ -241,10 +241,14 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
                     Defer.AddTag<FMassStateGoToRepairTag>(Entity);
                 else if (StateFrag.PlaceholderSignal == UnitSignals::Repair)
                     Defer.AddTag<FMassStateRepairTag>(Entity);
-                else
+                else if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
                     Defer.AddTag<FMassStateIdleTag>(Entity);
 
                 continue;
+            }else
+            {
+                auto& Defer = ChunkContext.Defer();
+                Defer.RemoveTag<FMassStateIdleTag>(Entity);
             }
         }
     });

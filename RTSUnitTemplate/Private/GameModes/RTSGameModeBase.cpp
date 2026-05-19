@@ -39,6 +39,7 @@
 #include "Engine/GameInstance.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
+#include "MassCommandBuffer.h"
 #include "MassExecutionContext.h"
 #include "Mass/UnitMassTag.h"
 
@@ -119,7 +120,8 @@ void ARTSGameModeBase::ReleaseEffectAreas()
 		{
 			for (const FMassEntityHandle& Entity : EntitiesToRelease)
 			{
- 			EntityManager.RemoveTagFromEntity(Entity, FMassEffectAreaLoadingTag::StaticStruct());
+				// FIX: Use Defer()
+				EntityManager.Defer().RemoveTag<FMassEffectAreaLoadingTag>(Entity);
 			}
 		}
 	}

@@ -1654,6 +1654,21 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		// Repair flow
 		SetTag(UnitTagBits::GoToRepair,         FMassStateGoToRepairTag());
 		SetTag(UnitTagBits::Repair,             FMassStateRepairTag());
+
+		// Remove conflicting tags if any worker tag is synced
+		const uint32 WorkerMask = UnitTagBits::Build | UnitTagBits::ResourceExtraction | 
+								 UnitTagBits::GoToResource | UnitTagBits::GoToBuild | 
+								 UnitTagBits::GoToBase | UnitTagBits::GoToRepair | 
+								 UnitTagBits::Repair;
+		
+		if ((Bits & WorkerMask) != 0)
+		{
+			EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
+			EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
+			EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
+			EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
+			EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
+		}
 		SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 		SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 		SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());

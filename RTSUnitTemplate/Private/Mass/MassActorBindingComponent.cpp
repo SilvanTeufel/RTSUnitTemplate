@@ -117,7 +117,8 @@ static void ApplyInitialStartupFreeze(AActor* Owner, FMassEntityManager& EM, FMa
 
 	if (bShouldFreeze)
 	{
-		EM.AddTagToEntity(Entity, FMassStateFrozenTag::StaticStruct());
+		// FIX: Use Defer().AddTag<T>
+		EM.Defer().AddTag<FMassStateFrozenTag>(Entity);
 		if (ACharacter* Character = Cast<ACharacter>(Owner))
 		{
 			if (UCharacterMovementComponent* MoveComp = Character->GetCharacterMovement())

@@ -1663,8 +1663,8 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 		{
 			if (EntityManager->IsEntityValid(UnitHandle))
 			{
-				EntityManager->AddTagToEntity(UnitHandle, FMassTransportProcessorActiveTag::StaticStruct());
-				//EntityManager->Defer().AddTag<FMassTransportProcessorActiveTag>(UnitHandle);
+				// FIX: Use Defer().AddTag<T> instead of synchronous AddTagToEntity
+				EntityManager->Defer().AddTag<FMassTransportProcessorActiveTag>(UnitHandle);
 				bAnyUnitTagged = true;
 			}
 		}

@@ -27,6 +27,7 @@
 #include "Mass/MassUnitVisualFragments.h"
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
+#include "MassCommandBuffer.h"
 
 AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 {
@@ -1142,11 +1143,13 @@ bool AMassUnitBase::EditHoverTag(bool bApply)
 	{
 		if (bApply)
 		{
-			EntityManager->AddTagToEntity(EntityHandle, FMassHoverTag::StaticStruct());
+			// FIX: Use Defer()
+			EntityManager->Defer().AddTag<FMassHoverTag>(EntityHandle);
 		}
 		else
 		{
-			EntityManager->RemoveTagFromEntity(EntityHandle, FMassHoverTag::StaticStruct());
+			// FIX: Use Defer()
+			EntityManager->Defer().RemoveTag<FMassHoverTag>(EntityHandle);
 		}
 		return true;
 	}
