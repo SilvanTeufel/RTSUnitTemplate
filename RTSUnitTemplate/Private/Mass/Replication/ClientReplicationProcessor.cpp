@@ -401,9 +401,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					// 1. Prüfen, ob die Einheit logisch stationär sein MUSS (Angriff/Pause ohne Bewegung)
 					const bool bHasAttackTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateAttackTag::StaticStruct());
 					const bool bHasPauseTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStatePauseTag::StaticStruct());
-					const bool bIsIdleHold = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct()) && AIStateList[EntityIdx].HoldPosition;
+					const bool bIsIdle = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct());
+					const bool bIsHoldPosition = AIStateList[EntityIdx].HoldPosition;
 
-					const bool bIsStationaryAttack = (bHasAttackTag || bHasPauseTag || bIsIdleHold) && CombatList.IsValidIndex(EntityIdx) && !CombatList[EntityIdx].bCanMoveWhileAttacking;
+					const bool bIsStationaryAttack = (bHasAttackTag || bHasPauseTag || bIsIdle || bIsHoldPosition) && CombatList.IsValidIndex(EntityIdx) && !CombatList[EntityIdx].bCanMoveWhileAttacking;
 
 					float CurrentKp = bIsStationaryAttack ? 1.0f : Kp;
 					float CurrentMinErrorSq = bIsStationaryAttack ? 1.0f : MinErrorForCorrectionSq; // Nur 1cm Toleranz im Stand
@@ -478,7 +479,14 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					}
 
 					// --- Rotation Reconciliation ---
-					float FinalKpRot = bIsStationaryAttack ? 1.0f : KpRot;
+					float FinalKpRot = KpRot;
+
+					// Wenn die Einheit stationär ist (Idle, HoldPosition, stationärer Angriff), 
+					// schalten wir die Korrektur aus (0.0f), um Wackeln durch Netzwerk-Jitter zu verhindern.
+					if (bIsStationaryAttack || DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct()))
+					{
+						FinalKpRot = 0.0f;
+					}
 					
 					// NEU: Wenn die Einheit lokal zum Ziel rotiert, dämpfen wir die Korrektur durch die Replikation stark ab.
 					// Dies verhindert das "Gegensteuern" der Replikation gegen die flüssige lokale Vorhersage.
