@@ -9,6 +9,7 @@
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Characters/Unit/SpawnerUnit.h"
+#include "Characters/Unit/UnitBase.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
@@ -184,13 +185,15 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					// Smooth rotation
 					FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * RotSpeed, 0.f, 1.f));
 					MassTransform.SetRotation(NewQuat);
-
-					Characteristics[i].PositionedTransform = MassTransform;
+					
+					
+					Characteristics[i].PositionedTransform.SetRotation(MassTransform.GetRotation());
 					Characteristics[i].bTransformDirty = true;
 					if (Actor)
 					{
-						Actor->SetActorRotation(NewQuat);
+						Actor->SetActorRotation(MassTransform.GetRotation());
 					}
+					
 				}
 			}
 		}

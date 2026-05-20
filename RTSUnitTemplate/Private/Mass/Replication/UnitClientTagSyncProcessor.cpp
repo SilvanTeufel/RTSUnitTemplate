@@ -184,6 +184,9 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	// 1. Dead (Höchste Priorität)
 	if (HasTag(FMassStateDeadTag::StaticStruct())) return EState::Dead;
 
+	// 1.1 FMassRotateToMouseTag (ZweitHöchste Priorität)
+	if (HasTag(FMassRotateToMouseTag::StaticStruct())) return EState::Aim;
+	
 	// 2. IsAttacked
 	if (HasTag(FMassStateIsAttackedTag::StaticStruct())) return EState::IsAttacked;
 
@@ -219,8 +222,6 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 	// 10. Utility / Other
 	if (HasTag(FMassStateEvasionTag::StaticStruct())) return EState::Evasion;
 	if (HasTag(FMassStateRootedTag::StaticStruct())) return EState::Rooted;
-	
-	if (HasTag(FMassRotateToMouseTag::StaticStruct())) return EState::Aim;
 
 	if (HasTag(FRunAnimationTag::StaticStruct()))
 	{

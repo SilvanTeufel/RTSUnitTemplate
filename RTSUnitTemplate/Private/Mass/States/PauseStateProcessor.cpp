@@ -66,6 +66,8 @@ void UPauseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
     //EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 
+    EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
