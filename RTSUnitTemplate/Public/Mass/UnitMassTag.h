@@ -1659,7 +1659,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		const uint32 WorkerMask = UnitTagBits::Build | UnitTagBits::ResourceExtraction | 
 								 UnitTagBits::GoToResource | UnitTagBits::GoToBuild | 
 								 UnitTagBits::GoToBase | UnitTagBits::GoToRepair | 
-								 UnitTagBits::Repair;
+								 UnitTagBits::Repair | UnitTagBits::Casting;
 		
 		if ((Bits & WorkerMask) != 0)
 		{

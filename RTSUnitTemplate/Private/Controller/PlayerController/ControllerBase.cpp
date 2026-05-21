@@ -30,6 +30,8 @@
 #include "AI/Navigation/NavQueryFilter.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/Abilitys/CastingFallBackProcessor.h"
+#include "Characters/Unit/MassUnitBase.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "Characters/Unit/GASUnit.h"
@@ -1339,7 +1341,26 @@ void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
         }
     }
 
-	UnitBase->SetUnitState(UnitData::Idle);
+    // Mass-specific cleanup
+    if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
+    {
+        FMassEntityManager* EntityManager;
+        FMassEntityHandle EntityHandle;
+        if (MassUnit->GetMassEntityData(EntityManager, EntityHandle))
+        {
+            // Remove the fallback tag first, so the watchdog doesn't interfere
+            EntityManager->Defer().RemoveTag<FMassCastingFallbackTag>(EntityHandle);
+        }
+        
+        // Use SwitchEntityTagByState to correctly swap all mass tags (Casting -> Idle)
+        MassUnit->SwitchEntityTagByState(UnitData::Idle, MassUnit->UnitStatePlaceholder);
+    }
+    else
+    {
+        // Fallback for non-mass units
+        UnitBase->SetUnitState(UnitData::Idle);
+    }
+
 	UnitBase->UnitControlTimer = 0;
 	UnitBase->CancelCurrentAbility();
 }

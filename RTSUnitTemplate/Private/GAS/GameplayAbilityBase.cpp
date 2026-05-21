@@ -219,6 +219,7 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 					{
 						MassSubsystem->GetMutableEntityManager().Defer().AddTag<FMassStateCastingTag>(Entity);
+						MassSubsystem->GetMutableEntityManager().Defer().AddTag<FMassCastingFallbackTag>(Entity);
 					}
 				}
 			}
@@ -294,6 +295,7 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 					{
 						MassSubsystem->GetMutableEntityManager().Defer().RemoveTag<FMassStateCastingTag>(Entity);
+						MassSubsystem->GetMutableEntityManager().Defer().RemoveTag<FMassCastingFallbackTag>(Entity);
 					}
 				}
 			}
