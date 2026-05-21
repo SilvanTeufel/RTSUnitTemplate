@@ -499,6 +499,11 @@ void AUnitRegistryReplicator::ServerDiagnosticsTick()
 
 AUnitRegistryReplicator* AUnitRegistryReplicator::GetOrSpawn(UWorld& World)
 {
+	if (World.bIsTearingDown)
+	{
+		return nullptr;
+	}
+
 	// Cache per-world pointer and throttle lookup/spawn attempts to once per second
 	static TMap<UWorld*, TWeakObjectPtr<AUnitRegistryReplicator>> GCache;
 	static TMap<UWorld*, double> GLastAttempt;

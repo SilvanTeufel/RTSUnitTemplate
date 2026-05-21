@@ -53,28 +53,32 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 					UMassEntitySubsystem* EntitySubsystem = World ? World->GetSubsystem<UMassEntitySubsystem>() : nullptr;
 					if (EntitySubsystem)
 					{
-						FUnitAnimationFragment* AnimFrag = EntitySubsystem->GetEntityManager().GetFragmentDataPtr<FUnitAnimationFragment>(Entity);
-						if (AnimFrag)
+						const FMassEntityManager& EntityManager = EntitySubsystem->GetEntityManager();
+						if (EntityManager.IsEntityValid(Entity))
 						{
-							BlendPoint_1 = AnimFrag->TargetBlendPoint_1;
-							BlendPoint_2 = AnimFrag->TargetBlendPoint_2;
-							CurrentBlendPoint_1 = AnimFrag->CurrentBlendPoint_1;
-							CurrentBlendPoint_2 = AnimFrag->CurrentBlendPoint_2;
-							TransitionRate_1 = AnimFrag->TransitionRate_1;
-							TransitionRate_2 = AnimFrag->TransitionRate_2;
-							Resolution_1 = AnimFrag->Resolution_1;
-							Resolution_2 = AnimFrag->Resolution_2;
-
-							/*
-							if (World && World->GetNetMode() == NM_Client)
+							FUnitAnimationFragment* AnimFrag = EntityManager.GetFragmentDataPtr<FUnitAnimationFragment>(Entity);
+							if (AnimFrag)
 							{
-								UE_LOG(LogTemp, VeryVerbose, TEXT("[AnimInstance] %s: Updated from Mass. CBP1: %.2f"), *UnitBase->GetName(), CurrentBlendPoint_1);
+								BlendPoint_1 = AnimFrag->TargetBlendPoint_1;
+								BlendPoint_2 = AnimFrag->TargetBlendPoint_2;
+								CurrentBlendPoint_1 = AnimFrag->CurrentBlendPoint_1;
+								CurrentBlendPoint_2 = AnimFrag->CurrentBlendPoint_2;
+								TransitionRate_1 = AnimFrag->TransitionRate_1;
+								TransitionRate_2 = AnimFrag->TransitionRate_2;
+								Resolution_1 = AnimFrag->Resolution_1;
+								Resolution_2 = AnimFrag->Resolution_2;
+
+								/*
+								if (World && World->GetNetMode() == NM_Client)
+								{
+									UE_LOG(LogTemp, VeryVerbose, TEXT("[AnimInstance] %s: Updated from Mass. CBP1: %.2f"), *UnitBase->GetName(), CurrentBlendPoint_1);
+								}
+								*/
 							}
-							*/
-						}
-						else
-						{
-							UE_LOG(LogTemp, Warning, TEXT("[AnimInstance] %s: No AnimFrag found on Entity!"), *UnitBase->GetName());
+							else
+							{
+								UE_LOG(LogTemp, Warning, TEXT("[AnimInstance] %s: No AnimFrag found on Entity!"), *UnitBase->GetName());
+							}
 						}
 					}
 				}

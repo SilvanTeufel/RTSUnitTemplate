@@ -1787,6 +1787,12 @@ void UMassActorBindingComponent::CleanupMassEntity()
 	AActor* Owner = GetOwner();
 	UWorld* World = GetWorld();
 
+	if (!World || World->bIsTearingDown)
+	{
+		MassEntityHandle.Reset();
+		return;
+	}
+
 	// Server-authoritative: ensure this unit is removed from replication registry before entity/actor destruction
 	if (World && World->GetNetMode() != NM_Client)
 	{
