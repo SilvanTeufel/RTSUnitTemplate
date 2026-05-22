@@ -310,6 +310,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID);
 
+	TArray<AUnitBase*> GetAndPrepareAbilityTargets(TSubclassOf<UGameplayAbilityBase> AbilityClass, int32 AbilityIndex);
+
 	// Accumulator to throttle streaming SetWorkAreaPosition updates
 	UPROPERTY(Transient)
 	float WorkAreaStreamAccumulator = 0.f;

@@ -734,55 +734,92 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityI
 	}
 }
 
+TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclassOf<UGameplayAbilityBase> AbilityClass, int32 AbilityIndex)
+{
+	TArray<AUnitBase*> PotentialUnits;
+	if (!AbilityClass || SelectedUnits.Num() == 0) return PotentialUnits;
+
+	const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+    
+	// 1. Filtering & Client-Side Prediction Reset
+	for (AUnitBase* Unit : SelectedUnits)
+	{
+		if (Unit && Unit->CanActivateAbilities && !Unit->IsWorker)
+		{
+			bool bUnitOnCooldown = false;
+			if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+			{
+				TArray<TSubclassOf<UGameplayAbilityBase>> UnitAbilityArray = GetAbilityArrayForUnit(Unit);
+				if (UnitAbilityArray.IsValidIndex(AbilityIndex))
+				{
+					bUnitOnCooldown = GASUnit->IsAbilityOnCooldownByClass(UnitAbilityArray[AbilityIndex]);
+				}
+			}
+
+			if (!bUnitOnCooldown)
+			{
+				PotentialUnits.Add(Unit);
+
+				/*
+				// Reset prediction locally on the client to visualize immediate stopping
+				if (AbilityCDO->bStopMovementOnActivation && Unit->MassActorBindingComponent)
+				{
+					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+					{
+						if (FMassClientPredictionFragment* Pred = MassSubsystem->GetEntityManager().GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+						{
+							Pred->bHasData = false;
+							Pred->Location = Unit->GetMassActorLocation();
+						}
+					}
+				}
+				*/
+			}
+		}
+	}
+
+	// 2. Filter by AbilitySelectionTag
+	TArray<AUnitBase*> FinalUnits;
+	if (PotentialUnits.Num() > 0)
+	{
+		AUnitBase* CurrentUnit = SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex) ? SelectedUnits[CurrentUnitWidgetIndex] : SelectedUnits[0];
+		
+		for (AUnitBase* Unit : PotentialUnits)
+		{
+			if (Unit->AbilitySelectionTag == CurrentUnit->AbilitySelectionTag)
+			{
+				FinalUnits.Add(Unit);
+			}
+		}
+
+		// Fallback: if no unit matches the tag (or all do), take the filtered potential units
+		if (FinalUnits.Num() == 0) FinalUnits = PotentialUnits;
+	}
+
+	// 3. Apply Batch Rotation Tag if defined in CDO
+	if (AbilityCDO->bRotateUnitsToMouse && FinalUnits.Num() > 0)
+	{
+		BatchSetRotateToMouseTagLocally(FinalUnits, true);
+		Server_BatchSetRotateToMouseTag(FinalUnits, true);
+	}
+
+	return FinalUnits;
+}
+
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID)
 {
-
-	if (AltIsPressed) return;
-	if (IsCtrlPressed) return;
+	if (AltIsPressed || IsCtrlPressed) return;
 
 	// 1. Identify the ability class from the current selection and InputID
 	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
 	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayByIndex();
-	TSubclassOf<UGameplayAbilityBase> AbilityClass = nullptr;
+	TSubclassOf<UGameplayAbilityBase> AbilityClass = AbilityArray.IsValidIndex(AbilityIndex) ? AbilityArray[AbilityIndex] : nullptr;
 
-	if (AbilityArray.IsValidIndex(AbilityIndex))
-	{
-		AbilityClass = AbilityArray[AbilityIndex];
-	}
+	if (!AbilityClass) return;
 
-	bool bAllowQueuing = false;
-	if (AbilityClass)
-	{
-		if (UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
-		{
-			bAllowQueuing = AbilityCDO->UseAbilityQue;
-		}
-	}
-
-	if (!bAllowQueuing)
-	{
-		// Requirement 2: Block if ANY selected unit is busy
-		for (AUnitBase* Unit : SelectedUnits)
-		{
-			if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
-			{
-				if (GASUnit->IsAnyAbilityActive()) return;
-			}
-		}
-
-		// Requirement 2: Block if CameraUnit is busy (if we are going to use it)
-		if (SelectedUnits.Num() == 0 && CameraUnitWithTag)
-		{
-			if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
-			{
-				if (GASUnit->IsAnyAbilityActive()) return;
-			}
-		}
-	}
-	
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-
 
 	if (AbilitySound)
 	{
@@ -790,9 +827,9 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	}
 	
 	bool bActivatedAny = false;
+
 	if (SelectedUnits.Num() > 0)
 	{
-
 		// Validate CurrentUnitWidgetIndex is within bounds
 		if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num())
 		{
@@ -801,40 +838,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 
 		AUnitBase* CurrentUnit = SelectedUnits[CurrentUnitWidgetIndex];
 
-		// 2. Batch apply tag if CDO says so
-		if (AbilityClass && AbilityClass.GetDefaultObject()->bRotateUnitsToMouse)
-		{
-			TArray<AUnitBase*> TargetUnits;
-			for (AUnitBase* Unit : SelectedUnits)
-			{
-				if (Unit && Unit->CanActivateAbilities && !Unit->IsWorker)
-				{
-					bool bUnitOnCooldown = false;
-					if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
-					{
-						TArray<TSubclassOf<UGameplayAbilityBase>> UnitAbilityArray = GetAbilityArrayForUnit(Unit);
-						if (UnitAbilityArray.IsValidIndex(AbilityIndex))
-						{
-							bUnitOnCooldown = GASUnit->IsAbilityOnCooldownByClass(UnitAbilityArray[AbilityIndex]);
-						}
-					}
-
-					if (!bUnitOnCooldown)
-					{
-						TargetUnits.Add(Unit);
-					}
-				}
-			}
-
-			if (TargetUnits.Num() > 0)
-			{
-				BatchSetRotateToMouseTagLocally(TargetUnits, true);
-				Server_BatchSetRotateToMouseTag(TargetUnits, true);
-			}
-		}
-		
-		
-		// Check if the current unit is valid before accessing its properties
+		// Special case: if the currently focused unit is a worker, we only activate for it
 		if (CurrentUnit && CurrentUnit->IsWorker && CurrentUnit->CanActivateAbilities)
 		{
 			ActivateAbilitiesByIndex_Implementation(CurrentUnit, InputID, Hit);
@@ -842,32 +846,34 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			HUDBase->SetUnitSelected(CurrentUnit, bIsAi);
 			CurrentUnitWidgetIndex = 0;
 			SelectedUnits = HUDBase->SelectedUnits;
-		}else if (CurrentUnit) {
-			bool bAnyHasTag = false;
+		}
+		else
+		{
+			// Batch activation logic for non-workers
+			TArray<AUnitBase*> TargetUnits = GetAndPrepareAbilityTargets(AbilityClass, AbilityIndex);
 
-			
-			for (AUnitBase* SelectedUnit : SelectedUnits)
+			if (TargetUnits.Num() > 0)
 			{
-				if (SelectedUnit && SelectedUnit->CanActivateAbilities && !SelectedUnit->IsWorker && SelectedUnit->AbilitySelectionTag == CurrentUnit->AbilitySelectionTag)
+				const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+				
+				// Respect queuing settings
+				if (!AbilityCDO->UseAbilityQue)
 				{
-					bAnyHasTag = true;
-					ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
+					for (AUnitBase* Unit : TargetUnits)
+					{
+						if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+						{
+							if (GASUnit->IsAnyAbilityActive()) return;
+						}
+					}
+				}
+
+				for (AUnitBase* Unit : TargetUnits)
+				{
+					ActivateAbilitiesByIndex_Implementation(Unit, InputID, Hit);
 					bActivatedAny = true;
 				}
 			}
-
-			if (!bAnyHasTag)
-			{
-				for (AUnitBase* SelectedUnit : SelectedUnits)
-				{
-					if (SelectedUnit && SelectedUnit->CanActivateAbilities && !SelectedUnit->IsWorker)
-					{
-						ActivateAbilitiesByIndex_Implementation(SelectedUnit, InputID, Hit);
-						bActivatedAny = true;
-					}
-				}
-			}
-			
 		}
 	}
 	else if (CameraUnitWithTag && CameraUnitWithTag->CanActivateAbilities)
@@ -876,53 +882,61 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 		SelectedUnits.Emplace(CameraUnitWithTag);
 		HUDBase->SetUnitSelected(CameraUnitWithTag, bIsAi);
 
-		// Check if CameraUnit's ability needs rotation
-		AbilityArray = GetAbilityArrayForUnit(CameraUnitWithTag);
+		TArray<TSubclassOf<UGameplayAbilityBase>> CameraAbilityArray = GetAbilityArrayForUnit(CameraUnitWithTag);
 
-		bool bAllowCameraQueuing = false;
-		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex])
+		if (CameraAbilityArray.IsValidIndex(AbilityIndex) && CameraAbilityArray[AbilityIndex])
 		{
-			if (UGameplayAbilityBase* AbilityCDO = AbilityArray[AbilityIndex]->GetDefaultObject<UGameplayAbilityBase>())
-			{
-				bAllowCameraQueuing = AbilityCDO->UseAbilityQue;
-			}
-		}
+			TSubclassOf<UGameplayAbilityBase> CameraAbilityClass = CameraAbilityArray[AbilityIndex];
+			const UGameplayAbilityBase* AbilityCDO = CameraAbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 
-		if (!bAllowCameraQueuing)
-		{
-			if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
+			if (!AbilityCDO->UseAbilityQue)
 			{
-				if (GASUnit->IsAnyAbilityActive())
+				if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
 				{
-					return;
+					if (GASUnit->IsAnyAbilityActive()) return;
 				}
 			}
-		}
 
-		bool bIsOnCooldown = false;
-		if (AbilityArray.IsValidIndex(AbilityIndex))
-		{
+			bool bIsOnCooldown = false;
 			if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
 			{
-				bIsOnCooldown = GASUnit->IsAbilityOnCooldownByClass(AbilityArray[AbilityIndex]);
+				bIsOnCooldown = GASUnit->IsAbilityOnCooldownByClass(CameraAbilityClass);
+			}
+
+			if (!bIsOnCooldown)
+			{
+				if (AbilityCDO->bRotateUnitsToMouse)
+				{
+					TArray<AUnitBase*> CameraTargetArray = { CameraUnitWithTag };
+					BatchSetRotateToMouseTagLocally(CameraTargetArray, true);
+					Server_BatchSetRotateToMouseTag(CameraTargetArray, true);
+				}
+
+				/*
+				// Prediction reset for CameraUnit
+				if (AbilityCDO->bStopMovementOnActivation && CameraUnitWithTag->MassActorBindingComponent)
+				{
+					FMassEntityHandle Entity = CameraUnitWithTag->MassActorBindingComponent->GetMassEntityHandle();
+					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+					{
+						if (FMassClientPredictionFragment* Pred = MassSubsystem->GetEntityManager().GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+						{
+							Pred->bHasData = false;
+							Pred->Location = CameraUnitWithTag->GetMassActorLocation();
+						}
+					}
+				}
+				*/
+
+				ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
+				bActivatedAny = true;
 			}
 		}
-
-		if (AbilityArray.IsValidIndex(AbilityIndex) && AbilityArray[AbilityIndex] && AbilityArray[AbilityIndex].GetDefaultObject()->bRotateUnitsToMouse && !bIsOnCooldown)
-		{
-			TArray<AUnitBase*> TargetUnits = { CameraUnitWithTag };
-			BatchSetRotateToMouseTagLocally(TargetUnits, true);
-			Server_BatchSetRotateToMouseTag(TargetUnits, true);
-		}
-
-		ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
-		bActivatedAny = true;
 	}
 	else if (HUDBase)
 	{
 		FVector CameraLocation = GetPawn()->GetActorLocation();
 		ActivateKeyboardAbilitiesOnCloseUnits(InputID, CameraLocation, SelectableTeamId, HUDBase);
-		// Activation may happen asynchronously via server response; leave flag unchanged here
 	}
 
 	if (bActivatedAny)

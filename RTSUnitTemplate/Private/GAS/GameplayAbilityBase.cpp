@@ -225,6 +225,40 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 			}
 		}
 	}
+
+	if (bStopMovementOnActivation && ActorInfo && ActorInfo->IsNetAuthority())
+	{
+		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			if (Unit->MassActorBindingComponent)
+			{
+				FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+				if (Entity.IsValid())
+				{
+					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+					{
+						FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+						const FVector CurrentLocation = Unit->GetMassActorLocation();
+
+						// 1. StoredLocation for the idle system to keep the unit there
+						if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+						{
+							StateFrag->StoredLocation = CurrentLocation;
+						}
+
+						// 2. Clear current move target (speed 0)
+						if (FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+						{
+							StopMovement(*MoveTarget, GetWorld());
+						}
+                        
+						// 3. Set state to Idle to sync animations
+						Unit->SetUnitState(UnitData::Idle);
+					}
+				}
+			}
+		}
+	}
 	
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 }
