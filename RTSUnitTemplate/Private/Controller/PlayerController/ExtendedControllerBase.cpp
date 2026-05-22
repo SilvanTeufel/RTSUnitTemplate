@@ -202,6 +202,12 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 						}
 					}
 				}
+				else if (GetWorld()->GetTimeSeconds() - Unit->LastAbilityRequestTime < 0.8f)
+				{
+					// We just pressed it. We hold the indicator active for max. 0.8s,
+					// while we wait for the replication from the server.
+					bStillAiming = true;
+				}
 			}
 
 			if (!bValid || !bStillAiming)
@@ -411,9 +417,7 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 				// before the server replication arrives.
 				if (!HasAuthority())
 				{
-					FQueuedAbility LocalSnapshot;
-					LocalSnapshot.AbilityClass = AbilityClass;
-					UnitBase->CurrentSnapshot = LocalSnapshot;
+					UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
 				}
 			}
 		}
@@ -490,9 +494,7 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 					// before the server replication arrives.
 					if (!HasAuthority())
 					{
-						FQueuedAbility LocalSnapshot;
-						LocalSnapshot.AbilityClass = AbilityToActivate;
-						UnitBase->CurrentSnapshot = LocalSnapshot;
+						UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
 					}
 				}
 			}

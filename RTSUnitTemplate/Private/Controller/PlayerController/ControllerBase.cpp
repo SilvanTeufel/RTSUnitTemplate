@@ -222,10 +222,13 @@ void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector
 {
 	if (!Unit) return;
 
-	if (Unit->CurrentSnapshot.AbilityClass)
+	if (Unit->IsAnyAbilityActive())
 	{
-		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		}
 
 		CancelCurrentAbility(Unit);
 	}
@@ -239,10 +242,13 @@ void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Loc
 {
 	if (!Unit) return;
 
-	if (Unit->CurrentSnapshot.AbilityClass)
+	if (Unit->IsAnyAbilityActive())
 	{
-		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		}
 
 		CancelCurrentAbility(Unit);
 	}
@@ -317,7 +323,7 @@ void AControllerBase::LeftClickSelect_Implementation()
 	{
 		if(SelectedUnits[i])
 		{
-			if (SelectedUnits[i]->CurrentSnapshot.AbilityClass)
+			if (SelectedUnits[i]->IsAnyAbilityActive())
 			{
 				FireAbilityMouseHit(SelectedUnits[i], Hit_IPoint);
 				Deselect = false;
@@ -537,10 +543,13 @@ void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector
 {
 	if (!Unit) return;
 
-	if (Unit->CurrentSnapshot.AbilityClass)
+	if (Unit->IsAnyAbilityActive())
 	{
-		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		}
 		CancelCurrentAbility(Unit);
 	}
 
@@ -588,12 +597,13 @@ void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector 
 {
 	if (!Unit) return;
 	
-	if (Unit->CurrentSnapshot.AbilityClass)
+	if (Unit->IsAnyAbilityActive())
 	{
-
-		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		}
 
 		if (CancelAbility) CancelCurrentAbility(Unit);
 	}
@@ -609,10 +619,13 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 
 	if (!Unit) return;
 
-	if (Unit->CurrentSnapshot.AbilityClass)
+	if (Unit->IsAnyAbilityActive())
 	{
-		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		if (Unit->CurrentSnapshot.AbilityClass)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		}
 
 		CancelCurrentAbility(Unit);
 	}

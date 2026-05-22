@@ -194,6 +194,9 @@ public:
 	float QueueFallbackTimer = 0.f;
 
 	UPROPERTY()
+	float LastAbilityRequestTime = 0.f;
+
+	UPROPERTY()
 	TWeakObjectPtr<APlayerController> CurrentInstigatorPC;
 	
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)

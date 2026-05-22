@@ -268,7 +268,18 @@ bool AGASUnit::IsAnyAbilityActive() const
 {
 	// ActivatedAbilityInstance works on Server.
 	// CurrentSnapshot.AbilityClass works on Clients because it is replicated.
-	return ActivatedAbilityInstance != nullptr || CurrentSnapshot.AbilityClass != nullptr;
+	if (ActivatedAbilityInstance != nullptr || CurrentSnapshot.AbilityClass != nullptr)
+	{
+		return true;
+	}
+
+	// Tolerance window for clients waiting for replication
+	if (GetWorld() && (GetWorld()->GetTimeSeconds() - LastAbilityRequestTime < 0.8f))
+	{
+		return true;
+	}
+
+	return false;
 }
 
 
@@ -325,7 +336,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 		CurrentInstigatorPC = InstigatorPC;
 
 		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-		if (bIsActivated && ActivatedAbilityInstance)
+		if (HasAuthority() && bIsActivated && ActivatedAbilityInstance)
 		{
 			// If you have a pointer to the active ability instance:
 			FQueuedAbility Queued;
