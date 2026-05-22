@@ -740,6 +740,15 @@ void AExtendedControllerBase::ClearMassStateTagsLocally(FMassEntityHandle Entity
 {
 	if (!Entity.IsValid()) return;
 
+	// Update StoredLocation to prevent the unit from running back to an old location on the client
+	if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+	{
+		if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+		{
+			StateFrag->StoredLocation = TransformFrag->GetTransform().GetLocation();
+		}
+	}
+
 	EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
 	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
 	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);

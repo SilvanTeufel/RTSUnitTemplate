@@ -402,9 +402,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					const bool bHasAttackTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateAttackTag::StaticStruct());
 					const bool bHasPauseTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStatePauseTag::StaticStruct());
 					const bool bIsIdle = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct());
+					const bool bIsMouseRotating = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassRotateToMouseTag::StaticStruct());
 					const bool bIsHoldPosition = AIStateList[EntityIdx].HoldPosition;
 
-					const bool bIsStationaryAttack = (bHasAttackTag || bHasPauseTag || bIsIdle || bIsHoldPosition) && CombatList.IsValidIndex(EntityIdx) && !CombatList[EntityIdx].bCanMoveWhileAttacking;
+					const bool bIsStationaryAttack = (bHasAttackTag || bHasPauseTag || bIsIdle || bIsHoldPosition || bIsMouseRotating) && CombatList.IsValidIndex(EntityIdx) && !CombatList[EntityIdx].bCanMoveWhileAttacking;
 
 					float CurrentKp = bIsStationaryAttack ? 1.0f : Kp;
 					float CurrentMinErrorSq = bIsStationaryAttack ? 1.0f : MinErrorForCorrectionSq; // Nur 1cm Toleranz im Stand

@@ -1765,6 +1765,16 @@ bool ACustomControllerBase::TryCancelActiveAbilities()
 				// Cancel if CanMove is true, or if CanMove is false, or if it's a building without a waypoint.
 				if (!BuildingBase || (BuildingBase && !BuildingBase->HasWaypoint))
 				{
+					// Local correction on client
+					if (!HasAuthority() && Unit->MassActorBindingComponent)
+					{
+						FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+						if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+						{
+							ClearMassStateTagsLocally(Entity, MassSubsystem->GetMutableEntityManager());
+						}
+					}
+
 					CancelCurrentAbility(Unit);
 					bAnyAbilityCanceled = true;
 				}

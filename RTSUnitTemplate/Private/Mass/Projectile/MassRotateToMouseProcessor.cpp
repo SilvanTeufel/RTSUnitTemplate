@@ -179,21 +179,29 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					FQuat TargetQuat = Dir.ToOrientationQuat();
 					FQuat CurrentQuat = MassTransform.GetRotation();
-					float RotSpeed = Characteristics[i].RotationSpeed;
-					if (RotSpeed <= 0.01f) { RotSpeed = 15.0f; }
 
-					// Smooth rotation
-					FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * RotSpeed, 0.f, 1.f));
-					MassTransform.SetRotation(NewQuat);
-					
-					
-					Characteristics[i].PositionedTransform.SetRotation(MassTransform.GetRotation());
-					Characteristics[i].bTransformDirty = true;
-					if (Actor)
+					// Deadzone check to prevent jitter
+					const float CurrentYaw = CurrentQuat.Rotator().Yaw;
+					const float TargetYaw = TargetQuat.Rotator().Yaw;
+					float DeltaAngle = FMath::FindDeltaAngleDegrees(CurrentYaw, TargetYaw);
+
+					if (FMath::Abs(DeltaAngle) > 2.5f)
 					{
-						Actor->SetActorRotation(MassTransform.GetRotation());
+						float RotSpeed = Characteristics[i].RotationSpeed;
+						if (RotSpeed <= 0.01f) { RotSpeed = 15.0f; }
+
+						// Smooth rotation
+						FQuat NewQuat = FQuat::Slerp(CurrentQuat, TargetQuat, FMath::Clamp(DeltaTime * RotSpeed, 0.f, 1.f));
+						MassTransform.SetRotation(NewQuat);
+						
+						
+						Characteristics[i].PositionedTransform.SetRotation(MassTransform.GetRotation());
+						Characteristics[i].bTransformDirty = true;
+						if (Actor)
+						{
+							Actor->SetActorRotation(MassTransform.GetRotation());
+						}
 					}
-					
 				}
 			}
 		}
