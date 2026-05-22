@@ -1485,8 +1485,7 @@ namespace UnitTagBits
 	static constexpr uint32 Casting             = 1u << 2;
 	static constexpr uint32 Charging            = 1u << 3;
 	static constexpr uint32 IsAttacked          = 1u << 4;
-	static constexpr uint32 Attack              = 1u << 5;
-	static constexpr uint32 Chase               = 1u << 6;
+	static constexpr uint32 Idle                = 1u << 5; // Moved from 28, replaces unused Attack
 	// Worker
 	static constexpr uint32 Build               = 1u << 7;
 	static constexpr uint32 ResourceExtraction  = 1u << 8;
@@ -1527,8 +1526,6 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassStateCastingTag::StaticStruct()))              Bits |= UnitTagBits::Casting;
 	if (H(FMassStateChargingTag::StaticStruct()))             Bits |= UnitTagBits::Charging;
 	if (H(FMassStateIsAttackedTag::StaticStruct()))           Bits |= UnitTagBits::IsAttacked;
-	// if (H(FMassStateAttackTag::StaticStruct()))               Bits |= UnitTagBits::Attack;
-	// if (H(FMassStateChaseTag::StaticStruct()))                Bits |= UnitTagBits::Chase;
 	if (H(FMassStateBuildTag::StaticStruct()))                Bits |= UnitTagBits::Build;
 	if (H(FMassStateResourceExtractionTag::StaticStruct()))   Bits |= UnitTagBits::ResourceExtraction;
 	if (H(FMassStateGoToResourceExtractionTag::StaticStruct())) Bits |= UnitTagBits::GoToResource;
@@ -1552,6 +1549,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FRunAnimationTag::StaticStruct()))                  Bits |= UnitTagBits::RunAnimation;
 	if (H(FMassUnitYawFollowTag::StaticStruct()))             Bits |= UnitTagBits::YawFollow;
 	if (H(FMassStateDetectTag::StaticStruct()))               Bits |= UnitTagBits::Detect;
+	if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
 	return Bits;
 }
 
@@ -1644,8 +1642,6 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
 		SetTag(UnitTagBits::Charging,            FMassStateChargingTag());
 		SetTag(UnitTagBits::IsAttacked,          FMassStateIsAttackedTag());
-		// SetTagPredictive(UnitTagBits::Attack,              FMassStateAttackTag());
-		// SetTagPredictive(UnitTagBits::Chase,               FMassStateChaseTag());
 		SetTag(UnitTagBits::Build,               FMassStateBuildTag());
 		SetTag(UnitTagBits::ResourceExtraction,  FMassStateResourceExtractionTag());
 		SetTag(UnitTagBits::GoToResource,        FMassStateGoToResourceExtractionTag());
@@ -1672,8 +1668,42 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 		SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());
 		SetTag(UnitTagBits::Patrol,              FMassStatePatrolTag());
-		// SetTagPredictive(UnitTagBits::Pause,               FMassStatePauseTag());
 		SetTag(UnitTagBits::Evasion,             FMassStateEvasionTag());
+
+		// Idle Tag Synchronisation: only apply it if the Client doesnt have any StateTag
+		const bool bServerIdle = (Bits & UnitTagBits::Idle) != 0;
+		const bool bClientHasIdle = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
+
+		if (bServerIdle && !bClientHasIdle)
+		{
+			const bool bHasAnyStateTag = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateChaseTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStatePatrolIdleTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStatePatrolRandomTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStatePatrolTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateResourceExtractionTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateGoToResourceExtractionTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateGoToBuildTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateGoToBaseTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateGoToRepairTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateIsAttackedTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateCastingTag::StaticStruct()) ||
+										DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());
+
+			if (!bHasAnyStateTag)
+			{
+				EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
+			}
+		}
+		else if (!bServerIdle && bClientHasIdle)
+		{
+			EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
+		}
 
 		// Latency kick for Pause state: Nur den Timer setzen, wenn der Server Pause meldet und der Client bereits lokal in Pause ist
 		const bool bServerPause = (Bits & UnitTagBits::Pause) != 0;

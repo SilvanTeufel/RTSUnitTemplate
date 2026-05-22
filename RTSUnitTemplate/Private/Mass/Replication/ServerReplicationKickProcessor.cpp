@@ -162,8 +162,7 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				if (Bits & UnitTagBits::Casting)            Names.Add(TEXT("Casting"));
 				if (Bits & UnitTagBits::Charging)           Names.Add(TEXT("Charging"));
 				if (Bits & UnitTagBits::IsAttacked)         Names.Add(TEXT("IsAttacked"));
-				if (Bits & UnitTagBits::Attack)             Names.Add(TEXT("Attack"));
-				if (Bits & UnitTagBits::Chase)              Names.Add(TEXT("Chase"));
+				if (Bits & UnitTagBits::Idle)               Names.Add(TEXT("Idle"));
 				if (Bits & UnitTagBits::Build)              Names.Add(TEXT("Build"));
 				if (Bits & UnitTagBits::ResourceExtraction) Names.Add(TEXT("ResourceExtraction"));
 				if (Bits & UnitTagBits::GoToResource)       Names.Add(TEXT("GoToResource"));
