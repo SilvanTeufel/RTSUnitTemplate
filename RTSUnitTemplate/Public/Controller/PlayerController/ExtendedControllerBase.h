@@ -449,6 +449,8 @@ public:
 	UFUNCTION(Client, Reliable, Category = RTSUnitTemplate)
 	void Client_DeselectSingleUnit(AUnitBase* UnitToDeselect);
 
+	void ClearMassStateTagsLocally(FMassEntityHandle Entity, struct FMassEntityManager& EntityManager);
+
 	void BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd);
 
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)

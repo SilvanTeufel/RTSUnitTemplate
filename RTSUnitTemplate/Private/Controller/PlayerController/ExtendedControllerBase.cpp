@@ -734,6 +734,30 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityI
 	}
 }
 
+void AExtendedControllerBase::ClearMassStateTagsLocally(FMassEntityHandle Entity, FMassEntityManager& EntityManager)
+{
+	if (!Entity.IsValid()) return;
+
+	EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateRepairTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateEvasionTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateChargingTag>(Entity);
+	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
+
+	EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
+}
+
 TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclassOf<UGameplayAbilityBase> AbilityClass, int32 AbilityIndex)
 {
 	TArray<AUnitBase*> PotentialUnits;
@@ -760,21 +784,14 @@ TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclas
 			{
 				PotentialUnits.Add(Unit);
 
-				/*
-				// Reset prediction locally on the client to visualize immediate stopping
 				if (AbilityCDO->bStopMovementOnActivation && Unit->MassActorBindingComponent)
 				{
 					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
 					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 					{
-						if (FMassClientPredictionFragment* Pred = MassSubsystem->GetEntityManager().GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
-						{
-							Pred->bHasData = false;
-							Pred->Location = Unit->GetMassActorLocation();
-						}
+						ClearMassStateTagsLocally(Entity, MassSubsystem->GetMutableEntityManager());
 					}
 				}
-				*/
 			}
 		}
 	}
@@ -912,21 +929,14 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 					Server_BatchSetRotateToMouseTag(CameraTargetArray, true);
 				}
 
-				/*
-				// Prediction reset for CameraUnit
 				if (AbilityCDO->bStopMovementOnActivation && CameraUnitWithTag->MassActorBindingComponent)
 				{
 					FMassEntityHandle Entity = CameraUnitWithTag->MassActorBindingComponent->GetMassEntityHandle();
 					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 					{
-						if (FMassClientPredictionFragment* Pred = MassSubsystem->GetEntityManager().GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
-						{
-							Pred->bHasData = false;
-							Pred->Location = CameraUnitWithTag->GetMassActorLocation();
-						}
+						ClearMassStateTagsLocally(Entity, MassSubsystem->GetMutableEntityManager());
 					}
 				}
-				*/
 
 				ActivateAbilitiesByIndex_Implementation(CameraUnitWithTag, InputID, Hit);
 				bActivatedAny = true;
