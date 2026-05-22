@@ -202,6 +202,13 @@ void AGASUnit::SetupAbilitySystemDelegates()
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
+
+	// If on server and CurrentSnapshot hasn't been set yet (e.g., for AI or auto-abilities),
+	// we set the AbilityClass so clients know an ability is active.
+	if (HasAuthority() && ActivatedAbilityInstance && !CurrentSnapshot.AbilityClass)
+	{
+		CurrentSnapshot.AbilityClass = ActivatedAbilityInstance->GetClass();
+	}
 }
 
 void AGASUnit::SetHealth_Implementation(float NewHealth)
@@ -259,7 +266,9 @@ bool AGASUnit::IsAbilityOnCooldownByClass(TSubclassOf<UGameplayAbilityBase> Abil
 
 bool AGASUnit::IsAnyAbilityActive() const
 {
-	return ActivatedAbilityInstance != nullptr;
+	// ActivatedAbilityInstance works on Server.
+	// CurrentSnapshot.AbilityClass works on Clients because it is replicated.
+	return ActivatedAbilityInstance != nullptr || CurrentSnapshot.AbilityClass != nullptr;
 }
 
 
@@ -316,7 +325,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 		CurrentInstigatorPC = InstigatorPC;
 
 		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-		if (bIsActivated)
+		if (bIsActivated && ActivatedAbilityInstance)
 		{
 			// If you have a pointer to the active ability instance:
 			FQueuedAbility Queued;
@@ -378,6 +387,13 @@ void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 		CurrentInstigatorPC = nullptr;
 	}
 
+	// Failsafe: if no instance is active, the snapshot must be empty.
+	if (HasAuthority() && !ActivatedAbilityInstance && CurrentSnapshot.AbilityClass)
+	{
+		CurrentSnapshot = FQueuedAbility();
+		CurrentInstigatorPC = nullptr;
+	}
+
 	// Example: delay by half a second
 	if (ActivatedAbilityInstance == nullptr)
 	{
@@ -426,7 +442,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 
 			bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(Next.AbilityClass);
 
-			if (bIsActivated)
+			if (bIsActivated && ActivatedAbilityInstance)
 			{
 				CurrentSnapshot = Next;
 
@@ -536,7 +552,11 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 			CancelCurrentAbility();
 		}
 	}
-	
+	else if (HasAuthority() && CurrentSnapshot.AbilityClass)
+	{
+		// Failsafe: If the snapshot is set but no ability instance exists on the server, clear it.
+		CancelCurrentAbility();
+	}
 }
 
 bool AGASUnit::DequeueAbility(int Index)
