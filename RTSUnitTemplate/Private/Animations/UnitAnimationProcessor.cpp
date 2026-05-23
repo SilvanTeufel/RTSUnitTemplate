@@ -109,25 +109,20 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 }
             }
 
-            // 2. Interpolate Current Values (Matches logic in UnitBaseAnimInstance.cpp)
-            auto Interpolate = [](float& Current, float Target, float Rate, float Resolution)
-            {
-                if (FMath::Abs(Current - Target) <= Resolution)
-                {
-                    Current = Target;
-                }
-                else if (Current < Target)
-                {
-                    Current += Rate;
-                }
-                else if (Current > Target)
-                {
-                    Current -= Rate;
-                }
-            };
+            // 2. Interpolate Current Values
+            const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-            Interpolate(AnimFrag.CurrentBlendPoint_1, AnimFrag.TargetBlendPoint_1, AnimFrag.TransitionRate_1, AnimFrag.Resolution_1);
-            Interpolate(AnimFrag.CurrentBlendPoint_2, AnimFrag.TargetBlendPoint_2, AnimFrag.TransitionRate_2, AnimFrag.Resolution_2);
+            AnimFrag.CurrentBlendPoint_1 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_1, AnimFrag.TargetBlendPoint_1, DeltaTime, AnimFrag.TransitionRate_1);
+            AnimFrag.CurrentBlendPoint_2 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_2, AnimFrag.TargetBlendPoint_2, DeltaTime, AnimFrag.TransitionRate_2);
+
+            if (FMath::Abs(AnimFrag.CurrentBlendPoint_1 - AnimFrag.TargetBlendPoint_1) <= AnimFrag.Resolution_1)
+            {
+                AnimFrag.CurrentBlendPoint_1 = AnimFrag.TargetBlendPoint_1;
+            }
+            if (FMath::Abs(AnimFrag.CurrentBlendPoint_2 - AnimFrag.TargetBlendPoint_2) <= AnimFrag.Resolution_2)
+            {
+                AnimFrag.CurrentBlendPoint_2 = AnimFrag.TargetBlendPoint_2;
+            }
 
             if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
             {
