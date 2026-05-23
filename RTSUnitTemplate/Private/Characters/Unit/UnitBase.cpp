@@ -663,6 +663,11 @@ void AUnitBase::SetShield_Implementation(float NewShield)
 	UpdateEntityHealth(Attributes->GetHealth(), NewShield);
 }
 
+void AUnitBase::SetMana_Implementation(float NewMana)
+{
+	Attributes->SetAttributeMana(NewMana);
+}
+
 
 
 void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)

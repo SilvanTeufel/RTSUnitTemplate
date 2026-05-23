@@ -77,4 +77,10 @@ struct FAttributeSaveData
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
 	float BaseRunSpeed = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, Category = "Attributes")
+	float Mana = 0.0f;
+
+	UPROPERTY(VisibleAnywhere, Category = "Attributes")
+	float MaxMana = 0.0f;
 };

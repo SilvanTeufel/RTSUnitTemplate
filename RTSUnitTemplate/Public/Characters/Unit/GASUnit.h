@@ -117,6 +117,10 @@ public:
 	void SetShield(float NewShield);
 	virtual void SetShield_Implementation(float NewShield);
 
+	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SetMana", Keywords = "RTSUnitTemplate SetMana"), Category = RTSUnitTemplate)
+	void SetMana(float NewMana);
+	virtual void SetMana_Implementation(float NewMana);
+
 	UPROPERTY(ReplicatedUsing = OnRep_ToggleUnitDetection, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ToggleUnitDetection = false;
 

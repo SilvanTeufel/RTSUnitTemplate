@@ -1175,14 +1175,18 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, con
 	float MaxHealth = Attr->GetMaxHealth();
 	float Shield = Attr->GetShield();
 	float MaxShield = Attr->GetMaxShield();
+	float Mana = Attr->GetMana();
+	float MaxMana = Attr->GetMaxMana();
 
 	if (MaxHealth <= 0.f) return;
 
 	float HealthPct = FMath::Clamp(Health / MaxHealth, 0.f, 1.f);
 	float ShieldPct = (MaxShield > 0.f) ? FMath::Clamp(Shield / MaxShield, 0.f, 1.f) : 0.f;
+	float ManaPct = (MaxMana > 0.f) ? FMath::Clamp(Mana / MaxMana, 0.f, 1.f) : 0.f;
 
 	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
 	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
+	ManaPct = (MaxMana > 0.f) ? GetHysteresisPct(ManaPct, Unit->DisplayedManaPct, Settings) : 0.f;
 
 	APlayerController* PC = GetOwningPlayerController();
 	float ProjectedSize = 60.f;
@@ -1255,6 +1259,12 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, con
 	}
 	DrawSegmentedBar(Pos, HealthPct, Settings.HealthColor);
 
+	if (MaxMana > 0.f && !Settings.bDisableManaBar)
+	{
+		Pos.Y += Thickness + (Settings.BarPadding * Settings.Scale) + (Outline * 2.f);
+		DrawSegmentedBar(Pos, ManaPct, Settings.ManaColor);
+	}
+
 	if (LevelUnit)
 	{
 		FVector2D LevelPos = ScreenPos;
@@ -1280,9 +1290,12 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 	float HealthPct = FMath::Clamp(Attr->GetHealth() / Attr->GetMaxHealth(), 0.f, 1.f);
 	float MaxShield = Attr->GetMaxShield();
 	float ShieldPct = (MaxShield > 0.f) ? FMath::Clamp(Attr->GetShield() / MaxShield, 0.f, 1.f) : 0.f;
+	float MaxMana = Attr->GetMaxMana();
+	float ManaPct = (MaxMana > 0.f) ? FMath::Clamp(Attr->GetMana() / MaxMana, 0.f, 1.f) : 0.f;
 
 	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
 	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
+	ManaPct = (MaxMana > 0.f) ? GetHysteresisPct(ManaPct, Unit->DisplayedManaPct, Settings) : 0.f;
 
 	float BaseRadiusX = RadiusX * Settings.RadiusMultiplier;
 	float BaseRadiusY = RadiusY * Settings.RadiusMultiplier;
@@ -1368,6 +1381,14 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 			}
 		};
 
+		if (MaxMana > 0.f && !Settings.bDisableManaBar)
+		{
+			float AvgRadius = (VecX_Base.Size() + VecY_Base.Size()) * 0.5f;
+			float ManaRadiusOffset = Thickness + (Settings.BarPadding * Settings.Scale) + (Outline * 2.f);
+			float ManaMult = (AvgRadius > 0.f) ? (AvgRadius - ManaRadiusOffset) / AvgRadius : 0.9f;
+			DrawArc2D(ManaMult, ManaPct, Settings.ManaColor);
+		}
+
 		DrawArc2D(1.0f, HealthPct, Settings.HealthColor);
 		if (MaxShield > 0.f)
 		{
@@ -1399,9 +1420,12 @@ void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc
 	float HealthPct = FMath::Clamp(Attr->GetHealth() / Attr->GetMaxHealth(), 0.f, 1.f);
 	float MaxShield = Attr->GetMaxShield();
 	float ShieldPct = (MaxShield > 0.f) ? FMath::Clamp(Attr->GetShield() / MaxShield, 0.f, 1.f) : 0.f;
+	float MaxMana = Attr->GetMaxMana();
+	float ManaPct = (MaxMana > 0.f) ? FMath::Clamp(Attr->GetMana() / MaxMana, 0.f, 1.f) : 0.f;
 
 	HealthPct = GetHysteresisPct(HealthPct, Unit->DisplayedHealthPct, Settings);
 	ShieldPct = (MaxShield > 0.f) ? GetHysteresisPct(ShieldPct, Unit->DisplayedShieldPct, Settings) : 0.f;
+	ManaPct = (MaxMana > 0.f) ? GetHysteresisPct(ManaPct, Unit->DisplayedManaPct, Settings) : 0.f;
 
 	APlayerController* PC = GetOwningPlayerController();
 	float WorldWidth = 40.f;
@@ -1482,6 +1506,18 @@ void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc
 	{
 		FVector2D R_Top(ScreenPos.X + OffsetX, ScreenPos.Y - BracketHeight * 0.5f);
 		DrawSegmentedBracket(R_Top, ShieldPct, Settings.ShieldColor);
+		
+		if (MaxMana > 0.f && !Settings.bDisableManaBar)
+		{
+			float ManaOffsetX = OffsetX + Thickness + (Settings.BarPadding * Settings.Scale) + (Outline * 2.f);
+			FVector2D R_ManaTop(ScreenPos.X + ManaOffsetX, ScreenPos.Y - BracketHeight * 0.5f);
+			DrawSegmentedBracket(R_ManaTop, ManaPct, Settings.ManaColor);
+		}
+	}
+	else if (MaxMana > 0.f && !Settings.bDisableManaBar)
+	{
+		FVector2D R_Top(ScreenPos.X + OffsetX, ScreenPos.Y - BracketHeight * 0.5f);
+		DrawSegmentedBracket(R_Top, ManaPct, Settings.ManaColor);
 	}
 
 	if (LevelUnit)

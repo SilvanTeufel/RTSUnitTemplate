@@ -22,6 +22,9 @@ class RTSUNITTEMPLATE_API UGameplayAbilityBase : public UGameplayAbility
 	
 public:
 	UGameplayAbilityBase();
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ManaCost = 0.f;
 
 	// Play a 2D sound only for the owning player of this ability (works from server or client)
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -78,6 +81,10 @@ public:
 
 	// Track execution to know if an ability class has ever been executed this session
 	virtual void ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData) override;
+
+	virtual bool CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const override;
+
+	virtual void ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
 
 	virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 

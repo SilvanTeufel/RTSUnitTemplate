@@ -279,6 +279,14 @@ public:
 	virtual void OnRep_Mana(const FGameplayAttributeData& OldMana);
 	// Mana //
 
+	// MaxMana //
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_MaxMana)
+	FGameplayAttributeData MaxMana;
+	ATTRIBUTE_ACCESSORS(UAttributeSetBase, MaxMana);
+	UFUNCTION()
+	virtual void OnRep_MaxMana(const FGameplayAttributeData& OldMaxMana);
+	// MaxMana //
+
 
 	// SpellSize //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_SpellSize)
@@ -368,6 +376,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void SetAttributeMana(float NewValue);
+
+	UFUNCTION(BlueprintCallable, Category = "Attributes")
+	void SetAttributeMaxMana(float NewValue);
 
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void SetAttributeSpellSize(float NewValue);

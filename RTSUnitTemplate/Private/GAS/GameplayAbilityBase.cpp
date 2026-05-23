@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "GAS/GameplayAbilityBase.h"
+#include "GAS/AttributeSetBase.h"
 #include "System/StoryTriggerQueueSubsystem.h"
 #include "Engine/GameInstance.h"
 
@@ -261,6 +262,36 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	}
 	
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+}
+
+bool UGameplayAbilityBase::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	if (!Super::CheckCost(Handle, ActorInfo, OptionalRelevantTags))
+	{
+		return false;
+	}
+
+	if (ManaCost > 0.f && ActorInfo && ActorInfo->AbilitySystemComponent.IsValid())
+	{
+		const float CurrentMana = ActorInfo->AbilitySystemComponent->GetNumericAttribute(UAttributeSetBase::GetManaAttribute());
+		if (CurrentMana < ManaCost)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+void UGameplayAbilityBase::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
+
+	if (ManaCost > 0.f && ActorInfo && ActorInfo->AbilitySystemComponent.IsValid())
+	{
+		UAbilitySystemComponent* ASC = ActorInfo->AbilitySystemComponent.Get();
+		const float CurrentMana = ASC->GetNumericAttribute(UAttributeSetBase::GetManaAttribute());
+		ASC->SetNumericAttributeBase(UAttributeSetBase::GetManaAttribute(), CurrentMana - ManaCost);
+	}
 }
 
 void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
@@ -694,7 +725,17 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 // In cpp file
 FText UGameplayAbilityBase::CreateTooltipText() const
 {
-	const FString costString = ConstructionCost.ToFormattedString();
+	FString costString = ConstructionCost.ToFormattedString();
+
+	if (ManaCost > 0.f)
+	{
+		if (!costString.IsEmpty())
+		{
+			costString += TEXT("\n");
+		}
+		costString += FString::Printf(TEXT("Mana Cost: %.0f"), ManaCost);
+	}
+	
 	const FString fullText = FString::Printf(TEXT("%s\n\n%s\n\nKeyboard %s"),
 		*AbilityName,
 		*costString, 

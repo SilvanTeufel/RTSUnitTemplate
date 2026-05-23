@@ -227,6 +227,14 @@ void AGASUnit::SetShield_Implementation(float NewShield)
 	}
 }
 
+void AGASUnit::SetMana_Implementation(float NewMana)
+{
+	if (Attributes)
+	{
+		Attributes->SetAttributeMana(NewMana);
+	}
+}
+
 void AGASUnit::SetToggleUnitDetection_Implementation(bool ToggleTo)
 {
 	ToggleUnitDetection = ToggleTo;

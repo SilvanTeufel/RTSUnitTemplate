@@ -39,6 +39,11 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, AttackPower, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, EffectDamage, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, EffectShield, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Mana, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, MaxMana, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, SpellSize, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, SpellForce, COND_None, REPNOTIFY_Always);
+	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, SpellCapacity, COND_None, REPNOTIFY_Always);
 }
 
 void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
@@ -65,6 +70,8 @@ void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
 	SetAttributeBaseHealth(SourceData.BaseHealth);
 	SetAttributeBaseAttackDamage(SourceData.BaseAttackDamage);
 	SetAttributeBaseRunSpeed(SourceData.BaseRunSpeed);
+	SetAttributeMaxMana(SourceData.MaxMana);
+	SetAttributeMana(SourceData.Mana);
 }
 
 void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
@@ -352,6 +359,11 @@ void UAttributeSetBase::OnRep_Mana(const FGameplayAttributeData& OldMana)
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, Mana, OldMana);
 }
 
+void UAttributeSetBase::OnRep_MaxMana(const FGameplayAttributeData& OldMaxMana)
+{
+	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, MaxMana, OldMaxMana);
+}
+
 void UAttributeSetBase::OnRep_SpellSize(const FGameplayAttributeData& OldSpellSize)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, SpellSize, OldSpellSize);
@@ -470,7 +482,15 @@ void UAttributeSetBase::SetAttributeBaseRunSpeed(float NewValue)
 
 void UAttributeSetBase::SetAttributeMana(float NewValue)
 {
-	SetMana(NewValue); 
+	if (NewValue > GetMaxMana())
+		Mana.SetCurrentValue(GetMaxMana());
+	else
+		Mana.SetCurrentValue(FMath::Max(NewValue, 0.0f));
+}
+
+void UAttributeSetBase::SetAttributeMaxMana(float NewValue)
+{
+	SetMaxMana(NewValue);
 }
 
 void UAttributeSetBase::SetAttributeSpellSize(float NewValue)

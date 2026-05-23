@@ -81,6 +81,9 @@ struct FHealthBarSettings
 	FColor ShieldColor = FColor::Cyan;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	FColor ManaColor = FColor::Blue;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	FColor BackgroundColor = FColor(0, 0, 0, 150);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health|Level")
@@ -103,6 +106,9 @@ struct FHealthBarSettings
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	bool bShowHealthbarOnSelected = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	bool bDisableManaBar = false;
 };
 
 USTRUCT(BlueprintType)

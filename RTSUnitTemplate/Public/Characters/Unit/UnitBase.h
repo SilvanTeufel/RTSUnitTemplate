@@ -256,6 +256,7 @@ public:
 	void DeadEffectsAndEvents();
 	
 	virtual void SetShield_Implementation(float NewShield) override;
+	virtual void SetMana_Implementation(float NewMana) override;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitHealthbarOwner();
@@ -435,6 +436,9 @@ public:
 
 	UPROPERTY()
 	float DisplayedShieldPct = -1.f;
+
+	UPROPERTY()
+	float DisplayedManaPct = -1.f;
 };
 
 
