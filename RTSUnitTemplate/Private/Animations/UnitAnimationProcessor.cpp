@@ -85,6 +85,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                          AnimFrag.TransitionRate_2 = RowData->TransitionRate_2;
                                          AnimFrag.Resolution_1 = RowData->Resolution_1;
                                          AnimFrag.Resolution_2 = RowData->Resolution_2;
+                                         AnimFrag.Sound = RowData->Sound;
                                          bFound = true;
 
                                          //UE_LOG(LogTemp, Log, TEXT("%s [AnimationProcessor] Loaded Row for %s: BP1=%.2f, BP2=%.2f"), 

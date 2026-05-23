@@ -67,6 +67,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 								TransitionRate_2 = AnimFrag->TransitionRate_2;
 								Resolution_1 = AnimFrag->Resolution_1;
 								Resolution_2 = AnimFrag->Resolution_2;
+								Sound = AnimFrag->Sound;
 
 								/*
 								if (World && World->GetNetMode() == NM_Client)
@@ -92,9 +93,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 				SoundTimer = 0.f;
 				LastAnimState = CharAnimState;
 
-				// Wenn wir nicht über Mass laufen, oder Sound vom Processor nicht gesetzt wird, 
-				// müssen wir Sound hier aktualisieren. Da Sound nur bei Zustandswechsel wichtig ist:
-				SetBlendPoints(UnitBase, Deltaseconds);
+				// Sound wird jetzt über den UnitAnimationProcessor im Fragment gesetzt.
 			}
 			
 			if(Sound && UnitBase)

@@ -844,8 +844,6 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayByIndex();
 	TSubclassOf<UGameplayAbilityBase> AbilityClass = AbilityArray.IsValidIndex(AbilityIndex) ? AbilityArray[AbilityIndex] : nullptr;
 
-	if (!AbilityClass) return;
-
 	FHitResult Hit;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 

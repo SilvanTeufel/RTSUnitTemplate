@@ -38,6 +38,9 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
     float Resolution_2 = 0.f;
 
     UPROPERTY(Transient)
+    class USoundBase* Sound = nullptr;
+
+    UPROPERTY(Transient)
     TEnumAsByte<UnitData::EState> LastProcessedState = UnitData::None;
 };
 
