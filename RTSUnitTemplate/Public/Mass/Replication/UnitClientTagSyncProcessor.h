@@ -28,6 +28,7 @@ protected:
 private:
 	FMassEntityQuery EntityQuery;
 	FMassEntityQuery InitialKickCleanupQuery;
+	FMassEntityQuery LoadingTagCleanupQuery;
 
 	TEnumAsByte<UnitData::EState> ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const;
 

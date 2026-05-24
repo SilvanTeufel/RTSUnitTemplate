@@ -120,6 +120,7 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
     VisualFrag->VisualRelativeTransform = VisualFrag->BaseRelativeTransform * VisualOffsetTransform;
 
     VisualFrag->BaseMeshRadius = Mesh->GetBounds().BoxExtent.X;
+    UE_LOG(LogTemp, Log, TEXT("[MassScaling] Register Visual: Mesh %s has BaseRadius %.2f"), *Mesh->GetName(), VisualFrag->BaseMeshRadius);
     
     if (EffectAreaActor->Niagara_A)
     {

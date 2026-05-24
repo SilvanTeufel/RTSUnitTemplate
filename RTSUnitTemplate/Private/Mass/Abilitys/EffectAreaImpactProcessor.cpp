@@ -179,6 +179,12 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 			Impact.ElapsedTime += DeltaTime;
 
+			if (bIsClient && (Impact.ElapsedTime < 5.0f || (Impact.ElapsedTime > 10.0f && Impact.ElapsedTime < 25.0f)))
+			{
+				UE_LOG(LogTemp, Log, TEXT("[MassScaling] ImpactProc: Entity %d, Elapsed=%.2f, Radius=%.2f, ScalingActive=%d, ScalingElapsed=%.2f, AtStart=%.2f, EndRad=%.2f, TimeToEnd=%.2f"), 
+					i, Impact.ElapsedTime, Impact.CurrentRadius, Impact.bIsScalingAfterImpact, Impact.ImpactScalingElapsedTime, Impact.RadiusAtImpactStart, Impact.EndRadius, Impact.TimeToEndRadius);
+			}
+
 			// Trigger OnEffectAreaDestructionStarted on client when bPendingDestruction replicates
 			if (!bIsServer && Impact.bPendingDestruction && !Impact.bClientDestructionStarted)
 			{
@@ -223,7 +229,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				float Alpha = FMath::Clamp(Impact.ElapsedTime / Impact.StartScaleTime, 0.f, 1.f);
 				Impact.CurrentRadius = FMath::Lerp(0.f, Impact.BaseRadius, Alpha);
 			}
-			else if (Impact.bIsScalingAfterImpact)
+			else if (Impact.bIsScalingAfterImpact || (Impact.ImpactScalingElapsedTime > 0.f && Impact.ImpactScalingElapsedTime < Impact.TimeToEndRadius))
 			{
 				// Detect start of impact scaling on client
 				if (!bIsServer && Impact.ImpactScalingElapsedTime == 0.f)
@@ -258,6 +264,10 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					if (bIsServer)
 					{
 						Impact.bIsScalingAfterImpact = false;
+						if (EffectArea)
+						{
+							EffectArea->bIsScalingAfterImpact = false;
+						}
 						Impact.bImpactVFXTriggered = true;
 
 						if (Impact.bDestroyOnImpact)
@@ -375,8 +385,16 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					{
 						Impact.bImpactScaleTriggered = true;
 						Impact.bIsScalingAfterImpact = true;
+						UE_LOG(LogTemp, Log, TEXT("[MassScaling] SERVER Impact Triggered for Entity %d, RadiusAtStart=%.2f"), i, Impact.CurrentRadius);
 						Impact.ImpactScalingElapsedTime = 0.f;
 						Impact.RadiusAtImpactStart = Impact.CurrentRadius;
+
+						if (EffectArea)
+						{
+							EffectArea->bIsScalingAfterImpact = true;
+							EffectArea->bImpactScaleTriggered = true;
+							EffectArea->RadiusAtImpactStart = Impact.CurrentRadius;
+						}
 					}
 					else if (!Impact.bScaleOnImpact)
 					{

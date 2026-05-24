@@ -7,6 +7,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Core/UnitData.h"
 #include "Mass/Replication/ReplicationSettings.h"
+#include "GameStates/ResourceGameState.h"
 #include "EngineUtils.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "MassSignalSubsystem.h"
@@ -46,6 +47,10 @@ void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	InitialKickCleanupQuery.Initialize(EntityManager);
 	InitialKickCleanupQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::All);
 	InitialKickCleanupQuery.RegisterWithProcessor(*this);
+
+	LoadingTagCleanupQuery.Initialize(EntityManager);
+	LoadingTagCleanupQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::All);
+	LoadingTagCleanupQuery.RegisterWithProcessor(*this);
 }
 
 void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
@@ -74,6 +79,26 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				KickCtx.Defer().RemoveTag<FMassStateStopSeparationTag>(Entity);
 			}
 		});
+	}
+
+	// Client-side cleanup for the Loading tag
+	if (World->GetNetMode() == NM_Client)
+	{
+		if (AResourceGameState* GS = World->GetGameState<AResourceGameState>())
+		{
+			if (GS->MatchStartTime > 0 && GS->GetServerWorldTimeSeconds() >= GS->MatchStartTime)
+			{
+				LoadingTagCleanupQuery.ForEachEntityChunk(EntityManager, Context, [](FMassExecutionContext& LoadingCtx)
+				{
+					const int32 Num = LoadingCtx.GetNumEntities();
+					for (int32 i = 0; i < Num; ++i)
+					{
+						const FMassEntityHandle Entity = LoadingCtx.GetEntity(i);
+						LoadingCtx.Defer().RemoveTag<FMassEffectAreaLoadingTag>(Entity);
+					}
+				});
+			}
+		}
 	}
 
 	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();

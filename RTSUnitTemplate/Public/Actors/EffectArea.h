@@ -105,6 +105,15 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
 	bool bScaleOnImpact = false;
 
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|Mass")
+	bool bIsScalingAfterImpact = false;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|Mass")
+	bool bImpactScaleTriggered = false;
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|Mass")
+	float RadiusAtImpactStart = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Duplication")
 	float DuplicationRadius = 0.f;
 

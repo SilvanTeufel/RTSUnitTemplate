@@ -53,6 +53,9 @@ AEffectArea::AEffectArea()
 	bPulsate = false;
 	bDestroyOnImpact = false;
 	bScaleOnImpact = false;
+	bIsScalingAfterImpact = false;
+	bImpactScaleTriggered = false;
+	RadiusAtImpactStart = 0.f;
 	DuplicationRadius = 0.f;
 	DuplicationTime = 0.f;
 	RandomAngleRange = 360.f;
@@ -159,6 +162,9 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, MaxLifeTime);
 	DOREPLIFETIME(AEffectArea, bDestroyOnImpact);
 	DOREPLIFETIME(AEffectArea, bScaleOnImpact);
+	DOREPLIFETIME(AEffectArea, bIsScalingAfterImpact);
+	DOREPLIFETIME(AEffectArea, bImpactScaleTriggered);
+	DOREPLIFETIME(AEffectArea, RadiusAtImpactStart);
 	DOREPLIFETIME(AEffectArea, ScaleMesh);
 }
 

@@ -288,6 +288,22 @@ void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, 
 
     }
 
+    if (!Area.HasAuthority())
+    {
+        // Übertrage den replizierten Status vom Actor in das Fragment
+        Impact.bIsScalingAfterImpact = Area.bIsScalingAfterImpact;
+        Impact.bImpactScaleTriggered = Area.bImpactScaleTriggered;
+        
+        // Falls die Skalierung auf dem Client gerade erst durch Replikation gestartet wurde
+        if (Impact.bIsScalingAfterImpact && Impact.ImpactScalingElapsedTime == 0.f)
+        {
+            Impact.RadiusAtImpactStart = Area.RadiusAtImpactStart;
+        }
+
+        UE_LOG(LogTemp, Log, TEXT("[MassScaling] SyncEffectArea Client: AreaIndex %d, FragScalingActive=%d, FragElapsed=%.2f, ActorScalingActive=%d"), 
+            Area.AreaIndex, Impact.bIsScalingAfterImpact, Impact.ImpactScalingElapsedTime, Area.bIsScalingAfterImpact);
+    }
+
     // Persistent safety check: If the transform is still at 0,0,0 but the actor has moved, re-sync.
     if (TransformFragment)
     {

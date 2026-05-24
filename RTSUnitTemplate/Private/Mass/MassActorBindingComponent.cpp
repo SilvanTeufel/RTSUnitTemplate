@@ -978,7 +978,9 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					ImpactFrag->bIsRadiusScaling = EffectArea->bIsRadiusScaling;
 					ImpactFrag->BaseRadius = EffectArea->BaseRadius;
 					ImpactFrag->CurrentRadius = EffectArea->bIsRadiusScaling ? EffectArea->StartRadius : EffectArea->BaseRadius;
-					ImpactFrag->ElapsedTime = 0.f;
+					ImpactFrag->ElapsedTime = ImpactFrag->ElapsedTime = (EffectArea->GetWorld()->GetNetMode() == NM_Client) 
+											  ? EffectArea->GetGameTimeSinceCreation() 
+											  : 0.f;
 					ImpactFrag->TeamId = EffectArea->TeamId;
 					ImpactFrag->IsHealing = EffectArea->IsHealing;
 					ImpactFrag->AreaEffectOne = EffectArea->AreaEffectOne;
@@ -1611,6 +1613,7 @@ void UMassActorBindingComponent::RequestClientMassLink()
 	}
 	else if (AEffectArea* Area = Cast<AEffectArea>(OwnerActor))
 	{
+		BindingType = EMassBindingType::EffectArea;
 		if (bDebugLogs)
 		{
 			UE_LOG(LogTemp, Log, TEXT("[MassLink] RequestClientMassLink for EffectArea: %s"), *OwnerName);
