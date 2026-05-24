@@ -1644,6 +1644,10 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	URTSWorldCacheSubsystem* CacheSub = MyWorld->GetSubsystem<URTSWorldCacheSubsystem>();
 	if (!CacheSub)
 	{
+		if (bDebugLogs)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: URTSWorldCacheSubsystem not found."), *OwnerName);
+		}
 		return false;
 	}
 
@@ -1651,20 +1655,63 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	AUnitRegistryReplicator* Registry = CacheSub->GetRegistry(false);
 	if (!Registry)
 	{
+		if (bDebugLogs)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: AUnitRegistryReplicator not found."), *OwnerName);
+		}
 		return false;
 	}
 
 	AUnitBase* Unit = Cast<AUnitBase>(OwnerActor);
 	AEffectArea* Area = Cast<AEffectArea>(OwnerActor);
 
-	if (Unit && Unit->UnitIndex == INDEX_NONE) return false;
+	if (Unit && Unit->UnitIndex == INDEX_NONE)
+	{
+		if (bDebugLogs)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: UnitIndex is INDEX_NONE."), *OwnerName);
+		}
+		return false;
+	}
+
 	if (Area)
 	{
-		if (Area->AreaIndex == INDEX_NONE) return false;
-		if (Area->BaseRadius <= 0.1f) return false;
+		if (Area->AreaIndex == INDEX_NONE)
+		{
+			if (bDebugLogs)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: AreaIndex is INDEX_NONE."), *OwnerName);
+			}
+			return false;
+		}
+
+		if (Area->BaseRadius <= 0.1f)
+		{
+			if (bDebugLogs)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: BaseRadius is too small (%.2f)."), *OwnerName, Area->BaseRadius);
+			}
+			return false;
+		}
+
 		// Wenn es eine duplizierte Area ist, auf die ID warten (Falls im BP MaxDuplicationCount > 0 eingestellt ist)
-		if (Area->MaxDuplicationCount > 0 && Area->DuplicationId == 0) return false;
-		if (Area->GetActorLocation().IsNearlyZero()) return false;
+		if (Area->MaxDuplicationCount > 0 && Area->DuplicationId == 0)
+		{
+			if (bDebugLogs)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: Waiting for DuplicationId."), *OwnerName);
+			}
+			return false;
+		}
+
+		if (Area->GetActorLocation().IsNearlyZero())
+		{
+			if (bDebugLogs)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: Actor location is nearly zero."), *OwnerName);
+			}
+			return false;
+		}
 	}
 
 	const FUnitRegistryItem* RegItem = nullptr;

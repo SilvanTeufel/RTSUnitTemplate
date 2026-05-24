@@ -24,6 +24,7 @@ void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite); // Eigene Stats lesen/schreiben
+    EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
     //EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::None);
@@ -75,11 +76,14 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StatsList = ChunkContext.GetMutableFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
+        auto ImpactList = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
+        
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i]; // Mutable ref needed
             FMassCombatStatsFragment& StatsFrag = StatsList[i];
+            const FEffectAreaImpactFragment* ImpactFragPtr = ImpactList.Num() > 0 ? &ImpactList[i] : nullptr;
 
             HandleLoseSightExtension(StateFrag, StatsFrag);
 
@@ -102,7 +106,19 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             }
 
             // --- 1. Check CURRENT entity's health ---
-            if (StatsFrag.Health <= 0.f)
+            bool bShouldDie = false;
+            if (StatsFrag.MaxHealth > 0.f)
+            {
+                // Normale Einheiten sterben bei Health <= 0
+                bShouldDie = (StatsFrag.Health <= 0.f);
+            }
+            else if (ImpactFragPtr)
+            {
+                // EffectAreas mit MaxHealth 0 sterben nur bei expliziter Zerstörungsanforderung
+                bShouldDie = ImpactFragPtr->bPendingDestruction;
+            }
+            
+            if (bShouldDie)
             {
                 if (SignalSubsystem)
                 {
@@ -128,12 +144,14 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         const int32 NumEntities = ChunkContext.GetNumEntities();
         auto StatsList = ChunkContext.GetMutableFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
+        auto ImpactList = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
             FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& StateFrag = StateList[i];
+            const FEffectAreaImpactFragment* ImpactFragPtr = ImpactList.Num() > 0 ? &ImpactList[i] : nullptr;
 
             HandleLoseSightExtension(StateFrag, StatsFrag);
             
@@ -146,7 +164,17 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 }
             }
 
-            if (StatsFrag.Health <= 0.f)
+            bool bShouldDie = false;
+            if (StatsFrag.MaxHealth > 0.f)
+            {
+                bShouldDie = (StatsFrag.Health <= 0.f);
+            }
+            else if (ImpactFragPtr)
+            {
+                bShouldDie = ImpactFragPtr->bPendingDestruction;
+            }
+            
+            if (bShouldDie)
             {
                 HandleUnitDeathClient(Entity, ChunkContext);
             }
