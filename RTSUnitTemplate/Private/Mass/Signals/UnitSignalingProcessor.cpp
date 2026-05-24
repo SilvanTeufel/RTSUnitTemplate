@@ -128,10 +128,6 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         {
             if (IsValid(Unit))
             {
-                if (bDebugLogs)
-                {
-                    UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor received Unit: %s. Adding to PendingRetryQueue."), *Unit->GetName());
-                }
                 PendingRetryQueue.AddUnique(Unit);
                 
                 // Client-side visual protection (Disabled on user request, but logic remains)
@@ -152,10 +148,6 @@ void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         {
             if (IsValid(Area))
             {
-                if (bDebugLogs)
-                {
-                    UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor received EffectArea: %s. Adding to PendingEffectAreaRetryQueue."), *Area->GetName());
-                }
                 PendingEffectAreaRetryQueue.AddUnique(Area);
             }
         }
@@ -322,20 +314,12 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
         // 1. Budget-Check (only critical on clients to avoid frame drops)
         if (bIsClient && RegistrationsThisFrame >= Budget)
         {
-            if (bDebugLogs)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("[MassLink] Budget hit! Deferring %d units to next frame."), PendingRetryQueue.Num());
-            }
             break;
         }
 
         // 2. Strict Validation (Wait for replication data)
         if (BindingComp->IsReadyForClientMassLink())
         {
-            if (bDebugLogs)
-            {
-                UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor initializing validated unit: %s"), *Unit->GetName());
-            }
             // 3. Actual Creation
             if (BindingComp->bNeedsMassUnitSetup)
             {
@@ -387,10 +371,6 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
 
         if (BindingComp->IsReadyForClientMassLink())
         {
-            if (bDebugLogs)
-            {
-                UE_LOG(LogTemp, Log, TEXT("[MassLink] Processor initializing validated EffectArea: %s"), *Area->GetName());
-            }
             BindingComp->CreateAndLinkEffectAreaToMassEntity();
 
             if (BindingComp->GetMassEntityHandle().IsValid())

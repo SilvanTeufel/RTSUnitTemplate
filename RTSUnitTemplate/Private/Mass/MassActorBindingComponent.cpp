@@ -294,10 +294,6 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 		NewMassEntityHandle = EM.CreateEntity(Archetype, SharedValues);
 		if (NewMassEntityHandle.IsValid())
 		{
-			if (bDebugLogs)
-			{
-				UE_LOG(LogTemp, Log, TEXT("[MassLink] Created Entity for %s"), *MyOwner->GetName());
-			}
 			// Perform synchronous initializations
 			MassEntityHandle = NewMassEntityHandle;
 			ApplyInitialStartupFreeze(MyOwner, EM, NewMassEntityHandle);
@@ -798,11 +794,6 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 
 		if (NewMassEntityHandle.IsValid())
 		{
-			if (bDebugLogs)
-			{
-				UE_LOG(LogTemp, Log, TEXT("[MassLink] Created Building Entity for %s"), *MyOwner->GetName());
-			}
-			
 			MassEntityHandle = NewMassEntityHandle;
 			ApplyInitialStartupFreeze(MyOwner, EM, NewMassEntityHandle);
 			InitTransform(EM, NewMassEntityHandle);
@@ -1591,11 +1582,6 @@ void UMassActorBindingComponent::RequestClientMassLink()
 			return;
 		}
 
-		if (bDebugLogs)
-		{
-			UE_LOG(LogTemp, Log, TEXT("[MassLink] RequestClientMassLink for Unit: %s (Index: %d)"), *OwnerName, UnitBase->UnitIndex);
-		}
-
 		const bool bCanMove = UnitBase->CanMove;
 		bNeedsMassUnitSetup = bCanMove;
 		bNeedsMassBuildingSetup = !bCanMove;
@@ -1614,10 +1600,6 @@ void UMassActorBindingComponent::RequestClientMassLink()
 	else if (AEffectArea* Area = Cast<AEffectArea>(OwnerActor))
 	{
 		BindingType = EMassBindingType::EffectArea;
-		if (bDebugLogs)
-		{
-			UE_LOG(LogTemp, Log, TEXT("[MassLink] RequestClientMassLink for EffectArea: %s"), *OwnerName);
-		}
 
 		if (UMassUnitSpawnerSubsystem* SpawnerSubsystem = World->GetSubsystem<UMassUnitSpawnerSubsystem>())
 		{
@@ -1626,10 +1608,6 @@ void UMassActorBindingComponent::RequestClientMassLink()
 	}
 	else
 	{
-		if (bDebugLogs)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[MassLink] RequestClientMassLink called for non-unit actor: %s"), *OwnerName);
-		}
 	}
 }
 
@@ -1647,10 +1625,6 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	URTSWorldCacheSubsystem* CacheSub = MyWorld->GetSubsystem<URTSWorldCacheSubsystem>();
 	if (!CacheSub)
 	{
-		if (bDebugLogs)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: URTSWorldCacheSubsystem not found."), *OwnerName);
-		}
 		return false;
 	}
 
@@ -1658,10 +1632,6 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	AUnitRegistryReplicator* Registry = CacheSub->GetRegistry(false);
 	if (!Registry)
 	{
-		if (bDebugLogs)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: AUnitRegistryReplicator not found."), *OwnerName);
-		}
 		return false;
 	}
 
@@ -1670,10 +1640,6 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 
 	if (Unit && Unit->UnitIndex == INDEX_NONE)
 	{
-		if (bDebugLogs)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: UnitIndex is INDEX_NONE."), *OwnerName);
-		}
 		return false;
 	}
 
@@ -1681,38 +1647,22 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	{
 		if (Area->AreaIndex == INDEX_NONE)
 		{
-			if (bDebugLogs)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: AreaIndex is INDEX_NONE."), *OwnerName);
-			}
 			return false;
 		}
 
 		if (Area->BaseRadius <= 0.1f)
 		{
-			if (bDebugLogs)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: BaseRadius is too small (%.2f)."), *OwnerName, Area->BaseRadius);
-			}
 			return false;
 		}
 
 		// Wenn es eine duplizierte Area ist, auf die ID warten (Falls im BP MaxDuplicationCount > 0 eingestellt ist)
 		if (Area->MaxDuplicationCount > 0 && Area->DuplicationId == 0)
 		{
-			if (bDebugLogs)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: Waiting for DuplicationId."), *OwnerName);
-			}
 			return false;
 		}
 
 		if (Area->GetActorLocation().IsNearlyZero())
 		{
-			if (bDebugLogs)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: Actor location is nearly zero."), *OwnerName);
-			}
 			return false;
 		}
 	}
@@ -1735,25 +1685,11 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 
 	if (!RegItem)
 	{
-		if (bDebugLogs)
-		{
-			static double LastLogTime = 0;
-			const double CurrentTime = MyWorld->GetTimeSeconds();
-			if (CurrentTime - LastLogTime > 2.0)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: No Registry Item found yet. (AreaIndex: %d)"), *OwnerName, Area ? Area->AreaIndex : -1);
-				LastLogTime = CurrentTime;
-			}
-		}
 		return false;
 	}
 
 	if (!RegItem->NetID.IsValid())
 	{
-		if (bDebugLogs)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("[MassLink] %s: Registry Item found but NetID is invalid."), *OwnerName);
-		}
 		return false;
 	}
 
@@ -1768,21 +1704,9 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	bool bInBubble = Bubble->Agents.FindItemByNetID(RegItem->NetID) != nullptr;
 	if (!bInBubble)
 	{
-		// Wir haben eine NetID, aber die Bubble-Daten fehlen noch
-		static double LastLogTime = 0;
-		const double CurrentTime = MyWorld->GetTimeSeconds();
-		if (bDebugLogs && (CurrentTime - LastLogTime > 1.0)) // Verhindere Frame-Spam
-		{
-			UE_LOG(LogTemp, Log, TEXT("[MassLink] %s: Waiting for Bubble data (NetID: %u)"), *OwnerName, RegItem->NetID.GetValue());
-			LastLogTime = CurrentTime;
-		}
 		return false;
 	}
 
-	if (bDebugLogs)
-	{
-		UE_LOG(LogTemp, Log, TEXT("[MassLink] %s: Validation SUCCESS (NetID: %u, InBubble: Yes)"), *OwnerName, RegItem->NetID.GetValue());
-	}
 	return true;
 }
 

@@ -115,13 +115,6 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 					float LocalRadius = Visual.BaseMeshRadius;
 					float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
 
-					if (bIsClient && (Impact.ElapsedTime < 5.0f || (Impact.ElapsedTime > 10.0f && Impact.ElapsedTime < 25.0f)))
-					{
-						bool bHasLoadingTag = VisualContext.DoesArchetypeHaveTag<FMassEffectAreaLoadingTag>();
-						UE_LOG(LogTemp, Log, TEXT("[MassScaling] VisualProc: Entity %d, Radius=%.2f, Base=%.2f, Scale=%.2f, Visible=%d, HasLoadingTag=%d, ScalingActive=%d"), 
-							i, Impact.CurrentRadius, LocalRadius, ScaleFactor, bShouldShow, bHasLoadingTag, Impact.bIsScalingAfterImpact);
-					}
-
 
 					FTransform VisualTransform = Visual.VisualRelativeTransform * BaseTransform;
 					VisualTransform.SetScale3D(FVector(ScaleFactor));
