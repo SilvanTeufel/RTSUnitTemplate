@@ -13,6 +13,9 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "NavigationSystem.h"
+#include "NavMesh/RecastNavMesh.h"
+#include "NavAreas/NavArea_Obstacle.h"
 
 // ...
 
@@ -80,7 +83,7 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
     // Throttle follow assignment checks to once per second
     FollowAccum += ExecutionInterval;
-    this->bFollowTickThisFrame = (FollowAccum >= 1.0f);
+    this->bFollowTickThisFrame = (FollowAccum >= 0.1f);
     if (this->bFollowTickThisFrame)
     {
         FollowAccum = 0.0f;
@@ -191,6 +194,8 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         DesiredPos.Y += SinA * OffsetMag;
                     }
 
+                    StateFrag.StoredLocation = DesiredPos;
+
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
                     float Threshold = 50.f;
                     if (bHasPredList)
@@ -214,7 +219,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 if (bHasPredList)
                 {
                     const FMassClientPredictionFragment& Pred = PredictionList[i];
-                    Threshold = Pred.PredAcceptanceRadius * 3.f;
+                    Threshold = Pred.PredAcceptanceRadius * 6.f;
                 }
                 
 
@@ -340,11 +345,69 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         DesiredPos.Y += SinA * OffsetMag;
                     }
 
+                    // Use grounded Z if the target has characteristic data (buildings)
+                    if (const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+                    {
+                        DesiredPos.Z = TargetCharFrag->LastGroundLocation;
+                    }
+                    else
+                    {
+                        DesiredPos.Z = FriendlyLoc.Z;
+                    }
+
+                    // Ensure DesiredPos is not in a dirty area
+                    if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+                    {
+                        FNavLocation DesiredNav;
+                        if (NavSys->ProjectPointToNavigation(DesiredPos, DesiredNav, FVector(500.f, 500.f, 500.f)))
+                        {
+                            bool bDesiredDirty = false;
+                            const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+                            if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+                            {
+                                const uint32 PolyAreaID = Recast->GetPolyAreaID(DesiredNav.NodeRef);
+                                const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+                                bDesiredDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+                            }
+                            
+                            if (bDesiredDirty)
+                            {
+                                // Shift outward until clean
+                                static const float ShiftRadii[] = {100.f, 250.f, 500.f};
+                                for (float Shift : ShiftRadii)
+                                {
+                                    FVector Candidate = DesiredPos + Dir2D * Shift;
+                                    FNavLocation CandNav;
+                                    if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(500.f, 500.f, 500.f)))
+                                    {
+                                        if (const ARecastNavMesh* RM = Cast<ARecastNavMesh>(NavData))
+                                        {
+                                            const uint32 AID = RM->GetPolyAreaID(CandNav.NodeRef);
+                                            const UClass* AC = RM->GetAreaClass(AID);
+                                            if (!(AC && AC->IsChildOf(UNavArea_Obstacle::StaticClass())))
+                                            {
+                                                DesiredPos = CandNav.Location;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                DesiredPos = DesiredNav.Location;
+                            }
+                        }
+                    }
+
+                    StateFrag.StoredLocation = DesiredPos;
+
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
                     const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                    const float Threshold = MoveTarget.SlackRadius * 2.f;
+                    const float Threshold = MoveTarget.SlackRadius * 6.f;
                     if (Dist2D > Threshold)
                     {
+                        UpdateMoveTarget(MoveTargetList[i], DesiredPos, StatsFrag.RunSpeed, World);
                         SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                         continue;
                     }
