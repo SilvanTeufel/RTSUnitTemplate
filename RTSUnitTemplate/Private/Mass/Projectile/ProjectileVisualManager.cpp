@@ -1,4 +1,6 @@
 ﻿#include "Mass/Projectile/ProjectileVisualManager.h"
+#include "System/PlayerTeamSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "MassCommandBuffer.h"
 #include "MassEntityManager.h"
 #include "MassEntitySubsystem.h"
@@ -216,6 +218,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		Fragments.Add(FMassCombatStatsFragment::StaticStruct());
 		Fragments.Add(FMassSightFragment::StaticStruct());
 		Fragments.Add(FMassAgentCharacteristicsFragment::StaticStruct());
+		Fragments.Add(FMassAllianceFragment::StaticStruct());
         
 		TArray<const UScriptStruct*> Tags;
 		Tags.Add(FMassProjectileTag::StaticStruct());
@@ -279,6 +282,17 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	ProjectileFragment.IsHealing = CDO->IsHealing;
 	ProjectileFragment.MaxPiercedTargets = (MaxPiercedTargets >= 0) ? MaxPiercedTargets : CDO->MaxPiercedTargets;
 	ProjectileFragment.bIsPredicted = bIsPredicted;
+
+	if (FMassAllianceFragment* AllianceFrag = EntityManager->GetFragmentDataPtr<FMassAllianceFragment>(Entity))
+	{
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (UPlayerTeamSubsystem* TeamSubsystem = GI->GetSubsystem<UPlayerTeamSubsystem>())
+			{
+				AllianceFrag->AlliedTeamsMask = TeamSubsystem->GetAlliedTeamsMask(ProjectileFragment.TeamId);
+			}
+		}
+	}
 
 	ProjectileFragment.bIsHoming = bFollowTarget && CDO->HomingMissleCount > 0;
 	ProjectileFragment.HomingInitialAngle = HomingInitialAngle;

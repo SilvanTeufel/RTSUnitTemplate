@@ -309,6 +309,9 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_SelectableTeamId, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int SelectableTeamId = -1;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int64 AlliedTeamsMask = 0;
+
 	UFUNCTION()
 	void OnRep_SelectableTeamId();
 

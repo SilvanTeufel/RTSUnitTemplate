@@ -1,4 +1,4 @@
-﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Characters/Unit/MassUnitBase.h"
@@ -547,14 +547,26 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	
 	    case UnitData::Chase:
 			    Defer.AddTag<FMassStateChaseTag>(EntityHandle);
+				if (StateFrag->CanAttack && StateFrag->IsInitialized)
+				{
+					Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+				}
 	        break;
 	
 	    case UnitData::Attack:
 	        Defer.AddTag<FMassStateAttackTag>(EntityHandle);
+			if (StateFrag->CanAttack && StateFrag->IsInitialized)
+			{
+				Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+			}
 	        break;
 	
 	    case UnitData::Pause:
 	        Defer.AddTag<FMassStatePauseTag>(EntityHandle);
+			if (StateFrag->CanAttack && StateFrag->IsInitialized)
+			{
+				Defer.AddTag<FMassStateDetectTag>(EntityHandle);
+			}
 	        break;
 	
 	    case UnitData::Dead:
@@ -822,6 +834,7 @@ bool AMassUnitBase::FocusEntityTarget(AUnitBase* TargetUnit)
 	TargetFrag->TargetEntity      = TargetEntity;
 	TargetFrag->LastKnownLocation = TargetUnit->GetMassActorLocation();
 	TargetFrag->IsFocusedOnTarget = true;
+	TargetFrag->bHasValidTarget   = true;
 
 	return true;
 }
@@ -853,6 +866,7 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 	TargetFrag->IsFocusedOnTarget = false;
 	TargetFrag->TargetEntity.Reset();
 	TargetFrag->FriendlyTargetEntity.Reset();
+	TargetFrag->bHasValidTarget = false;
 	
 	return true;
 }
@@ -881,6 +895,7 @@ bool AMassUnitBase::RemoveFriendlyFocusEntityTarget()
 	if (!TargetFrag) return false;
 	
 	TargetFrag->FriendlyTargetEntity.Reset();
+	//TargetFrag->bHasValidTarget = false;
 	
 	return true;
 }
@@ -1567,11 +1582,11 @@ bool AMassUnitBase::SyncTranslation()
 		return false;
 	}
 
-	// Make sure it’s still alive
+	// Make sure it�s still alive
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
 		UE_LOG(LogTemp, Warning,
-			   TEXT("AMassUnitBase (%s): SyncTranslation failed – entity %s invalid."),
+			   TEXT("AMassUnitBase (%s): SyncTranslation failed � entity %s invalid."),
 			   *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
@@ -1581,7 +1596,7 @@ bool AMassUnitBase::SyncTranslation()
 	if (!TransformFrag)
 	{
 		UE_LOG(LogTemp, Warning,
-			   TEXT("AMassUnitBase (%s): SyncTranslation failed – no FTransformFragment found."),
+			   TEXT("AMassUnitBase (%s): SyncTranslation failed � no FTransformFragment found."),
 			   *GetName());
 		return false;
 	}
@@ -1613,11 +1628,11 @@ bool AMassUnitBase::SyncRotation()
 		return false;
 	}
 
-	// Make sure it’s still alive
+	// Make sure it�s still alive
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
 		UE_LOG(LogTemp, Warning,
-			   TEXT("AMassUnitBase (%s): SyncRotation failed – entity %s invalid."),
+			   TEXT("AMassUnitBase (%s): SyncRotation failed � entity %s invalid."),
 			   *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
@@ -1627,7 +1642,7 @@ bool AMassUnitBase::SyncRotation()
 	if (!TransformFrag)
 	{
 		UE_LOG(LogTemp, Warning,
-			   TEXT("AMassUnitBase (%s): SyncRotation failed – no FTransformFragment found."),
+			   TEXT("AMassUnitBase (%s): SyncRotation failed � no FTransformFragment found."),
 			   *GetName());
 		return false;
 	}
@@ -1659,11 +1674,11 @@ bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
 		return false;
 	}
 
-	// Make sure it’s still alive
+	// Make sure it�s still alive
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
 		UE_LOG(LogTemp, Warning,
-		   TEXT("AMassUnitBase (%s): SyncTranslation failed – entity %s invalid."),
+		   TEXT("AMassUnitBase (%s): SyncTranslation failed � entity %s invalid."),
 		   *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
@@ -1673,7 +1688,7 @@ bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
 	if (!TransformFrag)
 	{
 		UE_LOG(LogTemp, Warning,
-		   TEXT("AMassUnitBase (%s): SyncTranslation failed – no FTransformFragment found."),
+		   TEXT("AMassUnitBase (%s): SyncTranslation failed � no FTransformFragment found."),
 		   *GetName());
 		return false;
 	}
@@ -1705,7 +1720,7 @@ bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float D
 	}
 	if (!EntityManager->IsEntityValid(EntityHandle))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): UpdateMovementAndPredictionAtLocation failed – entity %s invalid."), *GetName(), *EntityHandle.DebugGetDescription());
+		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): UpdateMovementAndPredictionAtLocation failed � entity %s invalid."), *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
 
@@ -3129,6 +3144,7 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 			{
 				AITFrag->TargetEntity.Reset();
 				AITFrag->IsFocusedOnTarget = false;
+				AITFrag->bHasValidTarget = false;
 			}
 		}
 	}

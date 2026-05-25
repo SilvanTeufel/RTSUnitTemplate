@@ -38,6 +38,7 @@ void UUnitActorToFragmentSyncProcessor::ConfigureQueries(const TSharedRef<FMassE
 	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -55,6 +56,7 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 		const TArrayView<FMassVisualEffectFragment> VisualEffectList = ChunkContext.GetMutableFragmentView<FMassVisualEffectFragment>();
 		const TArrayView<FEffectAreaImpactFragment> ImpactList = ChunkContext.GetMutableFragmentView<FEffectAreaImpactFragment>();
 		const TArrayView<FMassPatrolFragment> PatrolList = ChunkContext.GetMutableFragmentView<FMassPatrolFragment>();
+		const TArrayView<FMassAllianceFragment> AllianceList = ChunkContext.GetMutableFragmentView<FMassAllianceFragment>();
 		const TArrayView<FTransformFragment> TransformList = ChunkContext.GetMutableFragmentView<FTransformFragment>();
 
 		for (int32 EntityIndex = 0; EntityIndex < ChunkContext.GetNumEntities(); ++EntityIndex)
@@ -68,6 +70,7 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				if (CharacteristicsList.Num() > 0) SyncCharacteristics(*Unit, CharacteristicsList[EntityIndex]);
 				if (AIStateList.Num() > 0 && CombatStatsList.Num() > 0) SyncAIState(*Unit, AIStateList[EntityIndex], CombatStatsList[EntityIndex]);
 				if (VisibilityList.Num() > 0) SyncVisibility(*Unit, VisibilityList[EntityIndex]);
+				if (AllianceList.Num() > 0) AllianceList[EntityIndex].AlliedTeamsMask = Unit->AlliedTeamsMask;
 				
 				// KORREKTUR: Zugriff über EntityManager für optionale Fragmente
 				FMassEntityHandle EntityHandle = ChunkContext.GetEntity(EntityIndex);

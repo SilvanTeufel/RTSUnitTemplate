@@ -12,6 +12,7 @@
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "Actors/EffectArea.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "System/PlayerTeamSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 
 UUnitVisibilityProcessor::UUnitVisibilityProcessor()
@@ -98,6 +99,20 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	}
 	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(LocalPC);
 	
+	int64 LocalAllianceMask = 0;
+	int32 LocalTeamId = 0;
+	if (CustomPC)
+	{
+		LocalTeamId = CustomPC->SelectableTeamId;
+		LocalAllianceMask = CustomPC->AlliedTeamsMask;
+		
+		// Fallback if mask is not yet set but we have a TeamId
+		if (LocalAllianceMask == 0 && LocalTeamId != 0)
+		{
+			LocalAllianceMask = (1LL << LocalTeamId);
+		}
+	}
+
 	//const bool bIsClient = (World->GetNetMode() != NM_DedicatedServer);
 	const float DeltaTime = Context.GetDeltaTimeSeconds();
 
@@ -149,8 +164,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				if (CustomPC && CustomPC->IsLocalController())
 				{
 					// 1) Update Team Visibility
-					int32 LocalTeamId = CustomPC->SelectableTeamId;
-					Vis.bIsMyTeam = (LocalTeamId == StatsList[i].TeamId || LocalTeamId == 0);
+   		Vis.bIsMyTeam = (LocalAllianceMask & (1LL << StatsList[i].TeamId)) != 0 || LocalTeamId == 0;
 
 					// 2) Update Viewport Visibility
 					FVector2D ScreenPosition;
@@ -170,10 +184,30 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					}
 					else if (SightList.Num() > 0)
 					{
-						const int32* OverlapCount = SightList[i].ConsistentTeamOverlapsPerTeam.Find(LocalTeamId);
-						const int32* AttackerOverlapCount = SightList[i].ConsistentAttackerTeamOverlapsPerTeam.Find(LocalTeamId);
-						bool bAttacksMyTeam = false;
-						if (TargetList)
+						bool bSeenByAlliance = false;
+						for (const auto& Pair : SightList[i].ConsistentTeamOverlapsPerTeam)
+						{
+							if (Pair.Value > 0 && (LocalAllianceMask & (1LL << Pair.Key)) != 0)
+							{
+								bSeenByAlliance = true;
+								break;
+							}
+						}
+
+						if (!bSeenByAlliance)
+						{
+							for (const auto& Pair : SightList[i].ConsistentAttackerTeamOverlapsPerTeam)
+							{
+								if (Pair.Value > 0 && (LocalAllianceMask & (1LL << Pair.Key)) != 0)
+								{
+									bSeenByAlliance = true;
+									break;
+								}
+							}
+						}
+
+						bool bAttacksMyAlliance = false;
+						if (!bSeenByAlliance && TargetList)
 						{
 							const FMassAITargetFragment& TargetFrag = TargetList[i];
 							if (TargetFrag.bHasValidTarget && TargetFrag.TargetEntity.IsSet())
@@ -182,28 +216,38 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 								{
 									if (const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity))
 									{
-										bAttacksMyTeam = (TgtStats->TeamId == LocalTeamId && TgtStats->Health > 0.f);
+       			bAttacksMyAlliance = (TgtStats->Health > 0.f && (LocalAllianceMask & (1LL << TgtStats->TeamId)) != 0);
 									}
 								}
 							}
 						}
-						bIsVisibleByFog = (OverlapCount && *OverlapCount > 0) || (AttackerOverlapCount && *AttackerOverlapCount > 0) || bAttacksMyTeam;
+						bIsVisibleByFog = bSeenByAlliance || bAttacksMyAlliance;
 					}
 					
 					if (bIsVisibleByFog)
 					{
 						Vis.bIsVisibleEnemy = true;
+						Vis.LastVisibleTime = CurrentTime;
 					}
 					else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(i), FMassStateStopMovementTag::StaticStruct()) && (!UnitBase || UnitBase->CanMove))
 					{
-						Vis.bIsVisibleEnemy = false;
+						// Hysteresis: Only set to false if enough time has passed since last visible
+						if (CurrentTime - Vis.LastVisibleTime > 0.2f)
+						{
+							Vis.bIsVisibleEnemy = false;
+						}
 					}
 
 					if (Unit)
 					{
 						Unit->IsOnViewport = bCalculatedOnViewport;
-						Unit->IsMyTeam = (LocalTeamId == StatsList[i].TeamId || LocalTeamId == 0);
+						Unit->IsMyTeam = (LocalAllianceMask & (1LL << StatsList[i].TeamId)) != 0 || LocalTeamId == 0;
 						Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
+					}
+					
+					if (UnitBase && Vis.bIsVisibleEnemy)
+					{
+						UnitBase->LastVisibleTime = CurrentTime;
 					}
 					
 					if (Area)

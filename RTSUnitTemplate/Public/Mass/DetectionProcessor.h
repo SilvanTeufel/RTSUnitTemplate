@@ -35,6 +35,7 @@ struct FDetectorUnitInfo
 	//FMassMoveTargetFragment*                   MoveFrag;
 	const FMassCombatStatsFragment*            Stats;
 	const FMassAgentCharacteristicsFragment*   Char;
+	const FMassAllianceFragment*               Alliance;
 };
 
 UCLASS()

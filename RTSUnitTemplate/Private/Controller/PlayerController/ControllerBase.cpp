@@ -28,6 +28,7 @@
 #include "NavMesh/RecastNavMesh.h"
 #include "NavFilters/NavigationQueryFilter.h"
 #include "AI/Navigation/NavQueryFilter.h"
+#include "System/PlayerTeamSubsystem.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Abilitys/CastingFallBackProcessor.h"
@@ -53,7 +54,13 @@ void AControllerBase::BeginPlay() {
 	ToggleUnitCountDisplay(ShowUnitCount);
 	LastRunSoundTime = 0.f;
 
-
+	if (HasAuthority())
+	{
+		if (UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>())
+		{
+			AlliedTeamsMask = TeamSubsystem->GetAlliedTeamsMask(SelectableTeamId);
+		}
+	}
 }
 void AControllerBase::InitCameraHUDGameMode()
 {
@@ -150,6 +157,7 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	DOREPLIFETIME(AControllerBase, SIsPressedState);
 	DOREPLIFETIME(AControllerBase, MiddleMouseIsPressed);
 	DOREPLIFETIME(AControllerBase, SelectableTeamId);
+	DOREPLIFETIME(AControllerBase, AlliedTeamsMask);
 	DOREPLIFETIME(AControllerBase, UEPathfindingCornerOffset); // Added for Build
 }
 

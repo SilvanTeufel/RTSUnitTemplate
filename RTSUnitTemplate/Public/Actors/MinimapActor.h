@@ -110,6 +110,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
     FColor EnemyUnitColor = FColor(255, 0, 0, 255);
 
+	/** Die Farbe für alliierte Einheiten auf der Minimap. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|Colors")
+	FColor AlliedUnitColor = FColor(128, 0, 128, 255);
+
     /** If true, the MapSwitchActor positions will be updated on the minimap. */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     bool bLiveUpdateMapSwitcher = false;

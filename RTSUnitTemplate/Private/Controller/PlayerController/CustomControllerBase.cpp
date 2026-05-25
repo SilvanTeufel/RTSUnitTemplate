@@ -1414,9 +1414,16 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 	for (AUnitBase* Unit : Units)
 	{
 		if (!Unit) continue;
+		
+		Unit->RemoveFocusEntityTarget();
+		
 		if (Unit != FollowTarget)
 		{
 			Unit->ApplyFollowTarget(FollowTarget);
+		}
+		else
+		{
+			Unit->ApplyFollowTarget(nullptr);
 		}
 
 		if (Unit->IsWorker && FollowTarget)
@@ -2932,7 +2939,7 @@ void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUni
 			}
 
 			Unit->UnitToChase = TargetUnitBase;
-			Unit->FocusEntityTarget(TargetUnitBase);
+			bool bSuccess = Unit->FocusEntityTarget(TargetUnitBase);
 			Unit->SetRdyForTransport(false);
 			// Unit->TransportId = 0;
 

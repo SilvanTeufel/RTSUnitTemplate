@@ -515,6 +515,14 @@ struct TMassFragmentTraits<FMassAIStateFragment>
 
 
 USTRUCT()
+struct FMassAllianceFragment : public FMassFragment
+{
+	GENERATED_BODY()
+	UPROPERTY(Transient)
+	int64 AlliedTeamsMask = 0;
+};
+
+USTRUCT()
 struct FMassSightFragment : public FMassFragment
 {
 	GENERATED_BODY()
@@ -571,6 +579,9 @@ struct FMassVisibilityFragment : public FMassFragment
 
 	UPROPERTY()
 	float LastShield = -1.f;
+
+	UPROPERTY()
+	float LastVisibleTime = -100.f;
 
 	// Per-unit health widget telemetry
 	UPROPERTY(VisibleAnywhere, Transient, Category = RTSUnitTemplate)

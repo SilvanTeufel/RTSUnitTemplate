@@ -1,6 +1,8 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/EffectArea.h"
+#include "System/PlayerTeamSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Actors/AreaDecalComponent.h"
 #include "MassEntityManager.h"
 #include "MassEntityUtils.h"
@@ -90,6 +92,11 @@ void AEffectArea::BeginPlay()
 		{
 			AreaIndex = ++GM->HighestUnitIndex;
 		}
+
+		if (UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>())
+		{
+			AlliedTeamsMask = TeamSubsystem->GetAlliedTeamsMask(TeamId);
+		}
 	}
 
 	if (MassBindingComponent)
@@ -132,9 +139,12 @@ void AEffectArea::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	// Adds an instance for preview in the editor if a mesh is selected
-	if (ISMTemplate && ISMTemplate->GetInstanceCount() == 0 && ISMTemplate->GetStaticMesh())
+	if (ISMTemplate)
 	{
-		ISMTemplate->AddInstance(FTransform::Identity);
+		if (ISMTemplate->GetInstanceCount() == 0 && ISMTemplate->GetStaticMesh())
+		{
+			ISMTemplate->AddInstance(FTransform::Identity);
+		}
 	}
 }
 
@@ -152,6 +162,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, EndRadius);
 	DOREPLIFETIME(AEffectArea, BaseRadius);
 
+	DOREPLIFETIME(AEffectArea, AlliedTeamsMask);
 	DOREPLIFETIME(AEffectArea, DuplicationId);
 	DOREPLIFETIME(AEffectArea, MaxDuplicationCount);
 	DOREPLIFETIME(AEffectArea, bUseEffectAreaImpactProcessor);
@@ -258,7 +269,7 @@ void AEffectArea::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 
 	if (MyController && MyController->IsValidLowLevelFast())
 	{
-		if (MyController->SelectableTeamId == DetectorTeamId)
+		if (MyController->AlliedTeamsMask & (1LL << DetectorTeamId))
 		{
 			bIsVisibleByFog = bVisible;
 		}

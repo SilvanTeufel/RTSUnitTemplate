@@ -23,6 +23,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Teams")
 	void ClearAll();
 
+	UFUNCTION(BlueprintCallable, Category="Teams")
+	void SetTeamsAllied(int32 TeamA, int32 TeamB, bool bAllied);
+
+	UFUNCTION(BlueprintPure, Category="Teams")
+	bool IsAllied(int32 TeamA, int32 TeamB) const;
+
+	UFUNCTION(BlueprintPure, Category="Teams")
+	int64 GetAlliedTeamsMask(int32 TeamId) const;
+
 private:
 	// PlayerId -> TeamId (kann über Travel neu vergeben werden)
 	UPROPERTY()
@@ -35,4 +44,9 @@ private:
 	// Netzwerkadresse (z.B. "IP:Port") -> TeamId als letzter Fallback
 	UPROPERTY()
 	TMap<FString, int32> PendingTeamsByNetworkAddress;
+
+	// TeamId -> Set of allied TeamIds
+	TMap<int32, TArray<int32>> AlliedTeamsMap;
+
+	void UpdateAllUnitsAlliedMask(int32 TeamId);
 };

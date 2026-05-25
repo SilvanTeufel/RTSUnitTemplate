@@ -1045,8 +1045,10 @@ void AHUDBase::DrawAllHealthBars()
 
 			const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
 
-			// Sichtbarkeits-Check (Nur Team oder sichtbare Gegner)
-			if (!(Unit->IsMyTeam || Unit->IsVisibleEnemy)) continue;
+			// Sichtbarkeits-Check (Nur Team oder sichtbare Gegner mit kleiner Hysterese)
+			const float CurrentTime = GetWorld()->GetTimeSeconds();
+			const bool bVisible = Unit->IsMyTeam || Unit->IsVisibleEnemy || (CurrentTime - Unit->LastVisibleTime < 0.2f);
+			if (!bVisible) continue;
 
 			// Einstellungs-Auswahl (Vorläufige Bestimmung)
 			bool bIsBuilding = !Unit->CanMove;

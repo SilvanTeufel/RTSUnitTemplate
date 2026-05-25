@@ -5,6 +5,8 @@
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "System/PlayerTeamSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 
@@ -216,13 +218,19 @@ void AFogActor::UpdateFogMaskWithCircles_Local(
     const float WorldExtentY = FogMaxBounds.Y - FogMinBounds.Y;
 
     // 3) Loop over the parallel arrays
+    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController());
+    int64 LocalAllianceMask = CustomPC ? CustomPC->AlliedTeamsMask : (1LL << TeamId);
+
     const int32 Count = FMath::Min3(Positions.Num(), WorldRadii.Num(), UnitTeamIds.Num());
     for (int32 i = 0; i < Count; ++i)
     {
         // 3a) Team filter
         if (UnitTeamIds[i] != TeamId)
         {
-            continue;
+            if (!(LocalAllianceMask & (1LL << UnitTeamIds[i])))
+            {
+                continue;
+            }
         }
 
         // 3b) Compute pixel‐space center
@@ -312,13 +320,19 @@ void AFogActor::Multicast_UpdateFogMaskWithCircles_Implementation(
     const float WorldExtentY = FogMaxBounds.Y - FogMinBounds.Y;
 
     // 3) Loop over the parallel arrays
+    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController());
+    int64 LocalAllianceMask = CustomPC ? CustomPC->AlliedTeamsMask : (1LL << TeamId);
+
     const int32 Count = FMath::Min3(Positions.Num(), WorldRadii.Num(), UnitTeamIds.Num());
     for (int32 i = 0; i < Count; ++i)
     {
         // 3a) Team filter
         if (UnitTeamIds[i] != TeamId)
         {
-            continue;
+            if (!(LocalAllianceMask & (1LL << UnitTeamIds[i])))
+            {
+                continue;
+            }
         }
 
         // 3b) Compute pixel‐space center

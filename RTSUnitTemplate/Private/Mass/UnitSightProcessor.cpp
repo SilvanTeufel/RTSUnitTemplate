@@ -86,6 +86,7 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
@@ -97,6 +98,7 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EffectAreaQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EffectAreaQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EffectAreaQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
+    EffectAreaQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
     EffectAreaQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EffectAreaQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EffectAreaQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::All);
@@ -107,6 +109,7 @@ void UUnitSightProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     ProjectileQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     ProjectileQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     ProjectileQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadWrite);
+    ProjectileQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
     ProjectileQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     ProjectileQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     ProjectileQuery.AddTagRequirement<FMassProjectileTag>(EMassFragmentPresence::All);
@@ -141,6 +144,7 @@ void UUnitSightProcessor::ExecuteServer(
         FMassAgentCharacteristicsFragment*          Char;
         FMassAIStateFragment*                       State;
         FMassSightFragment*                         Sight;
+        const FMassAllianceFragment*                Alliance;
         bool                                        bCanRevealFog;
     };
     TArray<FLocalInfo> AllEntities;
@@ -157,6 +161,7 @@ void UUnitSightProcessor::ExecuteServer(
             auto*        StateList = ChunkCtx.GetMutableFragmentView<FMassAIStateFragment>().GetData();
             auto*        SightList = ChunkCtx.GetMutableFragmentView<FMassSightFragment>().GetData();
             auto*        CharList  = ChunkCtx.GetMutableFragmentView<FMassAgentCharacteristicsFragment>().GetData();
+            const auto*  AllianceList = ChunkCtx.GetFragmentView<FMassAllianceFragment>().GetData();
         
             for (int32 i = 0; i < N; ++i)
             {
@@ -207,6 +212,7 @@ void UUnitSightProcessor::ExecuteServer(
                         Char,
                         StateList ? &StateList[i] : nullptr,
                         &SightList[i],
+                        AllianceList ? &AllianceList[i] : nullptr,
                         bInCanRevealFog
                     });
             }
@@ -241,6 +247,9 @@ void UUnitSightProcessor::ExecuteServer(
             const auto& Tgt = AllEntities[j];
 
             if (Det.Stats->TeamId == Tgt.Stats->TeamId) 
+                continue;
+
+            if (Det.Alliance && (Det.Alliance->AlliedTeamsMask & (1LL << Tgt.Stats->TeamId)))
                 continue;
             
             const float DistSqr = FVector::DistSquared2D(Det.Location, Tgt.Location);

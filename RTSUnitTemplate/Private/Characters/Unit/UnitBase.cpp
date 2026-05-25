@@ -33,6 +33,7 @@
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Widgets/SquadHealthBar.h"
 #include "EngineUtils.h"
+#include "System/PlayerTeamSubsystem.h"
 #include <climits>
 // Mass includes for follow application and spawn return adjustments
 #include "Mass/Projectile/ProjectileVisualManager.h"
@@ -156,6 +157,10 @@ void AUnitBase::BeginPlay()
 	if (HasAuthority())
 	{
 		SetMeshRotationServer();
+		if (UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>())
+		{
+			AlliedTeamsMask = TeamSubsystem->GetAlliedTeamsMask(TeamId);
+		}
 	}
 	
 	
@@ -324,6 +329,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, UnitToChase);
 	DOREPLIFETIME(AUnitBase, FollowUnit);
+	DOREPLIFETIME(AUnitBase, AlliedTeamsMask);
 	DOREPLIFETIME(AUnitBase, NextWaypoint);
 	
 	DOREPLIFETIME(AUnitBase, DelayDeadVFX);
@@ -1708,7 +1714,7 @@ bool AUnitBase::IsSpawnedUnitDead(int UIndex)
 			return (UnitData.UnitBase->GetUnitState() == UnitData::Dead);
 		}
 	}
-
+	
 	// If no unit matches the UnitIndex, you can either return false, 
 	// or handle it based on how you want to treat units that are not found
 	return true;

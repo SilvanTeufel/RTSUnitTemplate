@@ -78,9 +78,16 @@ void UDetectionProcessor::InjectCurrentTargetIfMissing(const FDetectorUnitInfo& 
             // We must fetch its data directly from the EntityManager to build the FTargetUnitInfo struct.
             if (EntityManager.IsEntityActive(CurrentTargetEntity) && !DoesEntityHaveTag(EntityManager, CurrentTargetEntity, FMassStopUnitDetectionTag::StaticStruct()))
             {
+                const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentTargetEntity);
+                
+                // NEW: Allianz-Prüfung hier! Wenn das aktuelle Ziel alliiert ist, fügen wir es gar nicht erst zu TargetUnits hinzu.
+                if (TgtStats && DetectorInfo.Alliance && (DetectorInfo.Alliance->AlliedTeamsMask & (1LL << TgtStats->TeamId)) && !DetectorInfo.TargetFrag->IsFocusedOnTarget)
+                {
+                    return;
+                }
+
                 FTransformFragment* TgtTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(CurrentTargetEntity);
                 FMassAIStateFragment* TgtState = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CurrentTargetEntity);
-                const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(CurrentTargetEntity);
                 const FMassAgentCharacteristicsFragment* TgtChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(CurrentTargetEntity);
                 const FMassSightFragment* SightFragment = EntityManager.GetFragmentDataPtr<FMassSightFragment>(CurrentTargetEntity);
 
@@ -113,6 +120,7 @@ void UDetectionProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite); // Ziel schreiben
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Stats lesen
     EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::All);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly); // Eigene Fähigkeiten lesen
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddTagRequirement<FMassStateDetectTag>(EMassFragmentPresence::All);
@@ -201,6 +209,7 @@ void UDetectionProcessor::Execute(
         //auto*        MoveList     = ChunkCtx.GetMutableFragmentView<FMassMoveTargetFragment>().GetData();
         const auto&  StatsList    = ChunkCtx.GetFragmentView<FMassCombatStatsFragment>();
         const auto&  CharList     = ChunkCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const auto*  AllianceList = ChunkCtx.GetFragmentView<FMassAllianceFragment>().GetData();
 
         for (int32 i = 0; i < N; ++i)
         {
@@ -216,7 +225,8 @@ void UDetectionProcessor::Execute(
                 &TargetList[i],
                 //&MoveList[i],
                 &StatsList[i],
-                &CharList[i]
+                &CharList[i],
+                AllianceList ? &AllianceList[i] : nullptr
             });
         }
     });
@@ -227,6 +237,7 @@ void UDetectionProcessor::Execute(
 
     for (auto& Det : DetectorUnits)
     {
+
         const float Now = World->GetTimeSeconds();
         const float DetCapsule = Det.Char ? Det.Char->CapsuleRadius : 0.f;
         
@@ -262,10 +273,17 @@ void UDetectionProcessor::Execute(
 
                     // Prüfe, ob das Ziel noch grob in Sichtweite ist (mit Puffer für Replikations-Differenzen)
                     const float DistSq = FVector::DistSquared2D(Det.Location, TgtLoc);
-                    const float LoseSightSq = FMath::Square(Det.Stats->LoseSightRadius * 1.5f); 
-                    if (DistSq < LoseSightSq)
+                    const float LoseSightSq = FMath::Square(Det.Stats->LoseSightRadius * 1.5f);
+
+                    // NEW: Also check if target is allied. If so, don't protect it.
+                    bool bIsAllied = false;
+                    if (const FMassCombatStatsFragment* TgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Det.TargetFrag->TargetEntity))
                     {
-                        // UE_LOG(LogDetection, VeryVerbose, TEXT("[DetectionProcessor] Detector %d: Client flapping protection active for target %d"), Det.Entity.Index, Det.TargetFrag->TargetEntity.Index);
+                        bIsAllied = (Det.Alliance && (Det.Alliance->AlliedTeamsMask & (1LL << TgtStats->TeamId))) && !Det.TargetFrag->IsFocusedOnTarget;
+                    }
+
+                    if (DistSq < LoseSightSq && !bIsAllied)
+                    {
                         continue; // Bleibe beim vom Server vorgegebenen Ziel
                     }
                 }
@@ -275,11 +293,13 @@ void UDetectionProcessor::Execute(
         // Add  Det.TargetFrag->TargetEntity to TargetUnits if it is not already inside
         if (Det.TargetFrag->IsFocusedOnTarget)
         {
+            bool bFoundInList = false;
             for (auto& Tgt : TargetUnits)
             {
                 if (Tgt.Entity != Det.TargetFrag->TargetEntity) 
                     continue;
                 
+                bFoundInList = true;
                 const int32* SightCount = Tgt.Sight ? Tgt.Sight->ConsistentTeamOverlapsPerTeam.Find(DetectorTeamId) : nullptr;
                 const int32* DetectorSightCount = Tgt.Sight ? Tgt.Sight->ConsistentDetectorOverlapsPerTeam.Find(DetectorTeamId) : nullptr;
 
@@ -287,23 +307,24 @@ void UDetectionProcessor::Execute(
                 const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
                 const float EffectiveMinRangeSq = Det.Stats->MinRange > 0.f ? FMath::Square(Det.Stats->MinRange + DetCapsule + TgtCapsule) : 0.f;
       
-                if (Tgt.Stats->TeamId == Det.Stats->TeamId && Tgt.Entity == Det.TargetFrag->TargetEntity && Tgt.Stats->Health > 0 && DistSq >= EffectiveMinRangeSq)
+                const bool bIsAllied = (Det.Alliance && (Det.Alliance->AlliedTeamsMask & (1LL << Tgt.Stats->TeamId)));
+                if (Tgt.Entity == Det.TargetFrag->TargetEntity && Tgt.Stats->Health > 0)
                 {
-                    CurrentLocation    = Tgt.Location;
                     bCurrentStillViable = true;
                     bCurrentTargetCanAttack = Tgt.State->CanAttack;
-                }else if (Tgt.Entity == Det.TargetFrag->TargetEntity &&
-                    Tgt.Stats->Health > 0 &&
-                    ((Tgt.Char && !Tgt.Char->bIsInvisible && SightCount && *SightCount > 0) || (Tgt.Char && Tgt.Char->bIsInvisible && DetectorSightCount && *DetectorSightCount > 0) || !Tgt.Char) &&
-                    DistSq >= EffectiveMinRangeSq)
-                {
-                    CurrentLocation    = Tgt.Location;
-                    bCurrentStillViable = true;
-                    bCurrentTargetCanAttack = Tgt.State->CanAttack;
-                }else
-                {
-                    Det.TargetFrag->IsFocusedOnTarget = false;
-                    bCurrentTargetCanAttack = true;
+                    
+                    const bool bIsAlliedOrSameTeam = (Tgt.Stats->TeamId == Det.Stats->TeamId || bIsAllied);
+                    const bool bInSight = ((Tgt.Char && !Tgt.Char->bIsInvisible && SightCount && *SightCount > 0) || (Tgt.Char && Tgt.Char->bIsInvisible && DetectorSightCount && *DetectorSightCount > 0) || !Tgt.Char);
+
+                    if (bIsAlliedOrSameTeam || bInSight)
+                    {
+                        CurrentLocation = Tgt.Location;
+                    }
+                    else
+                    {
+                        // Focused targets stay focused even out of sight, but we keep the last known location
+                        CurrentLocation = Det.TargetFrag->LastKnownLocation;
+                    }
                 }
                 break;
             }
@@ -327,7 +348,8 @@ void UDetectionProcessor::Execute(
                 if (!EntityManager.IsEntityActive(SquadTarget)) continue;
                 const FMassCombatStatsFragment* SquadTgtStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(SquadTarget);
                 if (!SquadTgtStats || DoesEntityHaveTag(EntityManager, SquadTarget, FMassStopUnitDetectionTag::StaticStruct())) continue;
-                if (SquadTgtStats->TeamId == Det.Stats->TeamId) continue;
+                if (SquadTgtStats->TeamId == Det.Stats->TeamId && !Mate.TargetFrag->IsFocusedOnTarget) continue;
+                if (Det.Alliance && (Det.Alliance->AlliedTeamsMask & (1LL << SquadTgtStats->TeamId)) && !Mate.TargetFrag->IsFocusedOnTarget) continue;
                 if (SquadTgtStats->Health <= 0) continue;
 
                 const FMassAIStateFragment* SquadTgtState = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(SquadTarget);
@@ -365,11 +387,19 @@ void UDetectionProcessor::Execute(
                 if (Tgt.Stats->TeamId == Det.Stats->TeamId)
                     continue;
 
+                // skip allied
+                if (Det.Alliance && (Det.Alliance->AlliedTeamsMask & (1LL << Tgt.Stats->TeamId)))
+                {
+                    continue;
+                }
+
                 // skip too‐young / too‐old
                 const float TgtAge = Now - Tgt.State->BirthTime;
                 const float SinceDeath = Now - Tgt.State->DeathTime;
                 if ((TgtAge < 1.f && TgtAge >= 0.f) || (SinceDeath > 4.f && SinceDeath >= 0.f))
                     continue;
+
+                const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
 
                 // can I attack their type?
                 if ((Det.Char->bCanOnlyAttackGround && Tgt.Char->bIsFlying) ||
@@ -379,7 +409,6 @@ void UDetectionProcessor::Execute(
                     continue;
                 }
 
-                const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
                 const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
 
                 // Effective radii: add both capsule radii to base sight radii (2D)
@@ -437,7 +466,9 @@ void UDetectionProcessor::Execute(
                 {
                     const float EffectiveLoseSight = Det.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
                     const float EffectiveLoseSightSq = FMath::Square(EffectiveLoseSight);
-                    if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < EffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq && Tgt.Stats->Health > 0)
+                    bool bIsAllied = (Det.Alliance && (Det.Alliance->AlliedTeamsMask & (1LL << Tgt.Stats->TeamId)));
+    
+                    if (Tgt.Entity == Det.TargetFrag->TargetEntity && DistSq < EffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq && Tgt.Stats->Health > 0 && !bIsAllied)
                     {
                         // NEU: Auf dem Client respektieren wir den Server-Verlust. 
                         // Wenn der Server das Ziel verworfen hat (bHasValidTarget == false), beleben wir es hier nicht lokal wieder.
@@ -446,9 +477,8 @@ void UDetectionProcessor::Execute(
                             continue;
                         }
 
-                        CurrentLocation      = Tgt.Location;
+                        CurrentLocation      = Tgt.Location; // KRITISCH: Muss gesetzt werden!
                         bCurrentStillViable  = true;
-                        // Note: bCurrentTargetCanAttack was already updated at the start for the current target
                     }
                 }
 
@@ -475,12 +505,11 @@ void UDetectionProcessor::Execute(
         }
 
         // 4) Update target fragment
-        if (bFoundNew && (!Det.TargetFrag->IsFocusedOnTarget || (BestEntity != Det.TargetFrag->TargetEntity)))
+        if (bFoundNew && (BestEntity != Det.TargetFrag->TargetEntity || !Det.TargetFrag->bHasValidTarget))
         {
             Det.TargetFrag->TargetEntity      = BestEntity;
             Det.TargetFrag->LastKnownLocation = BestLocation;
             Det.TargetFrag->bHasValidTarget   = true;
-            Det.TargetFrag->IsFocusedOnTarget = true;
             if (!Det.State->SwitchingState)
             {
                 PendingSignals.Emplace(Det.Entity, UnitSignals::SetUnitToChase);

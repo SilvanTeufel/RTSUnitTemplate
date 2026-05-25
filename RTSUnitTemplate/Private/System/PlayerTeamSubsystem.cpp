@@ -2,6 +2,9 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Engine/Engine.h"
+#include "EngineUtils.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 
 void UPlayerTeamSubsystem::SetTeamForPlayer(APlayerController* PlayerController, int32 TeamId)
 {
@@ -91,4 +94,68 @@ void UPlayerTeamSubsystem::ClearAll()
 	PendingTeams.Empty();
 	PendingTeamsByName.Empty();
 	PendingTeamsByNetworkAddress.Empty();
+	AlliedTeamsMap.Empty();
+}
+
+void UPlayerTeamSubsystem::SetTeamsAllied(int32 TeamA, int32 TeamB, bool bAllied)
+{
+	if (bAllied)
+	{
+		AlliedTeamsMap.FindOrAdd(TeamA).AddUnique(TeamB);
+		AlliedTeamsMap.FindOrAdd(TeamB).AddUnique(TeamA);
+	}
+	else
+	{
+		if (TArray<int32>* AlliesA = AlliedTeamsMap.Find(TeamA)) AlliesA->Remove(TeamB);
+		if (TArray<int32>* AlliesB = AlliedTeamsMap.Find(TeamB)) AlliesB->Remove(TeamA);
+	}
+
+	UpdateAllUnitsAlliedMask(TeamA);
+	UpdateAllUnitsAlliedMask(TeamB);
+}
+
+bool UPlayerTeamSubsystem::IsAllied(int32 TeamA, int32 TeamB) const
+{
+	if (TeamA == TeamB) return true;
+	if (const TArray<int32>* Allies = AlliedTeamsMap.Find(TeamA))
+	{
+		return Allies->Contains(TeamB);
+	}
+	return false;
+}
+
+int64 UPlayerTeamSubsystem::GetAlliedTeamsMask(int32 TeamId) const
+{
+	int64 Mask = (1LL << TeamId);
+	if (const TArray<int32>* Allies = AlliedTeamsMap.Find(TeamId))
+	{
+		for (int32 AllyId : *Allies)
+		{
+			if (AllyId >= 0 && AllyId < 64)
+			{
+				Mask |= (1LL << AllyId);
+			}
+		}
+	}
+	return Mask;
+}
+
+void UPlayerTeamSubsystem::UpdateAllUnitsAlliedMask(int32 TeamId)
+{
+	int64 NewMask = GetAlliedTeamsMask(TeamId);
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		if (It->TeamId == TeamId)
+		{
+			It->AlliedTeamsMask = NewMask;
+		}
+	}
+
+	for (TActorIterator<AControllerBase> It(GetWorld()); It; ++It)
+	{
+		if (It->SelectableTeamId == TeamId)
+		{
+			It->AlliedTeamsMask = NewMask;
+		}
+	}
 }

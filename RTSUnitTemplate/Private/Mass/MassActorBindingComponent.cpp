@@ -419,6 +419,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FUnitAnimationFragment::StaticStruct(),
 			FMassAgentCharacteristicsFragment::StaticStruct(),
 			FMassVelocityFragment::StaticStruct(),
+			FMassAllianceFragment::StaticStruct(),
 
 			// NEW: Fragments required for Mass Replication
 			FMassNetworkIDFragment::StaticStruct(),
@@ -520,6 +521,7 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassCombatStatsFragment::StaticStruct(), 
 		FMassAgentCharacteristicsFragment::StaticStruct(),
     	FMassChargeTimerFragment::StaticStruct(),
+		FMassAllianceFragment::StaticStruct(),
 		FMassVisibilityFragment::StaticStruct(),
 		FMassUnitYawFollowFragment::StaticStruct(),
 
@@ -1400,6 +1402,18 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		if (ABuildingBase* Building = Cast<ABuildingBase>(OwnerActor))
 		{
 			BeaconFrag->BeaconRange = Building->BeaconRange;
+		}
+	}
+
+	if (FMassAllianceFragment* AllianceFrag = EntityManager.GetFragmentDataPtr<FMassAllianceFragment>(EntityHandle))
+	{
+		if (AUnitBase* Unit = Cast<AUnitBase>(OwnerActor))
+		{
+			AllianceFrag->AlliedTeamsMask = Unit->AlliedTeamsMask;
+		}
+		else if (AEffectArea* EffectArea = Cast<AEffectArea>(OwnerActor))
+		{
+			AllianceFrag->AlliedTeamsMask = EffectArea->AlliedTeamsMask;
 		}
 	}
 }

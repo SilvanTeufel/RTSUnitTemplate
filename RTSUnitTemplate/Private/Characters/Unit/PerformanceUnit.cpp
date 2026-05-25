@@ -692,7 +692,7 @@ void APerformanceUnit::SetEnemyVisibility(AActor* DetectingActor, bool bVisible)
 
 	if (MyController && MyController->IsValidLowLevelFast())
 	{
-		if (MyController->SelectableTeamId == DetectorTeamId)
+		if (MyController->AlliedTeamsMask & (1LL << DetectorTeamId))
 		{
 			IsVisibleEnemy = bVisible;
 		}

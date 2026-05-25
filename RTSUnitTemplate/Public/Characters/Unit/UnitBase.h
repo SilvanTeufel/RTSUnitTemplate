@@ -27,6 +27,9 @@ public:
 	// Unit this unit will follow when assigned via PlayerController right-click on a friendly unit.
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* FollowUnit = nullptr;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int64 AlliedTeamsMask = 0;
 	
 	static const FName BoxCollisionTag;
 
@@ -195,6 +198,9 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float MovementAcceptanceRadius = 50.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	float LastVisibleTime = -100.f;
 ///////////////////////////////////////////////////////////////////
 
 // related to Animations  //////////////////////////////////////////

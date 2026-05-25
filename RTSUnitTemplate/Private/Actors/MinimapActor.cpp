@@ -1,5 +1,8 @@
 ﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Actors/MinimapActor.h"
+#include "System/PlayerTeamSubsystem.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
+#include "Engine/GameInstance.h"
 
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/EffectArea.h"
@@ -630,9 +633,15 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     if (WorldExtentX <= 0 || WorldExtentY <= 0) return;
     const int32 Count = FMath::Min(ActorRefs.Num(), Positions.Num());
 
+    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController());
+    int64 LocalAllianceMask = CustomPC ? CustomPC->AlliedTeamsMask : (1LL << TeamId);
+
     for (int32 i = 0; i < Count; ++i)
     {
-        if (UnitTeamIds[i] != TeamId) continue;
+        bool bIsFriendly = (UnitTeamIds[i] == TeamId);
+        bool bIsAllied = (LocalAllianceMask & (1LL << UnitTeamIds[i])) != 0;
+        if (!bIsFriendly && !bIsAllied) continue;
+
         const FVector WorldPos = Positions[i];
         const float U = (WorldPos.X - MinimapMinBounds.X) / WorldExtentX;
         const float V = (WorldPos.Y - MinimapMinBounds.Y) / WorldExtentY;
@@ -647,8 +656,10 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     for (int32 i = 0; i < Count; ++i)
     {
         bool bShouldDraw = false;
-        
-        if (UnitTeamIds[i] == TeamId)
+        bool bIsFriendly = (UnitTeamIds[i] == TeamId);
+        bool bIsAllied = (LocalAllianceMask & (1LL << UnitTeamIds[i])) != 0;
+
+        if (bIsFriendly || bIsAllied)
         {
             bShouldDraw = true;
         }
@@ -679,7 +690,7 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
             const int32 CenterY = FMath::RoundToInt(V * MinimapTexSize);
             const float NormalizedRadius = UnitRadii[i] / WorldExtentX;
             const int32 PixelRadius = FMath::Max(1, FMath::RoundToInt(NormalizedRadius * MinimapTexSize * DotMultiplier));
-            const FColor& UnitColor = (UnitTeamIds[i] == TeamId) ? FriendlyUnitColor : EnemyUnitColor;
+            const FColor& UnitColor = bIsFriendly ? FriendlyUnitColor : (bIsAllied ? AlliedUnitColor : EnemyUnitColor);
 
             // Draw outline first (behind the fill) if enabled
             if (bDrawUnitOutline)
