@@ -101,7 +101,8 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
 
 void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager](FMassExecutionContext& ChunkContext)
+    UWorld* World = EntityManager.GetWorld();
+    EntityQuery.ForEachEntityChunk(Context, [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
@@ -171,29 +172,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
                     }
 
-                    const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
-                    FVector ToSelf2D = (Transform.GetLocation() - FriendlyLoc);
-                    ToSelf2D.Z = 0.f;
-                    const float Len2D = ToSelf2D.Size2D();
-                    const FVector Dir2D = (Len2D > KINDA_SMALL_NUMBER) ? (ToSelf2D / Len2D) : FVector::XAxisVector;
-                    FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
-
-                    float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
-                    if (OffsetMag > 0.f)
-                    {
-                        uint64 Seed = (uint64)Entity.Index | ((uint64)Entity.SerialNumber << 32);
-                        Seed += 0x9E3779B97F4A7C15ull;
-                        Seed = (Seed ^ (Seed >> 30)) * 0xBF58476D1CE4E5B9ull;
-                        Seed = (Seed ^ (Seed >> 27)) * 0x94D049BB133111EBull;
-                        Seed ^= (Seed >> 31);
-                        const double Unit = (double)(Seed >> 11) * (1.0 / 9007199254740992.0);
-                        const float Angle = (float)(Unit * 2.0 * PI);
-                        const float CosA = FMath::Cos(Angle);
-                        const float SinA = FMath::Sin(Angle);
-                        DesiredPos.X += CosA * OffsetMag;
-                        DesiredPos.Y += SinA * OffsetMag;
-                    }
-
+                    FVector DesiredPos = CalculateFollowPosition(EntityManager, Entity, TargetFrag, Transform.GetLocation(), FriendlyLoc, World);
                     StateFrag.StoredLocation = DesiredPos;
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
@@ -322,84 +301,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
                     }
 
-                    const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
-                    FVector ToSelf2D = (Transform.GetLocation() - FriendlyLoc);
-                    ToSelf2D.Z = 0.f;
-                    const float Len2D = ToSelf2D.Size2D();
-                    const FVector Dir2D = (Len2D > KINDA_SMALL_NUMBER) ? (ToSelf2D / Len2D) : FVector::XAxisVector;
-                    FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
-
-                    float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
-                    if (OffsetMag > 0.f)
-                    {
-                        uint64 Seed = (uint64)Entity.Index | ((uint64)Entity.SerialNumber << 32);
-                        Seed += 0x9E3779B97F4A7C15ull;
-                        Seed = (Seed ^ (Seed >> 30)) * 0xBF58476D1CE4E5B9ull;
-                        Seed = (Seed ^ (Seed >> 27)) * 0x94D049BB133111EBull;
-                        Seed ^= (Seed >> 31);
-                        const double Unit = (double)(Seed >> 11) * (1.0 / 9007199254740992.0);
-                        const float Angle = (float)(Unit * 2.0 * PI);
-                        const float CosA = FMath::Cos(Angle);
-                        const float SinA = FMath::Sin(Angle);
-                        DesiredPos.X += CosA * OffsetMag;
-                        DesiredPos.Y += SinA * OffsetMag;
-                    }
-
-                    // Use grounded Z if the target has characteristic data (buildings)
-                    if (const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
-                    {
-                        DesiredPos.Z = TargetCharFrag->LastGroundLocation;
-                    }
-                    else
-                    {
-                        DesiredPos.Z = FriendlyLoc.Z;
-                    }
-
-                    // Ensure DesiredPos is not in a dirty area
-                    if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
-                    {
-                        FNavLocation DesiredNav;
-                        if (NavSys->ProjectPointToNavigation(DesiredPos, DesiredNav, FVector(500.f, 500.f, 500.f)))
-                        {
-                            bool bDesiredDirty = false;
-                            const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
-                            if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
-                            {
-                                const uint32 PolyAreaID = Recast->GetPolyAreaID(DesiredNav.NodeRef);
-                                const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
-                                bDesiredDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
-                            }
-                            
-                            if (bDesiredDirty)
-                            {
-                                // Shift outward until clean
-                                static const float ShiftRadii[] = {100.f, 250.f, 500.f};
-                                for (float Shift : ShiftRadii)
-                                {
-                                    FVector Candidate = DesiredPos + Dir2D * Shift;
-                                    FNavLocation CandNav;
-                                    if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(500.f, 500.f, 500.f)))
-                                    {
-                                        if (const ARecastNavMesh* RM = Cast<ARecastNavMesh>(NavData))
-                                        {
-                                            const uint32 AID = RM->GetPolyAreaID(CandNav.NodeRef);
-                                            const UClass* AC = RM->GetAreaClass(AID);
-                                            if (!(AC && AC->IsChildOf(UNavArea_Obstacle::StaticClass())))
-                                            {
-                                                DesiredPos = CandNav.Location;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                DesiredPos = DesiredNav.Location;
-                            }
-                        }
-                    }
-
+                    FVector DesiredPos = CalculateFollowPosition(EntityManager, Entity, TargetFrag, Transform.GetLocation(), FriendlyLoc, World);
                     StateFrag.StoredLocation = DesiredPos;
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
@@ -454,6 +356,88 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             }
         }
     });
+}
+
+FVector UIdleStateProcessor::CalculateFollowPosition(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FVector& CurrentLocation, const FVector& FriendlyLoc, UWorld* World) const
+{
+    const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+    FVector ToSelf2D = (CurrentLocation - FriendlyLoc);
+    ToSelf2D.Z = 0.f;
+    const float Len2D = ToSelf2D.Size2D();
+    const FVector Dir2D = (Len2D > KINDA_SMALL_NUMBER) ? (ToSelf2D / Len2D) : FVector::XAxisVector;
+    FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
+
+    float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
+    if (OffsetMag > 0.f)
+    {
+        uint64 Seed = (uint64)Entity.Index | ((uint64)Entity.SerialNumber << 32);
+        Seed += 0x9E3779B97F4A7C15ull;
+        Seed = (Seed ^ (Seed >> 30)) * 0xBF58476D1CE4E5B9ull;
+        Seed = (Seed ^ (Seed >> 27)) * 0x94D049BB133111EBull;
+        Seed ^= (Seed >> 31);
+        const double Unit = (double)(Seed >> 11) * (1.0 / 9007199254740992.0);
+        const float Angle = (float)(Unit * 2.0 * PI);
+        const float CosA = FMath::Cos(Angle);
+        const float SinA = FMath::Sin(Angle);
+        DesiredPos.X += CosA * OffsetMag;
+        DesiredPos.Y += SinA * OffsetMag;
+    }
+
+    // Use grounded Z if the target has characteristic data (buildings)
+    if (const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))
+    {
+        DesiredPos.Z = TargetCharFrag->LastGroundLocation;
+    }
+    else
+    {
+        DesiredPos.Z = FriendlyLoc.Z;
+    }
+
+    // Ensure DesiredPos is not in a dirty area
+    if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+    {
+        FNavLocation DesiredNav;
+        if (NavSys->ProjectPointToNavigation(DesiredPos, DesiredNav, FVector(500.f, 500.f, 500.f)))
+        {
+            bool bDesiredDirty = false;
+            const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+            if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+            {
+                const uint32 PolyAreaID = Recast->GetPolyAreaID(DesiredNav.NodeRef);
+                const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+                bDesiredDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+            }
+
+            if (bDesiredDirty)
+            {
+                // Shift outward until clean
+                static const float ShiftRadii[] = { 100.f, 250.f, 500.f };
+                for (float Shift : ShiftRadii)
+                {
+                    FVector Candidate = DesiredPos + Dir2D * Shift;
+                    FNavLocation CandNav;
+                    if (NavSys->ProjectPointToNavigation(Candidate, CandNav, FVector(500.f, 500.f, 500.f)))
+                    {
+                        if (const ARecastNavMesh* RM = Cast<ARecastNavMesh>(NavData))
+                        {
+                            const uint32 AID = RM->GetPolyAreaID(CandNav.NodeRef);
+                            const UClass* AC = RM->GetAreaClass(AID);
+                            if (!(AC && AC->IsChildOf(UNavArea_Obstacle::StaticClass())))
+                            {
+                                DesiredPos = CandNav.Location;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            else
+            {
+                DesiredPos = DesiredNav.Location;
+            }
+        }
+    }
+    return DesiredPos;
 }
 
 void UIdleStateProcessor::SwitchToChaseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag)
