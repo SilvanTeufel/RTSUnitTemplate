@@ -94,7 +94,6 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 
                 if (bShouldLog && LoggedThisFrame < 10 && Effect.PulsateTargetISM.IsValid()) {
                     LoggedThisFrame++;
-                    UE_LOG(LogTemp, Log, TEXT("Entity %s: Pulsating ISM %s - Scale: %s"), *Context.GetEntity(i).DebugGetDescription(), *Effect.PulsateTargetISM->GetName(), *CurrentPulsateScale.ToString());
                 }
             }
 
@@ -111,7 +110,6 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 
                 if (bShouldLog && LoggedThisFrame < 10 && Effect.RotationTargetISM.IsValid()) {
                     LoggedThisFrame++;
-                    UE_LOG(LogTemp, Log, TEXT("Entity %s: Rotating ISM %s - Total Angle: %f, Elapsed: %f"), *Context.GetEntity(i).DebugGetDescription(), *Effect.RotationTargetISM->GetName(), TotalAngle, Effect.RotationElapsed);
                 }
             }
 
@@ -129,7 +127,6 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 if (bShouldLog && LoggedThisFrame < 10 && Effect.OscillationTargetISM.IsValid()) {
                     LoggedThisFrame++;
-                    UE_LOG(LogTemp, Log, TEXT("Entity %s: Oscillating ISM %s - Offset: %s"), *Context.GetEntity(i).DebugGetDescription(), *Effect.OscillationTargetISM->GetName(), *CurrentOscOffset.ToString());
                 }
             }
 

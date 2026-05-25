@@ -976,7 +976,6 @@ inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 	// Sicherheitscheck fr World Pointer
 	if (!World)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("StopMovement: World is null!"));
 		return;
 	}
 
@@ -1023,7 +1022,6 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 {
 	if (!EntityManager.IsEntityValid(Entity)) // Optional: Check entity validity first
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No EntityManager FOUND!!!!!!"));
 		return false;
 	}
 
@@ -1032,7 +1030,6 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 
 	if (!ArchetypeHandle.IsValid())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("No ArchetypeHandle FOUND!!!!!!"));
 		return false; // Should not happen for a valid, built entity, but good practice
 	}
 
@@ -1596,12 +1593,10 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		const bool bHasFrag = DoesEntityHaveFragment<FMassRotateToMouseFragment>(EntityManager, Entity);
 		if (bShouldHave && !bHasFrag) 
 		{ 
-			UE_LOG(LogTemp, Log, TEXT("ApplyReplicatedTagBits: Adding FMassRotateToMouseFragment for Entity index=%d"), Entity.Index);
 			EntityManager.Defer().AddFragment<FMassRotateToMouseFragment>(Entity); 
 		}
 		else if (!bShouldHave && bHasFrag) 
 		{ 
-			UE_LOG(LogTemp, Log, TEXT("ApplyReplicatedTagBits: Removing FMassRotateToMouseFragment for Entity index=%d"), Entity.Index);
 			EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity); 
 		}
 	}
@@ -1699,10 +1694,6 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 			{
 				EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
 			}
-		}
-		else if (!bServerIdle && bClientHasIdle)
-		{
-			EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
 		}
 
 		// Latency kick for Pause state: Nur den Timer setzen, wenn der Server Pause meldet und der Client bereits lokal in Pause ist

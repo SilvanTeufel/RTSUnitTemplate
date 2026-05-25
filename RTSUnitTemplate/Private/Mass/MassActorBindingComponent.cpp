@@ -181,11 +181,6 @@ void UMassActorBindingComponent::SetupMassOnUnit()
 		return;
 	}
 	
-	if (!World)
-	{
-		UE_LOG(LogTemp, Error, TEXT("World not FOUND!"));
-		return;
-	}
 
 	if (World->GetNetMode() == NM_Client)
 	{

@@ -317,15 +317,10 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
 
             // Revert pitch and roll to zero (level) and handle death rotation
             FRotator CurrentRotation = MassTransform.GetRotation().Rotator();
-            if (bIsDead)
-            {
-                UE_LOG(LogTemp, Warning, TEXT("DeathSpin NoHit Check: Multiplier=%.2f CurrentZ=%.2f TargetZ=%.2f"), CharFragment.VerticalDeathRotationMultiplier, CurrentZ, TargetZ);
-            }
             if (bIsDead && CharFragment.VerticalDeathRotationMultiplier > 0.f && CurrentZ > TargetZ + 1.f)
             {
                 const float DeltaYaw = CharFragment.VerticalDeathRotationMultiplier * ActualDeltaTime;
                 CurrentRotation.Yaw += DeltaYaw;
-                UE_LOG(LogTemp, Warning, TEXT("DeathSpin NoHit TRIGGERED: Multiplier=%.2f DeltaYaw=%.2f NewYaw=%.2f"), CharFragment.VerticalDeathRotationMultiplier, DeltaYaw, CurrentRotation.Yaw);
             }
 
             FRotator DesiredRotator(0.f, CurrentRotation.Yaw, 0.f);

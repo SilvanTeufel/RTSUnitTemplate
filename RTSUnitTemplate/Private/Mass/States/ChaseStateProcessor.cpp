@@ -148,7 +148,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-            // [DEBUG_LOG] ChaseStateProcessor.cpp: ExecuteClient
             if (StateFrag.SwitchingStateClient)
             {
                 StateFrag.SwitchingStateClient = false;
@@ -213,7 +212,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 const float Tolerance = 10.f; // Client-Side Prediction Bias
                 const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange + Tolerance);
-                
 
                 if (DistSq <= AttackRangeSq)
                 {
@@ -241,6 +239,17 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                                 }
                             }
                         }
+                    }
+                }
+                else
+                {
+                    // Update prediction to chase the target (Prediction Bias)
+                    if (bHasPrediction)
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[i];
+                        Pred.Location = TargetFrag.LastKnownLocation;
+                        Pred.PredDesiredSpeed = Stats.RunSpeed;
+                        Pred.bHasData = true;
                     }
                 }
             }
@@ -379,7 +388,6 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
 void UChaseStateProcessor::SwitchToPlaceholderState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag, AActor* UnitActor)
 {
-    UE_LOG(LogTemp, Warning, TEXT("[SwitchToPlaceholderState] Entity [%d:%d] PlaceholderSignal: %s"), Entity.Index, Entity.SerialNumber, *StateFrag.PlaceholderSignal.ToString());
     auto& Defer = Context.Defer();
 
     if (StateFrag.CanAttack && StateFrag.IsInitialized)

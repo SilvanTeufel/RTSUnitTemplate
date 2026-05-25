@@ -194,7 +194,6 @@ bool AMassUnitBase::SetInvisibility(bool NewInvisibility)
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENTITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -468,7 +467,6 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -644,7 +642,6 @@ bool AMassUnitBase::UpdateEntityStateOnUnload(const FVector& UnloadLocation)
 			if (!GetMassEntityData(EntityManager, EntityHandle))
 			{
 				// Error already logged in GetMassEntityData
-				UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 			
 				return false;
 			}
@@ -688,7 +685,6 @@ bool AMassUnitBase::ResetTarget()
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 			
 		return false;
 	}
@@ -717,7 +713,6 @@ bool AMassUnitBase::EditUnitDetection(bool HasDetection)
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -745,7 +740,6 @@ bool AMassUnitBase::EditUnitDetectable(bool IsDetectable)
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -773,7 +767,6 @@ bool AMassUnitBase::IsUnitDetectable()
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -804,7 +797,6 @@ bool AMassUnitBase::FocusEntityTarget(AUnitBase* TargetUnit)
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -844,7 +836,6 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -875,7 +866,6 @@ bool AMassUnitBase::RemoveFriendlyFocusEntityTarget()
 	if (!GetMassEntityData(EntityManager, EntityHandle))
 	{
 		// Error already logged in GetMassEntityData
-		UE_LOG(LogTemp, Warning, TEXT("!!!NO ENITY OR MANGER FOUND!!!"));
 	
 		return false;
 	}
@@ -1877,14 +1867,12 @@ void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
 	if (!StateFrag)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("NO STATE FRAG FOUND"));
 		return;
 	}
 
 	FMassCombatStatsFragment* StatsFrag = EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
 	if (!StatsFrag)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("NO StatsFrag FOUND"));
 		return;
 	}
 
