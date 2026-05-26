@@ -174,7 +174,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                 if (Pred.bHasData)
                 {
                     FinalDestination = Pred.Location;
-                    AcceptanceRadius = Pred.PredAcceptanceRadius;
+                    AcceptanceRadius = Pred.PredAcceptanceRadius*2.f;
                 }
             }
 

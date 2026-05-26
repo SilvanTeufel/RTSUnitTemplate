@@ -390,7 +390,18 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				const FVector TargetLocation = FinalXf.GetLocation();
 				const float DistanceSq = FVector::DistSquared2D(CurrentLocation, TargetLocation);
 
-				if (bUseFullReplication || JustLinked[EntityIdx] || DistanceSq > FMath::Square(FullReplicationDistance))
+				// --- NEU: Following detection ---
+				const bool bIsFollowing = (AITargetList.IsValidIndex(EntityIdx) && EntityManager.IsEntityActive(AITargetList[EntityIdx].FriendlyTargetEntity)) ||
+										   DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassUnitYawFollowTag::StaticStruct());
+
+				float CurrentSnapRange = FullReplicationDistance;
+				if (bIsFollowing)
+				{
+					// Reduce snaprange for followers to ensure they hard-snap sooner if they lag behind
+					CurrentSnapRange *= 3.5f; 
+				}
+
+				if (bUseFullReplication || JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
 				{
 					ClientXf = FinalXf;
 				}
@@ -410,6 +421,12 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					float CurrentKp = bIsStationaryAttack ? 1.0f : Kp;
 					float CurrentMinErrorSq = bIsStationaryAttack ? 1.0f : MinErrorForCorrectionSq; // Nur 1cm Toleranz im Stand
 
+					if (bIsFollowing)
+					{
+						// Increase Kp for followers so they are pulled harder towards their server position
+						CurrentKp *= 0.3f; 
+					}
+
 					const bool bIsMoving = (MoveTargetList.IsValidIndex(EntityIdx) && MoveTargetList[EntityIdx].DesiredSpeed.Get() > 10.f) || 
 										   (PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData);
 					
@@ -418,6 +435,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						// Increase tolerance and decrease correction speed while moving to prevent stuttering
 						CurrentMinErrorSq *= 2.0f; // Toleranz während der Fahrt: 200 (ca. 14 cm) statt bisher 100 (10 cm)
 						CurrentKp *= 0.4f;
+
+						if (bIsFollowing)
+						{
+							CurrentKp *= 2.5f; // Compensates for the movement reduction for followers
+						}
 
 						// If the server is pulling us backwards, be even more gentle
 						const FVector Forward = ClientXf.GetRotation().GetForwardVector();
