@@ -80,14 +80,6 @@ void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecut
     TimeSinceLastRun -= ExecutionInterval;
 
     const bool bIsClient = Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client);
-
-    // Throttle follow assignment checks to once per second
-    FollowAccum += ExecutionInterval;
-    this->bFollowTickThisFrame = (FollowAccum >= 0.1f);
-    if (this->bFollowTickThisFrame)
-    {
-        FollowAccum = 0.0f;
-    }
     
     if (bIsClient)
     {
@@ -111,8 +103,6 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
         const bool bHasPathFrag = PathList.Num() > 0;
-        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
-        const bool bHasPatrolFrag = PatrolList.Num() > 0;
         auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
         const bool bHasPredList = PredictionList.Num() > 0;
 
@@ -124,7 +114,6 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
-            const FMassPatrolFragment* PatrolFrag = bHasPatrolFrag ? &PatrolList[i] : nullptr;
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
@@ -161,10 +150,9 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 }
             }
             
-            if (this->bFollowTickThisFrame && !StateFrag.HoldPosition)
-            {
+          
                 const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
-                if (bIsFriendlyActive)
+                if (bIsFriendlyActive && !StateFrag.HoldPosition)
                 {
                     FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
                     if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
@@ -180,7 +168,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     if (bHasPredList)
                     {
                         const FMassClientPredictionFragment& Pred = PredictionList[i];
-                        Threshold = Pred.PredAcceptanceRadius * 3.f;
+                        Threshold = Pred.PredAcceptanceRadius *FollowAcceptanceMultiplier;
                     }
 
                     if (Dist2D > Threshold)
@@ -189,7 +177,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         continue;
                     }
                 }
-            }
+            
 
             if (!StateFrag.StoredLocation.IsNearlyZero())
             {
@@ -198,7 +186,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 if (bHasPredList)
                 {
                     const FMassClientPredictionFragment& Pred = PredictionList[i];
-                    Threshold = Pred.PredAcceptanceRadius * 6.f;
+                    Threshold = Pred.PredAcceptanceRadius * TresholdAcceptanceMultiplier;
                 }
                 
 
@@ -210,7 +198,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         if (Pred.bHasData)
                         {
                             Pred.Location = StateFrag.StoredLocation;
-                            Pred.PredAcceptanceRadius = Threshold / 3.f;
+                            Pred.PredAcceptanceRadius = Threshold / TresholdAcceptanceMultiplier;
                         }
                     }
                     if (!StateFrag.SwitchingStateClient)
@@ -290,10 +278,9 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 }
             }
 
-            if (this->bFollowTickThisFrame && !StateFrag.HoldPosition)
-            {
+      
                 const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
-                if (bIsFriendlyActive)
+                if (bIsFriendlyActive && !StateFrag.HoldPosition)
                 {
                     FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
                     if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
@@ -306,7 +293,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
                     const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                    const float Threshold = MoveTarget.SlackRadius * 6.f;
+                    const float Threshold = MoveTarget.SlackRadius * FollowAcceptanceMultiplier;
                     if (Dist2D > Threshold)
                     {
                         UpdateMoveTarget(MoveTargetList[i], DesiredPos, StatsFrag.RunSpeed, World);
@@ -314,7 +301,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         continue;
                     }
                 }
-            }
+            
 
             StateFrag.StateTimer += ExecutionInterval;
             
@@ -334,7 +321,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             {
                 const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
                 const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                const float Threshold = MoveTarget.SlackRadius * 2.f;
+                const float Threshold = MoveTarget.SlackRadius * TresholdAcceptanceMultiplier;
 
                 if (Dist2D > Threshold)
                 {
@@ -346,7 +333,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         if (Pred.bHasData)
                         {
                             Pred.Location = StateFrag.StoredLocation;
-                            Pred.PredAcceptanceRadius = Threshold / 3.f;
+                            Pred.PredAcceptanceRadius = Threshold / TresholdAcceptanceMultiplier;
                         }
                     }
 

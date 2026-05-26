@@ -62,9 +62,8 @@ private:
 	FMassEntityQuery EntityQuery;
 
 	float TimeSinceLastRun = 0.0f;
-	float FollowAccum = 0.0f;
-	bool bFollowTickThisFrame = false;
-	
+	float FollowAcceptanceMultiplier = 6.f;
+	float TresholdAcceptanceMultiplier = 6.f;
 	// --- Konfigurationswerte ---
 	// Besser: Diese Werte aus einem Shared Fragment lesen (z.B. FMassAIConfigSharedFragment)
 	UPROPERTY(EditDefaultsOnly, Category = "AI")
