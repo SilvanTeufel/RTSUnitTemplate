@@ -1415,7 +1415,7 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 	{
 		if (!Unit) continue;
 		
-		Unit->RemoveFocusEntityTarget();
+		if (FollowTarget) Unit->RemoveFocusEntityTarget();
 		
 		if (Unit != FollowTarget)
 		{
