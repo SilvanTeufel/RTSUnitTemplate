@@ -144,6 +144,8 @@ void UMassActorBindingComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProp
 	DOREPLIFETIME(UMassActorBindingComponent, SightRadius);
 	DOREPLIFETIME(UMassActorBindingComponent, LoseSightRadius);
 	DOREPLIFETIME(UMassActorBindingComponent, CanMoveWhileAttacking);
+	DOREPLIFETIME(UMassActorBindingComponent, FollowRadius);
+	DOREPLIFETIME(UMassActorBindingComponent, FollowOffset);
 }
 
 // Called when the game starts

@@ -38,6 +38,7 @@ void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::None);
@@ -109,11 +110,14 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 		auto CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
 		auto AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
+		auto AITargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
 		
 			const FMassAIStateFragment* StateFragPtr = !AIStateList.IsEmpty() ? &AIStateList[i] : nullptr;
+			FMassAITargetFragment* TargetFragPtr = !AITargetList.IsEmpty() ? &AITargetList[i] : nullptr;
+			
 			if (StateFragPtr)
 			{
 				const float Age = World->GetTimeSeconds() - StateFragPtr->BirthTime;
@@ -141,6 +145,15 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					if (StateFragPtr->StateTimer >= StatsFrag.CastTime)
 					{
 						SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::ClientSetToPlaceholder, Entity);
+					}
+				}
+
+				if (TargetFragPtr)
+				{
+					if (UMassActorBindingComponent* BindingComp = UnitBase->FindComponentByClass<UMassActorBindingComponent>())
+					{
+						TargetFragPtr->FollowRadius = BindingComp->FollowRadius;
+						TargetFragPtr->FollowOffset = BindingComp->FollowOffset;
 					}
 				}
 
@@ -175,6 +188,7 @@ void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FM
 {
 	FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity);
 	FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+	FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Entity);
 
 	if (StateFrag && ActorFrag)
 	{
@@ -191,6 +205,15 @@ void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FM
 			StateFrag->CanAttack = Unit->CanAttack;
 			StateFrag->IsInitialized = Unit->IsInitialized;
 			StateFrag->StoredLocation = Unit->GetActorLocation();
+
+			if (TargetFrag)
+			{
+				if (UMassActorBindingComponent* BindingComp = Unit->FindComponentByClass<UMassActorBindingComponent>())
+				{
+					TargetFrag->FollowRadius = BindingComp->FollowRadius;
+					TargetFrag->FollowOffset = BindingComp->FollowOffset;
+				}
+			}
 
 			Unit->SwitchEntityTagByState(Unit->StoredUnitState, Unit->UnitStatePlaceholder);
 		}
