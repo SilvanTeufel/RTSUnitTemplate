@@ -12,6 +12,7 @@ struct FMassEntityManager;
 struct FMassAITargetFragment;
 struct FMassAIStateFragment;
 struct FMassCombatStatsFragment;
+struct FMassAgentCharacteristicsFragment;
 struct FMassPatrolFragment;
 struct FMassStateTimerFragment;
 struct FMassUnitPathFragment;
@@ -53,7 +54,7 @@ protected:
 	void SwitchToRunState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 	void SwitchToPatrolRandomState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 
-	FVector CalculateFollowPosition(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FVector& CurrentLocation, const FVector& FriendlyLoc, UWorld* World) const;
+	FVector CalculateFollowPosition(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FMassAgentCharacteristicsFragment* CharacteristicsFrag, const FVector& CurrentLocation, const FVector& FriendlyLoc, UWorld* World) const;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;

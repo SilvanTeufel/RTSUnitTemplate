@@ -36,6 +36,7 @@ void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly); 
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);
@@ -101,6 +102,8 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto CharacteristicsList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const bool bHasCharFrag = CharacteristicsList.Num() > 0;
         const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
         const bool bHasPathFrag = PathList.Num() > 0;
         auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
@@ -114,6 +117,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             const FMassAITargetFragment& TargetFrag = TargetList[i];
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
+            const FMassAgentCharacteristicsFragment* CharFrag = bHasCharFrag ? &CharacteristicsList[i] : nullptr;
             const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
@@ -161,7 +165,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
                     }
 
-                    FVector DesiredPos = CalculateFollowPosition(EntityManager, Entity, TargetFrag, Transform.GetLocation(), FriendlyLoc, World);
+                    FVector DesiredPos = CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharFrag, Transform.GetLocation(), FriendlyLoc, World);
                     StateFrag.StoredLocation = DesiredPos;
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
@@ -237,6 +241,8 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const auto CharacteristicsList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const bool bHasCharFrag = CharacteristicsList.Num() > 0;
         const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
         const bool bHasPathFrag = PathList.Num() > 0;
         const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
@@ -252,6 +258,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             const FMassCombatStatsFragment& StatsFrag = StatsList[i];
             const FMassPatrolFragment* PatrolFrag = bHasPatrolFrag ? &PatrolList[i] : nullptr;
             const FTransform& Transform = TransformList[i].GetTransform();
+            const FMassAgentCharacteristicsFragment* CharFrag = bHasCharFrag ? &CharacteristicsList[i] : nullptr;
             const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
@@ -289,7 +296,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                         FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
                     }
 
-                    FVector DesiredPos = CalculateFollowPosition(EntityManager, Entity, TargetFrag, Transform.GetLocation(), FriendlyLoc, World);
+                    FVector DesiredPos = CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharFrag, Transform.GetLocation(), FriendlyLoc, World);
                     StateFrag.StoredLocation = DesiredPos;
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
@@ -346,9 +353,23 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
     });
 }
 
-FVector UIdleStateProcessor::CalculateFollowPosition(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FVector& CurrentLocation, const FVector& FriendlyLoc, UWorld* World) const
+FVector UIdleStateProcessor::CalculateFollowPosition(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FMassAgentCharacteristicsFragment* CharacteristicsFrag, const FVector& CurrentLocation, const FVector& FriendlyLoc, UWorld* World) const
 {
-    const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+    uint64 Seed = (uint64)Entity.Index | ((uint64)Entity.SerialNumber << 32);
+    Seed += 0x9E3779B97F4A7C15ull;
+    Seed = (Seed ^ (Seed >> 30)) * 0xBF58476D1CE4E5B9ull;
+    Seed = (Seed ^ (Seed >> 27)) * 0x94D049BB133111EBull;
+    Seed ^= (Seed >> 31);
+    const float UnitOffset = (float)((double)(Seed >> 11) * (1.0 / 9007199254740992.0));
+    const float UnitRadiusVariation = (float)((double)(Seed & 0xFFFFFFFF) / 4294967296.0);
+
+    float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+    if (CharacteristicsFrag)
+    {
+        // Vary the radius based on capsule size so they don't all stand on the same line
+        FollowRadius += CharacteristicsFrag->CapsuleRadius * (1.0f + UnitRadiusVariation * 0.5f);
+    }
+    
     FVector ToSelf2D = (CurrentLocation - FriendlyLoc);
     ToSelf2D.Z = 0.f;
     const float Len2D = ToSelf2D.Size2D();
@@ -356,15 +377,16 @@ FVector UIdleStateProcessor::CalculateFollowPosition(FMassEntityManager& EntityM
     FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
 
     float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
+    
+    // Use CapsuleRadius for an automatic spread if FollowOffset is too small
+    if (CharacteristicsFrag && OffsetMag < CharacteristicsFrag->CapsuleRadius)
+    {
+        OffsetMag = CharacteristicsFrag->CapsuleRadius;
+    }
+
     if (OffsetMag > 0.f)
     {
-        uint64 Seed = (uint64)Entity.Index | ((uint64)Entity.SerialNumber << 32);
-        Seed += 0x9E3779B97F4A7C15ull;
-        Seed = (Seed ^ (Seed >> 30)) * 0xBF58476D1CE4E5B9ull;
-        Seed = (Seed ^ (Seed >> 27)) * 0x94D049BB133111EBull;
-        Seed ^= (Seed >> 31);
-        const double Unit = (double)(Seed >> 11) * (1.0 / 9007199254740992.0);
-        const float Angle = (float)(Unit * 2.0 * PI);
+        const float Angle = UnitOffset * 2.0f * PI;
         const float CosA = FMath::Cos(Angle);
         const float SinA = FMath::Sin(Angle);
         DesiredPos.X += CosA * OffsetMag;
