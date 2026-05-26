@@ -106,9 +106,10 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		LocalTeamId = CustomPC->SelectableTeamId;
 		LocalAllianceMask = CustomPC->AlliedTeamsMask;
 		
-		// Fallback if mask is not yet set but we have a TeamId
-		if (LocalAllianceMask == 0 && LocalTeamId != 0)
+		// Safety check to repair a wrong mask on the client
+		if (LocalTeamId != 0 && (LocalAllianceMask & (1LL << LocalTeamId)) == 0)
 		{
+			// Reset it to the own team as a precaution until the network delivers the real mask
 			LocalAllianceMask = (1LL << LocalTeamId);
 		}
 	}
@@ -164,7 +165,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				if (CustomPC && CustomPC->IsLocalController())
 				{
 					// 1) Update Team Visibility
-   		Vis.bIsMyTeam = (LocalAllianceMask & (1LL << StatsList[i].TeamId)) != 0 || LocalTeamId == 0;
+					Vis.bIsMyTeam = (LocalAllianceMask & (1LL << StatsList[i].TeamId)) != 0 || LocalTeamId == 0;
 
 					// 2) Update Viewport Visibility
 					FVector2D ScreenPosition;

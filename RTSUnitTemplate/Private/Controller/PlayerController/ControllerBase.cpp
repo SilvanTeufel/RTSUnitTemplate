@@ -1394,6 +1394,13 @@ void AControllerBase::Multi_SetControllerTeamId_Implementation(int Id)
 
 void AControllerBase::OnRep_SelectableTeamId()
 {
+	// Fallback on client: If we change team but don't have a new alliance mask from server yet,
+	// we calculate the base mask ourselves!
+	if (SelectableTeamId != -1 && (AlliedTeamsMask & (1LL << SelectableTeamId)) == 0)
+	{
+		AlliedTeamsMask = (1LL << SelectableTeamId);
+	}
+
 	for (TActorIterator<AWaypoint> It(GetWorld()); It; ++It)
 	{
 		if (*It)
