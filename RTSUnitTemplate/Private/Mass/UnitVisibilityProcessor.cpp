@@ -84,20 +84,19 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 {
 	if (!World) return;
 
-	APlayerController* LocalPC = nullptr;
-	if (World->GetNetMode() != NM_DedicatedServer)
+	if (!CachedCustomPC && World->GetNetMode() != NM_DedicatedServer)
 	{
 		for (FConstPlayerControllerIterator Iterator = World->GetPlayerControllerIterator(); Iterator; ++Iterator)
 		{
 			APlayerController* PC = Iterator->Get();
 			if (PC && PC->IsLocalController())
 			{
-				LocalPC = PC;
+				CachedCustomPC = Cast<ACustomControllerBase>(PC);
 				break;
 			}
 		}
 	}
-	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(LocalPC);
+	ACustomControllerBase* CustomPC = CachedCustomPC.Get();
 	
 	int64 LocalAllianceMask = 0;
 	int32 LocalTeamId = 0;

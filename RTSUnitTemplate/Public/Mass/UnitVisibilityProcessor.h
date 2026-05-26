@@ -9,6 +9,8 @@
 #include "MassEntityTypes.h"
 #include "UnitVisibilityProcessor.generated.h"
 
+class ACustomControllerBase;
+
 UCLASS()
 class RTSUNITTEMPLATE_API UUnitVisibilityProcessor : public UMassProcessor
 {
@@ -52,4 +54,7 @@ private:
 	TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
 
 	FDelegateHandle VisibilitySignalDelegateHandle;
+	
+	UPROPERTY(Transient)
+	TObjectPtr<ACustomControllerBase> CachedCustomPC;
 };
