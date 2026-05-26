@@ -181,7 +181,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             // Only arrival check on client (skip if following a unit)
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
          
-            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius*2.f || 
+            if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius || 
                 (FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
             {
                 if (!StateFrag.SwitchingStateClient)

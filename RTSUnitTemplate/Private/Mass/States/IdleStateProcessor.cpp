@@ -105,6 +105,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         const bool bHasPathFrag = PathList.Num() > 0;
         auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
         const bool bHasPredList = PredictionList.Num() > 0;
+        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -150,7 +151,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 }
             }
             
-          
+                
                 const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
                 if (bIsFriendlyActive && !StateFrag.HoldPosition)
                 {
@@ -164,15 +165,20 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     StateFrag.StoredLocation = DesiredPos;
 
                     const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
-                    float Threshold = 50.f;
-                    if (bHasPredList)
-                    {
-                        const FMassClientPredictionFragment& Pred = PredictionList[i];
-                        Threshold = Pred.PredAcceptanceRadius *FollowAcceptanceMultiplier;
-                    }
+                    const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                    const float Threshold = MoveTarget.SlackRadius * FollowAcceptanceMultiplier;
 
                     if (Dist2D > Threshold)
                     {
+                        // Prediction aktualisieren für sofortige lokale Reaktion
+                        if (bHasPredList)
+                        {
+                            FMassClientPredictionFragment& Pred = PredictionList[i];
+                            Pred.Location = DesiredPos;
+                            Pred.PredAcceptanceRadius = MoveTarget.SlackRadius;
+                            Pred.PredDesiredSpeed = StatsFrag.RunSpeed;
+                            Pred.bHasData = true;
+                        }
                         SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                         continue;
                     }
@@ -182,24 +188,19 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             if (!StateFrag.StoredLocation.IsNearlyZero())
             {
                 const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
-                float Threshold = 50.f;
-                if (bHasPredList)
-                {
-                    const FMassClientPredictionFragment& Pred = PredictionList[i];
-                    Threshold = Pred.PredAcceptanceRadius * TresholdAcceptanceMultiplier;
-                }
+                const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                const float Threshold = MoveTarget.SlackRadius * TresholdAcceptanceMultiplier;
                 
-
                 if (Dist2D > Threshold)
                 {
+                    
                     if (bHasPredList)
                     {
                         FMassClientPredictionFragment& Pred = PredictionList[i];
-                        if (Pred.bHasData)
-                        {
-                            Pred.Location = StateFrag.StoredLocation;
-                            Pred.PredAcceptanceRadius = Threshold / TresholdAcceptanceMultiplier;
-                        }
+                        Pred.Location = StateFrag.StoredLocation;
+                        Pred.PredAcceptanceRadius = MoveTarget.SlackRadius;
+                        Pred.PredDesiredSpeed = StatsFrag.RunSpeed;
+                        Pred.bHasData = true;
                     }
                     if (!StateFrag.SwitchingStateClient)
                     {

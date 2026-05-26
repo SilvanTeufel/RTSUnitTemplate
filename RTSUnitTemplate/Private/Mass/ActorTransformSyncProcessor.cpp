@@ -597,6 +597,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
             
+            const bool bIsIdle = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
             const FQuat CurrentRotation = Actor->GetActorRotation().Quaternion();
             FVector FinalLocation = MassTransform.GetLocation();
@@ -640,7 +641,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting) || (bRotatesToMovementWhileAttacking && bIsMoving))
+            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting && !bIsIdle) || (bRotatesToMovementWhileAttacking && bIsMoving))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], FinalLocation, ActualDeltaTime, MassTransform);
             }
@@ -806,6 +807,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
 
+            const bool bIsIdle = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
             const FQuat CurrentRotation = Actor->GetActorRotation().Quaternion();
             FVector FinalLocation = MassTransform.GetLocation();
@@ -850,7 +852,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting) || (bRotatesToMovementWhileAttacking && bIsMoving))
+            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting && !bIsIdle) || (bRotatesToMovementWhileAttacking && bIsMoving))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }
