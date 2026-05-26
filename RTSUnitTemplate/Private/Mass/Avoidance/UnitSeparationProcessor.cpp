@@ -25,6 +25,7 @@ namespace
 		// NEU: Speichert, ob die Einheit gerade vom SoftAvoidanceProcessor gerettet wird
 		bool bIsBracingAgainstWall = false;
 		bool bIsFlying = false;
+		bool bIsFollowing = false;
 	};
 
 	static FVector Horizontal(const FVector& V)
@@ -123,6 +124,7 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 			// NEU: Prüfe, ob die Einheit an der Wand steht
 			Info.bIsBracingAgainstWall = DoesEntityHaveTag(EntityManager, Info.Entity, FMassSoftAvoidanceTag::StaticStruct());
+			Info.bIsFollowing = EntityManager.IsEntityActive(Targets[i].FriendlyTargetEntity);
 
 			/*DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateGoToBaseTag::StaticStruct()) || 
 								   DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateResourceExtractionTag::StaticStruct()) ||
@@ -194,8 +196,11 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				const FVector DirAB = (Dist > KINDA_SMALL_NUMBER) ? (Delta / Dist) : FVector(1, 0, 0);
 				const float Overlap = Desired - Dist;
 				
-				const float StrengthA = A.bUseWorkerStrength ? RepulsionStrengthWorker : (bSameTeam ? RepulsionStrengthFriendly : RepulsionStrengthEnemy);
-				const float StrengthB = B.bUseWorkerStrength ? RepulsionStrengthWorker : (bSameTeam ? RepulsionStrengthFriendly : RepulsionStrengthEnemy);
+				float StrengthA = A.bUseWorkerStrength ? RepulsionStrengthWorker : (bSameTeam ? RepulsionStrengthFriendly : RepulsionStrengthEnemy);
+				float StrengthB = B.bUseWorkerStrength ? RepulsionStrengthWorker : (bSameTeam ? RepulsionStrengthFriendly : RepulsionStrengthEnemy);
+
+				if (A.bIsFollowing) StrengthA *= 0.5f;
+				if (B.bIsFollowing) StrengthB *= 0.5f;
 
 				const FVector RightA = FVector(-A.Forward.Y, A.Forward.X, 0.f);
 				float LateralAmountA = DirAB | RightA;

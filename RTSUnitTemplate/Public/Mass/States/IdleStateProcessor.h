@@ -5,6 +5,7 @@
 #include "MassProcessor.h"
 #include "MassCommonTypes.h"
 #include "MassSignalSubsystem.h"
+#include "Core/RTSUnitUtils.h"
 #include "IdleStateProcessor.generated.h"
 
 // Forward declare Fragments and Tags used
@@ -53,8 +54,6 @@ protected:
 	void SwitchToPauseState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 	void SwitchToRunState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
 	void SwitchToPatrolRandomState(FMassEntityManager& EntityManager, FMassExecutionContext& Context, const FMassEntityHandle Entity, FMassAIStateFragment& StateFrag);
-
-	FVector CalculateFollowPosition(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FMassAgentCharacteristicsFragment* CharacteristicsFrag, const FVector& CurrentLocation, const FVector& FriendlyLoc, UWorld* World) const;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;

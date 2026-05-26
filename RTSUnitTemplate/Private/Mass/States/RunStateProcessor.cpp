@@ -7,6 +7,7 @@
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "Core/RTSUnitUtils.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Async/Async.h"
@@ -69,18 +70,6 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
         return; 
     }
     TimeSinceLastRun -= ExecutionInterval;
-
-    // Throttle follow updates to max once per second (local static accumulator)
-    static float FollowAccum = 0.0f;
-    FollowAccum += ExecutionInterval;
-    const bool bFollowTickThisFrameLocal = (FollowAccum >= 1.0f);
-    if (bFollowTickThisFrameLocal)
-    {
-        FollowAccum = 0.0f;
-    }
-    // propagate to member so ExecuteClient/Server can read it
-    this->bFollowTickThisFrame = bFollowTickThisFrameLocal;
-    // Get World and Signal Subsystem once
     
     if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
     {
@@ -144,7 +133,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
-
+            
             if (StateFrag.HoldPosition)
             {
                 if (!StateFrag.SwitchingStateClient)
@@ -273,6 +262,20 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
+
+            // Recalculate follow position if moving and following
+            const bool bIsFriendlyActiveServer = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+            if (bIsFriendlyActiveServer)
+            {
+                FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+                if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+                }
+
+                FVector DesiredPos = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, &CharFrag, CurrentLocation, FriendlyLoc, World);
+                UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);
+            }
 
             if (StateFrag.HoldPosition)
             {
