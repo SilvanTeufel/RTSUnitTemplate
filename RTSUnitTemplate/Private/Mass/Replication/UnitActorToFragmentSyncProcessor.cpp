@@ -2,6 +2,7 @@
 
 #include "Mass/Replication/UnitActorToFragmentSyncProcessor.h"
 #include "MassCommonFragments.h"
+#include "MassMovementFragments.h"
 #include "MassActorSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/EffectArea.h"
@@ -39,6 +40,8 @@ void UUnitActorToFragmentSyncProcessor::ConfigureQueries(const TSharedRef<FMassE
 	EntityQuery.AddRequirement<FMassPatrolFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -56,6 +59,8 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 		const TArrayView<FMassVisualEffectFragment> VisualEffectList = ChunkContext.GetMutableFragmentView<FMassVisualEffectFragment>();
 		const TArrayView<FEffectAreaImpactFragment> ImpactList = ChunkContext.GetMutableFragmentView<FEffectAreaImpactFragment>();
 		const TArrayView<FMassPatrolFragment> PatrolList = ChunkContext.GetMutableFragmentView<FMassPatrolFragment>();
+		const TArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+		const TArrayView<FMassAITargetFragment> AITargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
 		const TArrayView<FMassAllianceFragment> AllianceList = ChunkContext.GetMutableFragmentView<FMassAllianceFragment>();
 		const TArrayView<FTransformFragment> TransformList = ChunkContext.GetMutableFragmentView<FTransformFragment>();
 
@@ -69,6 +74,8 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				if (CombatStatsList.Num() > 0) SyncCombatStats(*Unit, CombatStatsList[EntityIndex]);
 				if (CharacteristicsList.Num() > 0) SyncCharacteristics(*Unit, CharacteristicsList[EntityIndex]);
 				if (AIStateList.Num() > 0 && CombatStatsList.Num() > 0) SyncAIState(*Unit, AIStateList[EntityIndex], CombatStatsList[EntityIndex]);
+				if (MoveTargetList.Num() > 0) SyncMoveTarget(*Unit, MoveTargetList[EntityIndex]);
+				if (AITargetList.Num() > 0) SyncAITarget(*Unit, AITargetList[EntityIndex], EntityManager);
 				if (VisibilityList.Num() > 0) SyncVisibility(*Unit, VisibilityList[EntityIndex]);
 				if (AllianceList.Num() > 0) AllianceList[EntityIndex].AlliedTeamsMask = Unit->AlliedTeamsMask;
 				
@@ -190,6 +197,32 @@ void UUnitActorToFragmentSyncProcessor::SyncAIState(const AUnitBase& Unit, FMass
 		{
 			CombatStats.SightRadius = Unit.MassActorBindingComponent->SightRadius;
 			CombatStats.LoseSightRadius = Unit.MassActorBindingComponent->LoseSightRadius;
+		}
+	}
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncMoveTarget(const AUnitBase& Unit, FMassMoveTargetFragment& MoveTarget)
+{
+	MoveTarget.SlackRadius = Unit.MovementAcceptanceRadius;
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncAITarget(const AUnitBase& Unit, FMassAITargetFragment& AITarget, FMassEntityManager& EntityManager)
+{
+	// On Client, we sync the replicated FollowUnit from the Actor to the Mass Fragment
+	if (!Unit.HasAuthority())
+	{
+		if (Unit.FollowUnit && Unit.FollowUnit->MassActorBindingComponent)
+		{
+			FMassEntityHandle TargetHandle = Unit.FollowUnit->MassActorBindingComponent->GetMassEntityHandle();
+			if (EntityManager.IsEntityActive(TargetHandle))
+			{
+				AITarget.FriendlyTargetEntity = TargetHandle;
+				AITarget.LastKnownFriendlyLocation = Unit.FollowUnit->GetActorLocation();
+			}
+		}
+		else
+		{
+			AITarget.FriendlyTargetEntity.Reset();
 		}
 	}
 }

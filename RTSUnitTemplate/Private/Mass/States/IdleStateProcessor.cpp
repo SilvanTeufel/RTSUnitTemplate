@@ -130,7 +130,37 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 continue;
             }
             
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
+            
+            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+  
+            if (bIsFriendlyActive && !StateFrag.HoldPosition)
+            {
+                const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                                
+                FVector DesiredPos = MoveTarget.Center;
+                StateFrag.StoredLocation = DesiredPos;
+
+                const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
+                              
+                const float Threshold = MoveTarget.SlackRadius * FollowAcceptanceMultiplier;
+
+                if (Dist2D > Threshold)
+                {
+                    if (bHasPredList)
+                    {
+                        FMassClientPredictionFragment& Pred = PredictionList[i];
+                        Pred.Location = DesiredPos;
+                        Pred.PredAcceptanceRadius = MoveTarget.SlackRadius;
+                        Pred.PredDesiredSpeed = StatsFrag.RunSpeed;
+                        Pred.bHasData = true;
+                    }
+                    SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
+                    continue;
+                }
+            }
+            
+            
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && !bIsFriendlyActive)
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -139,7 +169,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 continue;
             }
 
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition && !bIsFriendlyActive)
             {
                 const float EffectiveAttackRange = StatsFrag.AttackRange;
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
@@ -154,40 +184,6 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     continue;
                 }
             }
-            
-                
-                const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
-                if (bIsFriendlyActive && !StateFrag.HoldPosition)
-                {
-                    FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
-                    if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
-                    {
-                        FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
-                    }
-
-                    FVector DesiredPos = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharFrag, Transform.GetLocation(), FriendlyLoc, World);
-                    StateFrag.StoredLocation = DesiredPos;
-
-                    const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
-                    const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                    const float Threshold = MoveTarget.SlackRadius * FollowAcceptanceMultiplier;
-
-                    if (Dist2D > Threshold)
-                    {
-                        // Prediction aktualisieren für sofortige lokale Reaktion
-                        if (bHasPredList)
-                        {
-                            FMassClientPredictionFragment& Pred = PredictionList[i];
-                            Pred.Location = DesiredPos;
-                            Pred.PredAcceptanceRadius = MoveTarget.SlackRadius;
-                            Pred.PredDesiredSpeed = StatsFrag.RunSpeed;
-                            Pred.bHasData = true;
-                        }
-                        SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
-                        continue;
-                    }
-                }
-            
 
             if (!StateFrag.StoredLocation.IsNearlyZero())
             {
@@ -221,6 +217,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             {
                 FMassClientPredictionFragment& Pred = PredictionList[i];
                 Pred.Location = Transform.GetLocation();
+                StateFrag.StoredLocation = Transform.GetLocation();
                 Pred.PredDesiredSpeed = 0.f;
                 Pred.bHasData = true;
             }
@@ -267,13 +264,37 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
             if (StateFrag.SwitchingState) continue;
 
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies)
+            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+
+            if (bIsFriendlyActive && !StateFrag.HoldPosition)
+            {
+                FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+                if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+                }
+
+                FVector DesiredPos = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharFrag, Transform.GetLocation(), FriendlyLoc, World);
+                StateFrag.StoredLocation = DesiredPos;
+
+                const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
+                const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                const float Threshold = MoveTarget.SlackRadius * FollowAcceptanceMultiplier;
+                if (Dist2D > Threshold)
+                {
+                    UpdateMoveTarget(MoveTargetList[i], DesiredPos, StatsFrag.RunSpeed, World);
+                    SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
+                    continue;
+                }
+            }
+            
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && !bIsFriendlyActive)
             {
                 SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                 continue;
             }
 
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition && !bIsFriendlyActive)
             {
                 const float EffectiveAttackRange = StatsFrag.AttackRange;
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
@@ -285,30 +306,6 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     continue;
                 }
             }
-
-      
-                const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
-                if (bIsFriendlyActive && !StateFrag.HoldPosition)
-                {
-                    FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
-                    if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
-                    {
-                        FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
-                    }
-
-                    FVector DesiredPos = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharFrag, Transform.GetLocation(), FriendlyLoc, World);
-                    StateFrag.StoredLocation = DesiredPos;
-
-                    const float Dist2D = FVector::Dist2D(Transform.GetLocation(), DesiredPos);
-                    const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                    const float Threshold = MoveTarget.SlackRadius * FollowAcceptanceMultiplier;
-                    if (Dist2D > Threshold)
-                    {
-                        UpdateMoveTarget(MoveTargetList[i], DesiredPos, StatsFrag.RunSpeed, World);
-                        SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
-                        continue;
-                    }
-                }
             
 
             StateFrag.StateTimer += ExecutionInterval;
@@ -334,17 +331,6 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 if (Dist2D > Threshold)
                 {
                     UpdateMoveTarget(MoveTargetList[i], StateFrag.StoredLocation, StatsFrag.RunSpeed, World);
-
-                    if (bHasPredList)
-                    {
-                        FMassClientPredictionFragment& Pred = PredictionList[i];
-                        if (Pred.bHasData)
-                        {
-                            Pred.Location = StateFrag.StoredLocation;
-                            Pred.PredAcceptanceRadius = Threshold / TresholdAcceptanceMultiplier;
-                        }
-                    }
-
                     SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                     continue;
                 }
@@ -450,11 +436,13 @@ void UIdleStateProcessor::SwitchToRunState(FMassEntityManager& EntityManager, FM
     StateFrag.SwitchingState = true;
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {
+        
         if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
         {
-            if (const FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+            //if (const FMassMoveTargetFragment* MoveTarget = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+            if (!Pred->bHasData)
             {
-                Pred->Location = MoveTarget->Center;
+                //Pred->Location = MoveTarget->Center;
                 if (const FMassCombatStatsFragment* Stats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
                 {
                     Pred->PredDesiredSpeed = Stats->RunSpeed;

@@ -17,6 +17,8 @@ struct FMassAgentCharacteristicsFragment;
 struct FMassAIStateFragment;
 struct FMassVisibilityFragment;
 struct FMassPatrolFragment;
+struct FMassMoveTargetFragment;
+struct FMassAITargetFragment;
 struct FEffectAreaImpactFragment;
 struct FTransformFragment;
 
@@ -45,6 +47,8 @@ private:
 	void SyncCombatStats(const AUnitBase& Unit, FMassCombatStatsFragment& CombatStatsFragment);
 	void SyncCharacteristics(const AUnitBase& Unit, FMassAgentCharacteristicsFragment& CharacteristicsFragment);
 	void SyncAIState(const AUnitBase& Unit, FMassAIStateFragment& AIStateFragment, FMassCombatStatsFragment& CombatStatsFragment);
+	void SyncMoveTarget(const AUnitBase& Unit, FMassMoveTargetFragment& MoveTargetFragment);
+	void SyncAITarget(const AUnitBase& Unit, FMassAITargetFragment& AITarget, FMassEntityManager& EntityManager);
 	void SyncVisibility(const AUnitBase& Unit, FMassVisibilityFragment& VisibilityFragment);
 	void SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFragment, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle);
 	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment* CombatStatsFragment, FMassAgentCharacteristicsFragment* CharacteristicsFragment, FTransformFragment* TransformFragment);

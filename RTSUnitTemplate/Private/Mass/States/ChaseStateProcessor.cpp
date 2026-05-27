@@ -183,8 +183,19 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
-            // Case 2: Lost/invalid target or inactive => switch to Placeholder locally
-            if (!EntityManager.IsEntityActive(TargetFrag.TargetEntity) || (!TargetFrag.bHasValidTarget))
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+
+            if (bIsFriendlyActive)
+            {
+                if (!StateFrag.SwitchingStateClient)
+                {
+                    SwitchToPlaceholderState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                }
+                continue;
+            }
+
+            if (!bIsTargetActive || (!TargetFrag.bHasValidTarget))
             {
                        
                 if (!StateFrag.SwitchingStateClient)
@@ -196,8 +207,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
 
             // Case 3: In range check for local state switch to Pause
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
-
-            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
 
             if (bIsTargetActive)
             {
@@ -322,6 +331,25 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             }
             
             bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+
+            if (bIsFriendlyActive)
+            {
+                StateFrag.StoredLocation = Transform.GetLocation();
+                StateFrag.SwitchingState = true;
+
+                if (bHasMoveTarget)
+                {
+                    StopMovement(MoveTargetList[i], World);
+                }
+
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Idle, Entity);
+                }
+                continue;
+            }
+
             if (!bIsTargetActive || (!TargetFrag.bHasValidTarget && !StateFrag.SwitchingState))
             {
                 // Queue signal instead of sending directly

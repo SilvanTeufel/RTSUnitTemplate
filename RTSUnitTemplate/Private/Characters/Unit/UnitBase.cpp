@@ -343,6 +343,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, bIsInvisible);
 	DOREPLIFETIME(AUnitBase, bCanBeInvisible);
 	DOREPLIFETIME(AUnitBase, bHoldPosition);
+	DOREPLIFETIME(AUnitBase, MovementAcceptanceRadius);
 }
 
 

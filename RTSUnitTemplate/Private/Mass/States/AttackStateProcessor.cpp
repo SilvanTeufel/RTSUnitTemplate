@@ -179,6 +179,29 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+
+    if (bIsFriendlyActive)
+    {
+        if (!StateFrag.SwitchingStateClient)
+        {
+            StateFrag.SwitchingStateClient = true;
+            StateFrag.StateTimerClient = 0.f;
+            if (Item) Item->PredictionTimer = 0.f;
+
+            StateFrag.PlaceholderSignal = UnitSignals::Idle;
+            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+            {
+                UnitBase->UnitStatePlaceholder = UnitData::Idle;
+            }
+
+            auto& Defer = Context.Defer();
+            Defer.RemoveTag<FMassStateAttackTag>(Entity);
+            Defer.AddTag<FMassStateIdleTag>(Entity);
+        }
+        return;
+    }
+
     FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
     const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
@@ -299,6 +322,25 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+
+    if (bIsFriendlyActive)
+    {
+        StateFrag.SwitchingState = true;
+        StateFrag.PlaceholderSignal = UnitSignals::Idle;
+
+        if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+        {
+            UnitBase->UnitStatePlaceholder = UnitData::Idle;
+        }
+
+        if (SignalSubsystem)
+        {
+            SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SetUnitStatePlaceholder, Entity);
+        }
+        return;
+    }
+
     FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
     const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 

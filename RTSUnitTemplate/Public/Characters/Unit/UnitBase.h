@@ -196,7 +196,7 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWalkSpeed(float Speed);
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float MovementAcceptanceRadius = 50.f;
 
 	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)

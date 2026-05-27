@@ -157,16 +157,6 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             FVector FinalDestination = MoveTarget.Center;
             float AcceptanceRadius = MoveTarget.SlackRadius;
 
-            if (bHasPredList)
-            {
-                const FMassClientPredictionFragment& Pred = PredictionList[i];
-                if (Pred.bHasData)
-                {
-                    FinalDestination = Pred.Location;
-                    AcceptanceRadius = Pred.PredAcceptanceRadius*2.f;
-                }
-            }
-
             // Only arrival check on client (skip if following a unit)
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
          
@@ -182,7 +172,8 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             }
 
             const bool bHasDetectTag = DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct());
-            if (bHasDetectTag)
+
+            if (bHasDetectTag && !bHasFriendly)
             {
                 const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
                 if (TargetFrag.bHasValidTarget && bIsTargetActive)
@@ -265,6 +256,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
             // Recalculate follow position if moving and following
             const bool bIsFriendlyActiveServer = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+
             if (bIsFriendlyActiveServer)
             {
                 FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
@@ -292,7 +284,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
             
-            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && bIsTargetActive && !Stats.bCanMoveWhileAttacking)
+            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && bIsTargetActive && !Stats.bCanMoveWhileAttacking && !bIsFriendlyActiveServer)
             {
                 SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                 continue;
@@ -305,7 +297,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 continue;
             }
             else if ( DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) &&
-                    TargetFrag.bHasValidTarget && bIsTargetActive && Stats.bCanMoveWhileAttacking)
+                    TargetFrag.bHasValidTarget && bIsTargetActive && Stats.bCanMoveWhileAttacking && !bIsFriendlyActiveServer)
             {
                     const float DistSq = FVector::DistSquared2D(CurrentLocation, TargetFrag.LastKnownLocation);
                     

@@ -142,12 +142,14 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(MutableTargetFrag.TargetEntity);
+    const bool bIsFriendlyActive = EntityManager.IsEntityActive(MutableTargetFrag.FriendlyTargetEntity);
+
     FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MutableTargetFrag.TargetEntity) : nullptr;
     const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     
-    if (!bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
+    if (bIsFriendlyActive || !bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
     {
         if (!StateFrag.SwitchingState)
         {
@@ -248,6 +250,32 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+
+    if (bIsFriendlyActive)
+    {
+        if (!StateFrag.SwitchingStateClient)
+        {
+            StateFrag.SwitchingStateClient = true;
+            StateFrag.StateTimerClient = 0.f;
+            auto& Defer = Context.Defer();
+
+            StateFrag.PlaceholderSignal = UnitSignals::Idle;
+            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+            {
+                UnitBase->UnitStatePlaceholder = UnitData::Idle;
+            }
+
+            if (StateFrag.CanAttack && StateFrag.IsInitialized)
+            {
+                Defer.AddTag<FMassStateDetectTag>(Entity);
+            }
+            Defer.RemoveTag<FMassStatePauseTag>(Entity);
+            Defer.AddTag<FMassStateIdleTag>(Entity);
+        }
+        return;
+    }
+
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
