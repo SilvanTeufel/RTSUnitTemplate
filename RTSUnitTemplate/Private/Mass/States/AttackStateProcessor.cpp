@@ -179,9 +179,11 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+    const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
 
-    if (bIsFriendlyActive)
+    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), 6.f))
     {
         if (!StateFrag.SwitchingStateClient)
         {
@@ -230,10 +232,8 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
         return;
     }
 
-    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
-    const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
     const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-
+    const FMassAgentCharacteristicsFragment& CharFrag = *CharFragPtr;
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
@@ -322,9 +322,11 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     }
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+    const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
 
-    if (bIsFriendlyActive)
+    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), 6.f))
     {
         StateFrag.SwitchingState = true;
         StateFrag.PlaceholderSignal = UnitSignals::Idle;
@@ -361,10 +363,8 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
         return;
     }
 
-    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
-    const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
     const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
-
+    const FMassAgentCharacteristicsFragment& CharFrag = *CharFragPtr;
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;

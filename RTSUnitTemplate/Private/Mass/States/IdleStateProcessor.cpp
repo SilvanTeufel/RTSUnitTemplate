@@ -169,7 +169,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 continue;
             }
 
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition && !bIsFriendlyActive)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && (StateFrag.HoldPosition || bIsFriendlyActive) && !bShouldIgnoreEnemies)
             {
                 const float EffectiveAttackRange = StatsFrag.AttackRange;
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
@@ -294,7 +294,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 continue;
             }
 
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && StateFrag.HoldPosition && !bIsFriendlyActive)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && (StateFrag.HoldPosition || bIsFriendlyActive))
             {
                 const float EffectiveAttackRange = StatsFrag.AttackRange;
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);

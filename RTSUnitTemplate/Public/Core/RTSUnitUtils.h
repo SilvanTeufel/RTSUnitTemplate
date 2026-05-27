@@ -246,4 +246,24 @@ namespace RTSUnitUtils
 		}
 		return DesiredPos;
 	}
+
+	inline bool IsWithinFollowThreshold(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FMassAgentCharacteristicsFragment* CharacteristicsFrag, const FVector& CurrentLocation, const FMassMoveTargetFragment& MoveTarget, UWorld* World, float AcceptanceMultiplier)
+	{
+		if (!EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity))
+		{
+			return true;
+		}
+
+		FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+		if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+		{
+			FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+		}
+
+		FVector DesiredPos = CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharacteristicsFrag, CurrentLocation, FriendlyLoc, World);
+		const float Dist2D = FVector::Dist2D(CurrentLocation, DesiredPos);
+		const float Threshold = MoveTarget.SlackRadius * AcceptanceMultiplier;
+
+		return Dist2D <= Threshold;
+	}
 }

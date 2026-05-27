@@ -143,13 +143,18 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
 
     bool bIsTargetActive = EntityManager.IsEntityActive(MutableTargetFrag.TargetEntity);
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(MutableTargetFrag.FriendlyTargetEntity);
+    const auto TransformList = Context.GetFragmentView<FTransformFragment>();
+    const FTransform& Transform = TransformList[EntityIdx].GetTransform();
+    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+    const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
 
     FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MutableTargetFrag.TargetEntity) : nullptr;
     const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
+    FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
     
-    if (bIsFriendlyActive || !bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
+    if ((bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, MutableTargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, World, 6.f)) || !bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
     {
         if (!StateFrag.SwitchingState)
         {
@@ -177,12 +182,8 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
 
     StateFrag.StateTimer += ExecutionInterval;
 
-    const auto TransformList = Context.GetFragmentView<FTransformFragment>();
-    const FTransform& Transform = TransformList[EntityIdx].GetTransform();
-    const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
-    const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
-
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(MutableTargetFrag.TargetEntity) : nullptr;
+    const FMassAgentCharacteristicsFragment& CharFrag = *CharFragPtr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(MutableTargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
@@ -251,8 +252,10 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
 
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+    auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
+    FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
 
-    if (bIsFriendlyActive)
+    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, &CharFrag, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), 6.f))
     {
         if (!StateFrag.SwitchingStateClient)
         {
