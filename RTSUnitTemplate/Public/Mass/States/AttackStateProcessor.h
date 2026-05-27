@@ -74,4 +74,6 @@ private:
     // Cached Subsystem Pointer
     UPROPERTY(Transient)
     TObjectPtr<UMassSignalSubsystem> SignalSubsystem;
+
+    float FollowAcceptanceMultiplier = 6.f;
 };

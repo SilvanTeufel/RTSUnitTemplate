@@ -154,7 +154,7 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
     
-    if ((bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, MutableTargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, World, 6.f)) || !bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
+    if ((bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, MutableTargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, World, FollowAcceptanceMultiplier)) || !bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
     {
         if (!StateFrag.SwitchingState)
         {
@@ -255,7 +255,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
 
-    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, &CharFrag, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), 6.f))
+    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, &CharFrag, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), FollowAcceptanceMultiplier))
     {
         if (!StateFrag.SwitchingStateClient)
         {

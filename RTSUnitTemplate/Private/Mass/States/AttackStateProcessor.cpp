@@ -183,7 +183,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
     const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
 
-    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), 6.f))
+    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), FollowAcceptanceMultiplier))
     {
         if (!StateFrag.SwitchingStateClient)
         {
@@ -326,7 +326,7 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
 
-    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), 6.f))
+    if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), FollowAcceptanceMultiplier))
     {
         StateFrag.SwitchingState = true;
         StateFrag.PlaceholderSignal = UnitSignals::Idle;

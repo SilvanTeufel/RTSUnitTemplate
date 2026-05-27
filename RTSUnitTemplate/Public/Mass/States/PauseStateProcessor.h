@@ -69,4 +69,6 @@ private:
 	TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
 
 	FDelegateHandle ProjectileSignalDelegateHandle;
+
+	float FollowAcceptanceMultiplier = 6.f;
 };
