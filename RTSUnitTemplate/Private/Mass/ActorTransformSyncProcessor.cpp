@@ -385,7 +385,7 @@ void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, co
     }
 }
 
-void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
+void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform, bool bPreferEnemy) const
 {
     // Proceed if we have either a resolved target entity OR a valid target flag with a non-zero last known location, and rotation to enemy is enabled
     const bool bHasUsableTarget = TargetFrag.TargetEntity.IsSet() || (TargetFrag.bHasValidTarget && !TargetFrag.LastKnownLocation.IsNearlyZero()) ||
@@ -399,7 +399,7 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
     FVector TargetLocation = FVector::ZeroVector;
     FMassEntityHandle TargetEntity;
 
-    if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
+    if (bPreferEnemy && EntityManager.IsEntityValid(TargetFrag.TargetEntity))
     {
         TargetEntity = TargetFrag.TargetEntity;
         TargetLocation = TargetFrag.LastKnownLocation;
@@ -409,13 +409,22 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
         TargetEntity = TargetFrag.FriendlyTargetEntity;
         TargetLocation = TargetFrag.LastKnownFriendlyLocation;
     }
-    else if (!TargetFrag.LastKnownLocation.IsNearlyZero())
+    else if (EntityManager.IsEntityValid(TargetFrag.TargetEntity))
+    {
+        TargetEntity = TargetFrag.TargetEntity;
+        TargetLocation = TargetFrag.LastKnownLocation;
+    }
+    else if (bPreferEnemy && !TargetFrag.LastKnownLocation.IsNearlyZero())
     {
         TargetLocation = TargetFrag.LastKnownLocation;
     }
     else if (!TargetFrag.LastKnownFriendlyLocation.IsNearlyZero())
     {
         TargetLocation = TargetFrag.LastKnownFriendlyLocation;
+    }
+    else if (!TargetFrag.LastKnownLocation.IsNearlyZero())
+    {
+        TargetLocation = TargetFrag.LastKnownLocation;
     }
 
     if (EntityManager.IsEntityValid(TargetEntity))
@@ -670,7 +679,9 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
                 if (!bRotatedToBuildArea)
                 {
-                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], FinalLocation, ActualDeltaTime, MassTransform);
+                    const bool bPreferEnemy = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], FinalLocation, ActualDeltaTime, MassTransform, bPreferEnemy);
                 }
             }
 
@@ -881,7 +892,9 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
 
                 if (!bRotatedToBuildArea)
                 {
-                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
+                    const bool bPreferEnemy = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
+                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+                    RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, bPreferEnemy);
                 }
             }
 

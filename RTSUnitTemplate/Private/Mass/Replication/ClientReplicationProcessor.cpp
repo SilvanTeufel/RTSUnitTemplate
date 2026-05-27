@@ -281,7 +281,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							{
 								AIT.AbilityTargetLocation = FVector(UseItem->ActionLoc);
 							}
-							else if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsFriendly)
+							else if ((UseItem->TagBits & UnitReplicationBits::Slot_ActionIsFriendly) && !(UseItem->TagBits & UnitReplicationBits::Slot_ActionIsProjectile))
 							{
 								AIT.LastKnownFriendlyLocation = FVector(UseItem->ActionLoc);
 								const FMassEntityHandle* FoundFriendly = (UseItem->ActionID != 0) ? GlobalNetToEntity.Find(UseItem->ActionID) : nullptr;
@@ -516,7 +516,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					const bool bIsFollowTarget = FollowList.IsValidIndex(EntityIdx);
 					const bool bHasAITarget = AITargetList.IsValidIndex(EntityIdx) && AITargetList[EntityIdx].bHasValidTarget;
 
-					if (bIsFollowTarget || bHasAITarget)
+					if (bIsFollowTarget || bHasAITarget || bIsFollowing)
 					{
 						FinalKpRot *= 0.1f; // Replikations-Einfluss stark reduzieren
 					}
@@ -528,10 +528,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						float YawError = FRotator::NormalizeAxis(TargetRotator.Yaw - CurrentRotator.Yaw);
 
  					const float AbsYawError = FMath::Abs(YawError);
- 					if (AbsYawError > (bIsStationaryAttack ? 0.1f : MinYawErrorForCorrectionDeg))
+ 					if (AbsYawError > ((bIsStationaryAttack && !bIsFollowing) ? 0.1f : MinYawErrorForCorrectionDeg))
  					{
  						// NEU: Auch hier fadet die Korrekturstärke sanft ein (außer bei stationärem Angriff für sofortiges Snapping)
- 						const float RotSoftWeight = bIsStationaryAttack ? 1.0f : FMath::Clamp((AbsYawError - MinYawErrorForCorrectionDeg) / MinYawErrorForCorrectionDeg, 0.0f, 1.0f);
+ 						const float RotSoftWeight = (bIsStationaryAttack && !bIsFollowing) ? 1.0f : FMath::Clamp((AbsYawError - MinYawErrorForCorrectionDeg) / MinYawErrorForCorrectionDeg, 0.0f, 1.0f);
  						const float FinalKpRotSoft = FinalKpRot * RotSoftWeight;
 
 							// Apply proportional correction limited by MaxRotationCorrectionDegPerSec
