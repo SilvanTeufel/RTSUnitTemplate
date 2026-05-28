@@ -54,26 +54,33 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
                 UInstancedStaticMeshComponent* ISM = ResourceFrag.TargetISM.Get();
                 AActor* Actor = ActorFrag.GetMutable();
                 AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Actor);
-                if (Worker && Worker->GetMesh() && !Worker->IsHidden() && bUnitVisible) {
-                    static const FName SocketName(TEXT("ResourceSocket"));
-                    FTransform SocketTransform = Worker->GetMesh()->GetSocketTransform(SocketName);
-                    
-                    if (!ResourceFrag.SocketOffset.IsNearlyZero()) {
-                        FVector OffsetWorld = SocketTransform.TransformVector(ResourceFrag.SocketOffset);
-                        SocketTransform.AddToTranslation(OffsetWorld);
+                if (Worker && !Worker->IsHidden() && bUnitVisible) {
+                    FTransform ResourceTransform;
+
+                    if (Worker->bUseSkeletalMovement && Worker->GetMesh()) {
+                        static const FName SocketName(TEXT("ResourceSocket"));
+                        ResourceTransform = Worker->GetMesh()->GetSocketTransform(SocketName);
+                    } else {
+                        // Fallback for ISMs: Use Actor Transform
+                        ResourceTransform = Worker->GetActorTransform();
                     }
 
-                    SocketTransform.SetScale3D(ResourceFrag.ResourceScale);
+                    if (!ResourceFrag.SocketOffset.IsNearlyZero()) {
+                        FVector OffsetWorld = ResourceTransform.TransformVector(ResourceFrag.SocketOffset);
+                        ResourceTransform.AddToTranslation(OffsetWorld);
+                    }
+
+                    ResourceTransform.SetScale3D(ResourceFrag.ResourceScale);
 
                     if (!ResourceFrag.ResourceRotation.IsNearlyZero()) {
                         FQuat AdditionalRotation = ResourceFrag.ResourceRotation.Quaternion();
-                        SocketTransform.SetRotation(SocketTransform.GetRotation() * AdditionalRotation);
+                        ResourceTransform.SetRotation(ResourceTransform.GetRotation() * AdditionalRotation);
                     }
                     
                     bool bTeleport = !ResourceFrag.bWasVisible;
                     FResourceISMInstanceUpdate& Update = BatchedUpdates.FindOrAdd(ISM).AddDefaulted_GetRef();
                     Update.InstanceIndex = ResourceFrag.InstanceIndex;
-                    Update.NewTransform = SocketTransform;
+                    Update.NewTransform = ResourceTransform;
                     Update.bTeleport = bTeleport;
                     ResourceFrag.bWasVisible = true;
                 } else {

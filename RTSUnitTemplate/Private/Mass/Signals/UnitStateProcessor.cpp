@@ -2698,7 +2698,7 @@ void UUnitStateProcessor::SpawnWorkResource(
 
     // -- ATTACH --
     static const FName SocketName(TEXT("ResourceSocket"));
-    if (WorkingUnit->GetMesh() && WorkingUnit->GetMesh()->DoesSocketExist(SocketName))
+    if (WorkingUnit->bUseSkeletalMovement && WorkingUnit->GetMesh() && WorkingUnit->GetMesh()->DoesSocketExist(SocketName))
     {
         Res->AttachToComponent(
             WorkingUnit->GetMesh(),
@@ -2707,6 +2707,11 @@ void UUnitStateProcessor::SpawnWorkResource(
 
         // Offset if needed
         Res->SetActorRelativeLocation(Res->SocketOffset, false, nullptr, ETeleportType::TeleportPhysics);
+    }
+    else 
+    {
+        // For ISMs/VAT: No physical attachment needed. 
+        // The MassResourcePlacementProcessor will use the entity's transform + offset.
     }
 
     // Visibility of carried resource is controlled per-client in UnitVisibilityProcessor (mesh only)
