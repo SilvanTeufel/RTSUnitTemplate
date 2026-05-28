@@ -1045,10 +1045,15 @@ void AHUDBase::DrawAllHealthBars()
 
 			const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
 
+			// Early viewport check as requested
+			if (!Unit->IsOnViewport) continue;
+
 			// Sichtbarkeits-Check (Nur Team oder sichtbare Gegner mit kleiner Hysterese)
 			const float CurrentTime = GetWorld()->GetTimeSeconds();
 			const bool bVisible = Unit->IsMyTeam || Unit->IsVisibleEnemy || (CurrentTime - Unit->LastVisibleTime < 0.2f);
-			if (!bVisible) continue;
+
+			// Allow selected or permanent units to bypass the visibility gate
+			if (!bVisible && !bIsSelected && !bShowAllHealthBarsPermanent) continue;
 
 			// Einstellungs-Auswahl (Vorläufige Bestimmung)
 			bool bIsBuilding = !Unit->CanMove;
@@ -1110,7 +1115,7 @@ void AHUDBase::DrawAllHealthBars()
 			else if (bIsFlying) EffectiveSettings = FlyingHealthBarSettings;
 			else EffectiveSettings = GroundHealthBarSettings;
 
-			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !(EffectiveSettings.bShowHealthbarOnSelected && bIsSelected)) continue;
+			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !Unit->bShowLevelOnly && !(EffectiveSettings.bShowHealthbarOnSelected && bIsSelected)) continue;
 
 			// 3. Einzige Projektion für diesen Frame
 			FVector2D ScreenPos;
@@ -1166,7 +1171,9 @@ void AHUDBase::DrawAllHealthBars()
 void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV)
 {
 	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
-	if (LevelUnit && LevelUnit->bShowLevelOnly)
+	const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+
+	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !(Settings.bShowHealthbarOnSelected && bIsSelected))
 	{
 		DrawLevelText(Unit, ScreenPos, Settings);
 		return;
@@ -1279,7 +1286,9 @@ void AHUDBase::DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, con
 void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float RadiusX, float RadiusY, bool bIsFlying, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
 	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
-	if (LevelUnit && LevelUnit->bShowLevelOnly)
+	const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+
+	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !(Settings.bShowHealthbarOnSelected && bIsSelected))
 	{
 		DrawLevelText(Unit, ScreenPos, Settings);
 		return;
@@ -1412,7 +1421,9 @@ void AHUDBase::DrawSemiCircleHealthBar(AUnitBase* Unit, const FVector& BaseLoc, 
 void AHUDBase::DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV)
 {
 	ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit);
-	if (LevelUnit && LevelUnit->bShowLevelOnly)
+	const bool bIsSelected = SelectedUnitsSet.Contains(Unit);
+
+	if (LevelUnit && LevelUnit->bShowLevelOnly && !bShowAllHealthBarsPermanent && !(Settings.bShowHealthbarOnSelected && bIsSelected))
 	{
 		DrawLevelText(Unit, ScreenPos, Settings);
 		return;
