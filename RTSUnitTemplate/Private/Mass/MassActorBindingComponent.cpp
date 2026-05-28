@@ -60,6 +60,8 @@
 #include "GameStates/ResourceGameState.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 
+FOnMassArchetypeBuilding UMassActorBindingComponent::OnMassArchetypeBuilding;
+
 // CVAR for startup freeze
 static TAutoConsoleVariable<int32> CVarRTS_StartupFreeze_Enable(
 	TEXT("net.RTS.StartupFreeze.Enable"),
@@ -437,6 +439,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 			FMassHoverFragment::StaticStruct()
 		};
 
+		OnMassArchetypeBuilding.Broadcast(Owner, FragmentsAndTags);
+
 		if (EffectArea && EffectArea->Health <= 0.f)
 		{
 			FragmentsAndTags.Add(FMassStopUnitDetectionTag::StaticStruct());
@@ -535,6 +539,8 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 		FMassVisualEffectFragment::StaticStruct(),
 		FMassHoverFragment::StaticStruct(),
     };
+
+	OnMassArchetypeBuilding.Broadcast(Owner, FragmentsAndTags);
 	
 	if(UnitBase->AddEffectTargetFragement)
 		FragmentsAndTags.Add(FMassGameplayEffectTargetFragment::StaticStruct());

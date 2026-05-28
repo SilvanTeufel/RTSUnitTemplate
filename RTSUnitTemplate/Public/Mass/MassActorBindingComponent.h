@@ -24,12 +24,17 @@ enum class EMassBindingType : uint8
 	EffectArea
 };
 
+// Delegate-Definition
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMassArchetypeBuilding, AActor* /*Owner*/, TArray<const UScriptStruct*>& /*FragmentsAndTags*/);
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class RTSUNITTEMPLATE_API UMassActorBindingComponent : public USceneComponent
 {
 	GENERATED_BODY()
 
 public:	
+	static FOnMassArchetypeBuilding OnMassArchetypeBuilding;
+	
 	// Sets default values for this component's properties
 	UMassActorBindingComponent();
 
