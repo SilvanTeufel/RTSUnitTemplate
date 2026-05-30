@@ -28,6 +28,7 @@ void UMassProjectileImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	ProjectileQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	ProjectileQuery.AddRequirement<FMassProjectileFragment>(EMassFragmentAccess::ReadWrite);
 	ProjectileQuery.AddRequirement<FMassProjectileVisualFragment>(EMassFragmentAccess::ReadWrite);
+	ProjectileQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	ProjectileQuery.AddTagRequirement<FMassProjectileActiveTag>(EMassFragmentPresence::All);
 	ProjectileQuery.AddSubsystemRequirement<UMassSignalSubsystem>(EMassFragmentAccess::ReadWrite);
 	ProjectileQuery.RegisterWithProcessor(*this);
@@ -93,6 +94,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 		TConstArrayView<FTransformFragment> TransformList = ProjContext.GetFragmentView<FTransformFragment>();
 		TArrayView<FMassProjectileFragment> ProjectileList = ProjContext.GetMutableFragmentView<FMassProjectileFragment>();
 		TArrayView<FMassProjectileVisualFragment> VisualList = ProjContext.GetMutableFragmentView<FMassProjectileVisualFragment>();
+		TConstArrayView<FMassAllianceFragment> AllianceList = ProjContext.GetFragmentView<FMassAllianceFragment>();
 
 		for (int32 i = 0; i < ProjContext.GetNumEntities(); ++i)
 		{
@@ -150,6 +152,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				}
 
 				bool bSameTeam = (Projectile.TeamId == UnitTeams[j]);
+				const bool bIsAllied = (!AllianceList.IsEmpty() && (AllianceList[i].AlliedTeamsMask & (1LL << UnitTeams[j])));
 
 				// Damage logic: Impact if different team OR if it's the specific target unit
 				// Heal logic: Impact only if same team AND IsHealing is true
@@ -160,7 +163,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				}
 				else
 				{
-					bShouldImpact = !bSameTeam || bIsTarget;
+					bShouldImpact = (!bSameTeam && !bIsAllied) || bIsTarget;
 				}
 
 				if (!bShouldImpact) continue; 
