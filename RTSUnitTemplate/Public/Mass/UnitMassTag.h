@@ -494,7 +494,16 @@ struct FMassAIStateFragment : public FMassFragment
 	FVector LastProjectileScale = FVector::OneVector;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	float LastProjectileDamage = 0.f;
+	TSubclassOf<class UGameplayEffect> LastProjectileEffect;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	TSubclassOf<class UGameplayEffect> LastProjectileEffect2;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	TSubclassOf<class UGameplayEffect> LastProjectileEffect3;
+
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    float LastProjectileDamage = 0.f;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	FVector LastProjectileSpawnOffset = FVector::ZeroVector;
@@ -1256,6 +1265,15 @@ struct FMassProjectileFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 MaxPiercedTargets = 1;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class UGameplayEffect> ProjectileEffect;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class UGameplayEffect> ProjectileEffect2;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class UGameplayEffect> ProjectileEffect3;
 
 	UPROPERTY(Transient)
 	bool bIsPredicted = false;

@@ -136,7 +136,7 @@ public:
 	float CapsuleHeight = 50.f;
 
 	UFUNCTION(Server, Reliable)
-	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride = -1.f);
+	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride = -1.f, TSubclassOf<class UGameplayEffect> ProjectileEffect = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect2 = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect3 = nullptr);
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Duplication")
 	int32 DuplicationId = 0;

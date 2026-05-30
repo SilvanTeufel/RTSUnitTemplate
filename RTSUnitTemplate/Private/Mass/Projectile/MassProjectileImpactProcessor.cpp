@@ -259,7 +259,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 											PreciseImpactPos.Z = ProjPos.Z;
 										}
 										
-										TargetUnit->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
+										TargetUnit->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage, Projectile.ProjectileEffect, Projectile.ProjectileEffect2, Projectile.ProjectileEffect3);
 									}
 									else if (AEffectArea* EffectArea = Cast<AEffectArea>(TargetActor))
 									{
@@ -271,7 +271,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 											PreciseImpactPos.Z = ProjPos.Z;
 										}
 										
-										EffectArea->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage);
+										EffectArea->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage, Projectile.ProjectileEffect, Projectile.ProjectileEffect2, Projectile.ProjectileEffect3);
 									}
 								}
 							}

@@ -389,6 +389,8 @@ void AProjectile::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLi
 	DOREPLIFETIME(AProjectile, bCanBeRepelledByEnergyWall);
 	DOREPLIFETIME(AProjectile, BouncedBack);
 	DOREPLIFETIME(AProjectile, ProjectileEffect); // Added for Build
+	DOREPLIFETIME(AProjectile, ProjectileEffect2);
+	DOREPLIFETIME(AProjectile, ProjectileEffect3);
 	DOREPLIFETIME(AProjectile, UseAttributeDamage);
 	DOREPLIFETIME(AProjectile, PiercedActors);
 
@@ -1140,6 +1142,8 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		}else if(UnitToHit && UnitToHit->TeamId != TeamId)
 		{
 			UnitToHit->ApplyInvestmentEffect(ProjectileEffect);
+			UnitToHit->ApplyInvestmentEffect(ProjectileEffect2);
+			UnitToHit->ApplyInvestmentEffect(ProjectileEffect3);
 			ShootingUnit->IncreaseExperience();
 		}
 				
@@ -1251,6 +1255,8 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId)
 		{
 			UnitToHit->ApplyInvestmentEffect(ProjectileEffect);
+			UnitToHit->ApplyInvestmentEffect(ProjectileEffect2);
+			UnitToHit->ApplyInvestmentEffect(ProjectileEffect3);
 		}
 		
 		if (UnitToHit->DefensiveAbilityID != EGASAbilityInputID::None)

@@ -10,6 +10,7 @@
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"
 #include "WorkingUnitBase.h"
+#include "Actors/Projectile.h"
 #include "Navigation/CrowdFollowingComponent.h"
 #include "NavigationSystem.h"
 #include "AI/Navigation/NavigationTypes.h"
@@ -322,18 +323,18 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnProjectileFromClass(AActor* Aim, AActor* Attacker, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, bool FollowTarget, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, bool DisableAutoZOffset, float ZOffset, float Scale = 1.f, FVector SpawnOffset = FVector(0.f, 0.f, 0.f));
 
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void SpawnProjectileFromClassWithAim(FVector Aim, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f, FVector SpawnOffset = FVector(0.f, 0.f, 0.f), float ExtraDamage = 0.f);
+	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SpawnProjectileFromClassWithAim", Keywords = "RTSUnitTemplate SpawnProjectileFromClassWithAim"), Category = RTSUnitTemplate)
+	void SpawnProjectileFromClassWithAim(FVector Aim, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f, FVector SpawnOffset = FVector(0.f, 0.f, 0.f), float ExtraDamage = 0.f, TSubclassOf<class UGameplayEffect> NewEffect = nullptr, TSubclassOf<class UGameplayEffect> NewEffect2 = nullptr, TSubclassOf<class UGameplayEffect> NewEffect3 = nullptr);
 
     /** Version that accepts Mass Entity handles for direct registration */
     void SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle());
 
 	void IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(),
 		float InitialAngle = 0.f, float RotSpeed = 0.f, float MaxRadius = 0.f, float InterpSpeed = 0.f, bool bFollow = false, FVector TargetLocation = FVector::ZeroVector, FVector Scale = FVector::OneVector, float Spread = 0.f, float Damage = -1.f, int32 MaxPiercedTargets = -1,
-		int32 ProjectileCount = 1, bool IsBouncingNext = false, bool IsBouncingBack = false, float ZOffset = 0.f, FVector SpawnOffset = FVector::ZeroVector, bool DisableAutoZOffset = false, float TwinProjectileDistance = 0.f);
+		int32 ProjectileCount = 1, bool IsBouncingNext = false, bool IsBouncingBack = false, float ZOffset = 0.f, FVector SpawnOffset = FVector::ZeroVector, bool DisableAutoZOffset = false, float TwinProjectileDistance = 0.f, TSubclassOf<class UGameplayEffect> ProjectileEffect = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect2 = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect3 = nullptr);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-   	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride = -1.f);
+   	void HandleProjectileImpact(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride = -1.f, TSubclassOf<class UGameplayEffect> ProjectileEffect = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect2 = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect3 = nullptr);
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Spawn")
 	void SpawnEffectArea(int InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn);

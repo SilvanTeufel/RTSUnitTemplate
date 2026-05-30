@@ -341,7 +341,7 @@ void AEffectArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 	}
 }
 
-void AEffectArea::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride)
+void AEffectArea::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3)
 {
 	float AppliedDamage = DamageOverride;
 	if (AppliedDamage < 0.f && ProjectileClass) {

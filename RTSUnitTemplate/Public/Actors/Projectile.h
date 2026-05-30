@@ -206,6 +206,12 @@ public:
 	TSubclassOf<UGameplayEffect> ProjectileEffect;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	TSubclassOf<UGameplayEffect> ProjectileEffect2;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	TSubclassOf<UGameplayEffect> ProjectileEffect3;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool IsHealing = false;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")

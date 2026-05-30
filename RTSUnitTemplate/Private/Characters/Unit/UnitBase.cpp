@@ -1293,7 +1293,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     float ZOffset,
     float Scale,
     FVector SpawnOffset,
-    float ExtraDamage
+    float ExtraDamage,
+    TSubclassOf<class UGameplayEffect> NewEffect,
+    TSubclassOf<class UGameplayEffect> NewEffect2,
+    TSubclassOf<class UGameplayEffect> NewEffect3
 )
 {
     if (!ProjectileClass)
@@ -1421,7 +1424,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), FinalDamage, MaxPiercedTargets);
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), FinalDamage, MaxPiercedTargets, false, NewEffect, NewEffect2, NewEffect3);
                 }
             }
             else
@@ -1450,6 +1453,9 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                     Proj->Damage = FinalDamage;
                     Proj->IsBouncingNext    = IsBouncingNext;
                     Proj->IsBouncingBack    = IsBouncingBack;
+                    Proj->ProjectileEffect = NewEffect;
+                    Proj->ProjectileEffect2 = NewEffect2;
+                    Proj->ProjectileEffect3 = NewEffect3;
             
                     Proj->SetProjectileVisibility();
                     UGameplayStatics::FinishSpawningActor(Proj, SpawnXf);
@@ -1491,7 +1497,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             ZOffset,
             SpawnOffset,
             false,
-            TwinDistance
+            TwinDistance,
+            NewEffect,
+            NewEffect2,
+            NewEffect3
         );
     }
 }
@@ -1778,7 +1787,7 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 
 void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity,
     float InitialAngle, float RotSpeed, float MaxRadius, float InterpSpeed, bool bFollow, FVector TargetLocation, FVector Scale, float Spread, float Damage, int32 MaxPiercedTargets,
-    int32 ProjectileCount, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, FVector SpawnOffset, bool DisableAutoZOffset, float TwinProjectileDistance)
+    int32 ProjectileCount, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, FVector SpawnOffset, bool DisableAutoZOffset, float TwinProjectileDistance, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3)
 {
     if (!ProjectileClass || !HasAuthority()) return;
 
@@ -1821,6 +1830,9 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
             AIS->LastProjectileSpawnOffset = SpawnOffset;
             AIS->LastDisableAutoZOffset = DisableAutoZOffset;
             AIS->LastTwinProjectileDistance = TwinProjectileDistance;
+            AIS->LastProjectileEffect = ProjectileEffect;
+            AIS->LastProjectileEffect2 = ProjectileEffect2;
+            AIS->LastProjectileEffect3 = ProjectileEffect3;
 
             // Resolve target NetID
             AIS->LastTargetNetID = 0;
@@ -1836,7 +1848,7 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
 }
 
 
-void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride)
+void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVector& ImpactLocation, TSubclassOf<class AProjectile> ProjectileClass, float DamageOverride, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3)
 {
 	if (!ProjectileClass)
 	{
@@ -1899,9 +1911,31 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
     }
 
 	// Apply ProjectileEffect
-	if (CDO->ProjectileEffect)
+	if (ProjectileEffect)
+	{
+		ApplyInvestmentEffect(ProjectileEffect);
+	}
+	else if (CDO->ProjectileEffect)
 	{
 		ApplyInvestmentEffect(CDO->ProjectileEffect);
+	}
+
+	if (ProjectileEffect2)
+	{
+		ApplyInvestmentEffect(ProjectileEffect2);
+	}
+	else if (CDO->ProjectileEffect2)
+	{
+		ApplyInvestmentEffect(CDO->ProjectileEffect2);
+	}
+
+	if (ProjectileEffect3)
+	{
+		ApplyInvestmentEffect(ProjectileEffect3);
+	}
+	else if (CDO->ProjectileEffect3)
+	{
+		ApplyInvestmentEffect(CDO->ProjectileEffect3);
 	}
 
 	// Visuals/Sound
