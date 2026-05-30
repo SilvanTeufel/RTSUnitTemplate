@@ -1292,7 +1292,8 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     bool IsBouncingBack,
     float ZOffset,
     float Scale,
-    FVector SpawnOffset
+    FVector SpawnOffset,
+    float ExtraDamage
 )
 {
     if (!ProjectileClass)
@@ -1302,7 +1303,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     float TwinDistance = ProjectileCDO->TwinProjectileDistance;
     int32 HomingCount = ProjectileCDO->HomingMissleCount;
 
+    if (HomingCount > 0) HomingCount = ProjectileCount;
+
     int32 BaseCount = (HomingCount > 0) ? HomingCount : ProjectileCount;
+    float FinalDamage = ProjectileCDO->Damage + ExtraDamage;
 
 	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
 	FVector SpawnerLocationForAimDir = GetMassActorLocation(); // Default to actor's root location
@@ -1332,8 +1336,20 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             const int   MultiAngle    = (i == 0) ? 0 : ((i & 1) ? 1 : -1);
             const FVector ToAimDir     = (Aim - SpawnerLocationForAimDir).GetSafeNormal();
             
-            // For homing missiles, we typically ignore external spread to ensure they start at the same point
-            float ActualSpread = (HomingCount > 0 && ProjectileCount <= 1) ? 0.f : Spread;
+            float ActualSpread = Spread;
+            if (HomingCount <= 0)
+            {
+                if (i == 0) ActualSpread = 0.f;
+                else if (i == 1 || i == 2) ActualSpread = Spread;
+                else if (i == 3 || i == 4) ActualSpread = Spread / 2.0f;
+                else if (i == 5 || i == 6) ActualSpread = Spread + (Spread / 2.0f);
+                else ActualSpread = Spread + (i / 2) * (Spread / 2.0f);
+            }
+            else if (ProjectileCount <= 1)
+            {
+                ActualSpread = 0.f;
+            }
+
             const FVector SpreadOffset = FRotator(0.f, MultiAngle * 90.f, 0.f)
                                          .RotateVector(ToAimDir)
                                          * ActualSpread;
@@ -1405,7 +1421,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), ProjectileCDO->Damage, MaxPiercedTargets);
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), FinalDamage, MaxPiercedTargets);
                 }
             }
             else
@@ -1431,6 +1447,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             
                     //Proj->Mesh_A->OnComponentBeginOverlap.AddDynamic(Proj, &AProjectile::OnOverlapBegin);
                     Proj->MaxPiercedTargets = MaxPiercedTargets;
+                    Proj->Damage = FinalDamage;
                     Proj->IsBouncingNext    = IsBouncingNext;
                     Proj->IsBouncingBack    = IsBouncingBack;
             
@@ -1466,7 +1483,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             Aim, 
             ProjectileScale * Scale, 
             Spread, 
-            ProjectileCDO_Inner->Damage, 
+            FinalDamage, 
             MaxPiercedTargets,
             ProjectileCount,
             IsBouncingNext,
