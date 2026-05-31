@@ -1607,7 +1607,7 @@ UInstancedStaticMeshComponent* AProjectile::GetVisualISM(UInstancedStaticMeshCom
     return nullptr;
 }
 
-void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn)
+void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, FEffectAreaInfo AreaInfo, AUnitBase* ActorToLockOn, bool UseAreaInfo)
 {
 	if (!EAClass)
 	{
@@ -1653,15 +1653,25 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 		MyEffectArea->TeamId = InTeamId;
 		MyEffectArea->VisualRotationOffset = VisualRotationOffset;
 
+		// Apply AreaInfo if it's "valid" (using radius as indicator or if it was intended to be a pointer)
+		// Since we pass it as a value, we check if Radius is non-zero.
+		if (UseAreaInfo && AreaInfo.Radius > 0.f)
+		{
+			//MyEffectArea->StartRadius = AreaInfo.Radius;
+			MyEffectArea->EndRadius = AreaInfo.Radius;
+			MyEffectArea->BaseRadius = AreaInfo.Radius;
+			MyEffectArea->AreaEffectOne = AreaInfo.Effect1;
+			MyEffectArea->AreaEffectTwo = AreaInfo.Effect2;
+			MyEffectArea->AreaEffectThree = AreaInfo.Effect3;
+			MyEffectArea->BaseDamage = AreaInfo.Damage;
+		}
+
 		if(ActorToLockOn)
 		{
 			MyEffectArea->AttachToComponent(ActorToLockOn->GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, FName("rootSocket"));
 		}
 		
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
-	}
-	else
-	{
 	}
 }
 

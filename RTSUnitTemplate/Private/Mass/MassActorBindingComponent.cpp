@@ -979,6 +979,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 											  : 0.f;
 					ImpactFrag->TeamId = EffectArea->TeamId;
 					ImpactFrag->IsHealing = EffectArea->IsHealing;
+					ImpactFrag->BaseDamage = EffectArea->BaseDamage;
 					ImpactFrag->AreaEffectOne = EffectArea->AreaEffectOne;
 					ImpactFrag->AreaEffectTwo = EffectArea->AreaEffectTwo;
 					ImpactFrag->AreaEffectThree = EffectArea->AreaEffectThree;

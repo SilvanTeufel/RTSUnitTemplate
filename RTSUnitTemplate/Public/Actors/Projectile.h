@@ -12,6 +12,27 @@ class AEffectArea;
 
 #include "Projectile.generated.h"
 
+USTRUCT(BlueprintType)
+struct FEffectAreaInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float Radius = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float Damage = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	TSubclassOf<class UGameplayEffect> Effect1 = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	TSubclassOf<class UGameplayEffect> Effect2 = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	TSubclassOf<class UGameplayEffect> Effect3 = nullptr;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AProjectile : public AActor
 {
@@ -283,7 +304,7 @@ public:
 	void ImpactEvent();
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
-	void GroundHit(FVector ImpactLocation, UObject* WorldContext);
+	void GroundHit(FVector ImpactLocation, UObject* WorldContext, FEffectAreaInfo AreaInfo, int32 InTeamId);
 
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void DestroyWhenMaxPierced();
@@ -322,5 +343,5 @@ public:
 
 	/** Spawns an EffectArea actor and optionally attaches it to a unit */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile")
-	void SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn = nullptr);
+	void SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, FEffectAreaInfo AreaInfo, AUnitBase* ActorToLockOn = nullptr, bool UseAreaInfo = false);
 };

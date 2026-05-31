@@ -6,6 +6,7 @@
 #include "MassEntityManager.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Subsystems/ResourceVisualManager.h" // For FMeshMaterialKey
+#include "Actors/Projectile.h"
 #include "ProjectileVisualManager.generated.h"
 
 class AProjectile;
@@ -44,7 +45,7 @@ public:
 	const AProjectile* GetProjectileCDO(TSubclassOf<AProjectile> ProjectileClass);
 
    	/** Spawns a new mass projectile */
-    FMassEntityHandle SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(), float ProjectileSpeed = 0.f, int32 ShooterTeamId = -1, bool bFollowTarget = false, float HomingInitialAngle = 0.f, float HomingRotationSpeed = 0.f, float HomingMaxSpiralRadius = 0.f, float HomingInterpSpeed = 2.f, struct FMassCommandBuffer* CommandBuffer = nullptr, FVector Scale = FVector::OneVector, float Damage = -1.f, int32 MaxPiercedTargets = -1, bool bIsPredicted = false, TSubclassOf<class UGameplayEffect> ProjectileEffect = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect2 = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect3 = nullptr);
+    FMassEntityHandle SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(), float ProjectileSpeed = 0.f, int32 ShooterTeamId = -1, bool bFollowTarget = false, float HomingInitialAngle = 0.f, float HomingRotationSpeed = 0.f, float HomingMaxSpiralRadius = 0.f, float HomingInterpSpeed = 2.f, struct FMassCommandBuffer* CommandBuffer = nullptr, FVector Scale = FVector::OneVector, float Damage = -1.f, int32 MaxPiercedTargets = -1, bool bIsPredicted = false, TSubclassOf<class UGameplayEffect> ProjectileEffect = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect2 = nullptr, TSubclassOf<class UGameplayEffect> ProjectileEffect3 = nullptr, FEffectAreaInfo AreaInfo = FEffectAreaInfo());
 
     /** Returns the transform of a Mass projectile from its fragment */
     FTransform GetProjectileTransform(FMassEntityHandle EntityHandle) const;

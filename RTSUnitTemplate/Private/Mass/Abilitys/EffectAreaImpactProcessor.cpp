@@ -90,6 +90,7 @@ void UMassEffectAreaImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	AreaQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	AreaQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	AreaQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
+	AreaQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	AreaQuery.AddTagRequirement<FMassEffectAreaImpactTag>(EMassFragmentPresence::All);
 	AreaQuery.AddTagRequirement<FMassEffectAreaActiveTag>(EMassFragmentPresence::All);
 	AreaQuery.AddTagRequirement<FMassEffectAreaLoadingTag>(EMassFragmentPresence::None);
@@ -154,6 +155,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 		bool bIsClient = AreaContext.GetWorld()->GetNetMode() == NM_Client;
 		TConstArrayView<FMassNetworkIDFragment> NetIDList = AreaContext.GetFragmentView<FMassNetworkIDFragment>();
+		TConstArrayView<FMassAllianceFragment> AllianceList = AreaContext.GetFragmentView<FMassAllianceFragment>();
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
@@ -329,6 +331,8 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					if (FVector::DistSquared(AreaLocation, UnitLocation) <= RadiusSq)
 					{
 						int32 UnitTeam = UnitTeams[j];
+						const bool bIsAllied = (AllianceList.Num() > 0 && (AllianceList[i].AlliedTeamsMask & (1LL << UnitTeam)) != 0);
+
 						bool bShouldImpact = false;
 						if (Impact.IsHealing)
 						{
@@ -336,7 +340,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 						}
 						else
 						{
-							if (UnitTeam != Impact.TeamId) bShouldImpact = true;
+							if (UnitTeam != Impact.TeamId && !bIsAllied) bShouldImpact = true;
 						}
 
 						if (bShouldImpact)
@@ -350,9 +354,8 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 										// Apply effects (Damage/Healing) only if Area is NOT dead
 										 //if (!bIsDead)
 										{
-											UnitBase->ApplyInvestmentEffect(Impact.AreaEffectOne);
-											UnitBase->ApplyInvestmentEffect(Impact.AreaEffectTwo);
-											UnitBase->ApplyInvestmentEffect(Impact.AreaEffectThree);
+											UnitBase->HandleEffectAreaImpact(Impact.BaseDamage, Impact.IsHealing, Impact.AreaEffectOne, Impact.AreaEffectTwo, Impact.AreaEffectThree);
+											
 											if (EffectArea)
 											{
 												EffectArea->ImpactEvent(UnitBase);

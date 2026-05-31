@@ -52,6 +52,7 @@ AEffectArea::AEffectArea()
 	ScaleMesh = false;
 	bIsRadiusScaling = true;
 	BaseRadius = 100.f;
+	BaseDamage = 0.f;
 	bPulsate = false;
 	bDestroyOnImpact = false;
 	bScaleOnImpact = false;
@@ -161,6 +162,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, StartRadius);
 	DOREPLIFETIME(AEffectArea, EndRadius);
 	DOREPLIFETIME(AEffectArea, BaseRadius);
+	DOREPLIFETIME(AEffectArea, BaseDamage);
 
 	DOREPLIFETIME(AEffectArea, AlliedTeamsMask);
 	DOREPLIFETIME(AEffectArea, DuplicationId);

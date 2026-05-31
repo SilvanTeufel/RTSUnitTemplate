@@ -118,7 +118,7 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 						if (AProjectile* ProjCDO = Projectile.ProjectileClass->GetDefaultObject<AProjectile>())
 						{
 							UObject* WorldCtx = Projectile.WorldContext.IsValid() ? Projectile.WorldContext.Get() : (UObject*)Context.GetWorld();
-							ProjCDO->GroundHit(Projectile.LandscapeImpactLocation, WorldCtx);
+							ProjCDO->GroundHit(Projectile.LandscapeImpactLocation, WorldCtx, Projectile.AreaInfo, Projectile.TeamId);
 						}
 					}
 

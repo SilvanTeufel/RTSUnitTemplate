@@ -16,6 +16,7 @@
 #include "MassVisibilityInterface.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "NiagaraComponent.h"
+#include "Actors/Projectile.h"
 #include "UnitMassTag.generated.h"
 
 class UNiagaraComponent;
@@ -384,10 +385,13 @@ struct FActorTransformUpdatePayload
 //----------------------------------------------------------------------//
 //  AI State Fragment
 //----------------------------------------------------------------------//
-USTRUCT()
+USTRUCT(BlueprintType)
 struct FMassAIStateFragment : public FMassFragment
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	FEffectAreaInfo LastAreaInfo;
 	
     /** Timer, der fr Aktionen innerhalb des aktuellen Zustands verwendet wird (z.B. Attack-Cooldown, Pause-Dauer, Zeit im Idle-Zustand). Wird bei Zustandswechsel zurckgesetzt. */
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
@@ -1163,6 +1167,9 @@ struct FMassProjectileFragment : public FMassFragment
 {
 	GENERATED_BODY()
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	FEffectAreaInfo AreaInfo;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector TargetLocation = FVector::ZeroVector;
 
@@ -1405,6 +1412,7 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	// Impact properties (cached to avoid frequent Actor access)
 	int32 TeamId = 0;
 	bool IsHealing = false;
+	float BaseDamage = 0.f;
 	
 	UPROPERTY()
 	TSubclassOf<UGameplayEffect> AreaEffectOne;

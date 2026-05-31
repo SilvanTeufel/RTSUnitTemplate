@@ -1199,7 +1199,7 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), -1.f, MaxPiercedTargets);
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, Attacker, Aim, LocationToShoot, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), -1.f, MaxPiercedTargets, false, nullptr, nullptr, nullptr, FEffectAreaInfo());
                 }
             }
             else
@@ -1277,7 +1277,11 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             ZOffset,
             SpawnOffset,
             DisableAutoZOffset,
-            TwinDistance
+            TwinDistance,
+            nullptr,
+            nullptr,
+            nullptr,
+            FEffectAreaInfo()
         );
     }
 }
@@ -1296,7 +1300,8 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
     float ExtraDamage,
     TSubclassOf<class UGameplayEffect> NewEffect,
     TSubclassOf<class UGameplayEffect> NewEffect2,
-    TSubclassOf<class UGameplayEffect> NewEffect3
+    TSubclassOf<class UGameplayEffect> NewEffect3,
+    FEffectAreaInfo AreaInfo
 )
 {
     if (!ProjectileClass)
@@ -1424,7 +1429,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
                 // 1) Spawn authoritative entity on Server
                 if (UProjectileVisualManager* VisualManager = GetWorld()->GetSubsystem<UProjectileVisualManager>())
                 {
-                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), FinalDamage, MaxPiercedTargets, false, NewEffect, NewEffect2, NewEffect3);
+                    VisualManager->SpawnMassProjectile(ProjectileClass, SpawnXf, this, nullptr, LocationToShoot, ShooterEntity, FMassEntityHandle(), FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, SpawnXf.GetScale3D(), FinalDamage, MaxPiercedTargets, false, NewEffect, NewEffect2, NewEffect3, AreaInfo);
                 }
             }
             else
@@ -1490,17 +1495,18 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
             ProjectileScale * Scale, 
             Spread, 
             FinalDamage, 
-            MaxPiercedTargets,
-            ProjectileCount,
-            IsBouncingNext,
-            IsBouncingBack,
-            ZOffset,
-            SpawnOffset,
-            false,
-            TwinDistance,
-            NewEffect,
-            NewEffect2,
-            NewEffect3
+            MaxPiercedTargets, 
+            ProjectileCount, 
+            IsBouncingNext, 
+            IsBouncingBack, 
+            ZOffset, 
+            SpawnOffset, 
+            false, 
+            TwinDistance, 
+            NewEffect, 
+            NewEffect2, 
+            NewEffect3, 
+            AreaInfo
         );
     }
 }
@@ -1787,7 +1793,7 @@ void AUnitBase::ScheduleDelayedNavigationUpdate()
 
 void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity,
     float InitialAngle, float RotSpeed, float MaxRadius, float InterpSpeed, bool bFollow, FVector TargetLocation, FVector Scale, float Spread, float Damage, int32 MaxPiercedTargets,
-    int32 ProjectileCount, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, FVector SpawnOffset, bool DisableAutoZOffset, float TwinProjectileDistance, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3)
+    int32 ProjectileCount, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, FVector SpawnOffset, bool DisableAutoZOffset, float TwinProjectileDistance, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3, FEffectAreaInfo AreaInfo)
 {
     if (!ProjectileClass || !HasAuthority()) return;
 
@@ -1833,6 +1839,7 @@ void AUnitBase::IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile
             AIS->LastProjectileEffect = ProjectileEffect;
             AIS->LastProjectileEffect2 = ProjectileEffect2;
             AIS->LastProjectileEffect3 = ProjectileEffect3;
+          		AIS->LastAreaInfo = AreaInfo;
 
             // Resolve target NetID
             AIS->LastTargetNetID = 0;
@@ -1946,6 +1953,45 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 		const FRotator FaceRot = (ImpactLocation - FromLoc).Rotation();
 		PerfShooter->FireEffectsAtLocation(CDO->ImpactVFX, CDO->ImpactSound, CDO->ScaleImpactVFX, CDO->ScaleImpactSound, ImpactLocation, 2.0f, FaceRot);
 	}
+}
+
+void AUnitBase::HandleEffectAreaImpact_Implementation(float Damage, bool IsHealing, TSubclassOf<class UGameplayEffect> Effect1, TSubclassOf<class UGameplayEffect> Effect2, TSubclassOf<class UGameplayEffect> Effect3)
+{
+	if (!HasAuthority()) return;
+
+	float NewDamage = Damage;
+
+	// Apply Magic Resistance logic if it's not a healing area
+	// EffectAreas are always considered Magic Damage
+	if (!IsHealing && Attributes)
+	{
+		NewDamage = Damage - Attributes->GetMagicResistance();
+	}
+
+	NewDamage = FMath::Max(0.f, NewDamage);
+
+	if (IsHealing)
+	{
+		if (Attributes)
+		{
+			SetHealth_Implementation(FMath::Min(Attributes->GetMaxHealth(), Attributes->GetHealth() + NewDamage));
+		}
+	}
+	else
+	{
+		if (Attributes)
+		{
+			if (Attributes->GetShield() <= 0)
+				SetHealth_Implementation(Attributes->GetHealth() - NewDamage);
+			else
+				SetShield_Implementation(Attributes->GetShield() - NewDamage);
+		}
+	}
+
+	// Apply Gameplay Effects
+	if (Effect1) ApplyInvestmentEffect(Effect1);
+	if (Effect2) ApplyInvestmentEffect(Effect2);
+	if (Effect3) ApplyInvestmentEffect(Effect3);
 }
 
 void AUnitBase::SpawnEffectArea(int InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, AUnitBase* ActorToLockOn)
@@ -2099,7 +2145,7 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 {
                     // Identisches Log-Format wie auf dem Client für einfachen Vergleich
 
-                    VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets);
+                    VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets, false, nullptr, nullptr, nullptr, FEffectAreaInfo());
                 }
             }
         }
@@ -2131,7 +2177,11 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 0.f,   // ZOffset
                 FVector::ZeroVector, // SpawnOffset
                 false, // DisableAutoZOffset
-                TwinDistance
+                TwinDistance,
+                nullptr,
+                nullptr,
+                nullptr,
+                FEffectAreaInfo()
             );
         }
     }
