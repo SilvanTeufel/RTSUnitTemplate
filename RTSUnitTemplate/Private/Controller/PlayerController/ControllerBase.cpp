@@ -319,13 +319,12 @@ void AControllerBase::FireAbilityMouseHit_Implementation(AUnitBase* Unit, const 
 	{
 		if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
 		{
-			// Bypass throttle for host.
-			// Also bypass if the ability is already active to allow responsive clicking.
-			if (!IsLocalController() && !GASUnit->ActivatedAbilityInstance && GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReplicationTolerance)
+			// Use separate throttle for mouse hits to avoid blocking new activations
+			if (!IsLocalController() && GetWorld()->GetTimeSeconds() - GASUnit->LastMouseHitRequestTime < GASUnit->AbilityReactivationThrottle)
 			{
 				return;
 			}
-			GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+			GASUnit->LastMouseHitRequestTime = GetWorld()->GetTimeSeconds();
 			GASUnit->FireMouseHitAbility(InHitResult);
 		}
 	}
@@ -345,7 +344,13 @@ void AControllerBase::LeftClickSelect_Implementation()
 			{
 				if (AGASUnit* GASUnit = Cast<AGASUnit>(SelectedUnits[i]))
 				{
-					GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+					// Client-side throttle to ensure consistency between host and client
+					if (GetWorld()->GetTimeSeconds() - GASUnit->LastMouseHitRequestTime < GASUnit->AbilityReactivationThrottle)
+					{
+						Deselect = false;
+						continue;
+					}
+					GASUnit->LastMouseHitRequestTime = GetWorld()->GetTimeSeconds();
 				}
 				FireAbilityMouseHit(SelectedUnits[i], Hit_IPoint);
 				Deselect = false;

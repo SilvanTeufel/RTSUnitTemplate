@@ -203,11 +203,17 @@ void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
 
+	if (ActivatedAbilityInstance)
+	{
+		ActivatedAbilityInstance->ClickCount = 0;
+	}
+
 	// If on server and CurrentSnapshot hasn't been set yet (e.g., for AI or auto-abilities),
 	// we set the AbilityClass so clients know an ability is active.
 	if (HasAuthority() && ActivatedAbilityInstance && !CurrentSnapshot.AbilityClass)
 	{
 		CurrentSnapshot.AbilityClass = ActivatedAbilityInstance->GetClass();
+		CurrentSnapshot.ClickCount = 0;
 	}
 }
 
@@ -562,6 +568,10 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 		if (ActivatedAbilityInstance->Range == 0.f || Distance <= ActivatedAbilityInstance->Range || ActivatedAbilityInstance->ClickCount == 0)
 		{
 			ActivatedAbilityInstance->ClickCount++;
+			if (HasAuthority())
+			{
+				CurrentSnapshot.ClickCount = ActivatedAbilityInstance->ClickCount;
+			}
 			ActivatedAbilityInstance->OnAbilityMouseHit(InHitResult);
 		}else
 		{
@@ -572,6 +582,14 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 	{
 		// Failsafe: If the snapshot is set but no ability instance exists on the server, clear it.
 		CancelCurrentAbility();
+	}
+}
+
+void AGASUnit::OnRep_CurrentSnapshot()
+{
+	if (ActivatedAbilityInstance && CurrentSnapshot.AbilityClass == ActivatedAbilityInstance->GetClass())
+	{
+		ActivatedAbilityInstance->ClickCount = CurrentSnapshot.ClickCount;
 	}
 }
 

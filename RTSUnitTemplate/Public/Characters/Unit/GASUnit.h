@@ -33,6 +33,9 @@ struct FQueuedAbility
 
 	UPROPERTY()
 	TWeakObjectPtr<APlayerController> InstigatorPC;
+
+	UPROPERTY()
+	int32 ClickCount = 0;
     
 	bool operator==(const FQueuedAbility& Other) const
 	{
@@ -191,8 +194,11 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	UGameplayAbilityBase* ActivatedAbilityInstance;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category=Ability)
+	UPROPERTY(ReplicatedUsing = OnRep_CurrentSnapshot, BlueprintReadWrite, Category=Ability)
 	FQueuedAbility CurrentSnapshot;
+
+	UFUNCTION()
+	void OnRep_CurrentSnapshot();
 
 	UPROPERTY()
 	float QueueFallbackTimer = 0.f;
@@ -200,8 +206,14 @@ public:
 	UPROPERTY()
 	float LastAbilityRequestTime = 0.f;
 
+	UPROPERTY()
+	float LastMouseHitRequestTime = 0.f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
-	float AbilityReplicationTolerance = 0.1f;
+	float AbilityReplicationTolerance = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
+	float AbilityReactivationThrottle = 0.1f;
 
 	UPROPERTY()
 	TWeakObjectPtr<APlayerController> CurrentInstigatorPC;

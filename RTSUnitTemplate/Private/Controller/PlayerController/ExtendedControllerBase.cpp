@@ -414,7 +414,7 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		return;
 	}
 
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReplicationTolerance)
+	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -496,7 +496,7 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 		return;
 	}
 
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReplicationTolerance)
+	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -925,6 +925,12 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				{
 					if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
 					{
+						// Strict throttle for re-activation to ensure consistency between host and client
+						if (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle)
+						{
+							continue;
+						}
+
 						if (!AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive()) 
 						{
 							continue; 
@@ -956,6 +962,9 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 
 			if (AGASUnit* GASUnit = Cast<AGASUnit>(CameraUnitWithTag))
 			{
+				// Strict throttle for re-activation to ensure consistency between host and client
+				if (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle) return;
+
 				if (!AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive()) return;
 				if (GASUnit->IsAbilityOnCooldownByClass(CameraAbilityClass)) return;
 				
@@ -5622,8 +5631,11 @@ void AExtendedControllerBase::ProcessHeldAbilities()
 						// Check Cooldown and Queue status
 						if (!GASUnit->IsAbilityOnCooldownByClass(AbilityClass) && GASUnit->GetQueuedAbilities().Num() == 0)
 						{
-							// Check if unit is currently busy (respecting Ability Queuing)
-							if (AbilityCDO->UseAbilityQue || !GASUnit->IsAnyAbilityActive())
+							// Check if unit is ready for a NEW activation request
+							bool bIsActive = (GASUnit->ActivatedAbilityInstance != nullptr || GASUnit->CurrentSnapshot.AbilityClass != nullptr);
+							bool bRecentlyRequested = (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle);
+							
+							if (AbilityCDO->UseAbilityQue || (!bIsActive && !bRecentlyRequested))
 							{
 								bAnyUnitCanExecute = true;
 								break;
