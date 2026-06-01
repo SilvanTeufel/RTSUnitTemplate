@@ -217,7 +217,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 						}
 					}
 				}
-				else if (GetWorld()->GetTimeSeconds() - Unit->LastAbilityRequestTime < Unit->AbilityReplicationTolerance)
+				else if (GetWorld()->GetTimeSeconds() - Unit->LastAbilitySafetyWindowTime < Unit->AbilityReplicationTolerance)
 				{
 					// We just pressed it. We hold the indicator active while we wait for the replication from the server.
 					bStillAiming = true;
@@ -419,6 +419,7 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		return;
 	}
 	UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+	UnitBase->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
 
 	// Ability Indicator Spawning
 	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
@@ -501,6 +502,7 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 		return;
 	}
 	UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+	UnitBase->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
 
 	if (UnitBase && Abilities.Num() > 0)
 	{
@@ -519,6 +521,7 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 					if (!HasAuthority())
 					{
 						UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+						UnitBase->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
 					}
 				}
 			}
@@ -902,6 +905,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			if (AGASUnit* GASUnit = Cast<AGASUnit>(CurrentUnit))
 			{
 				GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+				GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
 			}
 			ActivateAbilitiesByIndex(CurrentUnit, InputID, Hit);
 			bActivatedAny = true;
@@ -937,6 +941,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 						}
 						
 						GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+						GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
 						ActivateAbilitiesByIndex(GASUnit, InputID, Hit);
 						bActivatedAny = true;
 					}
@@ -969,6 +974,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				if (GASUnit->IsAbilityOnCooldownByClass(CameraAbilityClass)) return;
 				
 				GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+				GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
 				ActivateAbilitiesByIndex(GASUnit, InputID, Hit);
 				bActivatedAny = true;
 			}
@@ -5632,10 +5638,9 @@ void AExtendedControllerBase::ProcessHeldAbilities()
 						if (!GASUnit->IsAbilityOnCooldownByClass(AbilityClass) && GASUnit->GetQueuedAbilities().Num() == 0)
 						{
 							// Check if unit is ready for a NEW activation request
-							bool bIsActive = (GASUnit->ActivatedAbilityInstance != nullptr || GASUnit->CurrentSnapshot.AbilityClass != nullptr);
-							bool bRecentlyRequested = (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle);
+							bool bThrottled = (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle);
 							
-							if (AbilityCDO->UseAbilityQue || (!bIsActive && !bRecentlyRequested))
+							if (AbilityCDO->UseAbilityQue || (!GASUnit->IsAnyAbilityActive() && !bThrottled))
 							{
 								bAnyUnitCanExecute = true;
 								break;

@@ -207,13 +207,16 @@ public:
 	float LastAbilityRequestTime = 0.f;
 
 	UPROPERTY()
+	float LastAbilitySafetyWindowTime = 0.f;
+
+	UPROPERTY()
 	float LastMouseHitRequestTime = 0.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
-	float AbilityReplicationTolerance = 0.5f;
+	float AbilityReplicationTolerance = 0.2f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
-	float AbilityReactivationThrottle = 0.1f;
+	float AbilityReactivationThrottle = 0.05f;
 
 	UPROPERTY()
 	TWeakObjectPtr<APlayerController> CurrentInstigatorPC;

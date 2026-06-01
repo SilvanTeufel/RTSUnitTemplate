@@ -202,6 +202,7 @@ void AGASUnit::SetupAbilitySystemDelegates()
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
+	LastAbilitySafetyWindowTime = 0.f;
 
 	if (ActivatedAbilityInstance)
 	{
@@ -288,7 +289,7 @@ bool AGASUnit::IsAnyAbilityActive() const
 	}
 
 	// Tolerance window for clients waiting for replication
-	if (GetWorld() && (GetWorld()->GetTimeSeconds() - LastAbilityRequestTime < AbilityReplicationTolerance))
+	if (GetWorld() && (GetWorld()->GetTimeSeconds() - LastAbilitySafetyWindowTime < AbilityReplicationTolerance))
 	{
 		return true;
 	}
@@ -379,7 +380,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 
 				if (!ActivatedAbilityInstance)
 				{
-					const float DelayTime = 0.1f;
+					const float DelayTime = AbilityReactivationThrottle;
 					FTimerHandle TimerHandle;
 					GetWorld()->GetTimerManager().SetTimer(
 						TimerHandle,
@@ -419,7 +420,7 @@ void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 	// Example: delay by half a second
 	if (ActivatedAbilityInstance == nullptr)
 	{
-		const float DelayTime = 0.1f;
+		const float DelayTime = AbilityReactivationThrottle;
 		FTimerHandle TimerHandle;
 		GetWorld()->GetTimerManager().SetTimer(
 			TimerHandle,
@@ -487,7 +488,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 
 				if (!AbilityQueue.IsEmpty())
 				{
-					const float DelayTime = 0.1f;
+					const float DelayTime = AbilityReactivationThrottle;
 					FTimerHandle TimerHandle;
 					GetWorld()->GetTimerManager().SetTimer(
 						TimerHandle,
@@ -587,6 +588,13 @@ void AGASUnit::FireMouseHitAbility(const FHitResult& InHitResult)
 
 void AGASUnit::OnRep_CurrentSnapshot()
 {
+	// The server has confirmed the ability started.
+	// We can now clear the safety window because we are no longer "waiting" for replication.
+	if (CurrentSnapshot.AbilityClass != nullptr)
+	{
+		LastAbilitySafetyWindowTime = 0.f;
+	}
+
 	if (ActivatedAbilityInstance && CurrentSnapshot.AbilityClass == ActivatedAbilityInstance->GetClass())
 	{
 		ActivatedAbilityInstance->ClickCount = CurrentSnapshot.ClickCount;
