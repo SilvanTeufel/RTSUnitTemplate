@@ -170,6 +170,50 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 	MoveDraggedUnit_Implementation(DeltaSeconds);
 	MoveWorkArea_Local(DeltaSeconds);
 
+	// Process held ability inputs for re-execution
+	if (IsLocalController() && !HeldAbilityInputs.IsEmpty())
+	{
+		TArray<TSubclassOf<UGameplayAbilityBase>> AbilityClasses = GetAbilityArrayByIndex();
+		for (EGASAbilityInputID InputID : HeldAbilityInputs)
+		{
+			int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
+
+			if (AbilityClasses.IsValidIndex(AbilityIndex))
+			{
+				TSubclassOf<UGameplayAbilityBase> AbilityClass = AbilityClasses[AbilityIndex];
+				if (AbilityClass)
+				{
+					if (UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
+					{
+						if (AbilityCDO->bExecuteOnPressed)
+						{
+							bool bAnyUnitCanExecute = false;
+							for (AUnitBase* Unit : SelectedUnits)
+							{
+								if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+								{
+									if (!GASUnit->IsAbilityOnCooldownByClass(AbilityClass) && GASUnit->GetQueuedAbilities().Num() == 0)
+									{
+										if (AbilityCDO->UseAbilityQue || !GASUnit->IsAnyAbilityActive())
+										{
+											bAnyUnitCanExecute = true;
+											break;
+										}
+									}
+								}
+							}
+
+							if (bAnyUnitCanExecute)
+							{
+								ActivateKeyboardAbilitiesOnMultipleUnits(InputID);
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	// Cleanup indicator if everything is deselected
 	if (IsLocalController() && SelectedUnits.IsEmpty() && AbilityIndicatorRefCount > 0)
 	{
@@ -961,6 +1005,18 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	if (bActivatedAny)
 	{
 		bUsedKeyboardAbilityBeforeClick = true;
+	}
+}
+
+void AExtendedControllerBase::SetAbilityInputHeld(EGASAbilityInputID InputID, bool bIsHeld)
+{
+	if (bIsHeld)
+	{
+		HeldAbilityInputs.Add(InputID);
+	}
+	else
+	{
+		HeldAbilityInputs.Remove(InputID);
 	}
 }
 

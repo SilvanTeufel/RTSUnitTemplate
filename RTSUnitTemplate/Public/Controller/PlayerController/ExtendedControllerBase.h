@@ -310,6 +310,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID);
 
+	void SetAbilityInputHeld(EGASAbilityInputID InputID, bool bIsHeld);
+
 	TArray<AUnitBase*> GetAndPrepareAbilityTargets(TSubclassOf<UGameplayAbilityBase> AbilityClass, int32 AbilityIndex);
 
 	// Accumulator to throttle streaming SetWorkAreaPosition updates
@@ -492,4 +494,6 @@ public:
 
 	UPROPERTY(Transient)
 	FVector LastSentMouseLocation = FVector::ZeroVector;
+
+	TSet<EGASAbilityInputID> HeldAbilityInputs;
 };

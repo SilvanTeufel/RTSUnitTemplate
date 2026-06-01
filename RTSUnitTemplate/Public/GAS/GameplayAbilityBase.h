@@ -65,6 +65,9 @@ public:
 	EGASAbilityInputID AbilityInputID = EGASAbilityInputID::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bExecuteOnPressed = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AAbilityIndicator> AbilityIndicatorClass;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)

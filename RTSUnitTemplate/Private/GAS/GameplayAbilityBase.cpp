@@ -135,6 +135,7 @@ namespace
 
 UGameplayAbilityBase::UGameplayAbilityBase()
 {
+	bExecuteOnPressed = false;
 	UpdateTooltipText();
 }
 

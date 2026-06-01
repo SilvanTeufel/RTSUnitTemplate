@@ -2820,6 +2820,12 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
         return;
     }
 
+    // Prevent any selection changes or deselection if an ability button is currently held down
+    if (!HeldAbilityInputs.IsEmpty())
+    {
+        return;
+    }
+
     if (bWasDeselectFlagActive) {
         HUDBase->DeselectAllUnits();
     } 

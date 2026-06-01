@@ -75,6 +75,13 @@ public:
 	FGameplayTag InputTag_5_Pressed;
 	FGameplayTag InputTag_6_Pressed;
 
+	FGameplayTag InputTag_1_Released;
+	FGameplayTag InputTag_2_Released;
+	FGameplayTag InputTag_3_Released;
+	FGameplayTag InputTag_4_Released;
+	FGameplayTag InputTag_5_Released;
+	FGameplayTag InputTag_6_Released;
+
 	FGameplayTag InputTag_F1_Pressed;
 	FGameplayTag InputTag_F2_Pressed;
 	FGameplayTag InputTag_F3_Pressed;
