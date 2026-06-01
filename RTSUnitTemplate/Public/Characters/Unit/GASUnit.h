@@ -200,6 +200,9 @@ public:
 	UPROPERTY()
 	float LastAbilityRequestTime = 0.f;
 
+	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
+	float AbilityReplicationTolerance = 0.1f;
+
 	UPROPERTY()
 	TWeakObjectPtr<APlayerController> CurrentInstigatorPC;
 	

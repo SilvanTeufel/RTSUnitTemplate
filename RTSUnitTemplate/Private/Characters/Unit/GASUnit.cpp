@@ -282,7 +282,7 @@ bool AGASUnit::IsAnyAbilityActive() const
 	}
 
 	// Tolerance window for clients waiting for replication
-	if (GetWorld() && (GetWorld()->GetTimeSeconds() - LastAbilityRequestTime < 0.8f))
+	if (GetWorld() && (GetWorld()->GetTimeSeconds() - LastAbilityRequestTime < AbilityReplicationTolerance))
 	{
 		return true;
 	}
@@ -332,9 +332,6 @@ bool AGASUnit::ActivateAbilityByInputID(
 			QueSnapshot.Add(Queued);
 			AbilityQueue.Enqueue(Queued);
 			AbilityQueueSize = QueSnapshot.Num();
-		}else
-		{
-			FireMouseHitAbility(HitResult);
 		}
 		return false;
 	}

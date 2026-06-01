@@ -43,6 +43,7 @@ struct FExtractionAudioData
 		: WorkArea(InArea), Distance(InDist), Volume(InVol), LastSignalTime(InTime) {}
 };
 
+
 /**
  * 
  */
@@ -95,6 +96,10 @@ protected:
 	TMap<EResourceType, UAudioComponent*> ExtractionAudioComponents;
 
 	void UpdateExtractionSounds(float DeltaSeconds);
+
+
+	// Separate function for processing held abilities
+	void ProcessHeldAbilities();
 
 	UFUNCTION(Category = RTSUnitTemplate)
 	void HandleExtractionSignal(FName SignalName, TArray<FMassEntityHandle>& Entities);

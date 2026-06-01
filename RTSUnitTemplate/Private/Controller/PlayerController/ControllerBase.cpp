@@ -317,7 +317,17 @@ void AControllerBase::FireAbilityMouseHit_Implementation(AUnitBase* Unit, const 
 {
 	if (Unit)
 	{
-		Unit->FireMouseHitAbility(InHitResult);
+		if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+		{
+			// Bypass throttle for host.
+			// Also bypass if the ability is already active to allow responsive clicking.
+			if (!IsLocalController() && !GASUnit->ActivatedAbilityInstance && GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReplicationTolerance)
+			{
+				return;
+			}
+			GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+			GASUnit->FireMouseHitAbility(InHitResult);
+		}
 	}
 }
 
@@ -333,6 +343,10 @@ void AControllerBase::LeftClickSelect_Implementation()
 		{
 			if (SelectedUnits[i]->IsAnyAbilityActive())
 			{
+				if (AGASUnit* GASUnit = Cast<AGASUnit>(SelectedUnits[i]))
+				{
+					GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+				}
 				FireAbilityMouseHit(SelectedUnits[i], Hit_IPoint);
 				Deselect = false;
 			}else
