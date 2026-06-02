@@ -1615,12 +1615,25 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 	}
 
 	UWorld* World = nullptr;
-	if (WorldContext && !WorldContext->IsA<UClass>())
+	if (WorldContext)
 	{
-		World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+		// Avoid using CDO or UClass as world context; fall back to GetWorld in that case
+		if (!WorldContext->HasAnyFlags(RF_ClassDefaultObject) && !WorldContext->IsA<UClass>())
+		{
+			World = GEngine ? GEngine->GetWorldFromContextObject(WorldContext, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+		}
 	}
 	
-	if (!World) World = GetWorld();
+	if (!World)
+	{
+		World = GetWorld();
+	}
+
+	if (!World)
+	{
+		UE_LOG(LogTemp, Error, TEXT("SpawnEffectArea: No valid world found to spawn EffectArea!"));
+		return;
+	}
 
 	FQuat VisualRotationOffset = FQuat::Identity;
 	FVector SpawnLocation = Location;
@@ -1646,7 +1659,7 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 		
 	const auto MyEffectArea = Cast<AEffectArea>
 						(UGameplayStatics::BeginDeferredActorSpawnFromClass
-						(World ? (UObject*)World : WorldContext, EAClass, Transform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
+						(World, EAClass, Transform, ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
 	
 	if (MyEffectArea != nullptr)
 	{

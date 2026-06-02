@@ -369,7 +369,8 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
             break;
         }
 
-        if (BindingComp->IsReadyForClientMassLink())
+        const bool bIsReady = BindingComp->IsReadyForClientMassLink();
+        if (bIsReady)
         {
             BindingComp->CreateAndLinkEffectAreaToMassEntity();
 
@@ -378,6 +379,9 @@ void UUnitSignalingProcessor::CreatePendingEntities(const float DeltaTime)
                 PendingEffectAreaRetryQueue.RemoveAt(i);
                 RegistrationsThisFrame++;
             }
+        }
+        else
+        {
         }
     }
 }

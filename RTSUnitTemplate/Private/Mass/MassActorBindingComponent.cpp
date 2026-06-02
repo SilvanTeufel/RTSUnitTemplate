@@ -958,7 +958,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == EffectArea->TeamId) || LocalTeamId == 0;
 				VisibilityFrag->bIsOnViewport = true;
-				VisibilityFrag->bIsVisibleEnemy = false;
+				VisibilityFrag->bIsVisibleEnemy = true;
 				VisibilityFrag->VisibilityOffset = EffectArea->VisibilityOffset;
 				VisibilityFrag->bAffectedByFogOfWar = EffectArea->bAffectedByFogOfWar;
 			}
@@ -1448,6 +1448,18 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 	{
 		InitTransform(EM, MassEntityHandle);
 		InitStats(EM, MassEntityHandle, GetOwner());
+
+		if (World->GetNetMode() == NM_Client)
+		{
+			if (FMassVisibilityFragment* VisFrag = EM.GetFragmentDataPtr<FMassVisibilityFragment>(MassEntityHandle))
+			{
+				VisFrag->bIsOnViewport = true;
+				// On client, we want it to be visible immediately, so we treat it as "my team" or not affected by fog initially
+				VisFrag->bIsMyTeam = true; 
+				VisFrag->bIsVisibleEnemy = true;
+				VisFrag->LastVisibleTime = World->GetTimeSeconds();
+			}
+		}
 		
 		FMassActorFragment& ActorFrag = EM.GetFragmentDataChecked<FMassActorFragment>(MassEntityHandle);
 		ActorFrag.SetAndUpdateHandleMap(MassEntityHandle, GetOwner(), false);
@@ -1491,6 +1503,28 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 					Reg->Registry.MarkItemDirty(*Existing);
 					Reg->Registry.MarkArrayDirty();
 					Reg->ForceNetUpdate();
+				}
+			}
+		}
+		else
+		{
+			if (FMassNetworkIDFragment* NetFrag = EM.GetFragmentDataPtr<FMassNetworkIDFragment>(MassEntityHandle))
+			{
+				if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
+				{
+					if (AUnitRegistryReplicator* Reg = CacheSub->GetRegistry(false))
+					{
+						if (AEffectArea* EffectAreaActor = Cast<AEffectArea>(GetOwner()))
+						{
+							if (EffectAreaActor->AreaIndex != INDEX_NONE)
+							{
+								if (const FUnitRegistryItem* Item = Reg->Registry.FindByUnitIndex(EffectAreaActor->AreaIndex))
+								{
+									NetFrag->NetID = Item->NetID;
+								}
+							}
+						}
+					}
 				}
 			}
 		}
@@ -1703,10 +1737,17 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 
 	if (!RegItem)
 	{
+		// NEU: Für EffectAreas erlauben wir das Fortfahren ohne Registry-Eintrag,
+		// da sie ihre Daten vom Actor beziehen und keine Mass-Replikation benötigen.
+		if (Area && Area->AreaIndex != INDEX_NONE)
+		{
+			return true; 
+		}
+
 		return false;
 	}
 
-	if (!RegItem->NetID.IsValid())
+	if (RegItem && !RegItem->NetID.IsValid())
 	{
 		return false;
 	}
@@ -1719,10 +1760,15 @@ bool UMassActorBindingComponent::IsReadyForClientMassLink() const
 	}
 
 	// Wenn das Item in der Bubble-Liste ist, sind initiale Daten vorhanden
-	bool bInBubble = Bubble->Agents.FindItemByNetID(RegItem->NetID) != nullptr;
+	bool bInBubble = RegItem && Bubble->Agents.FindItemByNetID(RegItem->NetID) != nullptr;
 	if (!bInBubble)
 	{
-		return false;
+		// NEU: Für EffectAreas ignorieren wir den Bubble-Check, 
+		// da sie über den Actor-Kanal bereits alles Wichtige haben.
+		if (Area == nullptr) 
+		{
+			return false;
+		}
 	}
 
 	return true;

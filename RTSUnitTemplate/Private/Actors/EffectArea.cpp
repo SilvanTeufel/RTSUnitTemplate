@@ -45,7 +45,7 @@ AEffectArea::AEffectArea()
 	MassBindingComponent->HideActorTime = 0.0f;
 	MassBindingComponent->DespawnTime = 0.5f;
 
-	bUseEffectAreaImpactProcessor = false;
+	bUseEffectAreaImpactProcessor = true;
 	StartRadius = 100.f;
 	EndRadius = 500.f;
 	TimeToEndRadius = 5.f;
@@ -104,6 +104,7 @@ void AEffectArea::BeginPlay()
 	{
 		MassBindingComponent->SetupMassOnEffectArea();
 	}
+
 }
 
 void AEffectArea::EndPlay(const EEndPlayReason::Type EndPlayReason)

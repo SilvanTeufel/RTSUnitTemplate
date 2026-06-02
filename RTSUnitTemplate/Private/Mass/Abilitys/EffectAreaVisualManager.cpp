@@ -88,10 +88,18 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
         Material = EffectAreaActor->ISMTemplate->GetMaterial(0);
     }
 
-    if (!Mesh) return;
+    if (!Mesh)
+    {
+        UE_LOG(LogTemp, Error, TEXT("AddVisualInstance: No Mesh found for EffectArea %s (ISMTemplate: %d)"), *EffectAreaActor->GetName(), EffectAreaActor->ISMTemplate != nullptr);
+        return;
+    }
 
     UInstancedStaticMeshComponent* ISM = GetOrCreatePooledISM(Mesh, Material, false);
-    if (!ISM) return;
+    if (!ISM)
+    {
+        UE_LOG(LogTemp, Error, TEXT("AddVisualInstance: Failed to get or create pooled ISM for %s"), *EffectAreaActor->GetName());
+        return;
+    }
 
     FMeshMaterialKey Key;
     Key.Mesh = Mesh;

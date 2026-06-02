@@ -161,15 +161,10 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 		{
 			AActor* AreaActor = ActorList[i].GetMutable();
 
-			// FILTER: On client, ignore entities without actors and entities with NetID 0
+			// FILTER: On client, process if we have an Actor (preferred) OR a valid NetID
 			if (bIsClient)
 			{
-				if (!AreaActor)
-				{
-					continue;
-				}
-
-				if (NetIDList.Num() > 0 && NetIDList[i].NetID.GetValue() == 0)
+				if (!AreaActor && (NetIDList.Num() == 0 || NetIDList[i].NetID.GetValue() == 0))
 				{
 					continue;
 				}
