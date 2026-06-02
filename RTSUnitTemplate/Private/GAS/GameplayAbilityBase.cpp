@@ -136,6 +136,7 @@ namespace
 UGameplayAbilityBase::UGameplayAbilityBase()
 {
 	bExecuteOnPressed = false;
+	bIsContinuousAbility = false;
 	UpdateTooltipText();
 }
 
@@ -743,6 +744,18 @@ FText UGameplayAbilityBase::CreateTooltipText() const
 		*KeyboardKey);
 
 	return FText::FromString(fullText);
+}
+
+FVector UGameplayAbilityBase::GetTargetLocation() const
+{
+	if (const AGASUnit* GASUnit = Cast<AGASUnit>(GetAvatarActorFromActorInfo()))
+	{
+		if (const AExtendedControllerBase* PC = Cast<AExtendedControllerBase>(GASUnit->CurrentInstigatorPC.Get()))
+		{
+			return PC->ReplicatedMouseLocation;
+		}
+	}
+	return FVector::ZeroVector;
 }
 
 void UGameplayAbilityBase::UpdateTooltipText()

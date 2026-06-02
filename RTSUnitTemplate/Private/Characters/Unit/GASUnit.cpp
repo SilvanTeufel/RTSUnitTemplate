@@ -336,6 +336,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 			Queued.AbilityClass = AbilityToActivate;
 			Queued.HitResult    = HitResult;
 			Queued.InstigatorPC = InstigatorPC;
+			Queued.InputID      = InputID;
 			QueSnapshot.Add(Queued);
 			AbilityQueue.Enqueue(Queued);
 			AbilityQueueSize = QueSnapshot.Num();
@@ -348,14 +349,20 @@ bool AGASUnit::ActivateAbilityByInputID(
 		CurrentInstigatorPC = InstigatorPC;
 
 		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
-		if (HasAuthority() && bIsActivated && ActivatedAbilityInstance)
+		if (bIsActivated && ActivatedAbilityInstance)
 		{
-			// If you have a pointer to the active ability instance:
-			FQueuedAbility Queued;
-			Queued.AbilityClass = AbilityToActivate;
-			Queued.HitResult    = HitResult;
-			Queued.InstigatorPC = InstigatorPC;
-			CurrentSnapshot = Queued;
+			ActivatedAbilityInstance->AbilityInputID = InputID;
+
+			if (HasAuthority())
+			{
+				// If you have a pointer to the active ability instance:
+				FQueuedAbility Queued;
+				Queued.AbilityClass = AbilityToActivate;
+				Queued.HitResult    = HitResult;
+				Queued.InstigatorPC = InstigatorPC;
+				Queued.InputID      = InputID;
+				CurrentSnapshot = Queued;
+			}
 		}
 		if (bIsActivated && HitResult.IsValidBlockingHit())
 		{
@@ -374,6 +381,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 				Queued.AbilityClass = AbilityToActivate;
 				Queued.HitResult    = HitResult;
 				Queued.InstigatorPC = InstigatorPC;
+				Queued.InputID      = InputID;
 				QueSnapshot.Add(Queued);
 				AbilityQueue.Enqueue(Queued);
 				AbilityQueueSize = QueSnapshot.Num();
@@ -467,6 +475,7 @@ void AGASUnit::ActivateNextQueuedAbility()
 
 			if (bIsActivated && ActivatedAbilityInstance)
 			{
+				ActivatedAbilityInstance->AbilityInputID = Next.InputID;
 				CurrentSnapshot = Next;
 
 				if (Next.HitResult.IsValidBlockingHit())
@@ -598,6 +607,7 @@ void AGASUnit::OnRep_CurrentSnapshot()
 	if (ActivatedAbilityInstance && CurrentSnapshot.AbilityClass == ActivatedAbilityInstance->GetClass())
 	{
 		ActivatedAbilityInstance->ClickCount = CurrentSnapshot.ClickCount;
+		ActivatedAbilityInstance->AbilityInputID = CurrentSnapshot.InputID;
 	}
 }
 
@@ -647,6 +657,35 @@ const TArray<FQueuedAbility>& AGASUnit::GetQueuedAbilities()
 const FQueuedAbility AGASUnit::GetCurrentSnapshot()
 {
 	return CurrentSnapshot;
+}
+
+void AGASUnit::StopCurrentAbility(bool bWasCancelled)
+{
+	if (!HasAuthority() || !ActivatedAbilityInstance) return;
+
+	if (bWasCancelled)
+	{
+		ActivatedAbilityInstance->K2_CancelAbility();
+	}
+	else
+	{
+		// Gracefully end the ability as a successful completion
+		ActivatedAbilityInstance->EndAbility(
+			ActivatedAbilityInstance->GetCurrentAbilitySpecHandle(),
+			ActivatedAbilityInstance->GetCurrentActorInfo(),
+			ActivatedAbilityInstance->GetCurrentActivationInfo(),
+			true, // bReplicateEndAbility
+			false // bWasCancelled
+		);
+	}
+}
+
+void AGASUnit::NotifyInputReleased(EGASAbilityInputID InputID)
+{
+	if (ActivatedAbilityInstance && ActivatedAbilityInstance->AbilityInputID == InputID)
+	{
+		ActivatedAbilityInstance->OnInputReleased();
+	}
 }
 
 void AGASUnit::CancelCurrentAbility()

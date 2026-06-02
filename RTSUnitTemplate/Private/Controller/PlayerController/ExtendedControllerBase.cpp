@@ -1001,6 +1001,23 @@ void AExtendedControllerBase::SetAbilityInputHeld(EGASAbilityInputID InputID, bo
 	else
 	{
 		HeldAbilityInputs.Remove(InputID);
+		Server_StopContinuousAbility(InputID, SelectedUnits);
+	}
+}
+
+void AExtendedControllerBase::Server_StopContinuousAbility_Implementation(EGASAbilityInputID InputID, const TArray<AUnitBase*>& Units)
+{
+	for (AUnitBase* Unit : Units)
+	{
+		if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+		{
+			if (GASUnit->ActivatedAbilityInstance && 
+				GASUnit->ActivatedAbilityInstance->AbilityInputID == InputID &&
+				GASUnit->ActivatedAbilityInstance->bIsContinuousAbility) 
+			{
+				GASUnit->NotifyInputReleased(InputID);
+			}
+		}
 	}
 }
 
@@ -5639,6 +5656,15 @@ void AExtendedControllerBase::ProcessHeldAbilities()
 						{
 							// Check if unit is ready for a NEW activation request
 							bool bThrottled = (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle);
+
+							if (AbilityCDO->bIsContinuousAbility && GASUnit->IsAnyAbilityActive())
+							{
+								// If it's the SAME ability already running, don't restart it
+								if (GASUnit->ActivatedAbilityInstance && GASUnit->ActivatedAbilityInstance->GetClass() == AbilityClass)
+								{
+									continue;
+								}
+							}
 							
 							if (AbilityCDO->UseAbilityQue || (!GASUnit->IsAnyAbilityActive() && !bThrottled))
 							{

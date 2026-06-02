@@ -68,7 +68,16 @@ public:
 	bool bExecuteOnPressed = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIsContinuousAbility = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AAbilityIndicator> AbilityIndicatorClass;
+
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void OnInputReleased();
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
+	FVector GetTargetLocation() const;
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void OnAbilityCastComplete( const FHitResult& InHitResult = FHitResult());

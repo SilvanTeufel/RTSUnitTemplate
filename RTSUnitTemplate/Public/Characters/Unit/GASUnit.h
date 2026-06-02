@@ -36,10 +36,14 @@ struct FQueuedAbility
 
 	UPROPERTY()
 	int32 ClickCount = 0;
+
+	UPROPERTY()
+	EGASAbilityInputID InputID = EGASAbilityInputID::None;
     
 	bool operator==(const FQueuedAbility& Other) const
 	{
 		return AbilityClass == Other.AbilityClass
+			&& InputID == Other.InputID
 			&& HitResult.Location.Equals(Other.HitResult.Location, 0.001f);
 	}
 };
@@ -81,6 +85,11 @@ public:
 	// Callback when an ability ends so we can pop the next one from the queue
 	UFUNCTION()
 	void OnAbilityEnded(UGameplayAbility* EndedAbility);
+
+	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
+	void StopCurrentAbility(bool bWasCancelled);
+
+	void NotifyInputReleased(EGASAbilityInputID InputID);
 
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void CancelCurrentAbility();
@@ -213,10 +222,10 @@ public:
 	float LastMouseHitRequestTime = 0.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
-	float AbilityReplicationTolerance = 0.2f;
+	float AbilityReplicationTolerance = 0.5f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Abilities")
-	float AbilityReactivationThrottle = 0.05f;
+	float AbilityReactivationThrottle = 0.1f;
 
 	UPROPERTY()
 	TWeakObjectPtr<APlayerController> CurrentInstigatorPC;

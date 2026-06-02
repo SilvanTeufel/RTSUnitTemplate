@@ -317,6 +317,9 @@ public:
 
 	void SetAbilityInputHeld(EGASAbilityInputID InputID, bool bIsHeld);
 
+	UFUNCTION(Server, Reliable)
+	void Server_StopContinuousAbility(EGASAbilityInputID InputID, const TArray<AUnitBase*>& Units);
+
 	TArray<AUnitBase*> GetAndPrepareAbilityTargets(TSubclassOf<UGameplayAbilityBase> AbilityClass, int32 AbilityIndex);
 
 	// Accumulator to throttle streaming SetWorkAreaPosition updates
