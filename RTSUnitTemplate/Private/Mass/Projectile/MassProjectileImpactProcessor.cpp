@@ -11,6 +11,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/EffectArea.h"
 
+#include "Mass/Projectile/MassProjectileMovementProcessor.h"
 #include "LandscapeProxy.h"
 #include "Actors/Projectile.h"
 
@@ -20,6 +21,8 @@ UMassProjectileImpactProcessor::UMassProjectileImpactProcessor()
 	ProcessingPhase = EMassProcessingPhase::PostPhysics;
 	bAutoRegisterWithProcessingPhases = true;
 	bRequiresGameThreadExecution = true; // Signal subsystem might need game thread
+
+	ExecutionOrder.ExecuteAfter.Add(UMassProjectileMovementProcessor::StaticClass()->GetFName());
 }
 
 void UMassProjectileImpactProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -105,10 +108,19 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			// --- NEW: Landscape Collision Check (Optimized) ---
 			if (Projectile.bEnableLandscapeHit && Projectile.bHasLandscapeImpact)
 			{
-				float DistSq = FVector::DistSquared(ProjPos, Projectile.LandscapeImpactLocation);
-				// Check if we are within collision radius, accounting for speed to avoid skipping
-				float SpeedBuffer = Projectile.Speed * 10.f * Context.GetDeltaTimeSeconds();
-				float CheckRadius = Projectile.CollisionRadius + SpeedBuffer + 25.f;
+				float MoveDist = Projectile.Speed * 10.f * Context.GetDeltaTimeSeconds();
+				FVector PrevPos = ProjPos - (Projectile.FlightDirection * MoveDist);
+				
+				// Use the center of flight if spiraling/homing (HomingOffset is the relative offset from center-line)
+				FVector AdjustedProjPos = ProjPos - Projectile.HomingOffset;
+				FVector AdjustedPrevPos = PrevPos - Projectile.HomingOffset;
+
+				float DistSq = FMath::PointDistToSegmentSquared(Projectile.LandscapeImpactLocation, AdjustedPrevPos, AdjustedProjPos);
+				
+				// Check if we are within collision radius. 
+				// We use a segment check now, so we don't need the SpeedBuffer in CheckRadius anymore, 
+				// but we keep a generous safety margin.
+				float CheckRadius = Projectile.CollisionRadius + 50.f;
 
 				if (DistSq <= FMath::Square(CheckRadius))
 				{

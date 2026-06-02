@@ -375,6 +375,13 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 				}
 			}
 		}
+
+		if (!ProjectileFragment.bHasLandscapeImpact && (ProjectileFragment.ArcHeight > 0.f || ProjectileFragment.ArcHeightDistanceFactor > 0.f))
+		{
+			// Fallback for arc projectiles: use TargetLocation as it's likely the intended hit point
+			ProjectileFragment.bHasLandscapeImpact = true;
+			ProjectileFragment.LandscapeImpactLocation = TargetLocation;
+		}
 	}
 
 	// Entity-Handles vom Server sind auf dem Client nicht gültig. Wir müssen sie lokal auflösen.

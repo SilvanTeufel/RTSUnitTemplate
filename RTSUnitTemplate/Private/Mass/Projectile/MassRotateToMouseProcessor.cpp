@@ -100,14 +100,11 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 
-	// Throttling for Server and Logs
-	static float LastLogTime = 0.0f;
+	// Throttling for Server
 	static float LastServerTickTime = 0.0f;
 	const float CurrentTime = World->GetTimeSeconds();
-	const bool bShouldLog = (CurrentTime - LastLogTime > 1.0f);
 	const bool bIsServerTick = (CurrentTime - LastServerTickTime > 0.05f);
 
-	if (bShouldLog) LastLogTime = CurrentTime;
 	if (bIsServerTick && bHasAuthority) LastServerTickTime = CurrentTime;
 
 	EntityQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ChunkContext)
@@ -161,13 +158,6 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				}
 			}
 
-			if (bShouldLog && i == 0) // Throttled Log (Once per second, first unit in chunk)
-			{
-				UE_LOG(LogTemp, Log, TEXT("[%s] RTM - Unit: %s, Rotator: %d, Local: %d, Target: %s"), 
-					(bHasAuthority ? TEXT("Server") : TEXT("Client")), 
-					Actor ? *Actor->GetName() : TEXT("None"), 
-					RotatorId, LocalPlayerId, *TargetLocation.ToString());
-			}
 
 			if (bFoundTarget)
 			{

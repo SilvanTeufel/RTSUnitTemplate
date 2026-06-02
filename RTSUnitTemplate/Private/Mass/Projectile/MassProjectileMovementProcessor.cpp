@@ -124,6 +124,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 			if (Projectile.LifeTime >= Projectile.MaxLifeTime)
 			{
+
 				// Destroy projectile entity
 				Context.Defer().DestroyEntity(Context.GetEntity(i));
 
@@ -173,9 +174,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 					}
 				}
 
-				if (EntityManager.GetWorld()->GetNetMode() == NM_Client && Projectile.TargetLocation.IsZero())
-				{
-				}
 			}
 
 
@@ -224,10 +222,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			
 			FVector TargetLocation = Projectile.TargetLocation;
 
-            if (LogThrottle % 60 == 0) {
-            }
-
-			// UE_LOG(LogTemp, Warning, TEXT("Projectile %d: Speed %f, CurrentLoc %s, TargetLoc %s, DeltaTime %f"), i, Projectile.Speed, *CurrentLocation.ToString(), *TargetLocation.ToString(), DeltaTime);
 
 			// If following target entity, update TargetLocation
 			if (Projectile.bFollowTarget && Projectile.TargetEntity.IsValid())
