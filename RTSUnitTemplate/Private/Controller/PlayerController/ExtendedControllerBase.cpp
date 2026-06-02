@@ -407,7 +407,7 @@ void AExtendedControllerBase::Client_PlaySound2D_Implementation(USoundBase* Soun
 	}
 }
 
-void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
+void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, int32 InAbilityArrayIndex, const FHitResult& HitResult)
 {
 	if (!UnitBase)
 	{
@@ -423,13 +423,13 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 
 	// Ability Indicator Spawning
 	int32 AbilityIndex = static_cast<int32>(InputID) - static_cast<int32>(EGASAbilityInputID::AbilityOne);
-	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(UnitBase);
+	TArray<TSubclassOf<UGameplayAbilityBase>> AbilityArray = GetAbilityArrayForUnit(UnitBase, InAbilityArrayIndex);
 	if (AbilityArray.IsValidIndex(AbilityIndex))
 	{
 		TSubclassOf<UGameplayAbilityBase> AbilityClass = AbilityArray[AbilityIndex];
 		if (AbilityClass && !UnitBase->IsAbilityOnCooldownByClass(AbilityClass))
 		{
-			UGameplayAbilityBase* AbilityCDO = AbilityClass.GetDefaultObject();
+			const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
 			{
 				HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
@@ -437,7 +437,7 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		}
 	}
 
-	switch (AbilityArrayIndex)
+	switch (InAbilityArrayIndex)
 	{
 	case 0:
 		ActivateDefaultAbilities(UnitBase, InputID, HitResult);
@@ -459,16 +459,35 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 
 void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
-	if(UnitBase && UnitBase->DefaultAbilities.Num())
+	if (!UnitBase) return;
+
+	// Server-side throttle to prevent spamming from clients
+	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	{
+		return;
+	}
+	UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+	UnitBase->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
+
+	if(UnitBase->DefaultAbilities.Num())
 	{
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->DefaultAbilities, HitResult, this);
 	}
-	
 }
 
 void AExtendedControllerBase::ActivateSecondAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
-	if (UnitBase && UnitBase->SecondAbilities.Num() > 0)
+	if (!UnitBase) return;
+
+	// Server-side throttle to prevent spamming from clients
+	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	{
+		return;
+	}
+	UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+	UnitBase->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
+
+	if (UnitBase->SecondAbilities.Num() > 0)
 	{
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->SecondAbilities, HitResult, this);
 	}
@@ -476,7 +495,17 @@ void AExtendedControllerBase::ActivateSecondAbilities_Implementation(AGASUnit* U
 
 void AExtendedControllerBase::ActivateThirdAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
-	if (UnitBase && UnitBase->ThirdAbilities.Num() > 0)
+	if (!UnitBase) return;
+
+	// Server-side throttle to prevent spamming from clients
+	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	{
+		return;
+	}
+	UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+	UnitBase->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
+
+	if (UnitBase->ThirdAbilities.Num() > 0)
 	{
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->ThirdAbilities, HitResult, this);
 	}
@@ -484,7 +513,17 @@ void AExtendedControllerBase::ActivateThirdAbilities_Implementation(AGASUnit* Un
 
 void AExtendedControllerBase::ActivateFourthAbilities_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult)
 {
-	if (UnitBase && UnitBase->FourthAbilities.Num() > 0)
+	if (!UnitBase) return;
+
+	// Server-side throttle to prevent spamming from clients
+	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	{
+		return;
+	}
+	UnitBase->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+	UnitBase->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
+
+	if (UnitBase->FourthAbilities.Num() > 0)
 	{
 		UnitBase->ActivateAbilityByInputID(InputID, UnitBase->FourthAbilities, HitResult, this);
 	}
@@ -544,11 +583,13 @@ void AExtendedControllerBase::ActivateDefaultAbilitiesByTag(EGASAbilityInputID I
 }
 
 
-TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayForUnit(AGASUnit* Unit)
+TArray<TSubclassOf<UGameplayAbilityBase>> AExtendedControllerBase::GetAbilityArrayForUnit(AGASUnit* Unit, int32 InAbilityArrayIndex)
 {
 	if (!Unit) return TArray<TSubclassOf<UGameplayAbilityBase>>();
 	
-	switch (AbilityArrayIndex)
+	int32 IndexToUse = (InAbilityArrayIndex != -1) ? InAbilityArrayIndex : AbilityArrayIndex;
+
+	switch (IndexToUse)
 	{
 	case 0:
 		return Unit->DefaultAbilities;
@@ -906,8 +947,8 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 			{
 				GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
 				GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
+				ActivateAbilitiesByIndex_Implementation(GASUnit, InputID, AbilityArrayIndex, Hit);
 			}
-			ActivateAbilitiesByIndex(CurrentUnit, InputID, Hit);
 			bActivatedAny = true;
 			if (IsLocalController() && HUDBase)
 			{
@@ -942,7 +983,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 						
 						GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
 						GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
-						ActivateAbilitiesByIndex(GASUnit, InputID, Hit);
+						ActivateAbilitiesByIndex_Implementation(GASUnit, InputID, AbilityArrayIndex, Hit);
 						bActivatedAny = true;
 					}
 				}
@@ -975,7 +1016,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				
 				GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
 				GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
-				ActivateAbilitiesByIndex(GASUnit, InputID, Hit);
+				ActivateAbilitiesByIndex_Implementation(GASUnit, InputID, AbilityArrayIndex, Hit);
 				bActivatedAny = true;
 			}
 		}

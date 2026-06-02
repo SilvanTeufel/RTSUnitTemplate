@@ -210,7 +210,7 @@ public:
 
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void ActivateAbilitiesByIndex(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult = FHitResult());
+	void ActivateAbilitiesByIndex(AGASUnit* UnitBase, EGASAbilityInputID InputID, int32 InAbilityArrayIndex, const FHitResult& HitResult = FHitResult());
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateDefaultAbilities(AGASUnit* UnitBase, EGASAbilityInputID InputID, const FHitResult& HitResult = FHitResult());
@@ -292,7 +292,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayByIndex();
 
-	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayForUnit(AGASUnit* Unit);
+	TArray<TSubclassOf<UGameplayAbilityBase>> GetAbilityArrayForUnit(AGASUnit* Unit, int32 InAbilityArrayIndex = -1);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<UGameplayAbilityBase*> GetAbilityObjectArrayByIndex();
