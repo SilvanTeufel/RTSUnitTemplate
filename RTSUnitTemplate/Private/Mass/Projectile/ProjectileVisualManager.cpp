@@ -401,6 +401,38 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	// ResolvedTargetEntity already resolved above
 	ProjectileFragment.TargetEntity = ResolvedTargetEntity;
 
+	// Compute initial local visibility BEFORE adding the ISM instance
+	int32 LocalTeamId = 0;
+	int64 LocalAllianceMask = 0;
+	if (World)
+	{
+		if (APlayerController* PC = World->GetFirstPlayerController())
+		{
+			if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+			{
+				LocalTeamId = CustomPC->SelectableTeamId;
+				LocalAllianceMask = CustomPC->AlliedTeamsMask;
+
+				// Safety repair like UnitVisibilityProcessor does
+				if (LocalTeamId != 0 && (LocalAllianceMask & (1LL << LocalTeamId)) == 0)
+				{
+					if (UGameInstance* GI = World->GetGameInstance())
+					{
+						if (UPlayerTeamSubsystem* TeamSubsystem = GI->GetSubsystem<UPlayerTeamSubsystem>())
+						{
+							LocalAllianceMask = TeamSubsystem->GetAlliedTeamsMask(LocalTeamId);
+						}
+					}
+					LocalAllianceMask |= (1LL << LocalTeamId);
+				}
+			}
+		}
+	}
+
+	const bool bLocalHasAlliance = (LocalAllianceMask & (1LL << ProjectileFragment.TeamId)) != 0;
+	const bool bIsMyTeamInit = bLocalHasAlliance || LocalTeamId == 0; // spectator/neutral sees all
+	const bool bInitiallyHidden = CDO->bAffectedByFogOfWar && !bIsMyTeamInit;
+
 	FMassProjectileVisualFragment VisualFragment;
 	VisualFragment.ProjectileClass = ProjectileClass;
 	VisualFragment.VisualRelativeTransform = CDO->ISMComponent ? CDO->ISMComponent->GetRelativeTransform() : FTransform::Identity;
@@ -409,6 +441,10 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
     {
 		// Initial Transform: Relative Offset * Entity Transform
 		FTransform InitialTransform = VisualFragment.VisualRelativeTransform * ScaledTransform;
+		if (bInitiallyHidden)
+		{
+			InitialTransform.SetScale3D(FVector::ZeroVector); // Hide immediately to avoid first-frame blink
+		}
         VisualFragment.InstanceIndex = ISM->AddInstance(InitialTransform, true);
         VisualFragment.ISMComponent = ISM;
     }
@@ -431,6 +467,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 			if (NC)
 			{
 				NC->SetWorldTransform(InitialTransform);
+				NC->SetVisibility(!bInitiallyHidden); // Do NOT Deactivate; Movement toggles visibility later
 				VisualFragment.Niagara_A = NC;
 			}
 		}
@@ -441,6 +478,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 			if (NC)
 			{
 				NC->SetWorldTransform(InitialTransform);
+				NC->SetVisibility(!bInitiallyHidden);
 				VisualFragment.Niagara_B = NC;
 			}
 		}
@@ -450,23 +488,9 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
     FMassVisibilityFragment VisibilityFragment;
     VisibilityFragment.VisibilityOffset = CDO->VisibilityOffset;
     VisibilityFragment.bAffectedByFogOfWar = CDO->bAffectedByFogOfWar;
-
-	// Determine if it's my team to avoid flickering in FOW
-	int32 LocalTeamId = 0;
-	if (World)
-	{
-		if (APlayerController* PC = World->GetFirstPlayerController())
-		{
-			if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
-			{
-				LocalTeamId = CustomPC->SelectableTeamId;
-			}
-		}
-	}
-
-    VisibilityFragment.bIsMyTeam = (LocalTeamId == ProjectileFragment.TeamId || LocalTeamId == 0);
-    VisibilityFragment.bIsOnViewport = true; // Will be updated by processor
-	VisibilityFragment.bIsVisibleEnemy = false; // Will be updated by processor
+	VisibilityFragment.bIsMyTeam = bIsMyTeamInit; // Use alliance-aware value
+    VisibilityFragment.bIsOnViewport = true;      // Will be updated by processor
+	VisibilityFragment.bIsVisibleEnemy = false;   // Will be updated by processor
 
     FMassCombatStatsFragment StatsFragment;
     StatsFragment.TeamId = ProjectileFragment.TeamId;
