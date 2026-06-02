@@ -59,6 +59,8 @@
 #include "Animations/UnitAnimationProcessor.h"
 #include "GameStates/ResourceGameState.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "System/PlayerTeamSubsystem.h"
+#include "Engine/GameInstance.h"
 
 FOnMassArchetypeBuilding UMassActorBindingComponent::OnMassArchetypeBuilding;
 
@@ -943,8 +945,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 			}
 			if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
 			{
-				// Determine if it's my team to avoid flickering in FOW
-				int32 LocalTeamId = -1;
+				int32 LocalTeamId = 0;
+				int64 LocalAllianceMask = 0;
 				if (UWorld* World = EffectArea->GetWorld())
 				{
 					if (APlayerController* PC = World->GetFirstPlayerController())
@@ -952,15 +954,35 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 						if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
 						{
 							LocalTeamId = CustomPC->SelectableTeamId;
+							LocalAllianceMask = CustomPC->AlliedTeamsMask;
+
+							// Ensure local team is in mask
+							if (LocalTeamId != 0 && (LocalAllianceMask & (1LL << LocalTeamId)) == 0)
+							{
+								if (UGameInstance* GI = World->GetGameInstance())
+								{
+									if (UPlayerTeamSubsystem* TeamSubsystem = GI->GetSubsystem<UPlayerTeamSubsystem>())
+									{
+										LocalAllianceMask = TeamSubsystem->GetAlliedTeamsMask(LocalTeamId);
+									}
+								}
+								LocalAllianceMask |= (1LL << LocalTeamId);
+							}
 						}
 					}
 				}
 
-				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == EffectArea->TeamId) || LocalTeamId == 0;
+				const bool bHasAlliance = (LocalAllianceMask & (1LL << EffectArea->TeamId)) != 0;
+				VisibilityFrag->bIsMyTeam = bHasAlliance || LocalTeamId == 0;
 				VisibilityFrag->bIsOnViewport = true;
-				VisibilityFrag->bIsVisibleEnemy = true;
+				VisibilityFrag->bIsVisibleEnemy = false; // Initialize as false to prevent FOW blink
 				VisibilityFrag->VisibilityOffset = EffectArea->VisibilityOffset;
 				VisibilityFrag->bAffectedByFogOfWar = EffectArea->bAffectedByFogOfWar;
+
+				// Initialize cached flags
+				VisibilityFrag->bLastIsMyTeam = VisibilityFrag->bIsMyTeam;
+				VisibilityFrag->bLastIsOnViewport = VisibilityFrag->bIsOnViewport;
+				VisibilityFrag->bLastIsVisibleEnemy = VisibilityFrag->bIsVisibleEnemy;
 			}
 
 			if (EffectArea->bUseEffectAreaImpactProcessor)
@@ -1313,8 +1335,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 		if (FMassVisibilityFragment* VisibilityFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(EntityHandle))
 		{
-			// Determine if it's my team to avoid flickering in FOW
-			int32 LocalTeamId = -1;
+			int32 LocalTeamId = 0;
+			int64 LocalAllianceMask = 0;
 			if (UWorld* World = OwnerActor->GetWorld())
 			{
 				if (APlayerController* PC = World->GetFirstPlayerController())
@@ -1322,6 +1344,20 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
 					{
 						LocalTeamId = CustomPC->SelectableTeamId;
+						LocalAllianceMask = CustomPC->AlliedTeamsMask;
+
+						// Ensure local team is in mask
+						if (LocalTeamId != 0 && (LocalAllianceMask & (1LL << LocalTeamId)) == 0)
+						{
+							if (UGameInstance* GI = World->GetGameInstance())
+							{
+								if (UPlayerTeamSubsystem* TeamSubsystem = GI->GetSubsystem<UPlayerTeamSubsystem>())
+								{
+									LocalAllianceMask = TeamSubsystem->GetAlliedTeamsMask(LocalTeamId);
+								}
+							}
+							LocalAllianceMask |= (1LL << LocalTeamId);
+						}
 					}
 				}
 			}
@@ -1336,26 +1372,27 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				OwnerTeamId = EffectArea->TeamId;
 			}
 
+			const bool bHasAlliance = (LocalAllianceMask & (1LL << OwnerTeamId)) != 0;
+			VisibilityFrag->bIsMyTeam = bHasAlliance || LocalTeamId == 0;
+			VisibilityFrag->bIsOnViewport = true;
+			VisibilityFrag->bIsVisibleEnemy = false;
+
 			if (APerformanceUnit* PerfUnit = Cast<APerformanceUnit>(UnitOwner))
 			{
-				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == OwnerTeamId) || LocalTeamId == 0;
-				VisibilityFrag->bIsOnViewport = true;
-				VisibilityFrag->bIsVisibleEnemy = false;
 				VisibilityFrag->VisibilityOffset = PerfUnit->VisibilityOffset;
-				VisibilityFrag->bLastIsMyTeam = VisibilityFrag->bIsMyTeam;
-				VisibilityFrag->bLastIsOnViewport = VisibilityFrag->bIsOnViewport;
-				VisibilityFrag->bLastIsVisibleEnemy = VisibilityFrag->bIsVisibleEnemy;
 				VisibilityFrag->bAffectedByFogOfWar = true;
 			}
 			else
 			{
 				// Buildings, EffectAreas and other units
-				VisibilityFrag->bIsMyTeam = (LocalTeamId != -1 && LocalTeamId == OwnerTeamId) || LocalTeamId == 0;
-				VisibilityFrag->bIsOnViewport = true;
-				VisibilityFrag->bIsVisibleEnemy = false;
 				VisibilityFrag->VisibilityOffset = 150.f; // Default for non-performance units
 				VisibilityFrag->bAffectedByFogOfWar = true;
 			}
+
+			// Initialize cached flags
+			VisibilityFrag->bLastIsMyTeam = VisibilityFrag->bIsMyTeam;
+			VisibilityFrag->bLastIsOnViewport = VisibilityFrag->bIsOnViewport;
+			VisibilityFrag->bLastIsVisibleEnemy = VisibilityFrag->bIsVisibleEnemy;
 		}
 
 	if(FMassAITargetFragment* TargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EntityHandle))
@@ -1454,10 +1491,42 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkEffectAreaToMassEntit
 			if (FMassVisibilityFragment* VisFrag = EM.GetFragmentDataPtr<FMassVisibilityFragment>(MassEntityHandle))
 			{
 				VisFrag->bIsOnViewport = true;
-				// On client, we want it to be visible immediately, so we treat it as "my team" or not affected by fog initially
-				VisFrag->bIsMyTeam = true; 
-				VisFrag->bIsVisibleEnemy = true;
+				
+				int32 LocalTeamId = 0;
+				int64 LocalAllianceMask = 0;
+				if (APlayerController* PC = World->GetFirstPlayerController())
+				{
+					if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+					{
+						LocalTeamId = CustomPC->SelectableTeamId;
+						LocalAllianceMask = CustomPC->AlliedTeamsMask;
+
+						if (LocalTeamId != 0 && (LocalAllianceMask & (1LL << LocalTeamId)) == 0)
+						{
+							if (UGameInstance* GI = World->GetGameInstance())
+							{
+								if (UPlayerTeamSubsystem* TeamSubsystem = GI->GetSubsystem<UPlayerTeamSubsystem>())
+								{
+									LocalAllianceMask = TeamSubsystem->GetAlliedTeamsMask(LocalTeamId);
+								}
+							}
+							LocalAllianceMask |= (1LL << LocalTeamId);
+						}
+					}
+				}
+
+				AEffectArea* EffectAreaActor = Cast<AEffectArea>(GetOwner());
+				int32 OwnerTeamId = EffectAreaActor ? EffectAreaActor->TeamId : 0;
+				const bool bHasAlliance = (LocalAllianceMask & (1LL << OwnerTeamId)) != 0;
+				
+				VisFrag->bIsMyTeam = bHasAlliance || LocalTeamId == 0; 
+				VisFrag->bIsVisibleEnemy = false;
 				VisFrag->LastVisibleTime = World->GetTimeSeconds();
+
+				// Initialize cached flags
+				VisFrag->bLastIsMyTeam = VisFrag->bIsMyTeam;
+				VisFrag->bLastIsOnViewport = VisFrag->bIsOnViewport;
+				VisFrag->bLastIsVisibleEnemy = VisFrag->bIsVisibleEnemy;
 			}
 		}
 		
