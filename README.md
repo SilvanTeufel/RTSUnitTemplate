@@ -1,6 +1,3 @@
-Mozilla Public License 2.0
-
-
 # Unreal Engine Plugin Source Files
 
 This repository contains the source files for the Unreal Engine plugin. If you are in need of the full plugin project, including example blueprints and levels, you're in the right place.
