@@ -885,7 +885,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 						FinalPos += AttributeOffset * ShootingUnitForward;
 					}
 					
-					return FinalPos + AdditionalOffset;
+					return FinalPos + GetActorRotation().RotateVector(AdditionalOffset);
 				}
 			}
 		}
@@ -922,7 +922,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 			}
 			
 			// If not attached to ISM (e.g. attached to StaticMeshComponent), just use standard component location
-			FVector MuzzleLocation = GetActorTransform().TransformPosition(GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation())) + AdditionalOffset;
+			FVector MuzzleLocation = GetActorTransform().TransformPosition(GetActorTransform().InverseTransformPosition(SpawnComp->GetComponentLocation())) + GetActorRotation().RotateVector(AdditionalOffset);
 
 			return MuzzleLocation;
 		}
@@ -1369,7 +1369,7 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 
             // Build the spawn transform
             FTransform SpawnXf;
-            FVector FinalSpawnPos = ActualSpawnOrigin + SpawnOffset;
+            FVector FinalSpawnPos = ActualSpawnOrigin + GetActorRotation().RotateVector(SpawnOffset);
             SpawnXf.SetLocation(FinalSpawnPos);
 
             FVector Dir         = (LocationToShoot - FinalSpawnPos).GetSafeNormal();
