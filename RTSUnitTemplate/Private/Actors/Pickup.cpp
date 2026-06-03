@@ -70,6 +70,7 @@ void APickup::Tick(float DeltaTime)
 			if(TeamId == UnitBase->TeamId) return;
 			
 			ImpactEvent();
+			OnPickupImpact.Broadcast(this, UnitBase);
 			switch (Type)
 			{
 		 	

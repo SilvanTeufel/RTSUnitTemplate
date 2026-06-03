@@ -11,6 +11,9 @@
 #include "GAS/GameplayAbilityBase.h"
 #include "Pickup.generated.h"
 
+class AUnitBase;
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnPickupImpact, APickup*, Pickup, AUnitBase*, Unit);
+
 UCLASS()
 class RTSUNITTEMPLATE_API APickup : public AActor
 {
@@ -79,6 +82,9 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void ImpactEvent();
+
+	UPROPERTY(BlueprintAssignable, Category = RTSUnitTemplate)
+	FOnPickupImpact OnPickupImpact;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 0;

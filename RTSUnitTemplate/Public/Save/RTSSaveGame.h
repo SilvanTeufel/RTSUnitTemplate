@@ -91,6 +91,9 @@ struct FUnitSaveData
     // Saved abilities states for this unit
     UPROPERTY()
     TArray<FAbilitySaveData> Abilities;
+
+    UPROPERTY()
+    TMap<FString, FString> SerializedModuleData;
 };
 
 USTRUCT(BlueprintType)

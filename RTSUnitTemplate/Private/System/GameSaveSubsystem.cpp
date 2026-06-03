@@ -164,6 +164,11 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
             }
         }
 
+        if (OnUnitSave.IsBound())
+        {
+            OnUnitSave.Broadcast(Unit, Data);
+        }
+
         Save->Units.Add(MoveTemp(Data));
     }
 
@@ -311,7 +316,7 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         }
     }
 
-    for (const FUnitSaveData& SavedUnit : SaveData->Units)
+    for (FUnitSaveData& SavedUnit : SaveData->Units)
     {
         AUnitBase* Unit = nullptr;
 
@@ -558,6 +563,11 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
                     }
                 }
             }
+        }
+
+        if (OnUnitLoad.IsBound())
+        {
+            OnUnitLoad.Broadcast(Unit, SavedUnit);
         }
 
         MatchedUnits.Add(Unit);

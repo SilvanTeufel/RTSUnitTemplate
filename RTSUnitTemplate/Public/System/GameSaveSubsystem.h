@@ -3,9 +3,12 @@
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Save/RTSSaveGame.h"
 #include "GameSaveSubsystem.generated.h"
 
 class URTSSaveGame;
+
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnUnitSaveLoad, AUnitBase*, FUnitSaveData&);
 
 /**
  * Subsystem zum Speichern und Laden von Spielzuständen inkl. Map-Wechsel.
@@ -16,6 +19,9 @@ class RTSUNITTEMPLATE_API UGameSaveSubsystem : public UGameInstanceSubsystem
     GENERATED_BODY()
 
 public:
+    FOnUnitSaveLoad OnUnitSave;
+    FOnUnitSaveLoad OnUnitLoad;
+
     UFUNCTION(BlueprintCallable, Category="Save")
     void SaveCurrentGame(const FString& SlotName);
 

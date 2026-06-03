@@ -31,6 +31,9 @@ struct FEffectAreaInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TSubclassOf<class UGameplayEffect> Effect3 = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float Amount = 0.f;
 };
 
 UCLASS()
