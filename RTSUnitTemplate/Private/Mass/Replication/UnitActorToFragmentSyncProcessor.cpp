@@ -128,6 +128,12 @@ void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, F
 
 	Stats.PauseDuration = Unit.PauseDuration;
 	Stats.AttackDuration = Unit.AttackDuration;
+
+	if (const AAbilityUnit* AbilityUnit = Cast<AAbilityUnit>(&Unit))
+	{
+		Stats.ContinuousAttackDuration = AbilityUnit->ContinuousAttackDuration;
+	}
+
 	Stats.bUseProjectile = Unit.UseProjectile;
 	Stats.CastTime = Unit.CastTime;
 	Stats.IsInitialized = Unit.IsInitialized;

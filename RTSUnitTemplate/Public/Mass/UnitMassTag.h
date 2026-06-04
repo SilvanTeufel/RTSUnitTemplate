@@ -36,6 +36,7 @@ struct FEffectAreaTag : public FMassTag
 
 // Position + movement are handled by built-in fragments like FMassMovementFragment, so no need to add here.
 // --- Kern-Zustnde ---
+USTRUCT() struct FMassStateContinuousAttackTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateIdleTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateChaseTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateAttackTag : public FMassTag { GENERATED_BODY() };
@@ -691,6 +692,9 @@ struct FMassCombatStatsFragment : public FMassFragment
     /** Angriffe pro Sekunde. Wird genutzt, um Cooldown/Pausendauer zu berechnen. */
     UPROPERTY(EditAnywhere, Category = "Stats")
     float AttackDuration = 0.7f;
+
+	UPROPERTY(EditAnywhere, Category = "Stats")
+	float ContinuousAttackDuration = 1.0f;
 
 	UPROPERTY(EditAnywhere, Category = "Stats")
 	float IsAttackedDuration = 0.5f;
@@ -1520,6 +1524,7 @@ namespace UnitTagBits
 	static constexpr uint32 Charging            = 1u << 3;
 	static constexpr uint32 IsAttacked          = 1u << 4;
 	static constexpr uint32 Idle                = 1u << 5; // Moved from 28, replaces unused Attack
+	static constexpr uint32 ContinuousAttack    = 1u << 6;
 	// Worker
 	static constexpr uint32 Build               = 1u << 7;
 	static constexpr uint32 ResourceExtraction  = 1u << 8;
@@ -1584,6 +1589,7 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	if (H(FMassUnitYawFollowTag::StaticStruct()))             Bits |= UnitTagBits::YawFollow;
 	if (H(FMassStateDetectTag::StaticStruct()))               Bits |= UnitTagBits::Detect;
 	if (H(FMassStateIdleTag::StaticStruct()))                 Bits |= UnitTagBits::Idle;
+	if (H(FMassStateContinuousAttackTag::StaticStruct()))     Bits |= UnitTagBits::ContinuousAttack;
 	return Bits;
 }
 
@@ -1622,6 +1628,7 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
 	SetTag(UnitTagBits::SoftAvoidance,       FMassSoftAvoidanceTag());
 	SetTag(UnitTagBits::RotateToMouse,       FMassRotateToMouseTag());
+	SetTag(UnitTagBits::ContinuousAttack,    FMassStateContinuousAttackTag());
 	SetTag(UnitTagBits::RunAnimation,        FRunAnimationTag());
 	SetTag(UnitTagBits::YawFollow,           FMassUnitYawFollowTag());
 	SetTag(UnitTagBits::Detect,              FMassStateDetectTag());

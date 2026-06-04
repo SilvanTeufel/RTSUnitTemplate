@@ -68,6 +68,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 								Resolution_1 = AnimFrag->Resolution_1;
 								Resolution_2 = AnimFrag->Resolution_2;
 								Sound = AnimFrag->Sound;
+								ContinuousPlayRate = AnimFrag->PlayRate;
 
 								/*
 								if (World && World->GetNetMode() == NM_Client)

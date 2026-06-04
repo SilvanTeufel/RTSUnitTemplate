@@ -185,6 +185,10 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 							// Ensure the tag and fragment for the processor are present
 							EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
+							if (bIsContinuousAbility)
+							{
+								EntityManager.Defer().AddTag<FMassStateContinuousAttackTag>(Entity);
+							}
 							if (EntityManager.GetFragmentDataPtr<FMassRotateToMouseFragment>(Entity) == nullptr)
 							{
 								EntityManager.Defer().AddFragment<FMassRotateToMouseFragment>(Entity);
@@ -326,6 +330,7 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 	
 							// Ensure the tag and fragment for the processor are removed
 							EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+							EntityManager.Defer().RemoveTag<FMassStateContinuousAttackTag>(Entity);
 							EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 
 							if (!bWasCancelled) AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, AnimTimeOnRotateFinished, UnitAnimOnRotateFinished);

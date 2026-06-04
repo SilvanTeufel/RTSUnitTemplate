@@ -23,6 +23,7 @@ void UUnitAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FUnitAnimationFragment>(EMassFragmentAccess::ReadWrite);
 
     EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
@@ -42,6 +43,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassUnitVisualFragment> VisualList = ChunkContext.GetFragmentView<FMassUnitVisualFragment>();
+        const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FUnitAnimationFragment> AnimList = ChunkContext.GetMutableFragmentView<FUnitAnimationFragment>();
 
         for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
@@ -53,6 +55,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             }
 
             FUnitAnimationFragment& AnimFrag = AnimList[i];
+            const FMassCombatStatsFragment& Stats = StatsList[i];
             
             if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
             {
@@ -111,6 +114,15 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
             // 2. Interpolate Current Values
             const float DeltaTime = Context.GetDeltaTimeSeconds();
+
+            if (DoesEntityHaveTag(EntityManager, ChunkContext.GetEntity(i), FMassStateContinuousAttackTag::StaticStruct()) && DoesEntityHaveTag(EntityManager, ChunkContext.GetEntity(i), FMassRotateToMouseTag::StaticStruct()))
+            {
+                AnimFrag.PlayRate = (Stats.ContinuousAttackDuration > 0.f) ? (1.0f / Stats.ContinuousAttackDuration) : 1.0f;
+            }
+            else
+            {
+                AnimFrag.PlayRate = 1.0f;
+            }
 
             AnimFrag.CurrentBlendPoint_1 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_1, AnimFrag.TargetBlendPoint_1, DeltaTime, AnimFrag.TransitionRate_1);
             AnimFrag.CurrentBlendPoint_2 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_2, AnimFrag.TargetBlendPoint_2, DeltaTime, AnimFrag.TransitionRate_2);

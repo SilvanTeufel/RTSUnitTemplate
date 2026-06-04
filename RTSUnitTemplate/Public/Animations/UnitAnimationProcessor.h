@@ -42,6 +42,9 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
 
     UPROPERTY(Transient)
     TEnumAsByte<UnitData::EState> LastProcessedState = UnitData::None;
+
+	UPROPERTY(Transient)
+	float PlayRate = 1.0f;
 };
 
 UCLASS()

@@ -267,7 +267,7 @@ void AExtendedControllerBase::UpdateMouseLocationWithThrottling(FVector NewLocat
 	}
 }
 
-void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd)
+void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd, bool bIsContinuous)
 {
 	UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem)
@@ -293,6 +293,11 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 					}
 
 					EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
+
+					if (bIsContinuous)
+					{
+						EntityManager.Defer().AddTag<FMassStateContinuousAttackTag>(Entity);
+					}
 					
 					FMassRotateToMouseFragment RTM;
 					EntityManager.Defer().PushCommand<FMassCommandAddFragmentInstances<FMassRotateToMouseFragment>>(Entity, RTM);
@@ -304,6 +309,7 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 						SpawnerUnit->ActiveRotationPlayerId = -1;
 					}
 					EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+					EntityManager.Defer().RemoveTag<FMassStateContinuousAttackTag>(Entity);
 					EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 				}
 			}
@@ -311,9 +317,9 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 	}
 }
 
-void AExtendedControllerBase::Server_BatchSetRotateToMouseTag_Implementation(const TArray<AUnitBase*>& Units, bool bAdd)
+void AExtendedControllerBase::Server_BatchSetRotateToMouseTag_Implementation(const TArray<AUnitBase*>& Units, bool bAdd, bool bIsContinuous)
 {
-	BatchSetRotateToMouseTagLocally(Units, bAdd);
+	BatchSetRotateToMouseTagLocally(Units, bAdd, bIsContinuous);
 }
 
 void AExtendedControllerBase::BatchSetRunAnimationTagLocally(const TArray<AUnitBase*>& Units, float Duration, bool bAdd)

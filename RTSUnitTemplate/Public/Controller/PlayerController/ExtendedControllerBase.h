@@ -461,10 +461,10 @@ public:
 
 	void ClearMassStateTagsLocally(FMassEntityHandle Entity, struct FMassEntityManager& EntityManager);
 
-	void BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd);
+	void BatchSetRotateToMouseTagLocally(const TArray<AUnitBase*>& Units, bool bAdd, bool bIsContinuous = false);
 
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
-	void Server_BatchSetRotateToMouseTag(const TArray<AUnitBase*>& Units, bool bAdd);
+	void Server_BatchSetRotateToMouseTag(const TArray<AUnitBase*>& Units, bool bAdd, bool bIsContinuous = false);
 
 	void BatchSetRunAnimationTagLocally(const TArray<AUnitBase*>& Units, float Duration, bool bAdd);
 

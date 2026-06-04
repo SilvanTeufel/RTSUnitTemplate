@@ -37,7 +37,7 @@ void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	EntityQuery.Initialize(EntityManager);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
-	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
@@ -109,17 +109,26 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
 		auto CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
-		auto AIStateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
+		auto AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
 		auto AITargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
-		
-			const FMassAIStateFragment* StateFragPtr = !AIStateList.IsEmpty() ? &AIStateList[i] : nullptr;
+			FMassAIStateFragment* StateFragPtr = !AIStateList.IsEmpty() ? &AIStateList[i] : nullptr;
+			const FMassCombatStatsFragment* CombatStatsFragPtr = &CombatStatsList[i];
 			FMassAITargetFragment* TargetFragPtr = !AITargetList.IsEmpty() ? &AITargetList[i] : nullptr;
 			
 			if (StateFragPtr)
 			{
+				if (DoesEntityHaveTag(EntityManager, ChunkContext.GetEntity(i), FMassStateContinuousAttackTag::StaticStruct()))
+				{
+					StateFragPtr->StateTimerClient += ChunkContext.GetDeltaTimeSeconds();
+				}
+				else
+				{
+					StateFragPtr->StateTimerClient = 0.f;
+				}
+
 				const float Age = World->GetTimeSeconds() - StateFragPtr->BirthTime;
 				if (bShowLogs)
 				{
@@ -136,7 +145,7 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			{
 				const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-				const TEnumAsByte<UnitData::EState> NewState = ComputeState(EntityManager, Entity);
+				const TEnumAsByte<UnitData::EState> NewState = ComputeState(EntityManager, Entity, StateFragPtr, CombatStatsFragPtr);
 
 				// Spezialfall Casting: Wenn Timer abgelaufen, Signal senden
 				if (NewState == UnitData::Casting && SignalSubsystem && StateFragPtr)
@@ -220,7 +229,7 @@ void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FM
 	}
 }
 
-TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const
+TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity, const FMassAIStateFragment* StateFrag, const FMassCombatStatsFragment* CombatStatsFrag) const
 {
 	using namespace UnitData;
 
@@ -231,6 +240,15 @@ TEnumAsByte<UnitData::EState> UUnitClientTagSyncProcessor::ComputeState(const FM
 
 	// 1. Dead (Höchste Priorität)
 	if (HasTag(FMassStateDeadTag::StaticStruct())) return EState::Dead;
+
+	if (HasTag(FMassStateContinuousAttackTag::StaticStruct()))
+	{
+		if (StateFrag && CombatStatsFrag && StateFrag->StateTimerClient < CombatStatsFrag->ContinuousAttackDuration)
+		{
+			return EState::Aim;
+		}
+		return EState::ContinousAttack;
+	}
 
 	// 1.1 FMassRotateToMouseTag (ZweitHöchste Priorität)
 	if (HasTag(FMassRotateToMouseTag::StaticStruct())) return EState::Aim;

@@ -101,6 +101,9 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TEnumAsByte<UnitData::EState> StoredUnitState = UnitData::Idle;
+
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ContinuousAttackDuration = 1.0f;
 	///////////////////////////////////////////////////////////////////
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	TArray<TSubclassOf<class UGameplayAbilityBase>>StartAbilities;

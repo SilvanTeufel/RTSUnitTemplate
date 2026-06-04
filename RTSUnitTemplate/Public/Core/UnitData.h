@@ -37,6 +37,7 @@ namespace UnitData
 		Healing UMETA(DisplayName = "Healing"),
 		Pause UMETA(DisplayName = "Pause"),
 		Aim UMETA(DisplayName = "Aim"),
+		ContinousAttack UMETA(DisplayName = "ContinousAttack"),
 		GoToRepair UMETA(DisplayName = "GoToRepair"),
 		Repair UMETA(DisplayName = "Repair"),
 		Chase UMETA(DisplayName = "Chase"),
