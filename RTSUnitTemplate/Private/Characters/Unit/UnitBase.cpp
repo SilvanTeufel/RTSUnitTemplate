@@ -1122,9 +1122,19 @@ void AUnitBase::SpawnProjectileFromClass_Implementation(
             FVector ToCenterDir   = (AimCenter - ShootingUnitLocation).GetSafeNormal();
             FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
             
-            // For homing missiles, we typically ignore external spread to ensure they start at the same point
-            // but we might want internal spread if spawning multiple homing missiles
-            float ActualSpread = (HomingCount > 0 && ProjectileCount <= 1) ? 0.f : Spread;
+            float ActualSpread = Spread;
+            if (HomingCount <= 0)
+            {
+                if (Count == 0) ActualSpread = 0.f;
+                else if (Count == 1 || Count == 2) ActualSpread = Spread;
+                else if (Count == 3 || Count == 4) ActualSpread = Spread / 2.0f;
+                else if (Count == 5 || Count == 6) ActualSpread = Spread + (Spread / 2.0f);
+                else ActualSpread = Spread + (Count / 2) * (Spread / 2.0f);
+            }
+            else if (ProjectileCount <= 1)
+            {
+                ActualSpread = 0.f;
+            }
             FVector SpreadOffset  = PerpOffsetDir * ActualSpread;
 
             // final aim point for this shot

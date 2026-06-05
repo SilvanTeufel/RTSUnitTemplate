@@ -228,7 +228,9 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 						// Determine HalfHeight for Auto Z-Offset
 						float HalfHeight = 0.f;
 						const uint32 TgtID = (TagBits & UnitReplicationBits::Slot_ActionIsProjectile) ? ActionID : 0;
-						if (!bDisableAutoZOffset_Resolved)
+						
+						bool bEffectiveFollowTarget = bStyleFollowTarget || (StyleIdx == 0 && (ReplicationBits & UnitReplicationBits::AIS_bFollowTarget) != 0);
+						if (!bDisableAutoZOffset_Resolved && bEffectiveFollowTarget)
 						{
 							if (TgtID != 0)
 							{
@@ -292,7 +294,24 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 									FVector ToCenterDir = (FinalTargetCenter - BaseSpawnXf.GetLocation()).GetSafeNormal();
 									FVector PerpOffsetDir = FRotator(0.f, MultiAngle * 90.f, 0.f).RotateVector(ToCenterDir);
 									
-									FVector SpreadOffset = PerpOffsetDir * ProjectileSpread_Resolved;
+									float ActualSpread = ProjectileSpread_Resolved;
+									const AProjectile* ProjCDO_Spread = VisualManager->GetProjectileCDO(ProjectileClass_Resolved);
+									bool bIsHoming_Spread = (ProjCDO_Spread && ProjCDO_Spread->HomingMissleCount > 0);
+
+									if (!bIsHoming_Spread)
+									{
+										if (i == 0) ActualSpread = 0.f;
+										else if (i == 1 || i == 2) ActualSpread = ProjectileSpread_Resolved;
+										else if (i == 3 || i == 4) ActualSpread = ProjectileSpread_Resolved / 2.0f;
+										else if (i == 5 || i == 6) ActualSpread = ProjectileSpread_Resolved + (ProjectileSpread_Resolved / 2.0f);
+										else ActualSpread = ProjectileSpread_Resolved + (i / 2) * (ProjectileSpread_Resolved / 2.0f);
+									}
+									else if (ProjectileCount_Resolved <= 1)
+									{
+										ActualSpread = 0.f;
+									}
+									
+									FVector SpreadOffset = PerpOffsetDir * ActualSpread;
 									FVector IndividualTargetLoc = FinalTargetCenter + SpreadOffset;
 
 									FTransform IndividualSpawnXf = IndividualSpawnXf_Base;

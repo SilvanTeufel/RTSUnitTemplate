@@ -1311,6 +1311,9 @@ struct FMassProjectileFragment : public FMassFragment
 	bool bHasHitTarget = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float TotalDistance = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector FlightDirection = FVector::ZeroVector;
 
     FMassEntityHandle HitEntities[16];

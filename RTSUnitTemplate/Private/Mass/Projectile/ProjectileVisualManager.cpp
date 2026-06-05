@@ -257,7 +257,9 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	}
 
 	FVector AdjustedTargetLocation = TargetLocation;
-	if (ResolvedTargetEntity.IsValid())
+	// Nur anpassen, wenn wir wirklich ein Homing-Projektil haben oder 
+	// wenn wir explizit auf eine Entität schießen ohne Positionsvorgabe.
+	if (ResolvedTargetEntity.IsValid() && bFollowTarget)
 	{
 		if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(ResolvedTargetEntity))
 		{
@@ -312,6 +314,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
     {
         ProjectileFragment.FlightDirection = Transform.GetRotation().GetForwardVector();
     }
+    ProjectileFragment.TotalDistance = (AdjustedTargetLocation - Transform.GetLocation()).Size();
 
 
 	ProjectileFragment.RotationOffset = CDO->RotationOffset;
@@ -364,17 +367,14 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		// Trace far ahead (beyond max life time distance)
 		FVector TraceEnd = TraceStart + ProjectileFragment.FlightDirection * (ProjectileFragment.Speed * 10.f * ProjectileFragment.MaxLifeTime * 1.5f);
 
-		bool bIsArc = ProjectileFragment.ArcHeight > 0.f;
+		bool bIsArc = ProjectileFragment.ArcHeight > 0.f || ProjectileFragment.ArcHeightDistanceFactor > 0.f;
 		if (bIsArc)
 		{
-			// Gesamtdistanz zum Ziel
-			float TotalDistance = (AdjustedTargetLocation - Transform.GetLocation()).Size();
-
 			// Effektive Bogenhöhe berechnen
-			float EffectiveArcHeight = ProjectileFragment.ArcHeight + (TotalDistance * ProjectileFragment.ArcHeightDistanceFactor);
+			float EffectiveArcHeight = ProjectileFragment.ArcHeight + (ProjectileFragment.TotalDistance * ProjectileFragment.ArcHeightDistanceFactor);
 
 			// Mittelpunkt zwischen Start und Ziel finden
-			FVector MidPoint = Transform.GetLocation() + (ProjectileFragment.FlightDirection * (TotalDistance * 0.5f));
+			FVector MidPoint = Transform.GetLocation() + (ProjectileFragment.FlightDirection * (ProjectileFragment.TotalDistance * 0.5f));
 
 			// Trace am Scheitelpunkt starten und zum Ziel führen
 			TraceStart = MidPoint + FVector(0, 0, EffectiveArcHeight);

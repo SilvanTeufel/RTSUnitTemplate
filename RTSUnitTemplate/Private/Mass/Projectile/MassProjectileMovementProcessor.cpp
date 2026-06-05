@@ -130,7 +130,8 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 			
 			if (Projectile.LifeTime < DeltaTime && EntityManager.GetWorld())
 			{
-				if (EntityManager.IsEntityActive(Projectile.TargetEntity))
+				// NUR anpassen, wenn das Projektil dem Ziel wirklich folgen soll!
+				if (Projectile.bFollowTarget && Projectile.TargetEntity.IsValid() && EntityManager.IsEntityActive(Projectile.TargetEntity))
 				{
 					if (const FMassAgentCharacteristicsFragment* TargetChar = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Projectile.TargetEntity))
 					{
@@ -142,7 +143,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 						Projectile.FlightDirection = (Projectile.TargetLocation - Transform.GetLocation()).GetSafeNormal();
 					}
 				}
-
 			}
 
 
@@ -262,14 +262,15 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 				{
 					// Arc Movement logic
 					Projectile.ArcTravelTime += DeltaTime;
-					float TotalDistance = FVector::Dist(Projectile.ArcStartLocation, Projectile.TargetLocation); // Use current target for arc distance calc
+					float TotalDistance = Projectile.TotalDistance > 0.f ? Projectile.TotalDistance : FVector::Dist(Projectile.ArcStartLocation, Projectile.TargetLocation); 
 					if (TotalDistance > 0.f)
 					{
                         const float EffectiveArcHeight = Projectile.ArcHeight + (TotalDistance * Projectile.ArcHeightDistanceFactor);
 						float CurrentDist = (Projectile.Speed * 10.f) * Projectile.ArcTravelTime;
 						float Alpha = CurrentDist / TotalDistance;
                         
-                        if (Alpha >= 1.0f && Projectile.bContinueAfterTarget)
+                        bool bIsArc = (Projectile.ArcHeight > 0.f || Projectile.ArcHeightDistanceFactor > 0.f);
+                        if (Alpha >= 1.0f && Projectile.bContinueAfterTarget && !bIsArc)
                         {
                             // Transition to Linear flight
                             Projectile.FlightDirection = (Projectile.TargetLocation - Projectile.ArcStartLocation).GetSafeNormal();
@@ -283,6 +284,16 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
                             
                             // Extrapolate linearly past target
                             NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
+                        }
+                        else if (Alpha >= 1.0f)
+                        {
+                            Alpha = 1.0f;
+                            NewLocation = Projectile.TargetLocation;
+
+                            if (bIsArc || !Projectile.bContinueAfterTarget)
+                            {
+                                Projectile.LifeTime = Projectile.MaxLifeTime;
+                            }
                         }
                         else
                         {
