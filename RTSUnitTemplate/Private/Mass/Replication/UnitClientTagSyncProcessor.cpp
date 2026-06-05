@@ -68,7 +68,7 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// Client-side cleanup for the Initial Kick tag
 	if (World->GetNetMode() == NM_Client)
 	{
-		InitialKickCleanupQuery.ForEachEntityChunk(EntityManager, Context, [](FMassExecutionContext& KickCtx)
+		InitialKickCleanupQuery.ForEachEntityChunk(Context, [](FMassExecutionContext& KickCtx)
 		{
 			const int32 Num = KickCtx.GetNumEntities();
 			for (int32 i = 0; i < Num; ++i)
@@ -90,7 +90,7 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		{
 			if (GS->MatchStartTime > 0 && GS->GetServerWorldTimeSeconds() >= GS->MatchStartTime)
 			{
-				LoadingTagCleanupQuery.ForEachEntityChunk(EntityManager, Context, [](FMassExecutionContext& LoadingCtx)
+				LoadingTagCleanupQuery.ForEachEntityChunk(Context, [](FMassExecutionContext& LoadingCtx)
 				{
 					const int32 Num = LoadingCtx.GetNumEntities();
 					for (int32 i = 0; i < Num; ++i)
@@ -105,7 +105,7 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 	UMassSignalSubsystem* SignalSubsystem = World->GetSubsystem<UMassSignalSubsystem>();
 
-	EntityQuery.ForEachEntityChunk(EntityManager, Context, [this, &EntityManager, SignalSubsystem, &Context, World](FMassExecutionContext& ChunkContext)
+	EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, SignalSubsystem, &Context, World](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		auto ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
