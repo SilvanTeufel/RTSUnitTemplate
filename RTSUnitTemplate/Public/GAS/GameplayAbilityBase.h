@@ -203,4 +203,5 @@ public:
 	 
 private:
 	FText CreateTooltipText() const;
+	float ActivationStartTime = 0.f;
 };

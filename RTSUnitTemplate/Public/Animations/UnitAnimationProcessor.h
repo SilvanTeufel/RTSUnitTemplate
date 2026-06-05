@@ -45,6 +45,9 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
 
 	UPROPERTY(Transient)
 	float PlayRate = 1.0f;
+
+	UPROPERTY(Transient)
+	float AnimationPosition = 0.0f;
 };
 
 UCLASS()

@@ -115,13 +115,52 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             // 2. Interpolate Current Values
             const float DeltaTime = Context.GetDeltaTimeSeconds();
 
-            if (DoesEntityHaveTag(EntityManager, ChunkContext.GetEntity(i), FMassStateContinuousAttackTag::StaticStruct()) && DoesEntityHaveTag(EntityManager, ChunkContext.GetEntity(i), FMassRotateToMouseTag::StaticStruct()))
+            if (DoesEntityHaveTag(EntityManager, ChunkContext.GetEntity(i), FMassStateContinuousAttackTag::StaticStruct()))
             {
-                AnimFrag.PlayRate = (Stats.ContinuousAttackDuration > 0.f) ? (1.0f / Stats.ContinuousAttackDuration) : 1.0f;
+                const FMassAIStateFragment& StateFrag = StateList[i];
+                float Duration = Stats.ContinuousAttackDuration;
+                if (Duration > 0.f)
+                {
+                    float SpeedMultiplier = 1.0f;
+                    float StartDelayMultiplier = 1.0f;
+                    float CycleRatio = 0.8f;
+
+                    if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
+                    {
+                        if (UUnitBaseAnimInstance* AnimInst = Cast<UUnitBaseAnimInstance>(UnitBase->GetMesh()->GetAnimInstance()))
+                        {
+                            SpeedMultiplier = AnimInst->ContinuousAttackSpeedMultiplier;
+                            StartDelayMultiplier = AnimInst->ContinuousAttackStartDelayMultiplier;
+                            CycleRatio = AnimInst->ContinuousAttackCycleRatio;
+                        }
+                    }
+
+                    AnimFrag.PlayRate = (1.0f / (Duration * CycleRatio)) * SpeedMultiplier;
+                    
+                    float StartDelay = Duration * StartDelayMultiplier;
+
+                    if (StateFrag.StateTimerClient < StartDelay)
+                    {
+                        AnimFrag.AnimationPosition = 0.f;
+                    }
+                    else
+                    {
+                        float CycleTime = FMath::Fmod(StateFrag.StateTimerClient - StartDelay, Duration);
+                        if (CycleTime < Duration * CycleRatio)
+                        {
+                            AnimFrag.AnimationPosition = FMath::Clamp(CycleTime / (Duration * CycleRatio), 0.f, 1.f);
+                        }
+                        else
+                        {
+                            AnimFrag.AnimationPosition = 1.f;
+                        }
+                    }
+                }
             }
             else
             {
                 AnimFrag.PlayRate = 1.0f;
+                AnimFrag.AnimationPosition = 0.f;
             }
 
             AnimFrag.CurrentBlendPoint_1 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_1, AnimFrag.TargetBlendPoint_1, DeltaTime, AnimFrag.TransitionRate_1);

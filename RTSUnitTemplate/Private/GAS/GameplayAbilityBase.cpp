@@ -154,6 +154,11 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		GExecutedAbilityClasses.Add(ThisClass);
 	}
 
+	if (UWorld* World = GetWorld())
+	{
+		ActivationStartTime = World->GetTimeSeconds();
+	}
+
 
 	if (bRotateUnitsToMouse)
 	{
@@ -681,6 +686,17 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 		return;
 
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
+
+	if (bIsContinuousAbility && ShootingUnit)
+	{
+		if (const AAbilityUnit* AbilityUnit = Cast<AAbilityUnit>(ShootingUnit))
+		{
+			if (GetWorld()->GetTimeSeconds() - ActivationStartTime < AbilityUnit->ContinuousAttackDuration)
+			{
+				return;
+			}
+		}
+	}
 
 	for(int Count = 0; Count < ProjectileCount; Count++){
 		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);

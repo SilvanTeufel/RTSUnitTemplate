@@ -30,7 +30,7 @@ private:
 	FMassEntityQuery InitialKickCleanupQuery;
 	FMassEntityQuery LoadingTagCleanupQuery;
 
-	TEnumAsByte<UnitData::EState> ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity) const;
+	TEnumAsByte<UnitData::EState> ComputeState(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity, const struct FMassAIStateFragment* StateFrag, const struct FMassCombatStatsFragment* CombatStatsFrag, class AUnitBase* UnitBase) const;
 
 	// Apply to owning actor if it's an AbilityUnit
 	void ApplyStateToActor(AAbilityUnit* AbilityUnit, TEnumAsByte<UnitData::EState> NewState) const;
