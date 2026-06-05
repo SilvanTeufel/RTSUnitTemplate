@@ -342,7 +342,7 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 							EntityManager.Defer().RemoveTag<FMassStateContinuousAttackTag>(Entity);
 							EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 
-							if (!bWasCancelled) AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, AnimTimeOnRotateFinished, UnitAnimOnRotateFinished);
+							if (!bWasCancelled && !bIsContinuousAbility) AExtendedControllerBase::ApplyRunAnimationTag(EntityManager, Entity, AnimTimeOnRotateFinished, UnitAnimOnRotateFinished);
 
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{

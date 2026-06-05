@@ -344,6 +344,10 @@ void AExtendedControllerBase::BatchSetRunAnimationTagLocally(const TArray<AUnitB
 			{
 				if (bAdd)
 				{
+					if (DoesEntityHaveTag(EntityManager, Entity, FMassStateContinuousAttackTag::StaticStruct()))
+					{
+						continue;
+					}
 					ApplyRunAnimationTag(EntityManager, Entity, Duration, UnitData::Attack);
 				}
 				else
