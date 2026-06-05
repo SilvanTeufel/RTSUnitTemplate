@@ -46,7 +46,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 		TConstArrayView<FMassProjectileFragment> ProjectileList = ChunkContext.GetFragmentView<FMassProjectileFragment>();
 		for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
 		{
-			if (!ProjectileList[i].bIsPredicted && ProjectileList[i].LifeTime < 0.2f)
+			if (!ProjectileList[i].bIsPredicted && ProjectileList[i].LifeTime < 0.05f)
 			{
 				ReplicatedProjectiles.Add(ProjectileList[i].ShooterEntity, ChunkContext.GetEntity(i));
 			}
@@ -71,7 +71,7 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 			// DEDUPLIZIERUNG: Wenn dies ein vorhergesagtes Projektil ist, 
 			// prüfen wir, ob ein repliziertes "Original" existiert (Cross-Chunk).
-			if (Projectile.bIsPredicted && Projectile.LifeTime < 0.2f)
+			if (Projectile.bIsPredicted && Projectile.LifeTime < 0.05f)
 			{
 				if (FMassEntityHandle* OriginalHandle = ReplicatedProjectiles.Find(Projectile.ShooterEntity))
 				{
@@ -122,37 +122,6 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 			Projectile.LifeTime += DeltaTime;
 
-			if (Projectile.LifeTime >= Projectile.MaxLifeTime)
-			{
-
-				// Destroy projectile entity
-				Context.Defer().DestroyEntity(Context.GetEntity(i));
-
-				// Cleanup visuals
-				if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
-				{
-					// Set Scale to 0 AND move far away to prevent ANY visual artifacts (including shadows)
-					FTransform HiddenTransform(FRotator::ZeroRotator, FVector(0.f, 0.f, -1000000.f), FVector::ZeroVector);
-					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, HiddenTransform, true, true, true);
-					Visual.InstanceIndex = INDEX_NONE;
-				}
-
-				if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())
-				{
-					NC_A->Deactivate();
-					NC_A->SetVisibility(false);
-					NC_A->DestroyComponent();
-				}
-
-				if (UNiagaraComponent* NC_B = Visual.Niagara_B.Get())
-				{
-					NC_B->Deactivate();
-					NC_B->SetVisibility(false);
-					NC_B->DestroyComponent();
-				}
-
-				continue;
-			}
 
 			if (Projectile.bIsHoming)
 			{
@@ -487,6 +456,35 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 				}
 			}
 			Transform.SetLocation(NewLocation);
+
+			if (Projectile.LifeTime >= Projectile.MaxLifeTime)
+			{
+				// Destroy projectile entity
+				Context.Defer().DestroyEntity(Context.GetEntity(i));
+
+				// Cleanup visuals
+				if (Visual.ISMComponent.IsValid() && Visual.InstanceIndex != INDEX_NONE)
+				{
+					// Set Scale to 0 AND move far away to prevent ANY visual artifacts (including shadows)
+					FTransform HiddenTransform(FRotator::ZeroRotator, FVector(0.f, 0.f, -1000000.f), FVector::ZeroVector);
+					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, HiddenTransform, true, true, true);
+					Visual.InstanceIndex = INDEX_NONE;
+				}
+
+				if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())
+				{
+					NC_A->Deactivate();
+					NC_A->SetVisibility(false);
+					NC_A->DestroyComponent();
+				}
+
+				if (UNiagaraComponent* NC_B = Visual.Niagara_B.Get())
+				{
+					NC_B->Deactivate();
+					NC_B->SetVisibility(false);
+					NC_B->DestroyComponent();
+				}
+			}
 
 			// Update Niagara
 			if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())

@@ -14,6 +14,7 @@
 #include "UObject/UObjectIterator.h"
 #include "LandscapeProxy.h"
 #include "Landscape.h"
+#include "DrawDebugHelpers.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 
 void UProjectileVisualManager::Initialize(FSubsystemCollectionBase& Collection)
@@ -363,6 +364,23 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		// Trace far ahead (beyond max life time distance)
 		FVector TraceEnd = TraceStart + ProjectileFragment.FlightDirection * (ProjectileFragment.Speed * 10.f * ProjectileFragment.MaxLifeTime * 1.5f);
 
+		bool bIsArc = ProjectileFragment.ArcHeight > 0.f;
+		if (bIsArc)
+		{
+			// Gesamtdistanz zum Ziel
+			float TotalDistance = (AdjustedTargetLocation - Transform.GetLocation()).Size();
+
+			// Effektive Bogenhöhe berechnen
+			float EffectiveArcHeight = ProjectileFragment.ArcHeight + (TotalDistance * ProjectileFragment.ArcHeightDistanceFactor);
+
+			// Mittelpunkt zwischen Start und Ziel finden
+			FVector MidPoint = Transform.GetLocation() + (ProjectileFragment.FlightDirection * (TotalDistance * 0.5f));
+
+			// Trace am Scheitelpunkt starten und zum Ziel führen
+			TraceStart = MidPoint + FVector(0, 0, EffectiveArcHeight);
+			TraceEnd = AdjustedTargetLocation;
+		}
+		
 		if (GetWorld()->LineTraceMultiByChannel(HitResults, TraceStart, TraceEnd, ECC_WorldStatic, Params))
 		{
 			for (const FHitResult& Hit : HitResults)
@@ -376,11 +394,11 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 			}
 		}
 
-		if (!ProjectileFragment.bHasLandscapeImpact && (ProjectileFragment.ArcHeight > 0.f || ProjectileFragment.ArcHeightDistanceFactor > 0.f))
+		if (!ProjectileFragment.bHasLandscapeImpact && bIsArc)
 		{
-			// Fallback for arc projectiles: use TargetLocation as it's likely the intended hit point
+			// Fallback for arc projectiles: use AdjustedTargetLocation as it's likely the intended hit point
 			ProjectileFragment.bHasLandscapeImpact = true;
-			ProjectileFragment.LandscapeImpactLocation = TargetLocation;
+			ProjectileFragment.LandscapeImpactLocation = AdjustedTargetLocation;
 		}
 	}
 
