@@ -192,6 +192,10 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 							EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
 							if (bIsContinuousAbility)
 							{
+								if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+								{
+									StateFrag->StateTimerClient = 0.f;
+								}
 								EntityManager.Defer().AddTag<FMassStateContinuousAttackTag>(Entity);
 							}
 							if (EntityManager.GetFragmentDataPtr<FMassRotateToMouseFragment>(Entity) == nullptr)

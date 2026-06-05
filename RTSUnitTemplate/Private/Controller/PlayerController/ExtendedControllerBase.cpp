@@ -296,6 +296,10 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 
 					if (bIsContinuous)
 					{
+						if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+						{
+							StateFrag->StateTimerClient = 0.f;
+						}
 						EntityManager.Defer().AddTag<FMassStateContinuousAttackTag>(Entity);
 					}
 					

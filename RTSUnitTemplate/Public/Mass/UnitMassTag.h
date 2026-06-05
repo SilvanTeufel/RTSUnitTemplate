@@ -1628,6 +1628,16 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 	SetTag(UnitTagBits::StopXYMovement,      FMassStateStopXYMovementTag());
 	SetTag(UnitTagBits::SoftAvoidance,       FMassSoftAvoidanceTag());
 	SetTag(UnitTagBits::RotateToMouse,       FMassRotateToMouseTag());
+	
+	const bool bShouldHaveContinuousAttack = (Bits & UnitTagBits::ContinuousAttack) != 0;
+	const bool bClientHasContinuousAttack = DoesEntityHaveTag(EntityManager, Entity, FMassStateContinuousAttackTag::StaticStruct());
+	if (bShouldHaveContinuousAttack && !bClientHasContinuousAttack)
+	{
+		if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+		{
+			StateFrag->StateTimerClient = 0.f;
+		}
+	}
 	SetTag(UnitTagBits::ContinuousAttack,    FMassStateContinuousAttackTag());
 	SetTag(UnitTagBits::RunAnimation,        FRunAnimationTag());
 	SetTag(UnitTagBits::YawFollow,           FMassUnitYawFollowTag());
