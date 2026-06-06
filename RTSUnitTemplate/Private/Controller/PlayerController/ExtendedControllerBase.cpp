@@ -864,7 +864,8 @@ TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclas
 		if (Unit && Unit->CanActivateAbilities && !Unit->IsWorker)
 		{
 			bool bUnitOnCooldown = false;
-			if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
+			AGASUnit* GASUnit = Cast<AGASUnit>(Unit);
+			if (GASUnit)
 			{
 				TArray<TSubclassOf<UGameplayAbilityBase>> UnitAbilityArray = GetAbilityArrayForUnit(Unit);
 				if (UnitAbilityArray.IsValidIndex(AbilityIndex))
@@ -877,7 +878,9 @@ TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclas
 			{
 				PotentialUnits.Add(Unit);
 
-				if (AbilityCDO->bStopMovementOnActivation && Unit->MassActorBindingComponent)
+				const bool bWillQueue = GASUnit && AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive();
+
+				if (!bWillQueue && AbilityCDO->bStopMovementOnActivation && Unit->MassActorBindingComponent)
 				{
 					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
 					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())

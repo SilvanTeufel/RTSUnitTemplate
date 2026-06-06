@@ -3,6 +3,7 @@
 #include "MassSignalSubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "MassEntityManager.h"
 #include "Async/Async.h"
 #include "MassActorSubsystem.h"
@@ -98,9 +99,24 @@ void UCastingFallBackProcessor::HandleCastingFallback(FName SignalName, TArray<F
         {
             if (FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity))
             {
-                if (AMassUnitBase* UnitBase = Cast<AMassUnitBase>(ActorFrag->GetMutable()))
+                if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorFrag->GetMutable()))
                 {
-                    UnitBase->SwitchEntityTag(FMassStateCastingTag::StaticStruct());
+                    // 1. Tag-Wechsel anstoßen (passiert deferred)
+                    if (AMassUnitBase* MassUnitBase = Cast<AMassUnitBase>(UnitBase))
+                    {
+                        MassUnitBase->SwitchEntityTag(FMassStateCastingTag::StaticStruct());
+                    }
+
+                    // 2. Daten SOFORT synchronisieren (damit sie im nächsten Frame bereit sind)
+                    if (FMassCombatStatsFragment* StatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+                    {
+                        StatsFrag->CastTime = UnitBase->CastTime;
+                    }
+                    
+                    if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+                    {
+                        StateFrag->StateTimer = 0.f;
+                    }
                 }
             }
         }

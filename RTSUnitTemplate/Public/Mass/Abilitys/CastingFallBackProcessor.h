@@ -28,7 +28,7 @@ protected:
     void HandleCastingFallback(FName SignalName, TArray<FMassEntityHandle>& Entities);
 
     UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-    float ExecutionInterval = 0.5f;
+    float ExecutionInterval = 0.1f;
 
 private:
     FMassEntityQuery EntityQuery;
