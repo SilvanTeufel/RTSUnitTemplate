@@ -6,7 +6,23 @@
 #include "MassProcessor.h"
 #include "MassEntityTypes.h"
 #include "Core/UnitData.h"
+#include "Engine/DataTable.h"
 #include "UnitAnimationProcessor.generated.h"
+
+USTRUCT(BlueprintType)
+struct FISMAnimationData : public FTableRowBase
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
+    TEnumAsByte<UnitData::EState> AnimState = UnitData::None;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
+    float StateCustomDataValue = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
+    float TransitionRate = 0.5f;
+};
 
 USTRUCT()
 struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
@@ -73,7 +89,7 @@ protected:
     int32 TransitionRateCustomDataIndex = 2;
 
     UPROPERTY(EditAnywhere, Category = "Mass|Visual")
-    bool bSetCustomDataValue = true;
+    class UDataTable* ISMAnimationDataTable = nullptr;
 
     FMassEntityQuery EntityQuery;
 };

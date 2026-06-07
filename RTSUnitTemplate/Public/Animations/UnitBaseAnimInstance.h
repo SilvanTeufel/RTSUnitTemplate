@@ -37,9 +37,6 @@ struct FUnitAnimData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	USoundBase* Sound = nullptr;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float StateCustomDataValue = 0.0f;
 };
 
 /**

@@ -51,11 +51,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
         {
             const FMassUnitVisualFragment& VisualFrag = VisualList[i];
-            if (!VisualFrag.bUseSkeletalMovement)
-            {
-                continue;
-            }
-
             FUnitAnimationFragment& AnimFrag = AnimList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
             
@@ -66,76 +61,71 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 // 1. Check for State Change and Update Targets
                 if (AnimFrag.LastProcessedState != CurrentState)
                 {
-                    /*
-                    UE_LOG(LogTemp, Log, TEXT("%s [AnimationProcessor] State Change for %s: %s -> %s"), 
-                        *NetModeStr,
-                        *UnitBase->GetName(), 
-                        *UEnum::GetValueAsString(AnimFrag.LastProcessedState.GetValue()), 
-                        *UEnum::GetValueAsString(CurrentState.GetValue()));
-                    */
-                    if (UUnitBaseAnimInstance* AnimInst = Cast<UUnitBaseAnimInstance>(UnitBase->GetMesh()->GetAnimInstance()))
+                    if (VisualFrag.bUseSkeletalMovement)
                     {
-                        if (AnimInst->AnimDataTable)
+                        if (UUnitBaseAnimInstance* AnimInst = Cast<UUnitBaseAnimInstance>(UnitBase->GetMesh()->GetAnimInstance()))
                         {
-                             bool bFound = false;
-                             for (auto It : AnimInst->AnimDataTable->GetRowMap())
-                             {
-                                 if (FUnitAnimData* RowData = reinterpret_cast<FUnitAnimData*>(It.Value))
+                            if (AnimInst->AnimDataTable)
+                            {
+                                 for (auto It : AnimInst->AnimDataTable->GetRowMap())
                                  {
-                                     if (RowData->AnimState == CurrentState)
+                                     if (FUnitAnimData* RowData = reinterpret_cast<FUnitAnimData*>(It.Value))
                                      {
-                                         AnimFrag.TargetBlendPoint_1 = RowData->BlendPoint_1;
-                                         AnimFrag.TargetBlendPoint_2 = RowData->BlendPoint_2;
-                                         AnimFrag.TransitionRate_1 = RowData->TransitionRate_1;
-                                         AnimFrag.TransitionRate_2 = RowData->TransitionRate_2;
-                                         AnimFrag.Resolution_1 = RowData->Resolution_1;
-                                         AnimFrag.Resolution_2 = RowData->Resolution_2;
-                                         AnimFrag.Sound = RowData->Sound;
-                                         AnimFrag.TargetStateCustomDataValue = RowData->StateCustomDataValue;
-                                         bFound = true;
-
-                                         // ISM Custom Data Update
-                                         if (bSetCustomDataValue)
+                                         if (RowData->AnimState == CurrentState)
                                          {
-                                             int32 InstanceIndex = INDEX_NONE;
-                                             UInstancedStaticMeshComponent* TargetISM = nullptr;
-
-                                             // 1. Attempt: Via VisualFragment
-                                             if (VisualFrag.VisualInstances.Num() > 0)
-                                             {
-                                                 InstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
-                                                 TargetISM = VisualFrag.VisualInstances[0].TargetISM.Get();
-                                             }
-
-                                             // 2. Attempt: Fallback to UnitBase
-                                             if (InstanceIndex == INDEX_NONE)
-                                             {
-                                                 if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
-                                                 {
-                                                     InstanceIndex = MassUnit->InstanceIndex;
-                                                     TargetISM = MassUnit->ISMComponent;
-                                                 }
-                                             }
-
-                                             if (TargetISM && InstanceIndex != INDEX_NONE)
-                                             {
-                                                 TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
-                                                 TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
-                                             }
+                                             AnimFrag.TargetBlendPoint_1 = RowData->BlendPoint_1;
+                                             AnimFrag.TargetBlendPoint_2 = RowData->BlendPoint_2;
+                                             AnimFrag.TransitionRate_1 = RowData->TransitionRate_1;
+                                             AnimFrag.TransitionRate_2 = RowData->TransitionRate_2;
+                                             AnimFrag.Resolution_1 = RowData->Resolution_1;
+                                             AnimFrag.Resolution_2 = RowData->Resolution_2;
+                                             AnimFrag.Sound = RowData->Sound;
+                                             break;
                                          }
-                                         break;
                                      }
                                  }
-                             }
-                             if (!bFound)
-                             {
-                                 //UE_LOG(LogTemp, Warning, TEXT("%s [AnimationProcessor] No Row found in DataTable for State %s (Unit: %s)"), 
-                                    // *NetModeStr, *UEnum::GetValueAsString(CurrentState.GetValue()), *UnitBase->GetName());
-                             }
+                            }
                         }
-                        else
+                    }
+                    else if (ISMAnimationDataTable)
+                    {
+                        for (auto It : ISMAnimationDataTable->GetRowMap())
                         {
-                           // UE_LOG(LogTemp, Warning, TEXT("%s [AnimationProcessor] AnimDataTable is NULL for %s"), *NetModeStr, *UnitBase->GetName());
+                            if (FISMAnimationData* RowData = reinterpret_cast<FISMAnimationData*>(It.Value))
+                            {
+                                if (RowData->AnimState == CurrentState)
+                                {
+                                    AnimFrag.TargetStateCustomDataValue = RowData->StateCustomDataValue;
+                                    AnimFrag.TransitionRate_1 = RowData->TransitionRate;
+
+                                    int32 InstanceIndex = INDEX_NONE;
+                                    UInstancedStaticMeshComponent* TargetISM = nullptr;
+
+                                    // 1. Attempt: Via VisualFragment
+                                    if (VisualFrag.VisualInstances.Num() > 0)
+                                    {
+                                        InstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
+                                        TargetISM = VisualFrag.VisualInstances[0].TargetISM.Get();
+                                    }
+
+                                    // 2. Attempt: Fallback to UnitBase
+                                    if (InstanceIndex == INDEX_NONE)
+                                    {
+                                        if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
+                                        {
+                                            InstanceIndex = MassUnit->InstanceIndex;
+                                            TargetISM = MassUnit->ISMComponent;
+                                        }
+                                    }
+
+                                    if (TargetISM && InstanceIndex != INDEX_NONE)
+                                    {
+                                        TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
+                                    }
+                                    break;
+                                }
+                            }
                         }
                     }
                     AnimFrag.LastProcessedState = CurrentState;
