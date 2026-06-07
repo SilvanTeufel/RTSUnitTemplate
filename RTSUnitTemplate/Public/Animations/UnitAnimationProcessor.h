@@ -91,5 +91,8 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Mass|Visual")
     int32 TransitionRateCustomDataIndex = 2;
 
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 StartTimeCustomDataIndex = 3;
+
     FMassEntityQuery EntityQuery;
 };

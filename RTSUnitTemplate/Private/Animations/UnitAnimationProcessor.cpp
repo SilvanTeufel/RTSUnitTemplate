@@ -37,7 +37,9 @@ void UUnitAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
 
 void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, &Context](FMassExecutionContext& ChunkContext)
+    const float CurrentWorldTime = Context.GetWorld()->GetTimeSeconds();
+
+    EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, &Context, CurrentWorldTime](FMassExecutionContext& ChunkContext)
     {
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
@@ -118,7 +120,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                     if (TargetISM && InstanceIndex != INDEX_NONE)
                                     {
                                         // Automatische Korrektur der CustomData-Größe, falls zu klein
-                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, TransitionRateCustomDataIndex) + 1;
+                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, FMath::Max(TransitionRateCustomDataIndex, StartTimeCustomDataIndex)) + 1;
                                         if (TargetISM->NumCustomDataFloats < RequiredFloats)
                                         {
                                             TargetISM->SetNumCustomDataFloats(RequiredFloats);
@@ -126,6 +128,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                         
                                         TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
                                         TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, StartTimeCustomDataIndex, CurrentWorldTime, true);
                                     }
                                     break;
                                 }
