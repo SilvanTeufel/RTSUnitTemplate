@@ -9,6 +9,8 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Animations/UnitBaseAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Characters/Unit/MassUnitBase.h"
 
 UUnitAnimationProcessor::UUnitAnimationProcessor()
 {
@@ -89,10 +91,38 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                          AnimFrag.Resolution_1 = RowData->Resolution_1;
                                          AnimFrag.Resolution_2 = RowData->Resolution_2;
                                          AnimFrag.Sound = RowData->Sound;
+                                         AnimFrag.TargetStateCustomDataValue = RowData->StateCustomDataValue;
                                          bFound = true;
 
-                                         //UE_LOG(LogTemp, Log, TEXT("%s [AnimationProcessor] Loaded Row for %s: BP1=%.2f, BP2=%.2f"), 
-                                            // *NetModeStr, *UnitBase->GetName(), AnimFrag.TargetBlendPoint_1, AnimFrag.TargetBlendPoint_2);
+                                         // ISM Custom Data Update
+                                         if (bSetCustomDataValue)
+                                         {
+                                             int32 InstanceIndex = INDEX_NONE;
+                                             UInstancedStaticMeshComponent* TargetISM = nullptr;
+
+                                             // 1. Attempt: Via VisualFragment
+                                             if (VisualFrag.VisualInstances.Num() > 0)
+                                             {
+                                                 InstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
+                                                 TargetISM = VisualFrag.VisualInstances[0].TargetISM.Get();
+                                             }
+
+                                             // 2. Attempt: Fallback to UnitBase
+                                             if (InstanceIndex == INDEX_NONE)
+                                             {
+                                                 if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
+                                                 {
+                                                     InstanceIndex = MassUnit->InstanceIndex;
+                                                     TargetISM = MassUnit->ISMComponent;
+                                                 }
+                                             }
+
+                                             if (TargetISM && InstanceIndex != INDEX_NONE)
+                                             {
+                                                 TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
+                                                 TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
+                                             }
+                                         }
                                          break;
                                      }
                                  }

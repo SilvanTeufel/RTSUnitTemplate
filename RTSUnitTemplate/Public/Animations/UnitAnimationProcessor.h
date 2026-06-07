@@ -48,6 +48,9 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
 
 	UPROPERTY(Transient)
 	float AnimationPosition = 0.0f;
+
+    UPROPERTY(Transient)
+    float TargetStateCustomDataValue = 0.0f;
 };
 
 UCLASS()
@@ -61,6 +64,16 @@ public:
 protected:
     virtual void ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) override;
     virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
+
+protected:
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 StateCustomDataIndex = 1;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 TransitionRateCustomDataIndex = 2;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    bool bSetCustomDataValue = true;
 
     FMassEntityQuery EntityQuery;
 };
