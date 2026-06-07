@@ -1443,6 +1443,14 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		}
 	}
 
+	if (FUnitAnimationFragment* AnimFrag = EntityManager.GetFragmentDataPtr<FUnitAnimationFragment>(EntityHandle))
+	{
+		if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(OwnerActor))
+		{
+			AnimFrag->ISMAnimationDataTable = MassUnit->ISMAnimationDataTable;
+		}
+	}
+
 	if (FMassBeaconFragment* BeaconFrag = EntityManager.GetFragmentDataPtr<FMassBeaconFragment>(EntityHandle))
 	{
 		if (ABuildingBase* Building = Cast<ABuildingBase>(OwnerActor))

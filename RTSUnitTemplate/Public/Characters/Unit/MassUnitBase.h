@@ -43,7 +43,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = ISM)
 	virtual FTransform GetMassActorTransform() const override;
-	// The Mass Actor Binding Component
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Visual")
+	class UDataTable* ISMAnimationDataTable = nullptr;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = ISM)
 	UMassActorBindingComponent* MassActorBindingComponent;
 

@@ -67,6 +67,9 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
 
     UPROPERTY(Transient)
     float TargetStateCustomDataValue = 0.0f;
+
+    UPROPERTY(Transient)
+    class UDataTable* ISMAnimationDataTable = nullptr;
 };
 
 UCLASS()
@@ -87,9 +90,6 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Mass|Visual")
     int32 TransitionRateCustomDataIndex = 2;
-
-    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
-    class UDataTable* ISMAnimationDataTable = nullptr;
 
     FMassEntityQuery EntityQuery;
 };

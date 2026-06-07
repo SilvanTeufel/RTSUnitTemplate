@@ -37,10 +37,7 @@ void UUnitAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
 
 void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UWorld* World = Context.GetWorld();
-    const FString NetModeStr = (World && World->GetNetMode() == NM_Client) ? TEXT("[Client]") : TEXT("[Server]");
-
-    EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, &Context, &NetModeStr](FMassExecutionContext& ChunkContext)
+    EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, &Context](FMassExecutionContext& ChunkContext)
     {
         const TArrayView<FMassActorFragment> ActorList = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
@@ -87,9 +84,9 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             }
                         }
                     }
-                    else if (ISMAnimationDataTable)
+                    else if (AnimFrag.ISMAnimationDataTable)
                     {
-                        for (auto It : ISMAnimationDataTable->GetRowMap())
+                        for (auto It : AnimFrag.ISMAnimationDataTable->GetRowMap())
                         {
                             if (FISMAnimationData* RowData = reinterpret_cast<FISMAnimationData*>(It.Value))
                             {
@@ -120,6 +117,13 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
                                     if (TargetISM && InstanceIndex != INDEX_NONE)
                                     {
+                                        // Automatische Korrektur der CustomData-Größe, falls zu klein
+                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, TransitionRateCustomDataIndex) + 1;
+                                        if (TargetISM->NumCustomDataFloats < RequiredFloats)
+                                        {
+                                            TargetISM->SetNumCustomDataFloats(RequiredFloats);
+                                        }
+                                        
                                         TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
                                         TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
                                     }
@@ -193,24 +197,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             if (FMath::Abs(AnimFrag.CurrentBlendPoint_2 - AnimFrag.TargetBlendPoint_2) <= AnimFrag.Resolution_2)
             {
                 AnimFrag.CurrentBlendPoint_2 = AnimFrag.TargetBlendPoint_2;
-            }
-
-            if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
-            {
-                if (UWorld* World = UnitBase->GetWorld())
-                {
-                    if (World->GetNetMode() == NM_Client)
-                    {
-                        // Log roughly every second if CBP changes (just for debugging)
-                        static float LogTimer = 0.f;
-                        LogTimer += Context.GetDeltaTimeSeconds();
-                        if (LogTimer > 1.0f)
-                        {
-                             // UE_LOG(LogTemp, Log, TEXT("[AnimationProcessor-Client] %s: CBP1=%.2f, Target1=%.2f"), *UnitBase->GetName(), AnimFrag.CurrentBlendPoint_1, AnimFrag.TargetBlendPoint_1);
-                             // LogTimer = 0.f;
-                        }
-                    }
-                }
             }
         }
     });
