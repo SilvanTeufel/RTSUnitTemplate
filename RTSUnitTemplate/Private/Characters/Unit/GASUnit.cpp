@@ -266,6 +266,28 @@ bool AGASUnit::IsAbilityOnCooldownByClass(TSubclassOf<UGameplayAbilityBase> Abil
 		return false;
 	}
 
+	// Try to find the spec for this ability
+	FGameplayAbilitySpec* Spec = AbilitySystemComponent->FindAbilitySpecFromClass(AbilityClass);
+	if (Spec)
+	{
+		const FGameplayAbilityActorInfo* ActorInfo = AbilitySystemComponent->AbilityActorInfo.Get();
+		if (ActorInfo)
+		{
+			// Check if there are instances of this ability
+			TArray<UGameplayAbility*> Instances = Spec->GetAbilityInstances();
+			if (Instances.Num() > 0)
+			{
+				// Use the instance for the cooldown check (especially important for instanced per actor abilities)
+				// CheckCooldown returns true if the ability can be activated (i.e., not on cooldown)
+				return !Instances[0]->CheckCooldown(Spec->Handle, ActorInfo);
+			}
+
+			// Fallback to calling CheckCooldown on the CDO, which is safe for ShootAbility as it uses ActorInfo
+			return !AbilityCDO->CheckCooldown(Spec->Handle, ActorInfo);
+		}
+	}
+
+	// Last resort: standard tag check if no spec or actor info is available
 	const FGameplayTagContainer* CooldownTags = AbilityCDO->GetCooldownTags();
 	if (CooldownTags && CooldownTags->Num() > 0)
 	{

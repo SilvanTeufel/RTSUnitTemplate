@@ -3316,13 +3316,7 @@ void ACustomControllerBase::Client_ApplyTeamAbilityKeyToggle_Implementation(int3
 void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability)
 {
 	// Ensure we only execute on the server
-	if (!HasAuthority())
-	{
-		return;
-	}
-
-	// Validate inputs
-	if (!Unit || !Ability)
+	if (!HasAuthority() || !Unit || !Ability)
 	{
 		Client_ReceiveCooldown(AbilityIndex, 0.f);
 		return;
@@ -3335,37 +3329,23 @@ void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Uni
 		return;
 	}
 
-	// Get cooldown GameplayEffect class from the ability
-	UGameplayEffect* CooldownGEInstance = Ability->GetCooldownGameplayEffect();
-	if (!CooldownGEInstance)
-	{
-		Client_ReceiveCooldown(AbilityIndex, 0.f);
-		return;
-	}
-
-	TSubclassOf<UGameplayEffect> CooldownGEClass = CooldownGEInstance->GetClass();
-	if (!CooldownGEClass)
-	{
-		Client_ReceiveCooldown(AbilityIndex, 0.f);
-		return;
-	}
-
-	FGameplayEffectQuery CooldownQuery;
-	CooldownQuery.EffectDefinition = CooldownGEClass;
-
-	TArray<FActiveGameplayEffectHandle> ActiveCooldownHandles = ASC->GetActiveEffects(CooldownQuery);
-
 	float RTime = 0.f;
-	if (ActiveCooldownHandles.Num() > 0)
+	float Duration = 0.f;
+
+	// Wir suchen die Spec für diese Ability
+	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(Ability->GetClass());
+	if (Spec)
 	{
-		// Assuming only one cooldown effect per ability, take the first handle
-		const FActiveGameplayEffectHandle ActiveHandle = ActiveCooldownHandles[0];
-		const FActiveGameplayEffect* ActiveEffect = ASC->GetActiveGameplayEffect(ActiveHandle);
-		if (ActiveEffect)
+		// Wir nutzen die instanziierte Ability, da diese Zugriff auf die aktuelle WeaponComponent hat
+		TArray<UGameplayAbility*> Instances = Spec->GetAbilityInstances();
+		if (Instances.Num() > 0)
 		{
-			UWorld* World = Unit->GetWorld();
-			const float CurrentTime = World ? World->GetTimeSeconds() : 0.f;
-			RTime = ActiveEffect->GetTimeRemaining(CurrentTime);
+			Instances[0]->GetCooldownTimeRemainingAndDuration(Spec->Handle, ASC->AbilityActorInfo.Get(), RTime, Duration);
+		}
+		else
+		{
+			// Fallback auf das Default-Objekt, falls keine Instanz aktiv ist
+			Ability->GetCooldownTimeRemainingAndDuration(Spec->Handle, ASC->AbilityActorInfo.Get(), RTime, Duration);
 		}
 	}
 

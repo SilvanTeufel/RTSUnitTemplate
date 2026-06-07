@@ -201,7 +201,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	static void Debug_DumpDisabledAbilityKeys();
 	 
+protected:
+	float ActivationStartTime = 0.f;
+
 private:
 	FText CreateTooltipText() const;
-	float ActivationStartTime = 0.f;
 };
