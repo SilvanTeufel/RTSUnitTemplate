@@ -75,6 +75,30 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
     float TargetStateCustomDataValue = 0.0f;
 
     UPROPERTY(Transient)
+    float PrevTargetStateCustomDataValue = 0.0f;
+
+    UPROPERTY(Transient)
+    float PrevStartTime = 0.0f;
+
+    UPROPERTY(Transient)
+    float PrevStartFrame = 0.0f;
+
+    UPROPERTY(Transient)
+    float PrevEndFrame = 0.0f;
+
+    UPROPERTY(Transient)
+    float CurrentStartTime = 0.0f;
+
+    UPROPERTY(Transient)
+    float CurrentStartFrame = 0.0f;
+
+    UPROPERTY(Transient)
+    float CurrentEndFrame = 0.0f;
+
+    UPROPERTY(Transient)
+    float BlendAlpha = 1.0f;
+
+    UPROPERTY(Transient)
     class UDataTable* ISMAnimationDataTable = nullptr;
 };
 
@@ -105,6 +129,21 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Mass|Visual")
     int32 EndFrameCustomDataIndex = 5;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 PrevStateCustomDataIndex = 6;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 PrevStartTimeCustomDataIndex = 7;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 PrevStartFrameCustomDataIndex = 8;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 PrevEndFrameCustomDataIndex = 9;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 BlendAlphaCustomDataIndex = 10;
 
     FMassEntityQuery EntityQuery;
 };

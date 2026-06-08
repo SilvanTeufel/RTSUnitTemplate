@@ -94,8 +94,18 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             {
                                 if (RowData->AnimState == CurrentState)
                                 {
+                                    AnimFrag.PrevTargetStateCustomDataValue = AnimFrag.TargetStateCustomDataValue;
+                                    AnimFrag.PrevStartTime = AnimFrag.CurrentStartTime;
+                                    AnimFrag.PrevStartFrame = AnimFrag.CurrentStartFrame;
+                                    AnimFrag.PrevEndFrame = AnimFrag.CurrentEndFrame;
+
                                     AnimFrag.TargetStateCustomDataValue = RowData->StateCustomDataValue;
                                     AnimFrag.TransitionRate_1 = RowData->TransitionRate;
+                                    AnimFrag.CurrentStartTime = CurrentWorldTime;
+                                    AnimFrag.CurrentStartFrame = RowData->StartFrame;
+                                    AnimFrag.CurrentEndFrame = RowData->EndFrame;
+
+                                    AnimFrag.BlendAlpha = 0.0f;
 
                                     int32 InstanceIndex = INDEX_NONE;
                                     UInstancedStaticMeshComponent* TargetISM = nullptr;
@@ -120,7 +130,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                     if (TargetISM && InstanceIndex != INDEX_NONE)
                                     {
                                         // Automatische Korrektur der CustomData-Größe, falls zu klein
-                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, FMath::Max(TransitionRateCustomDataIndex, FMath::Max(StartTimeCustomDataIndex, FMath::Max(StartFrameCustomDataIndex, EndFrameCustomDataIndex)))) + 1;
+                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, FMath::Max(TransitionRateCustomDataIndex, FMath::Max(StartTimeCustomDataIndex, FMath::Max(StartFrameCustomDataIndex, FMath::Max(EndFrameCustomDataIndex, FMath::Max(PrevStateCustomDataIndex, FMath::Max(PrevStartTimeCustomDataIndex, FMath::Max(PrevStartFrameCustomDataIndex, FMath::Max(PrevEndFrameCustomDataIndex, BlendAlphaCustomDataIndex))))))))) + 1;
                                         if (TargetISM->NumCustomDataFloats < RequiredFloats)
                                         {
                                             TargetISM->SetNumCustomDataFloats(RequiredFloats);
@@ -128,9 +138,16 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                         
                                         TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
                                         TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, StartTimeCustomDataIndex, CurrentWorldTime, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, StartFrameCustomDataIndex, RowData->StartFrame, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, EndFrameCustomDataIndex, RowData->EndFrame, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, StartTimeCustomDataIndex, AnimFrag.CurrentStartTime, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, StartFrameCustomDataIndex, AnimFrag.CurrentStartFrame, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, EndFrameCustomDataIndex, AnimFrag.CurrentEndFrame, true);
+                                        
+                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevStateCustomDataIndex, AnimFrag.PrevTargetStateCustomDataValue, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevStartTimeCustomDataIndex, AnimFrag.PrevStartTime, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevStartFrameCustomDataIndex, AnimFrag.PrevStartFrame, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevEndFrameCustomDataIndex, AnimFrag.PrevEndFrame, true);
+                                        
+                                        TargetISM->SetCustomDataValue(InstanceIndex, BlendAlphaCustomDataIndex, AnimFrag.BlendAlpha, true);
                                     }
                                     break;
                                 }
@@ -202,6 +219,34 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             if (FMath::Abs(AnimFrag.CurrentBlendPoint_2 - AnimFrag.TargetBlendPoint_2) <= AnimFrag.Resolution_2)
             {
                 AnimFrag.CurrentBlendPoint_2 = AnimFrag.TargetBlendPoint_2;
+            }
+
+            if (AnimFrag.BlendAlpha < 1.0f)
+            {
+                AnimFrag.BlendAlpha = FMath::Clamp(AnimFrag.BlendAlpha + (DeltaTime * AnimFrag.TransitionRate_1), 0.0f, 1.0f);
+
+                int32 InstanceIndex = INDEX_NONE;
+                UInstancedStaticMeshComponent* TargetISM = nullptr;
+
+                if (VisualFrag.VisualInstances.Num() > 0)
+                {
+                    InstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
+                    TargetISM = VisualFrag.VisualInstances[0].TargetISM.Get();
+                }
+
+                if (InstanceIndex == INDEX_NONE)
+                {
+                    if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(ActorList[i].GetMutable()))
+                    {
+                        InstanceIndex = MassUnit->InstanceIndex;
+                        TargetISM = MassUnit->ISMComponent;
+                    }
+                }
+
+                if (TargetISM && InstanceIndex != INDEX_NONE)
+                {
+                    TargetISM->SetCustomDataValue(InstanceIndex, BlendAlphaCustomDataIndex, AnimFrag.BlendAlpha, true);
+                }
             }
         }
     });
