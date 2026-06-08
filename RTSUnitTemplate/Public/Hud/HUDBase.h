@@ -135,6 +135,45 @@ struct FSelectionSettings
 	float RotatingSpeed = 120.0f;
 };
 
+UENUM(BlueprintType)
+enum ERectangleBorderType
+{
+	Line,
+	Dashed,
+	Dotted,
+	DashDotted
+};
+
+USTRUCT(BlueprintType)
+struct FSelectionRectangleSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	FLinearColor FillColor = FLinearColor(0, 1, 0, .15f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	FLinearColor BorderColor = FLinearColor(0, 1, 0, 1.0f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	float BorderThickness = 2.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	TEnumAsByte<ERectangleBorderType> BorderType = Line;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	float DashLength = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	float GapLength = 5.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	bool bDrawBorder = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	bool bDrawFill = true;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AHUDBase : public AHUD
 {
@@ -164,7 +203,16 @@ private:
 	void DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
 	float GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHealthBarSettings& Settings);
 
+protected:
+	void HandleSelectionRectangle();
+	void DrawDashedLine2D(const FVector2D& Start, const FVector2D& End, float DashLen, float GapLen, FLinearColor Color, float Thickness);
+	void DrawDashDottedLine2D(const FVector2D& Start, const FVector2D& End, float DashLen, float GapLen, FLinearColor Color, float Thickness);
+
 public:
+	
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Selection")
+	FSelectionRectangleSettings SelectionRectSettings;
+	
 	UFUNCTION(BlueprintCallable, Category = "RTS|HUD")
 	void RegisterUnit(class AUnitBase* Unit);
 

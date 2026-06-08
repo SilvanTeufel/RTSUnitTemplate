@@ -81,6 +81,80 @@ void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, fl
 	}
 }
 
+void AHUDBase::DrawDashedLine2D(const FVector2D& Start, const FVector2D& End, float DashLen, float GapLen, FLinearColor Color, float Thickness)
+{
+	if (!Canvas) return;
+
+	const FVector2D Dir = (End - Start);
+	const float TotalLen = Dir.Size();
+	if (TotalLen <= KINDA_SMALL_NUMBER) return;
+
+	const FVector2D StepDir = Dir / TotalLen;
+	float Traveled = 0.f;
+
+	while (Traveled < TotalLen)
+	{
+		const float ThisDash = FMath::Min(DashLen, TotalLen - Traveled);
+		const FVector2D SegStart = Start + StepDir * Traveled;
+		const FVector2D SegEnd = Start + StepDir * (Traveled + ThisDash);
+
+		FCanvasLineItem LineItem(SegStart, SegEnd);
+		LineItem.LineThickness = Thickness;
+		LineItem.SetColor(Color);
+		LineItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(LineItem);
+
+		Traveled += ThisDash + GapLen;
+	}
+}
+
+void AHUDBase::DrawDashDottedLine2D(const FVector2D& Start, const FVector2D& End, float DashLen, float GapLen, FLinearColor Color, float Thickness)
+{
+	if (!Canvas) return;
+
+	const FVector2D Dir = (End - Start);
+	const float TotalLen = Dir.Size();
+	if (TotalLen <= KINDA_SMALL_NUMBER) return;
+
+	const FVector2D StepDir = Dir / TotalLen;
+	float Traveled = 0.f;
+	const float DotLen = Thickness;
+
+	while (Traveled < TotalLen)
+	{
+		// Dash
+		float ThisDash = FMath::Min(DashLen, TotalLen - Traveled);
+		if (ThisDash > 0.f)
+		{
+			FCanvasLineItem LineItem(Start + StepDir * Traveled, Start + StepDir * (Traveled + ThisDash));
+			LineItem.LineThickness = Thickness;
+			LineItem.SetColor(Color);
+			LineItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(LineItem);
+			Traveled += ThisDash;
+		}
+
+		// Gap
+		Traveled += GapLen;
+		if (Traveled >= TotalLen) break;
+
+		// Dot
+		float ThisDot = FMath::Min(DotLen, TotalLen - Traveled);
+		if (ThisDot > 0.f)
+		{
+			FCanvasLineItem LineItem(Start + StepDir * Traveled, Start + StepDir * (Traveled + ThisDot));
+			LineItem.LineThickness = Thickness;
+			LineItem.SetColor(Color);
+			LineItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(LineItem);
+			Traveled += ThisDot;
+		}
+
+		// Gap
+		Traveled += GapLen;
+	}
+}
+
 void AHUDBase::AddClickIndicator(FVector Location, FColor Color, float LifeTime, float Radius)
 {
 	FClickIndicator NewIndicator;
@@ -527,6 +601,118 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 	}
 }
 
+void AHUDBase::HandleSelectionRectangle()
+{
+	if (!bSelectFriendly) return;
+
+	DeselectAllUnits();
+	SelectedUnits.Empty();
+	SelectedUnitsSet.Empty();
+	CurrentPoint = GetMousePos2D();
+
+	if (FMath::Abs(InitialPoint.X - CurrentPoint.X) >= 2)
+	{
+		// Zentrum und volle Größe berechnen
+		FVector2D Center = (InitialPoint + CurrentPoint) * 0.5f;
+		FVector2D FullSize = CurrentPoint - InitialPoint;
+
+		// Skaliertes Rechteck berechnen
+		FVector2D ScaledSize = FullSize * RectangleScaleSelectionFactor;
+		FVector2D InitialSelectionPoint = Center - (ScaledSize * 0.5f);
+		FVector2D CurrentSelectionPoint = Center + (ScaledSize * 0.5f);
+
+		// 1. Zeichnen des Rechtecks (Nur das Selektions-Rechteck behalten)
+		if (SelectionRectSettings.bDrawFill)
+		{
+			DrawRect(SelectionRectSettings.FillColor, InitialSelectionPoint.X, InitialSelectionPoint.Y,
+				CurrentSelectionPoint.X - InitialSelectionPoint.X,
+				CurrentSelectionPoint.Y - InitialSelectionPoint.Y);
+		}
+
+		if (SelectionRectSettings.bDrawBorder)
+		{
+			// Zeichne die 4 Linien des Rechtecks
+			const FVector2D TopLeft = InitialSelectionPoint;
+			const FVector2D TopRight(CurrentSelectionPoint.X, InitialSelectionPoint.Y);
+			const FVector2D BottomRight = CurrentSelectionPoint;
+			const FVector2D BottomLeft(InitialSelectionPoint.X, CurrentSelectionPoint.Y);
+
+			if (SelectionRectSettings.BorderType == Line)
+			{
+				DrawLine(TopLeft.X, TopLeft.Y, TopRight.X, TopRight.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawLine(TopRight.X, TopRight.Y, BottomRight.X, BottomRight.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawLine(BottomRight.X, BottomRight.Y, BottomLeft.X, BottomLeft.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				DrawLine(BottomLeft.X, BottomLeft.Y, TopLeft.X, TopLeft.Y, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+			}
+			else
+			{
+				float Dash = SelectionRectSettings.DashLength;
+				float Gap = SelectionRectSettings.GapLength;
+
+				if (SelectionRectSettings.BorderType == Dotted)
+				{
+					Dash = SelectionRectSettings.BorderThickness;
+					Gap = SelectionRectSettings.GapLength;
+
+					DrawDashedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				}
+				else if (SelectionRectSettings.BorderType == DashDotted)
+				{
+					DrawDashDottedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashDottedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashDottedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashDottedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				}
+				else // Dashed
+				{
+					DrawDashedLine2D(TopLeft, TopRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashedLine2D(TopRight, BottomRight, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashedLine2D(BottomRight, BottomLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+					DrawDashedLine2D(BottomLeft, TopLeft, Dash, Gap, SelectionRectSettings.BorderColor, SelectionRectSettings.BorderThickness);
+				}
+			}
+		}
+
+		// 2. Selektions-Logik
+		TArray<AUnitBase*> NewUnitBases;
+		GetActorsInSelectionRectangle<AUnitBase>(InitialSelectionPoint, CurrentSelectionPoint, NewUnitBases, false, false);
+
+		ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
+		const FVector2D SelectionRectMin(FMath::Min(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Min(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
+		const FVector2D SelectionRectMax(FMath::Max(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Max(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
+
+		for (AUnitBase* Unit : NewUnitBases) {
+			if (!Unit) continue;
+			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
+			if (Controller && Unit->CanBeSelected && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit)
+			{
+				FVector2D ScreenLocation;
+				if (Controller->ProjectWorldLocationToScreen(Unit->GetActorLocation(), ScreenLocation))
+				{
+					if (ScreenLocation.X >= SelectionRectMin.X && ScreenLocation.X <= SelectionRectMax.X &&
+						ScreenLocation.Y >= SelectionRectMin.Y && ScreenLocation.Y <= SelectionRectMax.Y)
+					{
+						if (Unit->GetOwner() == nullptr) Unit->SetOwner(Controller);
+						Unit->SetSelected();
+						SelectedUnits.Emplace(Unit);
+						SelectedUnitsSet.Add(Unit);
+						SelectUnitsFromSameSquad(Unit);
+					}
+				}
+			}
+		}
+
+		NewUnitBases.Empty();
+		if (Controller) Controller->AbilityArrayIndex = 0;
+	}
+
+	// Mass-Units/ISM Logik
+	SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
+}
+
 void AHUDBase::DrawHUD()
 {
 	Super::DrawHUD();
@@ -556,128 +742,7 @@ void AHUDBase::DrawHUD()
 	DrawSelectedBuildingWaypointLinks();
 	DrawSelectedUnitsMovementLines();
 
-	if (bSelectFriendly) {
-    
-       DeselectAllUnits();
-       SelectedUnits.Empty();
-       
-       CurrentPoint = GetMousePos2D();
-       
-       if (abs(InitialPoint.X - CurrentPoint.X) >= 2) {
-
-          // This is the visual rectangle the player sees.
-          DrawRect(FLinearColor(0, 0, 1, .15f),
-             InitialPoint.X,
-             InitialPoint.Y,
-             CurrentPoint.X - InitialPoint.X,
-             CurrentPoint.Y - InitialPoint.Y);
-
-          // ... (The complex calculation for the scaled selection rectangle remains the same)
-          const float LengthLineA = abs(InitialPoint.Y - CurrentPoint.Y);
-          const float LengthLineB = abs(InitialPoint.X - CurrentPoint.X);
-      		  FVector2D LineCenterPointA;
-      		  FVector2D LineCenterPointB;
-      		  FVector2D InitialSelectionPoint = FVector2D::ZeroVector;
-      		  FVector2D CurrentSelectionPoint = FVector2D::ZeroVector;
-
-          if (InitialPoint.Y < CurrentPoint.Y && InitialPoint.X < CurrentPoint.X) {
-             LineCenterPointA.X = InitialPoint.X;
-             LineCenterPointB.Y = CurrentPoint.Y;
-             LineCenterPointA.Y = InitialPoint.Y + (LengthLineA / 2);
-             LineCenterPointB.X = CurrentPoint.X - (LengthLineB / 2);
-             InitialSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-          }
-          else if (InitialPoint.Y < CurrentPoint.Y && InitialPoint.X > CurrentPoint.X) {
-             LineCenterPointA.X = InitialPoint.X;
-             LineCenterPointB.Y = CurrentPoint.Y;
-             LineCenterPointA.Y = InitialPoint.Y + (LengthLineA / 2);
-             LineCenterPointB.X = CurrentPoint.X + (LengthLineB / 2);
-             InitialSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-          }
-          else if (InitialPoint.Y > CurrentPoint.Y && InitialPoint.X < CurrentPoint.X) {
-             LineCenterPointA.X = InitialPoint.X;
-             LineCenterPointB.Y = CurrentPoint.Y;
-             LineCenterPointA.Y = InitialPoint.Y - (LengthLineA / 2);
-             LineCenterPointB.X = CurrentPoint.X - (LengthLineB / 2);
-             InitialSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-          }
-          else if (InitialPoint.Y > CurrentPoint.Y && InitialPoint.X > CurrentPoint.X) {
-             LineCenterPointA.X = InitialPoint.X;
-             LineCenterPointB.Y = CurrentPoint.Y;
-             LineCenterPointA.Y = InitialPoint.Y - (LengthLineA / 2);
-             LineCenterPointB.X = CurrentPoint.X + (LengthLineB / 2);
-             InitialSelectionPoint.X = LineCenterPointB.X + ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             InitialSelectionPoint.Y = LineCenterPointA.Y - ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.X = LineCenterPointB.X - ((LengthLineB * RectangleScaleSelectionFactor) / 2);
-             CurrentSelectionPoint.Y = LineCenterPointA.Y + ((LengthLineA * RectangleScaleSelectionFactor) / 2);
-          }
-          // ... (End of complex calculation)
-
-          DrawRect(FLinearColor(0, 1, 0, .15f),
-             InitialSelectionPoint.X,
-             InitialSelectionPoint.Y,
-             CurrentSelectionPoint.X - InitialSelectionPoint.X,
-             CurrentSelectionPoint.Y - InitialSelectionPoint.Y);
-
-          TArray <AUnitBase*> NewUnitBases;
-          GetActorsInSelectionRectangle<AUnitBase>(InitialSelectionPoint, CurrentSelectionPoint, NewUnitBases, false, false);
-          
-          ACameraControllerBase* Controller = Cast<ACameraControllerBase>(GetOwningPlayerController());
-          
-          // --- START OF MODIFICATION ---
-
-          // To handle dragging the rectangle in any direction, we must find the min and max coordinates.
-          const FVector2D SelectionRectMin(FMath::Min(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Min(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
-          const FVector2D SelectionRectMax(FMath::Max(InitialSelectionPoint.X, CurrentSelectionPoint.X), FMath::Max(InitialSelectionPoint.Y, CurrentSelectionPoint.Y));
-
-          for (int32 i = 0; i < NewUnitBases.Num(); i++) {
-
-             AUnitBase* Unit = NewUnitBases[i];
-             const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
-             
-             // Filter for units that are selectable and use skeletal movement
-             if(Controller && Unit && Unit->CanBeSelected && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit)
-             {
-                // Get the unit's center location in the world
-                const FVector UnitWorldLocation = Unit->GetActorLocation();
-
-                // Project the world location to screen space
-                FVector2D ScreenLocation;
-                if (Controller->ProjectWorldLocationToScreen(UnitWorldLocation, ScreenLocation))
-                {
-                    // Now, check if the projected center point is within our selection rectangle
-                    if (ScreenLocation.X >= SelectionRectMin.X && ScreenLocation.X <= SelectionRectMax.X &&
-                        ScreenLocation.Y >= SelectionRectMin.Y && ScreenLocation.Y <= SelectionRectMax.Y)
-                    {
-                        // The center is inside the rectangle, so we can select it.
-                        if (Unit->GetOwner() == nullptr) Unit->SetOwner(Controller);
-                        Unit->SetSelected();
-                        SelectedUnits.Emplace(Unit);
-                        SelectedUnitsSet.Add(Unit);
-                        SelectUnitsFromSameSquad(Unit);
-                    }
-                }
-             }
-          }
-
-          // --- END OF MODIFICATION ---
-          
-          NewUnitBases.Empty();
-          
-          if(Controller) Controller->AbilityArrayIndex = 0;
-       }
-       // This call handles the non-skeletal (ISM) units correctly already.
-       SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
-    }
+	HandleSelectionRectangle();
 }
 
 void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)
