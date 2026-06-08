@@ -22,6 +22,12 @@ struct FISMAnimationData : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
     float TransitionRate = 0.5f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
+    float StartFrame = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
+    float EndFrame = 0.0f;
 };
 
 USTRUCT()
@@ -93,6 +99,12 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Mass|Visual")
     int32 StartTimeCustomDataIndex = 3;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 StartFrameCustomDataIndex = 4;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 EndFrameCustomDataIndex = 5;
 
     FMassEntityQuery EntityQuery;
 };
