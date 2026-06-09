@@ -142,46 +142,31 @@ void AFogActor::InitializeFogPostProcess()
 	}
 
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-
-	if (ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC))
+	ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(PC);
+	
+	if (CustomPC && CustomPC->IsLocalController() && TeamId != -1 && CustomPC->SelectableTeamId == TeamId)
 	{
-		// Check if this fog actor belongs to the local player's team
-		// If TeamId is -1, it's not yet initialized/replicated for a specific team.
-		if (CustomPC->IsLocalController() && TeamId != -1 && CustomPC->SelectableTeamId == TeamId)
+		UPostProcessComponent* PPC = PostProcessComponent;
+		if (FogMaterial && FogMaskTexture && PPC)
 		{
-			if (FogMaterial && FogMaskTexture && PostProcessComponent)
+			if (!PPC->bEnabled)
 			{
-				if (!PostProcessComponent->bEnabled)
-				{
-					if (!FogMID)
-					{
-						FogMID = UMaterialInstanceDynamic::Create(FogMaterial, this);
-					}
-					
-					FogMID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
-					
-					FVector4 FogBounds(FogMinBounds.X, FogMinBounds.Y, FogMaxBounds.X, FogMaxBounds.Y);
-					FogMID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
-					
-					// Apply the material directly to our component
-					PostProcessComponent->Settings.AddBlendable(FogMID, 1.0f);
-					PostProcessComponent->bEnabled = true; // Enable the effect!
-					// Clear retry timer if running
-					if (GetWorld())
-					{
-						GetWorldTimerManager().ClearTimer(FogUpdateTimerHandle);
-					}
-				}
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("Fog post-process init failed: Missing material, texture, or component."));
+				if (!FogMID) FogMID = UMaterialInstanceDynamic::Create(FogMaterial, this);
+				FogMID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
+				FVector4 FogBounds(FogMinBounds.X, FogMinBounds.Y, FogMaxBounds.X, FogMaxBounds.Y);
+				FogMID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
+				PPC->Settings.AddBlendable(FogMID, 1.0f);
+				PPC->bEnabled = true;
+				GetWorldTimerManager().ClearTimer(FogUpdateTimerHandle);
 			}
 		}
-		else if (PostProcessComponent && PostProcessComponent->bEnabled)
+	}
+	else 
+	{
+		UPostProcessComponent* PPC = PostProcessComponent;
+		if (PPC && PPC->bEnabled)
 		{
-			// Disable if team no longer matches (e.g. after team switch)
-			PostProcessComponent->bEnabled = false;
+			PPC->bEnabled = false;
 		}
 	}
 }

@@ -143,6 +143,7 @@ int64 UPlayerTeamSubsystem::GetAlliedTeamsMask(int32 TeamId) const
 void UPlayerTeamSubsystem::UpdateAllUnitsAlliedMask(int32 TeamId)
 {
 	int64 NewMask = GetAlliedTeamsMask(TeamId);
+
 	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
 	{
 		if (It->TeamId == TeamId)

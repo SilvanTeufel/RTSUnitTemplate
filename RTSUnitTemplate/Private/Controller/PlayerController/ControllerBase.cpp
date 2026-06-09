@@ -1408,13 +1408,40 @@ void AControllerBase::CancelCurrentAbility_Implementation(AUnitBase* UnitBase)
 void AControllerBase::Multi_SetControllerTeamId_Implementation(int Id)
 {
 	SelectableTeamId = Id;
+
+	if (HasAuthority())
+	{
+		if (UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>())
+		{
+			AlliedTeamsMask = TeamSubsystem->GetAlliedTeamsMask(SelectableTeamId);
+		}
+	}
+
 	OnRep_SelectableTeamId();
+}
+
+void AControllerBase::OnRep_AlliedTeamsMask()
+{
+	// Fallback: Ensure own team bit is set, but avoid accumulation if called manually 
+	// or during transitions. Usually server mask already contains this bit.
+	if (SelectableTeamId != -1 && (AlliedTeamsMask & (1LL << SelectableTeamId)) == 0)
+	{
+		AlliedTeamsMask |= (1LL << SelectableTeamId);
+	}
+
+	for (TActorIterator<AWaypoint> It(GetWorld()); It; ++It)
+	{
+		if (*It)
+		{
+			It->UpdateVisibility();
+		}
+	}
 }
 
 void AControllerBase::OnRep_SelectableTeamId()
 {
-	// Fallback on client: If we change team but don't have a new alliance mask from server yet,
-	// we calculate the base mask ourselves!
+	// Fallback: Wenn das Bit für das eigene Team fehlt, setzen wir die Maske 
+	// auf NUR das eigene Team zurück, statt Bits zu akkumulieren (verhindert z.B. 6 | 16 = 22).
 	if (SelectableTeamId != -1 && (AlliedTeamsMask & (1LL << SelectableTeamId)) == 0)
 	{
 		AlliedTeamsMask = (1LL << SelectableTeamId);

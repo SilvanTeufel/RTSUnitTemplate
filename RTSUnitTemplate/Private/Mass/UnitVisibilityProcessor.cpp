@@ -74,6 +74,7 @@ void UUnitVisibilityProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassSightFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassAllianceFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
@@ -103,13 +104,25 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	if (CustomPC)
 	{
 		LocalTeamId = CustomPC->SelectableTeamId;
-		LocalAllianceMask = CustomPC->AlliedTeamsMask;
-		
-		// Safety check to repair a wrong mask on the client
-		if (LocalTeamId != 0 && (LocalAllianceMask & (1LL << LocalTeamId)) == 0)
+
+		if (UGameInstance* GI = World->GetGameInstance())
 		{
-			// Reset it to the own team as a precaution until the network delivers the real mask
+			if (UPlayerTeamSubsystem* TeamSub = GI->GetSubsystem<UPlayerTeamSubsystem>())
+			{
+				LocalAllianceMask = TeamSub->GetAlliedTeamsMask(LocalTeamId);
+			}
+		}
+
+		// Fallback only if subsystem has nothing
+		if (LocalAllianceMask == 0 && LocalTeamId != 0)
+		{
 			LocalAllianceMask = (1LL << LocalTeamId);
+		}
+
+		// Ensure own bit is always set
+		if (LocalTeamId != 0)
+		{
+			LocalAllianceMask |= (1LL << LocalTeamId);
 		}
 	}
 
@@ -144,6 +157,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		const auto& CharList = ChunkCtx.GetFragmentView<FMassAgentCharacteristicsFragment>();
 		const auto& SightList = ChunkCtx.GetFragmentView<FMassSightFragment>();
 		auto* TargetList = ChunkCtx.GetFragmentView<FMassAITargetFragment>().GetData();
+		const auto* AllianceList = ChunkCtx.GetFragmentView<FMassAllianceFragment>().GetData();
 
 		for (int32 i = 0; i < N; ++i)
 		{
@@ -164,7 +178,21 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				if (CustomPC && CustomPC->IsLocalController())
 				{
 					// 1) Update Team Visibility
-					Vis.bIsMyTeam = (LocalAllianceMask & (1LL << StatsList[i].TeamId)) != 0 || LocalTeamId == 0;
+					const int32 EntityTeamId = StatsList[i].TeamId;
+					const bool bSameTeam = (EntityTeamId == LocalTeamId);
+					const bool bAllied = (LocalAllianceMask & (1LL << EntityTeamId)) != 0;
+					const bool bSpectator = (LocalTeamId == 0);
+
+					Vis.bIsMyTeam = bSameTeam || bAllied || bSpectator;
+					
+					// If we have an AllianceFragment on the entity, double check it
+					if (!Vis.bIsMyTeam && AllianceList)
+					{
+						if ((AllianceList[i].AlliedTeamsMask & (1LL << LocalTeamId)) != 0)
+						{
+							Vis.bIsMyTeam = true;
+						}
+					}
 
 					// 2) Update Viewport Visibility
 					FVector2D ScreenPosition;
