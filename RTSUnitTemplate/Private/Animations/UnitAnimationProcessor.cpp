@@ -98,12 +98,14 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                     AnimFrag.PrevStartTime = AnimFrag.CurrentStartTime;
                                     AnimFrag.PrevStartFrame = AnimFrag.CurrentStartFrame;
                                     AnimFrag.PrevEndFrame = AnimFrag.CurrentEndFrame;
+                                    AnimFrag.PrevPlayRate = AnimFrag.CurrentPlayRate;
 
                                     AnimFrag.TargetStateCustomDataValue = RowData->StateCustomDataValue;
                                     AnimFrag.TransitionRate_1 = RowData->TransitionRate;
                                     AnimFrag.CurrentStartTime = CurrentWorldTime;
                                     AnimFrag.CurrentStartFrame = RowData->StartFrame;
                                     AnimFrag.CurrentEndFrame = RowData->EndFrame;
+                                    AnimFrag.CurrentPlayRate = RowData->PlayRate;
 
                                     AnimFrag.BlendAlpha = 0.0f;
 
@@ -130,7 +132,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                     if (TargetISM && InstanceIndex != INDEX_NONE)
                                     {
                                         // Automatische Korrektur der CustomData-Größe, falls zu klein
-                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, FMath::Max(TransitionRateCustomDataIndex, FMath::Max(StartTimeCustomDataIndex, FMath::Max(StartFrameCustomDataIndex, FMath::Max(EndFrameCustomDataIndex, FMath::Max(PrevStateCustomDataIndex, FMath::Max(PrevStartTimeCustomDataIndex, FMath::Max(PrevStartFrameCustomDataIndex, FMath::Max(PrevEndFrameCustomDataIndex, BlendAlphaCustomDataIndex))))))))) + 1;
+                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, FMath::Max(TransitionRateCustomDataIndex, FMath::Max(StartTimeCustomDataIndex, FMath::Max(StartFrameCustomDataIndex, FMath::Max(EndFrameCustomDataIndex, FMath::Max(PrevStateCustomDataIndex, FMath::Max(PrevStartTimeCustomDataIndex, FMath::Max(PrevStartFrameCustomDataIndex, FMath::Max(PrevEndFrameCustomDataIndex, FMath::Max(BlendAlphaCustomDataIndex, FMath::Max(PlayRateCustomDataIndex, PrevPlayRateCustomDataIndex))))))))))) + 1;
                                         if (TargetISM->NumCustomDataFloats < RequiredFloats)
                                         {
                                             TargetISM->SetNumCustomDataFloats(RequiredFloats);
@@ -148,6 +150,9 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                         TargetISM->SetCustomDataValue(InstanceIndex, PrevEndFrameCustomDataIndex, AnimFrag.PrevEndFrame, true);
                                         
                                         TargetISM->SetCustomDataValue(InstanceIndex, BlendAlphaCustomDataIndex, AnimFrag.BlendAlpha, true);
+
+                                        TargetISM->SetCustomDataValue(InstanceIndex, PlayRateCustomDataIndex, AnimFrag.CurrentPlayRate, true);
+                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevPlayRateCustomDataIndex, AnimFrag.PrevPlayRate, true);
                                     }
                                     break;
                                 }

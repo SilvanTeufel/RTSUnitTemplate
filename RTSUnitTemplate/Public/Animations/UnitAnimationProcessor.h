@@ -28,6 +28,9 @@ struct FISMAnimationData : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
     float EndFrame = 0.0f;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
+    float PlayRate = 1.0f;
 };
 
 USTRUCT()
@@ -99,6 +102,12 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
     float BlendAlpha = 1.0f;
 
     UPROPERTY(Transient)
+    float CurrentPlayRate = 1.0f;
+
+    UPROPERTY(Transient)
+    float PrevPlayRate = 1.0f;
+
+    UPROPERTY(Transient)
     class UDataTable* ISMAnimationDataTable = nullptr;
 };
 
@@ -144,6 +153,12 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Mass|Visual")
     int32 BlendAlphaCustomDataIndex = 10;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 PlayRateCustomDataIndex = 11;
+
+    UPROPERTY(EditAnywhere, Category = "Mass|Visual")
+    int32 PrevPlayRateCustomDataIndex = 12;
 
     FMassEntityQuery EntityQuery;
 };
