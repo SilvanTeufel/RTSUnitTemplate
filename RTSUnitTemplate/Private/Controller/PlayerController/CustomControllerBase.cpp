@@ -1875,7 +1875,11 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 	}
 
 	int32 NumUnits = SelectedUnits.Num();
-	if (NumUnits == 0) return;
+	if (NumUnits == 0)
+	{
+		AttackToggled = false;
+		return;
+	}
 
 	// Consistency: Sort units by radius so that formation validation and assignment match Move logic
 	TArray<AUnitBase*> UnitsToProcess = SelectedUnits;
@@ -3389,7 +3393,11 @@ void ACustomControllerBase::HandleAttackMovePressed()
     GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 
     int32 NumUnits = SelectedUnits.Num();
-    if (NumUnits == 0) return;
+    if (NumUnits == 0)
+    {
+        AttackToggled = false;
+        return;
+    }
 
     // Consistency: Sort units by radius so that formation validation and assignment match Move logic
     TArray<AUnitBase*> UnitsToProcess = SelectedUnits;

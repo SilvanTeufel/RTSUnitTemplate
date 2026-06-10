@@ -1232,17 +1232,11 @@ void AControllerBase::ToggleUnitDetection_Implementation(AUnitBase* Unit)
 
 void AControllerBase::TPressed()
 {
-	if(!AttackToggled)
+	if(!AttackToggled && SelectedUnits.Num() > 0)
 	{
 		AttackToggled = true;
 		for (int32 i = 0; i < SelectedUnits.Num(); i++)
 		{
-			/*
-			if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
-			{
-				if(SelectedUnits[i])
-					SelectedUnits[i]->SetToggleUnitDetection(true);
-			}*/
 			ToggleUnitDetection(SelectedUnits[i]);
 		}
 	}
