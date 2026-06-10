@@ -5,6 +5,7 @@
 #include "MassMovementFragments.h"
 #include "MassActorSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/ConstructionUnit.h"
 #include "Actors/EffectArea.h"
 #include "MassExecutionContext.h"
 #include "MassReplicationFragments.h"
@@ -77,6 +78,7 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				if (MoveTargetList.Num() > 0) SyncMoveTarget(*Unit, MoveTargetList[EntityIndex]);
 				if (AITargetList.Num() > 0) SyncAITarget(*Unit, AITargetList[EntityIndex], EntityManager);
 				if (VisibilityList.Num() > 0) SyncVisibility(*Unit, VisibilityList[EntityIndex]);
+				if (VisualEffectList.Num() > 0) SyncVisualEffect(*Unit, VisualEffectList[EntityIndex]);
 				if (AllianceList.Num() > 0) AllianceList[EntityIndex].AlliedTeamsMask = Unit->AlliedTeamsMask;
 				
 				// KORREKTUR: Zugriff über EntityManager für optionale Fragmente
@@ -240,6 +242,35 @@ void UUnitActorToFragmentSyncProcessor::SyncVisibility(const AUnitBase& Unit, FM
 		Visibility.LastHealth = Unit.Attributes->GetHealth();
 		Visibility.LastShield = Unit.Attributes->GetShield();
 	}
+}
+
+void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, FMassVisualEffectFragment& VisualEffect)
+{
+	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(&Unit);
+	if (!MassUnit) return;
+
+	VisualEffect.bPulsateEnabled = (MassUnit->Rep_VE_ActiveEffects & (1 << 0)) != 0;
+	VisualEffect.PulsateMinScale = MassUnit->Rep_VE_PulsateMinScale;
+	VisualEffect.PulsateMaxScale = MassUnit->Rep_VE_PulsateMaxScale;
+	VisualEffect.PulsateHalfPeriod = MassUnit->Rep_VE_PulsateHalfPeriod;
+
+	VisualEffect.bRotationEnabled = (MassUnit->Rep_VE_ActiveEffects & (1 << 1)) != 0;
+	VisualEffect.RotationAxis = MassUnit->Rep_VE_RotationAxis;
+	VisualEffect.RotationDegreesPerSecond = MassUnit->Rep_VE_RotationDegreesPerSecond;
+
+	VisualEffect.bOscillationEnabled = (MassUnit->Rep_VE_ActiveEffects & (1 << 2)) != 0;
+	if (const AConstructionUnit* ConstructionUnit = Cast<AConstructionUnit>(MassUnit))
+	{
+		VisualEffect.OscillationOffsetA = ConstructionUnit->Rep_VE_OscillationOffsetA;
+		VisualEffect.OscillationOffsetB = ConstructionUnit->Rep_VE_OscillationOffsetB;
+		VisualEffect.OscillationCyclesPerSecond = ConstructionUnit->Rep_VE_OscillationCyclesPerSecond;
+	}
+
+	VisualEffect.bDishRotationEnabled = (MassUnit->Rep_VE_ActiveEffects & (1 << 3)) != 0;
+	VisualEffect.DishSpeedMin = MassUnit->Rep_VE_DishSpeedMin;
+	VisualEffect.DishSpeedMax = MassUnit->Rep_VE_DishSpeedMax;
+	VisualEffect.DishDurationMin = MassUnit->Rep_VE_DishDurationMin;
+	VisualEffect.DishDurationMax = MassUnit->Rep_VE_DishDurationMax;
 }
 
 void UUnitActorToFragmentSyncProcessor::SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFrag, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle)

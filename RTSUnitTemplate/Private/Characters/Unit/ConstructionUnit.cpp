@@ -23,6 +23,9 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AConstructionUnit, Worker);
 	DOREPLIFETIME(AConstructionUnit, WorkArea);
+	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetA);
+	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetB);
+	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationCyclesPerSecond);
 }
 
 void AConstructionUnit::BeginPlay()

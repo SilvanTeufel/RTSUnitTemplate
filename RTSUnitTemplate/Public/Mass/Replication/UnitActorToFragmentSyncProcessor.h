@@ -50,6 +50,7 @@ private:
 	void SyncMoveTarget(const AUnitBase& Unit, FMassMoveTargetFragment& MoveTargetFragment);
 	void SyncAITarget(const AUnitBase& Unit, FMassAITargetFragment& AITarget, FMassEntityManager& EntityManager);
 	void SyncVisibility(const AUnitBase& Unit, FMassVisibilityFragment& VisibilityFragment);
+	void SyncVisualEffect(const AUnitBase& Unit, FMassVisualEffectFragment& VisualEffectFragment);
 	void SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFragment, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle);
 	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment* CombatStatsFragment, FMassAgentCharacteristicsFragment* CharacteristicsFragment, FTransformFragment* TransformFragment);
 };

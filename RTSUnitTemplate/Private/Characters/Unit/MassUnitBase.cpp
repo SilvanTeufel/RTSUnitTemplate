@@ -42,7 +42,7 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 		ISMComponent = CreateDefaultSubobject<UInstancedStaticMeshComponent>(TEXT("ISMComponent"));
 		ISMComponent->SetupAttachment(RootComponent);
 		// ISMComponent->SetVisibility(false);
-		ISMComponent->SetIsReplicated(true);
+		ISMComponent->SetIsReplicated(false);
 	}
 
 	
@@ -50,6 +50,7 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	HealthWidgetComp->SetupAttachment(RootComponent);
 	HealthWidgetComp->SetVisibility(true);
 	HealthWidgetComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	HealthWidgetComp->SetIsReplicated(false);
 
 	float CapsuleHalfHeight = 88.f;
 	if (UCapsuleComponent* Capsule = GetCapsuleComponent())
@@ -63,6 +64,7 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	TimerWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Timer"));
 	TimerWidgetComp->SetupAttachment(RootComponent);
 	TimerWidgetComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	TimerWidgetComp->SetIsReplicated(false);
 	TimerWidgetRelativeOffset = FVector(0.f, 0.f, CapsuleHalfHeight + TimerWidgetHeightOffset);
 	TimerWidgetComp->SetRelativeLocation(TimerWidgetRelativeOffset);
 }
@@ -77,16 +79,9 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AMassUnitBase, bIsMassUnit);
-	DOREPLIFETIME(AMassUnitBase, ISMComponent);
 	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
 	//DOREPLIFETIME(AMassUnitBase, bUseIsmWithActorMovement);
 
-	DOREPLIFETIME(AMassUnitBase, Niagara_A);
-	DOREPLIFETIME(AMassUnitBase, Niagara_B);
-
-	DOREPLIFETIME(AMassUnitBase, Niagara_A_Start_Transform);
-	DOREPLIFETIME(AMassUnitBase, Niagara_B_Start_Transform);
-	
 	DOREPLIFETIME(AMassUnitBase, MeshRotationOffset);
 	
 	DOREPLIFETIME(AMassUnitBase, IsFlying);
@@ -98,18 +93,10 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_PulsateHalfPeriod);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_RotationAxis);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_RotationDegreesPerSecond);
-	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationOffsetA);
-	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationOffsetB);
-	DOREPLIFETIME(AMassUnitBase, Rep_VE_OscillationCyclesPerSecond);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishSpeedMin);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishSpeedMax);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishDurationMin);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishDurationMax);
-
-	DOREPLIFETIME(AMassUnitBase, HealthWidgetComp);
-	DOREPLIFETIME(AMassUnitBase, TimerWidgetComp);
-	DOREPLIFETIME(AMassUnitBase, HealthWidgetRelativeOffset);
-	DOREPLIFETIME(AMassUnitBase, TimerWidgetRelativeOffset);
 }
 
 
@@ -1379,9 +1366,6 @@ bool AMassUnitBase::RegisterVisualsToMass()
 							EffectFrag->RotationDegreesPerSecond = Rep_VE_RotationDegreesPerSecond;
 
 							EffectFrag->bOscillationEnabled = (Rep_VE_ActiveEffects & (1 << 2)) != 0;
-							EffectFrag->OscillationOffsetA = Rep_VE_OscillationOffsetA;
-							EffectFrag->OscillationOffsetB = Rep_VE_OscillationOffsetB;
-							EffectFrag->OscillationCyclesPerSecond = Rep_VE_OscillationCyclesPerSecond;
 
 							EffectFrag->bDishRotationEnabled = (Rep_VE_ActiveEffects & (1 << 3)) != 0;
 							EffectFrag->DishSpeedMin = Rep_VE_DishSpeedMin;

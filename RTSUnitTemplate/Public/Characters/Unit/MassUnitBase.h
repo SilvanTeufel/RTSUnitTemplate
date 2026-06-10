@@ -52,7 +52,7 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, Category = "Mass")
 	void OnMassRegistrationFinished();
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = ISM)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = ISM)
 	UInstancedStaticMeshComponent* ISMComponent;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "ISM")
@@ -96,13 +96,6 @@ public:
 	float Rep_VE_RotationDegreesPerSecond = 0.f;
 
 	UPROPERTY(Replicated)
-	FVector Rep_VE_OscillationOffsetA = FVector::ZeroVector;
-	UPROPERTY(Replicated)
-	FVector Rep_VE_OscillationOffsetB = FVector::ZeroVector;
-	UPROPERTY(Replicated)
-	float Rep_VE_OscillationCyclesPerSecond = 0.f;
-
-	UPROPERTY(Replicated)
 	float Rep_VE_DishSpeedMin = 0.f;
 
 	UPROPERTY(Replicated)
@@ -135,25 +128,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool TimerUpdateTriggered = false;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* HealthWidgetComp;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float HealthWidgetHeightOffset = 150.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector HealthWidgetRelativeOffset;
 
 	//UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//TSubclassOf<UUserWidget> HealthBarWidgetClass;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UWidgetComponent* TimerWidgetComp;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TimerWidgetHeightOffset = 100.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector TimerWidgetRelativeOffset;
 
 protected:
@@ -275,16 +268,16 @@ public:
 	bool GetMassEntityData(FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle);
 	bool GetMassEntityData(const FMassEntityManager*& OutEntityManager, FMassEntityHandle& OutEntityHandle) const;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_A;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTransform Niagara_A_Start_Transform;
 	
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UNiagaraComponent* Niagara_B;
 
-	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	FTransform Niagara_B_Start_Transform;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)

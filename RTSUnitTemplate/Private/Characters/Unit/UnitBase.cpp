@@ -73,9 +73,11 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 	
 	Niagara_A = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara"));
 	Niagara_A->SetupAttachment(RootComponent);
+	Niagara_A->SetIsReplicated(false);
 	
 	Niagara_B = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Niagara_B"));
 	Niagara_B->SetupAttachment(RootComponent);
+	Niagara_B->SetIsReplicated(false);
 
 	//SetReplicates(false);
 	//bReplicates = false;

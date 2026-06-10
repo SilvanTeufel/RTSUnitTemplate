@@ -29,9 +29,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
 	bool ScaleZ = false;
 
-	// The work/build area for this construction site
+	// Whether the work/build area for this construction site
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	AWorkArea* WorkArea = nullptr;
+
+	UPROPERTY(Replicated)
+	FVector Rep_VE_OscillationOffsetA = FVector::ZeroVector;
+	UPROPERTY(Replicated)
+	FVector Rep_VE_OscillationOffsetB = FVector::ZeroVector;
+	UPROPERTY(Replicated)
+	float Rep_VE_OscillationCyclesPerSecond = 0.f;
 
 	// Optional override for which component to animate (if null we try to auto-detect a mesh; fallback to RootComponent/Actor)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Anim")
