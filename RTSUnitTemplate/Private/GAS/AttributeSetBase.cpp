@@ -261,7 +261,14 @@ void UAttributeSetBase::SetAttributeShield(float NewShield)
 	if(NewShield <= 0)
 	{
 		Shield = 0.f;
-		SetHealth(GetHealth()+NewShield);
+		if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor()))
+		{
+			UnitBase->SetHealth(GetHealth() + NewShield);
+		}
+		else
+		{
+			SetHealth(GetHealth() + NewShield);
+		}
 	}else if(NewShield > GetMaxShield())
 	{
 		Shield = GetMaxShield();
