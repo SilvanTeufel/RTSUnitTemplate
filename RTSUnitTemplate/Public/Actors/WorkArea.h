@@ -57,7 +57,7 @@ public:
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void AddAreaToGroup();
 
-	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void InitWorkerOverflowTimer();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

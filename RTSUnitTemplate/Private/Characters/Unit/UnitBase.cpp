@@ -1740,7 +1740,7 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 	return SpawnedUnits;
 }
 
-void AUnitBase::ApplyFollowTarget_Implementation(AUnitBase* NewFollowTarget)
+void AUnitBase::ApplyFollowTarget(AUnitBase* NewFollowTarget)
 {
 	// Delegate implementation to MassUnit base helper so logic lives in parent class
 	ApplyFollowTargetForUnit(this, NewFollowTarget);

@@ -74,10 +74,13 @@ void AWorkArea::BeginPlay()
 	MaxAvailableResourceAmount = AvailableResourceAmount;
 	OriginalActorScale = GetActorScale3D();
 	SetReplicateMovement(false);
-	InitWorkerOverflowTimer();
+	if (HasAuthority())
+	{
+		InitWorkerOverflowTimer();
+	}
 }
 
-void AWorkArea::InitWorkerOverflowTimer_Implementation()
+void AWorkArea::InitWorkerOverflowTimer()
 {
 	if (Type == WorkAreaData::BuildArea && WorkerReturnDelay > 0.f)
 	{

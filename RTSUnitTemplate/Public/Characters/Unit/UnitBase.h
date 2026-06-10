@@ -407,7 +407,7 @@ public:
 		bool bDoGroundTrace = true, float WaypointDirectionOffset = 50.f, FVector OffsetLocation = FVector(0.f, 0.f, 0.f));
 
 	// Applies/clears a follow target for this single unit on the server and updates the Mass AI fragment flag.
-	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ApplyFollowTarget(AUnitBase* NewFollowTarget);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
