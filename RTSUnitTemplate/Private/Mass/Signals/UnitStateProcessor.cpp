@@ -3030,24 +3030,24 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				const FMassCombatStatsFragment* StatsFragPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(E);
 
 				// Prüfe, ob alle nötigen Fragmente vorhanden sind
-				if (!StateFragPtr || !PatrolFragPtr || !MoveTargetPtr || !StatsFragPtr)
+				if (!StateFragPtr || !MoveTargetPtr || !StatsFragPtr)
 				{
 					continue;
 				}
 
 				// Dereferenziere Pointer für einfacheren Zugriff
 				FMassAIStateFragment& StateFrag = *StateFragPtr;
-				FMassPatrolFragment& PatrolFrag = *PatrolFragPtr; // Mutable Referenz
 				FMassMoveTargetFragment& MoveTarget = *MoveTargetPtr; // Mutable Referenz
 				const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
 				
 				StateFrag.CanMove = Unit->CanMove;
 				StateFrag.CanAttack = Unit->CanAttack;
 				StateFrag.IsInitialized = Unit->IsInitialized;
-				StateFrag.StoredLocation = Unit->GetActorLocation();
+				StateFrag.StoredLocation = Unit->GetActorLocation(); // Always set on spawn
 
-				if (Unit->UnitState == UnitData::PatrolRandom)
+				if (PatrolFragPtr && Unit->UnitState == UnitData::PatrolRandom)
 				{
+					FMassPatrolFragment& PatrolFrag = *PatrolFragPtr; // Mutable Referenz
 					if (!EntityManager.IsEntityValid(E))
 					{
 						continue;

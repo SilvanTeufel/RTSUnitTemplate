@@ -355,9 +355,11 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 // Queue signal instead of sending directly
                 if (bHasMoveTarget)
                 {
+                    // Fallback to current location if StoredLocation is zero
+                    FVector FinalTarget = StateFrag.StoredLocation.IsNearlyZero() ? Transform.GetLocation() : StateFrag.StoredLocation;
                     UpdateMoveTarget(
                      MoveTargetList[i],
-                     StateFrag.StoredLocation,
+                     FinalTarget,
                      Stats.RunSpeed,
                      World);
                 }

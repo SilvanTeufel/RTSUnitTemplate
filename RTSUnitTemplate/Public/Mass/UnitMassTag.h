@@ -988,14 +988,18 @@ inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector&
     
 	// --- Modify the Fragment ---
 	MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
+	
+	// FIX: Calculate direction BEFORE updating the Center
+	FVector Direction = (TargetLocation - MoveTarget.Center);
+	if (!Direction.IsNearlyZero())
+	{
+		MoveTarget.Forward = Direction.GetSafeNormal();
+	}
+
 	MoveTarget.Center = TargetLocation;
 	MoveTarget.DesiredSpeed.Set(Speed);
-	MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewnscht ist)
-	//MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius fr Bewegung (ggf. anpassen)
-
-	//UE_LOG(LogTemp, Log, TEXT("MoveTarget.Center: %s"), *MoveTarget.Center.ToString());
-	FVector PreNormalizedForward = (TargetLocation - MoveTarget.Center);
-	MoveTarget.Forward = PreNormalizedForward.GetSafeNormal();
+	MoveTarget.IntentAtGoal = EMassMovementAction::Stand; // Anhalten, wenn Ziel erreicht (oder was immer gewünscht ist)
+	//MoveTarget.SlackRadius = 50.f; // Standard-Akzeptanzradius für Bewegung (ggf. anpassen)
 }
 
 

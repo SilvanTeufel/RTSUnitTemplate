@@ -217,10 +217,10 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             {
                 FMassClientPredictionFragment& Pred = PredictionList[i];
                 Pred.Location = Transform.GetLocation();
-                StateFrag.StoredLocation = Transform.GetLocation();
                 Pred.PredDesiredSpeed = 0.f;
                 Pred.bHasData = true;
             }
+            StateFrag.StoredLocation = Transform.GetLocation();
         }
     });
 }
@@ -335,6 +335,9 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     continue;
                 }
             }
+
+            // Ensure units stay where they are if target is lost later
+            StateFrag.StoredLocation = Transform.GetLocation();
         }
     });
 }

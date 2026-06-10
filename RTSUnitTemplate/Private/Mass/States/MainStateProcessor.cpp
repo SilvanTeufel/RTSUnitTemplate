@@ -24,6 +24,7 @@ void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Zustand ändern, Timer lesen
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite); // Eigene Stats lesen/schreiben
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
     //EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
@@ -77,6 +78,7 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
         auto StatsList = ChunkContext.GetMutableFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
         auto ImpactList = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
+        auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -94,6 +96,9 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UnitSpawned, Entity);
                 }
                 StateFrag.BirthTime = World->GetTimeSeconds();
+
+                // NEW: Initialize StoredLocation to spawn position
+                StateFrag.StoredLocation = TransformList[i].GetTransform().GetLocation();
             }else
             {
                 const float Age = World->GetTimeSeconds() - StateFrag.BirthTime;
@@ -145,6 +150,7 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         auto StatsList = ChunkContext.GetMutableFragmentView<FMassCombatStatsFragment>();
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         auto ImpactList = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
+        auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -162,6 +168,9 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UnitSpawned, Entity);
                 }
+
+                // NEW: Initialize StoredLocation to spawn position
+                StateFrag.StoredLocation = TransformList[i].GetTransform().GetLocation();
             }
 
             bool bShouldDie = false;
