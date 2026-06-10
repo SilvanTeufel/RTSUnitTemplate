@@ -180,7 +180,7 @@ struct FMassChargeTimerFragment : public FMassFragment
 
 	// The speed the unit should revert to after the charge
 	UPROPERTY()
-	float OriginalDesiredSpeed; // Or just float if you don't use FMassFactor for speed
+	float OriginalDesiredSpeed = 0.f; // Or just float if you don't use FMassFactor for speed
 
 	// Flag to indicate if the original speed was set (optional, for robustness)
 	UPROPERTY()
@@ -229,7 +229,7 @@ struct FMassGameplayEffectFragment : public FMassFragment
 	TSubclassOf<UGameplayEffect> EnemyEffect;
 
 	UPROPERTY(EditAnywhere, Category = "Ability")
-	float EffectRadius;
+	float EffectRadius = 0.f;
 };
 
 USTRUCT()

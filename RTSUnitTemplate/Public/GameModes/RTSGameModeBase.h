@@ -32,7 +32,7 @@ struct FTimerHandleMapping
 	GENERATED_BODY()
 
 	UPROPERTY(VisibleAnywhere, Category = "Timer")
-	int32 Id;
+	int32 Id = 0;
 
 	UPROPERTY(VisibleAnywhere, Category = "Timer")
 	FTimerHandle Timer;

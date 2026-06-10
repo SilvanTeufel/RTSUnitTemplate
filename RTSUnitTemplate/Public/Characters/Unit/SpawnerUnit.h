@@ -19,16 +19,16 @@ struct FSpawnData : public FTableRowBase
 {
 	GENERATED_USTRUCT_BODY()
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	int Id;
+	int Id = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
 	TSubclassOf<APickup> PickupBlueprint;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	float ProbabilityArray;
+	float ProbabilityArray = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	float MaxLifeTime;
+	float MaxLifeTime = 0.f;
 };
 
 UCLASS()

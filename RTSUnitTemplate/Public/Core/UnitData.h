@@ -187,13 +187,13 @@ struct FSpeechData_Texts : public FTableRowBase
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int Id;
+	int Id = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (MultiLine=true))
 	FText Text;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	USoundBase* SpeechSound;
+	USoundBase* SpeechSound = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BlendPoint_1 = 0;
@@ -224,19 +224,19 @@ struct FSpeechData_Buttons : public FTableRowBase
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	int Id;
+	int Id = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	int Text_Id;
+	int Text_Id = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate, meta = (MultiLine=true))
 	FText Text;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	int New_Text_Id;
+	int New_Text_Id = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = TopDownRTSTemplate)
-	USoundBase* ButtonSound;
+	USoundBase* ButtonSound = nullptr;
 };
 
 
@@ -368,7 +368,7 @@ struct FUnitSpawnParameter : public FTableRowBase
 {
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int Id;
+	int Id = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AUnitBase> UnitBaseClass;
@@ -387,10 +387,10 @@ struct FUnitSpawnParameter : public FTableRowBase
 	FVector UnitMaxRange = FVector(100.f,100.f,0.f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TEnumAsByte<UnitData::EState> State;
+	TEnumAsByte<UnitData::EState> State = UnitData::None;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	TEnumAsByte<UnitData::EState> StatePlaceholder;
+	TEnumAsByte<UnitData::EState> StatePlaceholder = UnitData::None;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float LoopTime = 3.f;
@@ -417,16 +417,16 @@ struct FUnitSpawnParameter : public FTableRowBase
 	float BaseRunSpeed = 0.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
-	USkeletalMesh* CharacterMesh;
+	USkeletalMesh* CharacterMesh = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	UMaterialInstance* Material;
+	UMaterialInstance* Material = nullptr;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FRotator ServerMeshRotation;
+	FRotator ServerMeshRotation = FRotator::ZeroRotator;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int TeamId;
+	int TeamId = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FBuildingCost ConstructionCost;
@@ -458,10 +458,10 @@ struct FUnitSpawnData : public FTableRowBase
 {
 	GENERATED_USTRUCT_BODY()
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int Id;
+	int Id = 0;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintReadWrite, Category = RTSUnitTemplate)
-	class AUnitBase* UnitBase;
+	class AUnitBase* UnitBase = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FUnitSpawnParameter SpawnParameter;
