@@ -45,7 +45,10 @@ public:
 	bool DroneBehavior = false;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
-	float DroneOrbitRadius = 300.f;
+	FVector2D DroneOrbitRadius = FVector2D(300.f, 300.f);
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	FVector DroneOrbitCenter = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneMeshSafetyBuffer = 50.f;

@@ -254,7 +254,9 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     UPROPERTY()
     float DroneBuildingHeight = 300.f;
     UPROPERTY()
-    float DroneOrbitRadius = 400.f;
+    FVector2D DroneOrbitRadius = FVector2D(400.f, 400.f);
+    UPROPERTY()
+    FVector DroneOrbitCenter = FVector::ZeroVector;
     UPROPERTY()
     float DroneOrbitSpeed = 45.f;
     UPROPERTY()

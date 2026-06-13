@@ -177,7 +177,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     Effect.DroneTimer = 0.f;
                     Effect.DroneLastStage = Effect.DroneStage;
                     if (Effect.DroneStage == 0) {
-                        Effect.DroneOffset = FVector(Effect.DroneOrbitRadius, 0.f, Effect.DroneSpawnHeight);
+                        Effect.DroneOffset = FVector(Effect.DroneOrbitRadius.X, 0.f, Effect.DroneSpawnHeight);
                         Effect.DroneRotation = FRotator(Effect.DroneSpawnPitch, 0.f, 0.f).Quaternion();
                         Effect.DroneCurrentAngle = 0.f;
                     }
@@ -196,8 +196,8 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 {
                     Effect.DroneCurrentAngle += Effect.DroneOrbitSpeed * DroneDeltaTime;
                     float Rad = FMath::DegreesToRadians(Effect.DroneCurrentAngle);
-                    Effect.DroneOffset.X = FMath::Cos(Rad) * Effect.DroneOrbitRadius;
-                    Effect.DroneOffset.Y = FMath::Sin(Rad) * Effect.DroneOrbitRadius;
+                    Effect.DroneOffset.X = FMath::Cos(Rad) * Effect.DroneOrbitRadius.X;
+                    Effect.DroneOffset.Y = FMath::Sin(Rad) * Effect.DroneOrbitRadius.Y;
 
                     // Compute world rotation relative to building
                     // We want the drone to face "forward" in its orbit
@@ -329,7 +329,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 // Drone Behavior
                 if (Effect.bDroneEnabled) {
-                    NewTransform.AddToTranslation(Effect.DroneOffset);
+                    NewTransform.AddToTranslation(Effect.DroneOffset + Effect.DroneOrbitCenter);
                     NewTransform.SetRotation(Effect.DroneRotation * NewTransform.GetRotation());
                     NewTransform.SetScale3D(Effect.DroneBaseScale * NewTransform.GetScale3D());
                 }

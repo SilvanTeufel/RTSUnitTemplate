@@ -33,6 +33,7 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, DroneBehavior);
 	DOREPLIFETIME(AConstructionUnit, BuildingMaxHeight);
 	DOREPLIFETIME(AConstructionUnit, DroneOrbitRadius);
+	DOREPLIFETIME(AConstructionUnit, DroneOrbitCenter);
 	DOREPLIFETIME(AConstructionUnit, DroneOrbitSpeed);
 	DOREPLIFETIME(AConstructionUnit, DroneRotationSpeed);
 	DOREPLIFETIME(AConstructionUnit, DroneInterpSpeed);
@@ -208,26 +209,29 @@ void AConstructionUnit::UpdateDroneLogic(float DeltaSeconds)
 		float ScaledX = BoxExtent.X * ActorScale.X;
 		float ScaledY = BoxExtent.Y * ActorScale.Y;
 		
-		float MeshHorizontalRadius = FVector2D(ScaledX, ScaledY).Size();
+		// Requirement 1: Elliptical orbit. 
+		// We want a safety buffer in world space.
+		float WorldRadiusX = ScaledX + DroneMeshSafetyBuffer;
+		float WorldRadiusY = ScaledY + DroneMeshSafetyBuffer;
 		
-		// Now we have the world-space radius needed. 
-		// But DroneOrbitRadius is applied as a relative offset in MassUnitVisualTweenProcessor.
-		// Since the Drone instance is a child of the ConstructionUnit, it is affected by the Actor's scale.
-		// If the scale is non-uniform, a circular orbit in relative space becomes an ellipse in world space.
-		// However, we want the drone to stay at a safe distance in all directions.
+		// Convert back to relative space for the Mass fragment
+		// Since the Drone is a child of the ConstructionUnit, it is affected by its scale.
+		// WorldRadiusX = RelativeRadiusX * ActorScale.X  => RelativeRadiusX = WorldRadiusX / ActorScale.X
 		
-		// If we want a circular orbit in world space, we would need to compensate for the actor scale.
-		// For now, let's at least ensure the radius is sufficient for the largest dimension.
-		// We divide by the average horizontal scale to get a relative radius that roughly matches the world size.
-		float AvgScale = (ActorScale.X + ActorScale.Y) * 0.5f;
-		if (AvgScale > KINDA_SMALL_NUMBER)
-		{
-			DroneOrbitRadius = (MeshHorizontalRadius + DroneMeshSafetyBuffer) / AvgScale;
-		}
+		if (ActorScale.X > KINDA_SMALL_NUMBER)
+			DroneOrbitRadius.X = WorldRadiusX / ActorScale.X;
 		else
-		{
-			DroneOrbitRadius = MeshHorizontalRadius + DroneMeshSafetyBuffer;
-		}
+			DroneOrbitRadius.X = WorldRadiusX;
+
+		if (ActorScale.Y > KINDA_SMALL_NUMBER)
+			DroneOrbitRadius.Y = WorldRadiusY / ActorScale.Y;
+		else
+			DroneOrbitRadius.Y = WorldRadiusY;
+
+		// Requirement 2: Orbit center is the X/Y position of the BuildArea/WorkArea.
+		// We need the location of WA relative to this actor.
+		FVector WALocation = WA->GetActorLocation();
+		DroneOrbitCenter = GetActorTransform().InverseTransformPosition(WALocation);
 	}
 
 	switch (Rep_DroneStage)

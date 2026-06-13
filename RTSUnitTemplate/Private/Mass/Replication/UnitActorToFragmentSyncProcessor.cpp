@@ -271,6 +271,7 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		VisualEffect.DroneTargetHeight = ConstructionUnit->Rep_DroneTargetHeight;
 		VisualEffect.DroneBuildingHeight = ConstructionUnit->BuildingMaxHeight;
 		VisualEffect.DroneOrbitRadius = ConstructionUnit->DroneOrbitRadius;
+		VisualEffect.DroneOrbitCenter = ConstructionUnit->DroneOrbitCenter;
 		VisualEffect.DroneOrbitSpeed = ConstructionUnit->DroneOrbitSpeed;
 		VisualEffect.DroneRotationSpeed = ConstructionUnit->DroneRotationSpeed;
 		VisualEffect.DroneInterpSpeed = ConstructionUnit->DroneInterpSpeed;
