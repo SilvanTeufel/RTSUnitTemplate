@@ -30,6 +30,8 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, Rep_DroneStage);
 	DOREPLIFETIME(AConstructionUnit, Rep_DroneTargetAngle);
 	DOREPLIFETIME(AConstructionUnit, Rep_DroneTargetHeight);
+	DOREPLIFETIME(AConstructionUnit, DroneBehavior);
+	DOREPLIFETIME(AConstructionUnit, BuildingMaxHeight);
 }
 
 void AConstructionUnit::BeginPlay()
@@ -184,12 +186,13 @@ void AConstructionUnit::MulticastPulsateScale_Implementation(const FVector& MinM
 
 void AConstructionUnit::UpdateDroneLogic(float DeltaSeconds)
 {
-	if (!WorkArea) return;
+	AWorkArea* WA = BuildArea ? BuildArea : WorkArea;
+	if (!WA) return;
 
 	// Determine Building Height
-	if (WorkArea->Mesh)
+	if (WA->Mesh)
 	{
-		BuildingMaxHeight = WorkArea->Mesh->Bounds.BoxExtent.Z * 2.f;
+		BuildingMaxHeight = WA->Mesh->Bounds.BoxExtent.Z * 2.f;
 	}
 
 	switch (Rep_DroneStage)
@@ -260,6 +263,18 @@ void AConstructionUnit::UpdateDroneLogic(float DeltaSeconds)
 	case 5: // Stage 6: Despawn (Fly up)
 		// Stay in this stage until actor is destroyed
 		break;
+	}
+
+	// Trigger Stage 5 Despawn for normal builds if build is almost done
+	if (DroneBehavior && Rep_DroneStage < 5 && UnitState != UnitData::Casting)
+	{
+		const float BuildTimeLimit = WA->BuildTime;
+		const float Remaining = BuildTimeLimit - WA->CurrentBuildTime;
+		if (WA->CurrentBuildTime > BuildTimeLimit * 0.9f || Remaining < 2.0f)
+		{
+			Rep_DroneStage = 5;
+			ForceNetUpdate();
+		}
 	}
 
 	DroneStateTimer += DeltaSeconds;

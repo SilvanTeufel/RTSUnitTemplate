@@ -171,7 +171,8 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
             if (Effect.bDroneEnabled) {
                 float DroneDeltaTime = Context.GetDeltaTimeSeconds();
 
-                // Reset timer and state on stage change
+
+                // Stage Transition Log
                 if (Effect.DroneStage != Effect.DroneLastStage) {
                     Effect.DroneTimer = 0.f;
                     Effect.DroneLastStage = Effect.DroneStage;
@@ -216,9 +217,9 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 break;
                 case 5: // Despawn
                 {
-                    Effect.DroneOffset.Z += 800.f * DroneDeltaTime;
+                    Effect.DroneOffset.Z += 2000.f * DroneDeltaTime;
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
-                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, 2.0f);
+                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, 8.0f);
                     Effect.DroneRotation = CurrentRot.Quaternion();
                 }
                 break;

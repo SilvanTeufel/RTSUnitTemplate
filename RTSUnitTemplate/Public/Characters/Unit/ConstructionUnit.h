@@ -41,7 +41,7 @@ public:
 	UPROPERTY(Replicated)
 	float Rep_VE_OscillationCyclesPerSecond = 0.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	bool DroneBehavior = false;
 
 	UPROPERTY(Replicated)
@@ -53,7 +53,7 @@ public:
 	UPROPERTY(Replicated)
 	float Rep_DroneTargetHeight = 0.f;
 
-	UPROPERTY()
+	UPROPERTY(Replicated)
 	float BuildingMaxHeight = 300.f;
 
 	// Optional override for which component to animate (if null we try to auto-detect a mesh; fallback to RootComponent/Actor)

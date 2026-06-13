@@ -229,6 +229,11 @@ void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* Resou
 		{
 			WorkingUnit->ResourcePlace->RemoveWorkerFromArray(WorkingUnit);
 		}
+
+		if (IsValid(WorkingUnit->BuildArea))
+		{
+			WorkingUnit->BuildArea->RemoveWorkerFromArray(WorkingUnit);
+		}
 	}
 	
 	if (!SwitchBuildArea( UnitBase, ResourceGameMode))

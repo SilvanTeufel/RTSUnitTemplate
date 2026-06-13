@@ -187,10 +187,13 @@ void AWorkArea::Tick(float DeltaTime)
 	ControlTimer += DeltaTime;
 	if(ControlTimer >= ResetStartBuildTime)
 	{
-		if(!Building || PlannedBuilding && !StartedBuilding)
+		if(!Building || (PlannedBuilding && !StartedBuilding))
 		{
-			PlannedBuilding = false;
-			StartedBuilding = false;
+			if (Workers.Num() == 0)
+			{
+				PlannedBuilding = false;
+				StartedBuilding = false;
+			}
 		}
 		ControlTimer = 0.f;
 	}
@@ -215,6 +218,8 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, ScaleConstructionUnit);
 	DOREPLIFETIME(AWorkArea, IsExtensionArea);
 	DOREPLIFETIME(AWorkArea, Workers);
+	DOREPLIFETIME(AWorkArea, PlannedBuilding);
+	DOREPLIFETIME(AWorkArea, StartedBuilding);
 	DOREPLIFETIME(AWorkArea, bMIDEnabled);
 	DOREPLIFETIME(AWorkArea, BuildTime);
 	DOREPLIFETIME(AWorkArea, CurrentBuildTime);
@@ -287,6 +292,11 @@ void AWorkArea::HandleBaseArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AR
 			if (IsValid(Worker->ResourcePlace))
 			{
 				Worker->ResourcePlace->RemoveWorkerFromArray(Worker);
+			}
+
+			if (IsValid(Worker->BuildArea))
+			{
+				Worker->BuildArea->RemoveWorkerFromArray(Worker);
 			}
 	
 			if(Worker->WorkResource)
@@ -425,41 +435,56 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 
 bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
+	if (!HasAuthority()) return false;
 	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(Worker);
 	BuildAreas.SetNum(3);
 	
-	Worker->BuildArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas); // BuildAreas.Num() ? BuildAreas[0] : nullptr;
+	AWorkArea* SelectedArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas);
+	if (!SelectedArea || SelectedArea->IsExtensionArea)
+	{
+		Worker->BuildArea = nullptr;
+		return false;
+	}
 
 	bool CanAffordConstruction;
-	
 	if(IsPaid)
 		CanAffordConstruction = true;
 	else	
-		CanAffordConstruction = Worker->BuildArea? ResourceGameMode->CanAffordConstruction(Worker->BuildArea->ConstructionCost, Worker->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
+		CanAffordConstruction = ResourceGameMode->CanAffordConstruction(SelectedArea->ConstructionCost, Worker->TeamId);
 
-	
-	bool AreaIsForTeam = false;
-	if (Worker->BuildArea)
+	bool AreaIsForTeam = (SelectedArea->TeamId == 0) || (Worker->TeamId == SelectedArea->TeamId);
+
+	if(CanAffordConstruction && AreaIsForTeam)
 	{
-		AreaIsForTeam = 
-			(Worker->BuildArea->TeamId == 0) || 
-			(Worker->TeamId == Worker->BuildArea->TeamId);
+		// Only if no one is working there yet, or we can add more workers
+		bool bCanWork = false;
+		if (SelectedArea->Workers.Num() == 0 && !SelectedArea->PlannedBuilding)
+		{
+			SelectedArea->PlannedBuilding = true;
+			SelectedArea->ControlTimer = 0.f;
+			bCanWork = true;
+		}
+		else if (SelectedArea->AllowAddingWorkers && SelectedArea->Workers.Num() < SelectedArea->MaxWorkerCount)
+		{
+			bCanWork = true;
+		}
+
+		if (bCanWork)
+		{
+			Worker->BuildArea = SelectedArea;
+			SelectedArea->AddWorkerToArray(Worker); // Reserve early
+			UnitBase->SetUEPathfinding = true;
+			Worker->SetUnitState(UnitData::GoToBuild);
+			Worker->SwitchEntityTagByState(UnitData::GoToBuild, Worker->UnitStatePlaceholder);
+			return true;
+		}
+		else
+		{
+		}
 	}
-
-
-	if(CanAffordConstruction && Worker->BuildArea && !Worker->BuildArea->PlannedBuilding && AreaIsForTeam) // && AreaIsForTeam
-	{
-		Worker->BuildArea->PlannedBuilding = true;
-		Worker->BuildArea->ControlTimer = 0.f;
-		UnitBase->SetUEPathfinding = true;
-		Worker->SetUnitState(UnitData::GoToBuild);
-		Worker->SwitchEntityTagByState(UnitData::GoToBuild, Worker->UnitStatePlaceholder);
-	} else
-	{
-		return false;
-	}
 	
-	return true;
+	Worker->BuildArea = nullptr;
+	return false;
 }
 
 void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
@@ -475,8 +500,13 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 				(Worker->TeamId == Worker->BuildArea->TeamId);
 		}
 
-		if(this == Worker->BuildArea && CanAffordConstruction && Building == nullptr && !StartedBuilding && AreaIsForTeam)
+		if(this == Worker->BuildArea && !IsExtensionArea && CanAffordConstruction && Building == nullptr && !StartedBuilding && AreaIsForTeam)
 		{
+			if (Workers.Num() >= MaxWorkerCount && !Workers.Contains(Worker))
+			{
+				SwitchBuildArea(Worker, UnitBase, ResourceGameMode);
+				return;
+			}
 
 			StartedBuilding = true;
 			StartedBuild();
@@ -494,6 +524,10 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 			
 			UnitBase->UnitControlTimer = 0;
 			UnitBase->SetUEPathfinding = true;
+			if (UnitBase->BuildArea)
+			{
+				UnitBase->CastTime = UnitBase->BuildArea->BuildTime;
+			}
 			UnitBase->SetUnitState(UnitData::Build);
 		}else if (this == Worker->BuildArea && (Building != nullptr || !StartedBuilding) && CanAffordConstruction)
 		{

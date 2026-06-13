@@ -41,6 +41,7 @@
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Subsystems/UnitVisualManager.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include "GameplayTagContainer.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Characters/Unit/GASUnit.h"
@@ -248,6 +249,22 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	}
 
 	FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+
+	if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit))
+	{
+		if (IsValid(Worker->BuildArea))
+		{
+			Worker->BuildArea->StartedBuilding = false;
+			Worker->BuildArea->PlannedBuilding = false;
+			Worker->BuildArea->RemoveWorkerFromArray(Worker);
+			Worker->BuildArea = nullptr;
+		}
+		if (IsValid(Worker->ResourcePlace))
+		{
+			Worker->ResourcePlace->RemoveWorkerFromArray(Worker);
+			Worker->ResourcePlace = nullptr;
+		}
+	}
 
 	if (!EntityManager.IsEntityActive(MassEntityHandle))
 	{

@@ -4201,7 +4201,8 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			NewConstruction->BuildArea = WA;
 			if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
 			{
-				CU->SwitchEntityTag(FMassStateCastingTag::StaticStruct());
+				CU->SwitchEntityTagByState(UnitData::Casting, UnitData::Idle);
+				UE_LOG(LogTemp, Warning, TEXT("[JUNIE] Spawned ConstructionUnit %s, DroneBehavior=%d"), *CU->GetName(), (int)CU->DroneBehavior);
 			}
 			
 				if (!Unit->CurrentDraggedWorkArea)
@@ -4305,6 +4306,10 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		if (Worker->IsOverlappingActor(Worker->BuildArea))
 		{
 			// If they are overlapping, set the state to 'Build'
+			if (AUnitBase* UnitBase = Cast<AUnitBase>(Worker))
+			{
+				UnitBase->CastTime = Worker->BuildArea->BuildTime;
+			}
 			Worker->SetUnitState(UnitData::Build);
 			Worker->SwitchEntityTagByState(UnitData::Build, Worker->UnitStatePlaceholder);
 			Worker->SetUEPathfinding = true;
@@ -5054,14 +5059,14 @@ void AExtendedControllerBase::DestroyDraggedArea_Implementation(AWorkingUnitBase
 
 void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
 {
-	if(Worker && Worker->GetUnitState() == UnitData::Build && Worker->BuildArea)
+	if(Worker && (Worker->GetUnitState() == UnitData::Build || Worker->GetUnitState() == UnitData::GoToBuild) && Worker->BuildArea)
 	{
 		Worker->BuildArea->StartedBuilding = false;
 		Worker->BuildArea->PlannedBuilding = false;
 		Worker->BuildArea->RemoveWorkerFromArray(Worker);
+		
 		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
-
-		if(ResourceGameMode)
+		if(ResourceGameMode && Worker->BuildArea->IsPaid)
 		{
 			ResourceGameMode->ModifyResource(EResourceType::Primary, Worker->TeamId, Worker->BuildArea->ConstructionCost.PrimaryCost);
 			ResourceGameMode->ModifyResource(EResourceType::Secondary, Worker->TeamId, Worker->BuildArea->ConstructionCost.SecondaryCost);
@@ -5070,15 +5075,21 @@ void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
 			ResourceGameMode->ModifyResource(EResourceType::Epic, Worker->TeamId, Worker->BuildArea->ConstructionCost.EpicCost);
 			ResourceGameMode->ModifyResource(EResourceType::Legendary, Worker->TeamId, Worker->BuildArea->ConstructionCost.LegendaryCost);
 		}
+		
+		Worker->BuildArea = nullptr;
+		Worker->SetUnitState(UnitData::Idle);
+		Worker->SwitchEntityTagByState(UnitData::Idle, Worker->UnitStatePlaceholder);
 	}
 }
 
 void AExtendedControllerBase::StopWorkOnSelectedUnit()
 {
-	if(SelectedUnits.Num() && SelectedUnits[0])
+	for (AUnitBase* Unit : SelectedUnits)
 	{
-		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[0]);
-		StopWork(Worker);
+		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit))
+		{
+			StopWork(Worker);
+		}
 	}
 }
 
@@ -5268,14 +5279,26 @@ void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBa
 
 void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {
-
-	if (!Worker || !Worker->IsWorker) return;
+	if (!Worker || !Worker->IsWorker || !WorkArea) return;
 	
+	// Server-side capacity check to prevent overcrowding due to network latency or multiple clicks
+	if (WorkArea->Workers.Num() >= WorkArea->MaxWorkerCount && !WorkArea->Workers.Contains(Worker))
+	{
+		return; 
+	}
+
 	Worker->BuildArea = WorkArea;
+	// Ensure the worker is registered in the area's worker list on the server
+	WorkArea->AddWorkerToArray(Worker);
+
 	// Check if the worker is overlapping with the build area
 	if (Worker->IsOverlappingActor(Worker->BuildArea))
 	{
 		// If they are overlapping, set the state to 'Build'
+		if (AUnitBase* UnitBase = Cast<AUnitBase>(Worker))
+		{
+			UnitBase->CastTime = Worker->BuildArea->BuildTime;
+		}
 		Worker->SetUnitState(UnitData::Build);
 		Worker->SwitchEntityTagByState(UnitData::Build, Worker->UnitStatePlaceholder);
 	}
@@ -5449,16 +5472,21 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 						SendWorkerToResource(Worker, WorkArea);
 					}
 				}
-			} else if(WorkArea && WorkArea->Type == WorkAreaData::BuildArea)
+			} else if(WorkArea && WorkArea->Type == WorkAreaData::BuildArea && !WorkArea->IsExtensionArea)
 			{
 				int NumberSended = 0;
-				for (int32 i = 0; i < SelectedUnits.Num() && WorkArea->MaxWorkerCount > NumberSended; i++) {
+				int CurrentWorkers = WorkArea->Workers.Num();
+				int MaxAllowed = WorkArea->MaxWorkerCount;
+
+				for (int32 i = 0; i < SelectedUnits.Num() && (CurrentWorkers + NumberSended) < MaxAllowed; i++) {
 					if (SelectedUnits[i]->IsWorker)
 					{
 						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
 						if(Worker && (Worker->TeamId == WorkArea->TeamId || WorkArea->TeamId == 0))
 						{
 							Worker->RemoveFocusEntityTarget();
+							// Reserve the spot immediately on the server
+							WorkArea->AddWorkerToArray(Worker);
 							SendWorkerToWorkArea(Worker, WorkArea);
 							NumberSended++;
 						}
