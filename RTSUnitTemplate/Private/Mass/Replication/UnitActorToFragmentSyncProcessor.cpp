@@ -270,6 +270,13 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		VisualEffect.DroneTargetAngle = ConstructionUnit->Rep_DroneTargetAngle;
 		VisualEffect.DroneTargetHeight = ConstructionUnit->Rep_DroneTargetHeight;
 		VisualEffect.DroneBuildingHeight = ConstructionUnit->BuildingMaxHeight;
+		VisualEffect.DroneOrbitRadius = ConstructionUnit->DroneOrbitRadius;
+		VisualEffect.DroneOrbitSpeed = ConstructionUnit->DroneOrbitSpeed;
+		VisualEffect.DroneRotationSpeed = ConstructionUnit->DroneRotationSpeed;
+		VisualEffect.DroneInterpSpeed = ConstructionUnit->DroneInterpSpeed;
+		VisualEffect.DroneAscentSpeed = ConstructionUnit->DroneAscentSpeed;
+		VisualEffect.DroneSpawnHeight = ConstructionUnit->DroneSpawnHeight;
+		VisualEffect.DroneSpawnPitch = ConstructionUnit->DroneSpawnPitch;
 	}
 
 	VisualEffect.bDishRotationEnabled = (MassUnit->Rep_VE_ActiveEffects & (1 << 3)) != 0;

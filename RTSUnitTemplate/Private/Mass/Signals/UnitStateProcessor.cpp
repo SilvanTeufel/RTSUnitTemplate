@@ -3949,7 +3949,13 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					NewConstruction->GetRootComponent()->UpdateComponentToWorld(); // ensure bounds are valid pre-spawn
 					FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
 					FVector UnitSize = PreBox.GetSize();
-					if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+					bool bIsDrone = false;
+					if (const AConstructionUnit* CU_DroneCheck = Cast<AConstructionUnit>(NewConstruction))
+					{
+						bIsDrone = CU_DroneCheck->DroneBehavior;
+					}
+
+					if (!bIsDrone && !UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
 					{
 						const float Margin = 0.98f;
 						const float ScaleX = (AreaSize.X * Margin) / UnitSize.X;

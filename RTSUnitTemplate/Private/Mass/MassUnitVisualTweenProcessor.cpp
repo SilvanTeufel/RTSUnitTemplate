@@ -177,25 +177,25 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     Effect.DroneTimer = 0.f;
                     Effect.DroneLastStage = Effect.DroneStage;
                     if (Effect.DroneStage == 0) {
-                        Effect.DroneOffset = FVector(Effect.DroneOrbitRadius, 0.f, 1500.f);
-                        Effect.DroneRotation = FRotator(-45.f, 0.f, 0.f).Quaternion();
+                        Effect.DroneOffset = FVector(Effect.DroneOrbitRadius, 0.f, Effect.DroneSpawnHeight);
+                        Effect.DroneRotation = FRotator(Effect.DroneSpawnPitch, 0.f, 0.f).Quaternion();
                         Effect.DroneCurrentAngle = 0.f;
                     }
                 }
 
                 switch (Effect.DroneStage) {
                 case 0: // Spawn / Fly down
-                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, 2.0f);
+                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, Effect.DroneInterpSpeed);
                     break;
                 case 1: // Orbit
                 {
-                    Effect.DroneCurrentAngle += 45.f * DroneDeltaTime;
+                    Effect.DroneCurrentAngle += Effect.DroneOrbitSpeed * DroneDeltaTime;
                     float Rad = FMath::DegreesToRadians(Effect.DroneCurrentAngle);
                     Effect.DroneOffset.X = FMath::Cos(Rad) * Effect.DroneOrbitRadius;
                     Effect.DroneOffset.Y = FMath::Sin(Rad) * Effect.DroneOrbitRadius;
 
                     FRotator TargetRot = FRotator(0.f, Effect.DroneCurrentAngle + 90.f, 0.f);
-                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, 5.f);
+                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
                 }
                 break;
                 case 2: // Focus
@@ -203,23 +203,23 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     FVector Direction = -Effect.DroneOffset;
                     Direction.Z = 0.f;
                     FRotator TargetRot = Direction.Rotation();
-                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, 5.f);
+                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
                 }
                 break;
                 case 3: // Vertical Move
-                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, 2.0f);
+                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, Effect.DroneInterpSpeed);
                     break;
                 case 4: // Reorient
                 {
                     FRotator TargetRot = FRotator(0.f, Effect.DroneCurrentAngle + 90.f, 0.f);
-                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, 5.f);
+                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
                 }
                 break;
                 case 5: // Despawn
                 {
-                    Effect.DroneOffset.Z += 2000.f * DroneDeltaTime;
+                    Effect.DroneOffset.Z += Effect.DroneAscentSpeed * DroneDeltaTime;
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
-                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, 8.0f);
+                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, Effect.DroneRotationSpeed + 3.f);
                     Effect.DroneRotation = CurrentRot.Quaternion();
                 }
                 break;

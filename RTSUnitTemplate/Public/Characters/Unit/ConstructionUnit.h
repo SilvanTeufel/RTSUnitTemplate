@@ -44,6 +44,27 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	bool DroneBehavior = false;
 
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneOrbitRadius = 300.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneOrbitSpeed = 45.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneRotationSpeed = 5.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneInterpSpeed = 2.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneAscentSpeed = 2000.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneSpawnHeight = 1500.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneSpawnPitch = -45.f;
+
 	UPROPERTY(Replicated)
 	int32 Rep_DroneStage = 0;
 
@@ -155,5 +176,4 @@ public:
 	float DroneTargetAngle = 0.f;
 	float DroneCurrentAngle = 0.f;
 	float DroneTargetHeight = 0.f;
-	float DroneOrbitRadius = 400.f;
 };

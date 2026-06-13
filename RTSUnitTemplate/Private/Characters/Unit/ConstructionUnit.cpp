@@ -32,6 +32,13 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, Rep_DroneTargetHeight);
 	DOREPLIFETIME(AConstructionUnit, DroneBehavior);
 	DOREPLIFETIME(AConstructionUnit, BuildingMaxHeight);
+	DOREPLIFETIME(AConstructionUnit, DroneOrbitRadius);
+	DOREPLIFETIME(AConstructionUnit, DroneOrbitSpeed);
+	DOREPLIFETIME(AConstructionUnit, DroneRotationSpeed);
+	DOREPLIFETIME(AConstructionUnit, DroneInterpSpeed);
+	DOREPLIFETIME(AConstructionUnit, DroneAscentSpeed);
+	DOREPLIFETIME(AConstructionUnit, DroneSpawnHeight);
+	DOREPLIFETIME(AConstructionUnit, DroneSpawnPitch);
 }
 
 void AConstructionUnit::BeginPlay()
