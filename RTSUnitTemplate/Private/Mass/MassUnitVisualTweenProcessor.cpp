@@ -199,7 +199,11 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     Effect.DroneOffset.X = FMath::Cos(Rad) * Effect.DroneOrbitRadius;
                     Effect.DroneOffset.Y = FMath::Sin(Rad) * Effect.DroneOrbitRadius;
 
+                    // Compute world rotation relative to building
+                    // We want the drone to face "forward" in its orbit
                     FRotator TargetRot = FRotator(0.f, Effect.DroneCurrentAngle + 90.f, 0.f);
+                    
+                    // DroneRotation is relative to Actor.
                     Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
                 }
                 break;
@@ -327,6 +331,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 if (Effect.bDroneEnabled) {
                     NewTransform.AddToTranslation(Effect.DroneOffset);
                     NewTransform.SetRotation(Effect.DroneRotation * NewTransform.GetRotation());
+                    NewTransform.SetScale3D(Effect.DroneBaseScale * NewTransform.GetScale3D());
                 }
 
                 Instance.CurrentRelativeTransform = NewTransform;

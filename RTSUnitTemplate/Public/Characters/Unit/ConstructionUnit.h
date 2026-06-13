@@ -47,6 +47,9 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneOrbitRadius = 300.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneMeshSafetyBuffer = 50.f;
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneOrbitSpeed = 45.f;
 

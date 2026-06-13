@@ -267,6 +267,9 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     float DroneSpawnHeight = 1500.f;
     UPROPERTY()
     float DroneSpawnPitch = -45.f;
+
+    UPROPERTY()
+    FVector DroneBaseScale = FVector::OneVector;
 };
 
 template<>

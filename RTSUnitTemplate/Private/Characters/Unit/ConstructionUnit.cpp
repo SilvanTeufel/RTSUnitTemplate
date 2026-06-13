@@ -196,10 +196,38 @@ void AConstructionUnit::UpdateDroneLogic(float DeltaSeconds)
 	AWorkArea* WA = BuildArea ? BuildArea : WorkArea;
 	if (!WA) return;
 
-	// Determine Building Height
+	// Determine Building Height and Drone Radius
 	if (WA->Mesh)
 	{
 		BuildingMaxHeight = WA->Mesh->Bounds.BoxExtent.Z * 2.f;
+		
+		FVector BoxExtent = WA->Mesh->Bounds.BoxExtent;
+		FVector ActorScale = GetActorScale3D();
+		
+		// Consider actor scale to get the actual world-space size of the building
+		float ScaledX = BoxExtent.X * ActorScale.X;
+		float ScaledY = BoxExtent.Y * ActorScale.Y;
+		
+		float MeshHorizontalRadius = FVector2D(ScaledX, ScaledY).Size();
+		
+		// Now we have the world-space radius needed. 
+		// But DroneOrbitRadius is applied as a relative offset in MassUnitVisualTweenProcessor.
+		// Since the Drone instance is a child of the ConstructionUnit, it is affected by the Actor's scale.
+		// If the scale is non-uniform, a circular orbit in relative space becomes an ellipse in world space.
+		// However, we want the drone to stay at a safe distance in all directions.
+		
+		// If we want a circular orbit in world space, we would need to compensate for the actor scale.
+		// For now, let's at least ensure the radius is sufficient for the largest dimension.
+		// We divide by the average horizontal scale to get a relative radius that roughly matches the world size.
+		float AvgScale = (ActorScale.X + ActorScale.Y) * 0.5f;
+		if (AvgScale > KINDA_SMALL_NUMBER)
+		{
+			DroneOrbitRadius = (MeshHorizontalRadius + DroneMeshSafetyBuffer) / AvgScale;
+		}
+		else
+		{
+			DroneOrbitRadius = MeshHorizontalRadius + DroneMeshSafetyBuffer;
+		}
 	}
 
 	switch (Rep_DroneStage)

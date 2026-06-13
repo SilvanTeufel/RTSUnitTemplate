@@ -277,6 +277,17 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		VisualEffect.DroneAscentSpeed = ConstructionUnit->DroneAscentSpeed;
 		VisualEffect.DroneSpawnHeight = ConstructionUnit->DroneSpawnHeight;
 		VisualEffect.DroneSpawnPitch = ConstructionUnit->DroneSpawnPitch;
+
+		// Drone scale compensation for non-uniform actor scale
+		FVector ActorScale = Unit.GetActorScale3D();
+		if (!ActorScale.IsNearlyZero())
+		{
+			VisualEffect.DroneBaseScale = FVector(1.0f / ActorScale.X, 1.0f / ActorScale.Y, 1.0f / ActorScale.Z);
+		}
+		else
+		{
+			VisualEffect.DroneBaseScale = FVector::OneVector;
+		}
 	}
 
 	VisualEffect.bDishRotationEnabled = (MassUnit->Rep_VE_ActiveEffects & (1 << 3)) != 0;
