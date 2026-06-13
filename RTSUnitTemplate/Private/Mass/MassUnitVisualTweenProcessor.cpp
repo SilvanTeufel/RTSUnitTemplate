@@ -185,8 +185,13 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 switch (Effect.DroneStage) {
                 case 0: // Spawn / Fly down
+                {
                     Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, Effect.DroneInterpSpeed);
-                    break;
+                    FRotator CurrentRot = Effect.DroneRotation.Rotator();
+                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, Effect.DroneRotationSpeed);
+                    Effect.DroneRotation = CurrentRot.Quaternion();
+                }
+                break;
                 case 1: // Orbit
                 {
                     Effect.DroneCurrentAngle += Effect.DroneOrbitSpeed * DroneDeltaTime;
@@ -207,8 +212,15 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 }
                 break;
                 case 3: // Vertical Move
+                {
                     Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, Effect.DroneInterpSpeed);
-                    break;
+                    
+                    FVector Direction = -Effect.DroneOffset;
+                    Direction.Z = 0.f;
+                    FRotator TargetRot = Direction.Rotation();
+                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
+                }
+                break;
                 case 4: // Reorient
                 {
                     FRotator TargetRot = FRotator(0.f, Effect.DroneCurrentAngle + 90.f, 0.f);
@@ -219,7 +231,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 {
                     Effect.DroneOffset.Z += Effect.DroneAscentSpeed * DroneDeltaTime;
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
-                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, Effect.DroneRotationSpeed + 3.f);
+                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, 90.f, DroneDeltaTime, Effect.DroneRotationSpeed + 3.f);
                     Effect.DroneRotation = CurrentRot.Quaternion();
                 }
                 break;

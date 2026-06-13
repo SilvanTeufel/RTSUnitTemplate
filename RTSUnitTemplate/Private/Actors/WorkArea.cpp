@@ -734,6 +734,10 @@ void AWorkArea::OnOverflowTimer()
 		if (AUnitBase* Unit = Cast<AUnitBase>(Worker))
 		{
 			Unit->SwitchEntityTagByState(UnitData::GoToBase, Unit->UnitStatePlaceholder);
+			if (AWorkingUnitBase* W = Cast<AWorkingUnitBase>(Unit))
+			{
+				W->BuildArea = nullptr;
+			}
 		}
 		// Remove worker from array via helper (ensures consistent behavior)
 		RemoveWorkerFromArray(Worker);

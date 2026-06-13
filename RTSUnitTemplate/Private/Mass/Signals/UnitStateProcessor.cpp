@@ -622,6 +622,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         			{
                         				EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
                         				Worker->BuildArea->RemoveWorkerFromArray(Worker);
+                        				Worker->BuildArea = nullptr;
                         				SetTag = true;
                         			}
                         		}
@@ -672,6 +673,9 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     				if (Worker->BuildArea && Worker->BuildArea->Workers.Num() > Worker->BuildArea->MaxWorkerCount)
                     				{
                     					UpdateUnitMovement(Entity , UnitBase);
+                    					EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
+                    					Worker->BuildArea->RemoveWorkerFromArray(Worker);
+                    					Worker->BuildArea = nullptr;
                     					SetTag = true;
                     				}
                     			}
@@ -3821,6 +3825,7 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 			{
 				FMassEntityHandle MutableEntity = Entity;
 				SwitchState(UnitSignals::GoToBase, MutableEntity, EntityManager);
+				Worker->BuildArea = nullptr;
 				return;
 			}
 			Worker->BuildArea->AddWorkerToArray(Worker);
