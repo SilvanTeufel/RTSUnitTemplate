@@ -51,7 +51,7 @@ public:
 	FVector DroneOrbitCenter = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
-	float DroneMeshSafetyBuffer = 50.f;
+	float DroneMeshSafetyBuffer = 150.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneOrbitSpeed = 45.f;
