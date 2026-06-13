@@ -16,6 +16,7 @@ AConstructionUnit::AConstructionUnit(const FObjectInitializer& ObjectInitializer
 	// Likely stationary
 	CanMove = false;
 	bIsConstructionUnit = true;
+	PrimaryActorTick.bCanEverTick = true;
 }
 
 void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -26,6 +27,9 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetA);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetB);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationCyclesPerSecond);
+	DOREPLIFETIME(AConstructionUnit, Rep_DroneStage);
+	DOREPLIFETIME(AConstructionUnit, Rep_DroneTargetAngle);
+	DOREPLIFETIME(AConstructionUnit, Rep_DroneTargetHeight);
 }
 
 void AConstructionUnit::BeginPlay()
@@ -47,6 +51,16 @@ void AConstructionUnit::SetCharacterVisibility(bool desiredVisibility)
 void AConstructionUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
+}
+
+void AConstructionUnit::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (HasAuthority() && DroneBehavior)
+	{
+		UpdateDroneLogic(DeltaSeconds);
+	}
 }
 
 UPrimitiveComponent* AConstructionUnit::ResolveVisualComponent() const
@@ -166,4 +180,87 @@ void AConstructionUnit::MulticastPulsateScale_Implementation(const FVector& MinM
 			Rep_VE_PulsateHalfPeriod = EffectFrag->PulsateHalfPeriod;
 		}
 	}
+}
+
+void AConstructionUnit::UpdateDroneLogic(float DeltaSeconds)
+{
+	if (!WorkArea) return;
+
+	// Determine Building Height
+	if (WorkArea->Mesh)
+	{
+		BuildingMaxHeight = WorkArea->Mesh->Bounds.BoxExtent.Z * 2.f;
+	}
+
+	switch (Rep_DroneStage)
+	{
+	case 0: // Stage 1: Spawn far above and fly down
+		if (DroneStateTimer == 0.f)
+		{
+			Rep_DroneStage = 0; // Ensure we are in 0
+			Rep_DroneTargetHeight = BuildingMaxHeight * 0.5f;
+		}
+		
+		// The actual movement happens in Mass processor
+		// We just wait here or use a timer to transition if needed
+		// But better let the Mass processor handle the progress and we just check state
+		
+		if (DroneStateTimer >= 3.0f) // Give it 3 seconds to "fly down"
+		{
+			Rep_DroneStage = 1; // Transition to Stage 2 (Orbit)
+			DroneStateTimer = 0.f;
+			Rep_DroneTargetAngle = FMath::RandRange(60.f, 180.f);
+		}
+		break;
+
+	case 1: // Stage 2: Orbit around building
+	{
+		// In Stage 1 (Fragment DroneStage 1), it orbits.
+		// We wait until it should have reached its target.
+		// The speed is 45 deg/s.
+		float EstimatedTime = Rep_DroneTargetAngle / 45.f;
+		if (DroneStateTimer >= EstimatedTime)
+		{
+			Rep_DroneStage = 2; // Transition to Stage 3 (Stop and Focus)
+			DroneStateTimer = 0.f;
+		}
+	}
+	break;
+
+	case 2: // Stage 3: Stop and rotate to building
+	{
+		if (DroneStateTimer >= 1.5f)
+		{
+			Rep_DroneStage = 3; // Transition to Stage 4 (Vertical move)
+			DroneStateTimer = 0.f;
+			Rep_DroneTargetHeight = FMath::RandRange(10.f, BuildingMaxHeight);
+		}
+	}
+	break;
+
+	case 3: // Stage 4: Fly up/down
+		if (DroneStateTimer >= 2.0f) // 2 seconds for vertical move
+		{
+			Rep_DroneStage = 4; // Transition to Stage 5 (Reorient)
+			DroneStateTimer = 0.f;
+		}
+		break;
+
+	case 4: // Stage 5: Rotate back to movement direction
+	{
+		if (DroneStateTimer >= 1.0f)
+		{
+			Rep_DroneStage = 1; // Loop back to Orbit
+			Rep_DroneTargetAngle += FMath::RandRange(60.f, 180.f);
+			DroneStateTimer = 0.f;
+		}
+	}
+	break;
+
+	case 5: // Stage 6: Despawn (Fly up)
+		// Stay in this stage until actor is destroyed
+		break;
+	}
+
+	DroneStateTimer += DeltaSeconds;
 }

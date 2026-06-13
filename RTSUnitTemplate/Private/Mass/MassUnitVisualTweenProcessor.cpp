@@ -167,6 +167,65 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 }
             }
 
+            // 2.5 Drone Simulation
+            if (Effect.bDroneEnabled) {
+                float DroneDeltaTime = Context.GetDeltaTimeSeconds();
+
+                // Reset timer and state on stage change
+                if (Effect.DroneStage != Effect.DroneLastStage) {
+                    Effect.DroneTimer = 0.f;
+                    Effect.DroneLastStage = Effect.DroneStage;
+                    if (Effect.DroneStage == 0) {
+                        Effect.DroneOffset = FVector(Effect.DroneOrbitRadius, 0.f, 1500.f);
+                        Effect.DroneRotation = FRotator(-45.f, 0.f, 0.f).Quaternion();
+                        Effect.DroneCurrentAngle = 0.f;
+                    }
+                }
+
+                switch (Effect.DroneStage) {
+                case 0: // Spawn / Fly down
+                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, 2.0f);
+                    break;
+                case 1: // Orbit
+                {
+                    Effect.DroneCurrentAngle += 45.f * DroneDeltaTime;
+                    float Rad = FMath::DegreesToRadians(Effect.DroneCurrentAngle);
+                    Effect.DroneOffset.X = FMath::Cos(Rad) * Effect.DroneOrbitRadius;
+                    Effect.DroneOffset.Y = FMath::Sin(Rad) * Effect.DroneOrbitRadius;
+
+                    FRotator TargetRot = FRotator(0.f, Effect.DroneCurrentAngle + 90.f, 0.f);
+                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, 5.f);
+                }
+                break;
+                case 2: // Focus
+                {
+                    FVector Direction = -Effect.DroneOffset;
+                    Direction.Z = 0.f;
+                    FRotator TargetRot = Direction.Rotation();
+                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, 5.f);
+                }
+                break;
+                case 3: // Vertical Move
+                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, 2.0f);
+                    break;
+                case 4: // Reorient
+                {
+                    FRotator TargetRot = FRotator(0.f, Effect.DroneCurrentAngle + 90.f, 0.f);
+                    Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, 5.f);
+                }
+                break;
+                case 5: // Despawn
+                {
+                    Effect.DroneOffset.Z += 800.f * DroneDeltaTime;
+                    FRotator CurrentRot = Effect.DroneRotation.Rotator();
+                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, 2.0f);
+                    Effect.DroneRotation = CurrentRot.Quaternion();
+                }
+                break;
+                }
+                Effect.DroneTimer += DroneDeltaTime;
+            }
+
             // 3. Apply everything to instances
             for (int32 InstanceIdx = 0; InstanceIdx < Visual.VisualInstances.Num(); ++InstanceIdx) {
                 FMassUnitVisualInstance& Instance = Visual.VisualInstances[InstanceIdx];
@@ -251,6 +310,12 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     }
                 }
 
+                // Drone Behavior
+                if (Effect.bDroneEnabled) {
+                    NewTransform.AddToTranslation(Effect.DroneOffset);
+                    NewTransform.SetRotation(Effect.DroneRotation * NewTransform.GetRotation());
+                }
+
                 Instance.CurrentRelativeTransform = NewTransform;
             }
 
@@ -258,7 +323,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
             const bool bHasActiveTweenOrEffect =
                 Tween.RotationTween.bActive || Tween.LocationTween.bActive || Tween.ScaleTween.bActive ||
                 Effect.bPulsateEnabled || Effect.bRotationEnabled || Effect.bOscillationEnabled ||
-                Effect.bDishRotationEnabled || (Effect.bYawChaseEnabled && bHasYawChaseTarget);
+                Effect.bDishRotationEnabled || (Effect.bYawChaseEnabled && bHasYawChaseTarget) || Effect.bDroneEnabled;
 
             if (bHasActiveTweenOrEffect)
             {

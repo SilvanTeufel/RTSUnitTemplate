@@ -3707,6 +3707,15 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 	{
 		WA->CurrentBuildTime = Construction->UnitControlTimer;
 	}
+	// Drone Behavior Stage 6 (Despawn) trigger
+	if (Construction->DroneBehavior && Construction->Rep_DroneStage < 5)
+	{
+		const float RemainingTime = WA->BuildTime - Construction->UnitControlTimer;
+		if (RemainingTime < 2.0f) // 2 seconds before end
+		{
+			Construction->Rep_DroneStage = 5;
+		}
+	}
 	// If CU died, hide and lock out respawn
 	if (Construction->Attributes)
 	{
@@ -3951,13 +3960,16 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 				// start construction animations (rotate + oscillate) for remaining build time (95%)
 				if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
 				{
-					const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
-					CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
-					CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
-					// Start multiplicative pulsating scale around base (configured on construction unit)
-					if (CU_Anim->bPulsateScaleDuringBuild)
+					if (!CU_Anim->DroneBehavior)
 					{
-						CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+						const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
+						CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
+						CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
+						// Start multiplicative pulsating scale around base (configured on construction unit)
+						if (CU_Anim->bPulsateScaleDuringBuild)
+						{
+							CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+						}
 					}
 				}
 				// set initial health (>=5%)

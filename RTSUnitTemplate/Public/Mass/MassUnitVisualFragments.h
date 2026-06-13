@@ -227,6 +227,34 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> DishTargetISM;
+
+    // Drone Behavior
+    UPROPERTY()
+    bool bDroneEnabled = false;
+
+    UPROPERTY()
+    FVector DroneOffset = FVector::ZeroVector;
+
+    UPROPERTY()
+    FQuat DroneRotation = FQuat::Identity;
+
+    // Drone Behavior state for local simulation
+    UPROPERTY()
+    int32 DroneStage = 0;
+    UPROPERTY()
+    int32 DroneLastStage = -1;
+    UPROPERTY()
+    float DroneTimer = 0.f;
+    UPROPERTY()
+    float DroneCurrentAngle = 0.f;
+    UPROPERTY()
+    float DroneTargetAngle = 0.f;
+    UPROPERTY()
+    float DroneTargetHeight = 0.f;
+    UPROPERTY()
+    float DroneBuildingHeight = 300.f;
+    UPROPERTY()
+    float DroneOrbitRadius = 400.f;
 };
 
 template<>

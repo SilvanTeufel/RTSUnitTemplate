@@ -4185,12 +4185,15 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			}
 			if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
 			{
-				const float AnimDuration = WA->BuildTime * 0.95f;
-				CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
-				CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
-				if (CU_Anim->bPulsateScaleDuringBuild)
+				if (!CU_Anim->DroneBehavior)
 				{
-					CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+					const float AnimDuration = WA->BuildTime * 0.95f;
+					CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
+					CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
+					if (CU_Anim->bPulsateScaleDuringBuild)
+					{
+						CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+					}
 				}
 			}
 			WA->ConstructionUnit = NewConstruction;

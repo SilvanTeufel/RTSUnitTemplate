@@ -19,6 +19,7 @@ public:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetCharacterVisibility(bool desiredVisibility) override;
 
 	// The worker assigned to construct this site
@@ -39,6 +40,21 @@ public:
 	FVector Rep_VE_OscillationOffsetB = FVector::ZeroVector;
 	UPROPERTY(Replicated)
 	float Rep_VE_OscillationCyclesPerSecond = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	bool DroneBehavior = false;
+
+	UPROPERTY(Replicated)
+	int32 Rep_DroneStage = 0;
+
+	UPROPERTY(Replicated)
+	float Rep_DroneTargetAngle = 0.f;
+
+	UPROPERTY(Replicated)
+	float Rep_DroneTargetHeight = 0.f;
+
+	UPROPERTY()
+	float BuildingMaxHeight = 300.f;
 
 	// Optional override for which component to animate (if null we try to auto-detect a mesh; fallback to RootComponent/Actor)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Anim")
@@ -129,7 +145,15 @@ public:
  FVector Pulsate_Min = FVector(0.9f, 0.9f, 0.9f);
  FVector Pulsate_Max = FVector(1.1f, 1.1f, 1.1f);
  float Pulsate_HalfPeriod = 0.75f;
- float Pulsate_Elapsed = 0.f;
- TWeakObjectPtr<USceneComponent> Pulsate_TargetComp;
- bool Pulsate_UseActor = false;
+	float Pulsate_Elapsed = 0.f;
+	TWeakObjectPtr<USceneComponent> Pulsate_TargetComp;
+	bool Pulsate_UseActor = false;
+
+	// Drone logic helpers
+	void UpdateDroneLogic(float DeltaSeconds);
+	float DroneStateTimer = 0.f;
+	float DroneTargetAngle = 0.f;
+	float DroneCurrentAngle = 0.f;
+	float DroneTargetHeight = 0.f;
+	float DroneOrbitRadius = 400.f;
 };
