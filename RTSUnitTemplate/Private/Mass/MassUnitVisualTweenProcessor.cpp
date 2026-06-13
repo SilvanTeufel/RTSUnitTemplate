@@ -188,7 +188,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 {
                     Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, Effect.DroneInterpSpeed);
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
-                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, -90.f, DroneDeltaTime, Effect.DroneRotationSpeed);
+                    CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, 90.f, DroneDeltaTime, Effect.DroneRotationSpeed);
                     Effect.DroneRotation = CurrentRot.Quaternion();
                 }
                 break;

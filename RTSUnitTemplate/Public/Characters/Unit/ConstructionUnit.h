@@ -63,7 +63,7 @@ public:
 	float DroneSpawnHeight = 1500.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
-	float DroneSpawnPitch = -45.f;
+	float DroneSpawnPitch = 90.f;
 
 	UPROPERTY(Replicated)
 	int32 Rep_DroneStage = 0;
