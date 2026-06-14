@@ -4,6 +4,9 @@
 #include "MassExecutionContext.h"
 #include "Mass/MassUnitVisualFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "MassActorSubsystem.h"
+#include "Characters/Unit/ConstructionUnit.h"
+#include "Actors/WorkArea.h"
 #include "MassNavigationFragments.h"
 #include <type_traits>
 
@@ -18,6 +21,7 @@ UMassUnitVisualTweenProcessor::UMassUnitVisualTweenProcessor() {
 void UMassUnitVisualTweenProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager) {
     EntityQuery.Initialize(EntityManager);
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassUnitVisualFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVisualTweenFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadWrite);
@@ -40,6 +44,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
     EntityQuery.ForEachEntityChunk(Context, ([&EntityManager, DeltaTime, bShouldLog](FMassExecutionContext& Context) {
         TConstArrayView<FTransformFragment> TransformList = Context.GetFragmentView<FTransformFragment>();
+        TConstArrayView<FMassActorFragment> ActorList = Context.GetFragmentView<FMassActorFragment>();
         TArrayView<FMassUnitVisualFragment> VisualList = Context.GetMutableFragmentView<FMassUnitVisualFragment>();
         TArrayView<FMassVisualTweenFragment> TweenList = Context.GetMutableFragmentView<FMassVisualTweenFragment>();
         TArrayView<FMassVisualEffectFragment> EffectList = Context.GetMutableFragmentView<FMassVisualEffectFragment>();
@@ -190,6 +195,11 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
                     CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, 90.f, DroneDeltaTime, Effect.DroneRotationSpeed);
                     Effect.DroneRotation = CurrentRot.Quaternion();
+
+                    if (Effect.DroneTimer >= 3.0f) {
+                        Effect.DroneStage = 1;
+                        Effect.DroneTargetAngle = FMath::FRandRange(60.f, 180.f);
+                    }
                 }
                 break;
                 case 1: // Orbit
@@ -205,6 +215,11 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     
                     // DroneRotation is relative to Actor.
                     Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
+
+                    float EstimatedTime = Effect.DroneTargetAngle / Effect.DroneOrbitSpeed;
+                    if (Effect.DroneTimer >= EstimatedTime) {
+                        Effect.DroneStage = 2;
+                    }
                 }
                 break;
                 case 2: // Focus
@@ -213,6 +228,11 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     Direction.Z = 0.f;
                     FRotator TargetRot = Direction.Rotation();
                     Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
+
+                    if (Effect.DroneTimer >= 1.5f) {
+                        Effect.DroneStage = 3;
+                        Effect.DroneTargetHeight = FMath::FRandRange(10.f, Effect.DroneBuildingHeight);
+                    }
                 }
                 break;
                 case 3: // Vertical Move
@@ -223,12 +243,21 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     Direction.Z = 0.f;
                     FRotator TargetRot = Direction.Rotation();
                     Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
+
+                    if (Effect.DroneTimer >= 2.0f) {
+                        Effect.DroneStage = 4;
+                    }
                 }
                 break;
                 case 4: // Reorient
                 {
                     FRotator TargetRot = FRotator(0.f, Effect.DroneCurrentAngle + 90.f, 0.f);
                     Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
+
+                    if (Effect.DroneTimer >= 1.0f) {
+                        Effect.DroneStage = 1;
+                        Effect.DroneTargetAngle = FMath::FRandRange(60.f, 180.f);
+                    }
                 }
                 break;
                 case 5: // Despawn
@@ -237,9 +266,23 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
                     CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, 90.f, DroneDeltaTime, Effect.DroneRotationSpeed + 3.f);
                     Effect.DroneRotation = CurrentRot.Quaternion();
+
+                    if (Effect.DroneTimer >= 5.0f) {
+                        Effect.bDroneEnabled = false;
+                    }
                 }
                 break;
                 }
+
+                // Autonome Despawn Erkennung
+                if (Effect.DroneStage < 5) {
+                    if (const AConstructionUnit* CU = Cast<AConstructionUnit>(ActorList[i].Get())) {
+                        if (CU->WorkArea && CU->WorkArea->CurrentBuildTime > CU->WorkArea->BuildTime * 0.9f) {
+                            Effect.DroneStage = 5;
+                        }
+                    }
+                }
+
                 Effect.DroneTimer += DroneDeltaTime;
             }
 

@@ -264,30 +264,68 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		VisualEffect.OscillationOffsetA = ConstructionUnit->Rep_VE_OscillationOffsetA;
 		VisualEffect.OscillationOffsetB = ConstructionUnit->Rep_VE_OscillationOffsetB;
 		VisualEffect.OscillationCyclesPerSecond = ConstructionUnit->Rep_VE_OscillationCyclesPerSecond;
-		
-		VisualEffect.bDroneEnabled = ConstructionUnit->DroneBehavior;
-		VisualEffect.DroneStage = ConstructionUnit->Rep_DroneStage;
-		VisualEffect.DroneTargetAngle = ConstructionUnit->Rep_DroneTargetAngle;
-		VisualEffect.DroneTargetHeight = ConstructionUnit->Rep_DroneTargetHeight;
-		VisualEffect.DroneBuildingHeight = ConstructionUnit->BuildingMaxHeight;
-		VisualEffect.DroneOrbitRadius = ConstructionUnit->DroneOrbitRadius;
-		VisualEffect.DroneOrbitCenter = ConstructionUnit->DroneOrbitCenter;
-		VisualEffect.DroneOrbitSpeed = ConstructionUnit->DroneOrbitSpeed;
-		VisualEffect.DroneRotationSpeed = ConstructionUnit->DroneRotationSpeed;
-		VisualEffect.DroneInterpSpeed = ConstructionUnit->DroneInterpSpeed;
-		VisualEffect.DroneAscentSpeed = ConstructionUnit->DroneAscentSpeed;
-		VisualEffect.DroneSpawnHeight = ConstructionUnit->DroneSpawnHeight;
-		VisualEffect.DroneSpawnPitch = ConstructionUnit->DroneSpawnPitch;
 
-		// Drone scale compensation for non-uniform actor scale
-		FVector ActorScale = Unit.GetActorScale3D();
-		if (!ActorScale.IsNearlyZero())
+		if (ConstructionUnit->DroneBehavior && !VisualEffect.bDroneEnabled)
 		{
-			VisualEffect.DroneBaseScale = FVector(1.0f / ActorScale.X, 1.0f / ActorScale.Y, 1.0f / ActorScale.Z);
+			VisualEffect.bDroneEnabled = true;
+			VisualEffect.DroneStage = 0;
+			VisualEffect.DroneTimer = 0.f;
+			VisualEffect.DroneCurrentAngle = 0.f;
+
+			// Lokale Berechnung der Parameter (Building Height, Radius, Center)
+			AWorkArea* WA = ConstructionUnit->WorkArea;
+			if (WA && WA->Mesh)
+			{
+				VisualEffect.DroneBuildingHeight = WA->Mesh->Bounds.BoxExtent.Z * 2.f;
+                
+				FVector BoxExtent = WA->Mesh->Bounds.BoxExtent;
+				FVector ActorScale = Unit.GetActorScale3D();
+                
+				float ScaledX = BoxExtent.X * ActorScale.X;
+				float ScaledY = BoxExtent.Y * ActorScale.Y;
+                
+				float WorldRadiusX = ScaledX + ConstructionUnit->DroneMeshSafetyBuffer;
+				float WorldRadiusY = ScaledY + ConstructionUnit->DroneMeshSafetyBuffer;
+                
+				if (ActorScale.X > KINDA_SMALL_NUMBER)
+					VisualEffect.DroneOrbitRadius.X = WorldRadiusX / ActorScale.X;
+				else
+					VisualEffect.DroneOrbitRadius.X = WorldRadiusX;
+
+				if (ActorScale.Y > KINDA_SMALL_NUMBER)
+					VisualEffect.DroneOrbitRadius.Y = WorldRadiusY / ActorScale.Y;
+				else
+					VisualEffect.DroneOrbitRadius.Y = WorldRadiusY;
+
+				FVector WALocation = WA->GetActorLocation();
+				VisualEffect.DroneOrbitCenter = Unit.GetActorTransform().InverseTransformPosition(WALocation);
+			}
+            
+			// Kopiere BP Defaults vom Actor
+			VisualEffect.DroneOrbitSpeed = ConstructionUnit->DroneOrbitSpeed;
+			VisualEffect.DroneRotationSpeed = ConstructionUnit->DroneRotationSpeed;
+			VisualEffect.DroneInterpSpeed = ConstructionUnit->DroneInterpSpeed;
+			VisualEffect.DroneAscentSpeed = ConstructionUnit->DroneAscentSpeed;
+			VisualEffect.DroneSpawnHeight = ConstructionUnit->DroneSpawnHeight;
+			VisualEffect.DroneSpawnPitch = ConstructionUnit->DroneSpawnPitch;
+            
+			// Initial Target Height (Stage 0: Fly down)
+			VisualEffect.DroneTargetHeight = VisualEffect.DroneBuildingHeight * 0.5f;
+
+			// Drone scale compensation
+			FVector ActorScale = Unit.GetActorScale3D();
+			if (!ActorScale.IsNearlyZero())
+			{
+				VisualEffect.DroneBaseScale = FVector(1.0f / ActorScale.X, 1.0f / ActorScale.Y, 1.0f / ActorScale.Z);
+			}
+			else
+			{
+				VisualEffect.DroneBaseScale = FVector::OneVector;
+			}
 		}
-		else
+		else if (!ConstructionUnit->DroneBehavior)
 		{
-			VisualEffect.DroneBaseScale = FVector::OneVector;
+			VisualEffect.bDroneEnabled = false;
 		}
 	}
 

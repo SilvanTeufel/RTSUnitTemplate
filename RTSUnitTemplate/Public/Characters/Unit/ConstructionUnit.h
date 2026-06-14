@@ -19,7 +19,6 @@ public:
 	virtual void BeginPlay() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
-	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetCharacterVisibility(bool desiredVisibility) override;
 
 	// The worker assigned to construct this site
@@ -44,43 +43,43 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	bool DroneBehavior = false;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	FVector2D DroneOrbitRadius = FVector2D(300.f, 300.f);
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	FVector DroneOrbitCenter = FVector::ZeroVector;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneMeshSafetyBuffer = 150.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneOrbitSpeed = 45.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneRotationSpeed = 5.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneInterpSpeed = 2.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneAscentSpeed = 2000.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneSpawnHeight = 1500.f;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneSpawnPitch = 90.f;
 
-	UPROPERTY(Replicated)
+	UPROPERTY()
 	int32 Rep_DroneStage = 0;
 
-	UPROPERTY(Replicated)
+	UPROPERTY()
 	float Rep_DroneTargetAngle = 0.f;
 
-	UPROPERTY(Replicated)
+	UPROPERTY()
 	float Rep_DroneTargetHeight = 0.f;
 
-	UPROPERTY(Replicated)
+	UPROPERTY()
 	float BuildingMaxHeight = 300.f;
 
 	// Optional override for which component to animate (if null we try to auto-detect a mesh; fallback to RootComponent/Actor)
@@ -134,7 +133,7 @@ public:
 	
  // Query if the pulsating scale is currently active on this client
  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Construction|Pulsate")
- bool IsPulsatingScaleActive() const { return bPulsateActive; }
+ bool IsPulsatingScaleActive() const { return (Rep_VE_ActiveEffects & (1 << 0)) != 0; }
 
  // Utility: immediately mark this construction site as dead, zero its health, and hide it
  UFUNCTION(BlueprintCallable, Category = Construction)
@@ -144,42 +143,7 @@ public:
  UFUNCTION(Server, Reliable)
  void Server_KillConstructionUnit();
 
- protected:
- // Resolve which component we will animate
- UPrimitiveComponent* ResolveVisualComponent() const;
-
- // Runtime state (not replicated)
- float Rotate_Duration = 0.f;
- float Rotate_Elapsed = 0.f;
- FVector Rotate_Axis = FVector(0.f, 0.f, 0.f);
- float Rotate_DegreesPerSec = 0.f;
- TWeakObjectPtr<USceneComponent> Rotate_TargetComp;
- bool Rotate_UseActor = false;
-
- float Osc_Duration = 0.f;
- float Osc_Elapsed = 0.f;
- float Osc_CyclesPerSec = 1.f;
- FVector Osc_OffsetA = FVector::ZeroVector;
- FVector Osc_OffsetB = FVector(0.f, 0.f, 50.f);
- FVector Osc_BaseRelativeLoc = FVector::ZeroVector;
- FVector Osc_BaseActorLoc = FVector::ZeroVector;
- TWeakObjectPtr<USceneComponent> Osc_TargetComp;
- bool Osc_UseActor = false;
-
- // Pulsate runtime state
- bool bPulsateActive = false;
- FVector Pulsate_BaseScale = FVector(1.f, 1.f, 1.f);
- FVector Pulsate_Min = FVector(0.9f, 0.9f, 0.9f);
- FVector Pulsate_Max = FVector(1.1f, 1.1f, 1.1f);
- float Pulsate_HalfPeriod = 0.75f;
-	float Pulsate_Elapsed = 0.f;
-	TWeakObjectPtr<USceneComponent> Pulsate_TargetComp;
-	bool Pulsate_UseActor = false;
-
-	// Drone logic helpers
-	void UpdateDroneLogic(float DeltaSeconds);
-	float DroneStateTimer = 0.f;
-	float DroneTargetAngle = 0.f;
-	float DroneCurrentAngle = 0.f;
-	float DroneTargetHeight = 0.f;
+	protected:
+	// Resolve which component we will animate
+	UPrimitiveComponent* ResolveVisualComponent() const;
 };
