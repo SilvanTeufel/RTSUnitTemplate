@@ -238,6 +238,12 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     UPROPERTY()
     FQuat DroneRotation = FQuat::Identity;
 
+    UPROPERTY(Transient)
+    FVector DroneVisualOffset = FVector::ZeroVector;
+
+    UPROPERTY(Transient)
+    FQuat DroneVisualRotation = FQuat::Identity;
+
     // Drone Behavior state for local simulation
     UPROPERTY()
     int32 DroneStage = 0;

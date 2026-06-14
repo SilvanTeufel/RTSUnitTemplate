@@ -184,6 +184,8 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     if (Effect.DroneStage == 0) {
                         Effect.DroneOffset = FVector(Effect.DroneOrbitRadius.X, 0.f, Effect.DroneSpawnHeight);
                         Effect.DroneRotation = FRotator(Effect.DroneSpawnPitch, 0.f, 0.f).Quaternion();
+                        Effect.DroneVisualOffset = Effect.DroneOffset;
+                        Effect.DroneVisualRotation = Effect.DroneRotation;
                         Effect.DroneCurrentAngle = 0.f;
                     }
                 }
@@ -206,8 +208,13 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 {
                     Effect.DroneCurrentAngle += Effect.DroneOrbitSpeed * DroneDeltaTime;
                     float Rad = FMath::DegreesToRadians(Effect.DroneCurrentAngle);
-                    Effect.DroneOffset.X = FMath::Cos(Rad) * Effect.DroneOrbitRadius.X;
-                    Effect.DroneOffset.Y = FMath::Sin(Rad) * Effect.DroneOrbitRadius.Y;
+                    
+                    FVector TargetOffset = Effect.DroneOffset;
+                    TargetOffset.X = FMath::Cos(Rad) * Effect.DroneOrbitRadius.X;
+                    TargetOffset.Y = FMath::Sin(Rad) * Effect.DroneOrbitRadius.Y;
+                    
+                    // Use interpolation for smoother movement during orbit
+                    Effect.DroneOffset = FMath::VInterpTo(Effect.DroneOffset, TargetOffset, DroneDeltaTime, Effect.DroneInterpSpeed);
 
                     // Compute world rotation relative to building
                     // We want the drone to face "forward" in its orbit
@@ -262,7 +269,10 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 break;
                 case 5: // Despawn
                 {
-                    Effect.DroneOffset.Z += Effect.DroneAscentSpeed * DroneDeltaTime;
+                    FVector TargetOffset = Effect.DroneOffset;
+                    TargetOffset.Z += Effect.DroneAscentSpeed * DroneDeltaTime;
+                    Effect.DroneOffset = FMath::VInterpTo(Effect.DroneOffset, TargetOffset, DroneDeltaTime, Effect.DroneInterpSpeed);
+                    
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
                     CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, 90.f, DroneDeltaTime, Effect.DroneRotationSpeed + 3.f);
                     Effect.DroneRotation = CurrentRot.Quaternion();
@@ -281,6 +291,16 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                             Effect.DroneStage = 5;
                         }
                     }
+                }
+
+                // Interpolate visual representation to match the simulated authoritative state
+                // This smooths out any jitter from replication or physics-sync
+                if (Effect.DroneVisualOffset.IsZero()) {
+                    Effect.DroneVisualOffset = Effect.DroneOffset;
+                    Effect.DroneVisualRotation = Effect.DroneRotation;
+                } else {
+                    Effect.DroneVisualOffset = FMath::VInterpTo(Effect.DroneVisualOffset, Effect.DroneOffset, DroneDeltaTime, Effect.DroneInterpSpeed);
+                    Effect.DroneVisualRotation = FMath::QInterpTo(Effect.DroneVisualRotation, Effect.DroneRotation, DroneDeltaTime, Effect.DroneRotationSpeed);
                 }
 
                 Effect.DroneTimer += DroneDeltaTime;
@@ -372,8 +392,8 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 // Drone Behavior
                 if (Effect.bDroneEnabled) {
-                    NewTransform.AddToTranslation(Effect.DroneOffset + Effect.DroneOrbitCenter);
-                    NewTransform.SetRotation(Effect.DroneRotation * NewTransform.GetRotation());
+                    NewTransform.AddToTranslation(Effect.DroneVisualOffset + Effect.DroneOrbitCenter);
+                    NewTransform.SetRotation(Effect.DroneVisualRotation * NewTransform.GetRotation());
                     NewTransform.SetScale3D(Effect.DroneBaseScale * NewTransform.GetScale3D());
                 }
 
