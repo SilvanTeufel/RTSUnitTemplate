@@ -43,6 +43,8 @@
 #include "MassReplicationFragments.h"
 #include "MassMovementFragments.h"
 #include "MassActorSubsystem.h"
+#include "Mass/MassUnitVisualFragments.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Core/UnitData.h"
 #include "Core/RTSUnitUtils.h"
 
@@ -4151,7 +4153,7 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			{
 				FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
 				FVector UnitSize = PreBox.GetSize();
-				if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+				if (/* drones must NOT be area-fit-scaled: a large/non-uniform base scale applied after FinishSpawning with replication off races the client-side drone-param capture and destabilizes the orbiting ISM */ (!Cast<AConstructionUnit>(NewConstruction) || !Cast<AConstructionUnit>(NewConstruction)->DroneBehavior) && !UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
 				{
 					const float Margin = 0.98f;
 					const float ScaleX = (AreaSize.X * Margin) / FMath::Max(KINDA_SMALL_NUMBER, UnitSize.X);
@@ -4196,7 +4198,28 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 					}
 				}
 			}
-			WA->ConstructionUnit = NewConstruction;
+			// Reconcile the Mass base transform (PositionedTransform) to the final actor transform
+				// and re-capture the ISM BaseOffset, mirroring the proven-stable normal WorkArea path
+				// (UnitStateProcessor.cpp). Without this the drone's frozen base and captured BaseOffset
+				// can stay stale/un-scaled on the client, so the orbiting ISM composes against a wrong
+				// base. SyncTranslation does not move the actor; it only writes the current actor
+				// loc/rot/scale into the transform fragment + PositionedTransform.
+				NewConstruction->SyncTranslation();
+				if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(NewConstruction))
+				{
+					if (FMassUnitVisualFragment* VF = MassUnit->GetMutableVisualFragment())
+					{
+						for (FMassUnitVisualInstance& Inst : VF->VisualInstances)
+						{
+							if (Inst.TemplateISM.IsValid())
+							{
+								Inst.BaseOffset = Inst.TemplateISM->GetRelativeTransform();
+								Inst.CurrentRelativeTransform = Inst.BaseOffset;
+							}
+						}
+					}
+				}
+				WA->ConstructionUnit = NewConstruction;
 			WA->bConstructionUnitSpawned = true;
 			NewConstruction->BuildArea = WA;
 			if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
