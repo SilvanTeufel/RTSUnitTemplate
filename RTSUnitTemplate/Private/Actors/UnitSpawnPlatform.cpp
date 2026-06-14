@@ -238,7 +238,7 @@ int NewTeamId, AWaypoint* Waypoint, int UIndex)
 		UnitBase->OnRep_MeshAssetPath();
 		UnitBase->OnRep_MeshMaterialPath();
 
-		UnitBase->SetReplicateMovement(true);
+		//UnitBase->SetReplicateMovement(true);
 		//SetReplicates(true);
 		//UnitBase->GetMesh()->SetIsReplicated(true);
 
