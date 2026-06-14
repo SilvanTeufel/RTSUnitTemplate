@@ -276,6 +276,16 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     UPROPERTY()
     float DroneSpawnPitch = -45.f;
 
+    // Stage 3 (Vertical Move) bounce state — randomized once per entry into stage 3
+    UPROPERTY(Transient)
+    float DroneBounceBaseHeight = 0.f;
+    UPROPERTY(Transient)
+    float DroneBounceAmplitude = 0.f;
+    UPROPERTY(Transient)
+    float DroneBounceCycles = 0.f;
+    UPROPERTY(Transient)
+    float DroneBounceDuration = 0.f;
+
     UPROPERTY()
     FVector DroneBaseScale = FVector::OneVector;
 };

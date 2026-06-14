@@ -188,6 +188,16 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                         Effect.DroneVisualRotation = Effect.DroneRotation;
                         Effect.DroneCurrentAngle = 0.f;
                     }
+                    else if (Effect.DroneStage == 3) {
+                        // Randomize the vertical bounce for this entry: 1..3 up/down bounces over 3..5s.
+                        const float SafeMin = FMath::Max(50.f, Effect.DroneBuildingHeight * 0.15f);
+                        Effect.DroneBounceCycles    = FMath::FRandRange(1.f, 3.f);   // number of up/down bounces
+                        Effect.DroneBounceDuration  = FMath::FRandRange(3.f, 5.f);   // over this many seconds
+                        Effect.DroneBounceAmplitude = FMath::FRandRange(0.30f, 0.55f) * FMath::Max(Effect.DroneBuildingHeight, 150.f);
+                        // Oscillate around the current height, raised so the lowest point (base - amplitude)
+                        // stays safely above the ground.
+                        Effect.DroneBounceBaseHeight = FMath::Max(Effect.DroneOffset.Z, SafeMin + Effect.DroneBounceAmplitude);
+                    }
                 }
 
                 switch (Effect.DroneStage) {
@@ -242,16 +252,31 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     }
                 }
                 break;
-                case 3: // Vertical Move
+                case 3: // Vertical Move — bounce up/down a few times, then settle at a random height
                 {
-                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, Effect.DroneTargetHeight, DroneDeltaTime, Effect.DroneInterpSpeed);
-                    
+                    const float SafeMinHeight = FMath::Max(50.f, Effect.DroneBuildingHeight * 0.15f);
+
+                    if (Effect.DroneTimer < Effect.DroneBounceDuration)
+                    {
+                        // Smooth sine bounce around the base height. Lowest point clamped above ground.
+                        const float Omega = 2.f * PI * Effect.DroneBounceCycles / FMath::Max(0.001f, Effect.DroneBounceDuration);
+                        const float BounceZ = Effect.DroneBounceBaseHeight + Effect.DroneBounceAmplitude * FMath::Sin(Omega * Effect.DroneTimer);
+                        Effect.DroneOffset.Z = FMath::Max(BounceZ, SafeMinHeight);
+                    }
+                    else
+                    {
+                        // Bounces finished: settle smoothly at the random target height (kept above ground).
+                        const float SettleZ = FMath::Max(Effect.DroneTargetHeight, SafeMinHeight);
+                        Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, SettleZ, DroneDeltaTime, Effect.DroneInterpSpeed);
+                    }
+
                     FVector Direction = -Effect.DroneOffset;
                     Direction.Z = 0.f;
                     FRotator TargetRot = Direction.Rotation();
                     Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
 
-                    if (Effect.DroneTimer >= 2.0f) {
+                    // Transition only after the bounces AND a short settle window.
+                    if (Effect.DroneTimer >= Effect.DroneBounceDuration + 1.0f) {
                         Effect.DroneStage = 4;
                     }
                 }
@@ -267,12 +292,16 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     }
                 }
                 break;
-                case 5: // Despawn
+                case 5: // Despawn — accelerate upward and fly out of sight
                 {
-                    FVector TargetOffset = Effect.DroneOffset;
-                    TargetOffset.Z += Effect.DroneAscentSpeed * DroneDeltaTime;
-                    Effect.DroneOffset = FMath::VInterpTo(Effect.DroneOffset, TargetOffset, DroneDeltaTime, Effect.DroneInterpSpeed);
-                    
+                    // Interpolate toward a FIXED, very high target Z so the remaining distance stays
+                    // large and the ascent keeps real speed. (Previously TargetOffset.Z was recomputed
+                    // each frame just above the current Z, so VInterpTo never built up distance and
+                    // crawled.) A solid interp speed gives a smooth start that quickly accelerates.
+                    const float DespawnTargetZ    = Effect.DroneSpawnHeight + 10000.f; // far above the scene
+                    const float DespawnInterpSpeed = Effect.DroneInterpSpeed + 3.0f;    // solid, snappy ascent
+                    Effect.DroneOffset.Z = FMath::FInterpTo(Effect.DroneOffset.Z, DespawnTargetZ, DroneDeltaTime, DespawnInterpSpeed);
+
                     FRotator CurrentRot = Effect.DroneRotation.Rotator();
                     CurrentRot.Pitch = FMath::FInterpTo(CurrentRot.Pitch, 90.f, DroneDeltaTime, Effect.DroneRotationSpeed + 3.f);
                     Effect.DroneRotation = CurrentRot.Quaternion();
