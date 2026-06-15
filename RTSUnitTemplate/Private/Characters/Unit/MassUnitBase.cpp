@@ -43,6 +43,11 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 		ISMComponent->SetupAttachment(RootComponent);
 		// ISMComponent->SetVisibility(false);
 		ISMComponent->SetIsReplicated(false);
+		// The animation processor writes custom-data indices 1..12 (13 floats). Size the template here
+		// so it is correct before any instance is added, and so the value copied into the pooled ISM in
+		// UUnitVisualManager::AssignUnitVisual is never undersized. No instances exist at construction,
+		// so this just sets the default count.
+		ISMComponent->NumCustomDataFloats = 13;
 	}
 
 	

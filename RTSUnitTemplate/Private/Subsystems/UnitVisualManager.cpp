@@ -105,7 +105,10 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	ISM->SetGenerateOverlapEvents(TemplateISM->GetGenerateOverlapEvents());
 	ISM->SetRenderCustomDepth(TemplateISM->bRenderCustomDepth);
 	ISM->SetCustomDepthStencilValue(TemplateISM->CustomDepthStencilValue);
-	ISM->SetNumCustomDataFloats(TemplateISM->NumCustomDataFloats);
+	// Never inherit a too-small value from the editor template. The animation processor needs 13
+	// custom-data floats (indices 1..12); clamp up so a misconfigured template can't undersize the
+	// pooled ISM and force a destructive runtime resize later (which would zero all instances).
+	ISM->SetNumCustomDataFloats(FMath::Max(13, TemplateISM->NumCustomDataFloats));
 
 	// Map ISM instance to MassUnitBase
 	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(ISM);
@@ -230,6 +233,10 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
 
     UInstancedStaticMeshComponent* NewISM = NewObject<UInstancedStaticMeshComponent>(ManagerActor);
     NewISM->SetStaticMesh(Mesh);
+    // Pre-size custom data ONCE, before any instance is added (so nothing is wiped). The animation
+    // processor writes custom-data indices 1..12, i.e. it needs 13 floats. Doing this here means it
+    // never has to resize a live, shared ISM at runtime (which would zero EVERY instance's data).
+    NewISM->SetNumCustomDataFloats(13);
     if (Material) {
         NewISM->SetMaterial(0, Material);
     }

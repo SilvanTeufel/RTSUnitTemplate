@@ -12,6 +12,46 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Characters/Unit/MassUnitBase.h"
 
+// All ISM animation custom data lives in indices 1..12 (see the *CustomDataIndex members in
+// UnitAnimationProcessor.h), so every animated ISM needs at least this many custom-data floats.
+// The ISM is pre-sized to this ONCE at creation (UUnitVisualManager::GetOrCreateISM /
+// UUnitVisualManager::AssignUnitVisual / the AMassUnitBase constructor) and is NEVER resized here:
+// on a pooled/shared ISM, SetNumCustomDataFloats reallocates and zero-fills the custom data of
+// EVERY instance, which would wipe other units' animation state mid-play.
+// NOTE: if you change any *CustomDataIndex value, update this constant and those three creation sites.
+static constexpr int32 RequiredCustomDataFloats = 13;
+
+// Returns the row matching State; if none exists, falls back to the Idle row; nullptr if neither is
+// present. This guarantees an entity entering a state with no table row still receives valid custom
+// data instead of keeping stale/zero values (which freezes the vertex animation).
+static const FISMAnimationData* FindISMRowForStateOrIdle(UDataTable* Table, TEnumAsByte<UnitData::EState> State)
+{
+    if (!Table)
+    {
+        return nullptr;
+    }
+
+    const FISMAnimationData* ExactMatch = nullptr;
+    const FISMAnimationData* IdleMatch = nullptr;
+    for (const TPair<FName, uint8*>& It : Table->GetRowMap())
+    {
+        if (const FISMAnimationData* Row = reinterpret_cast<const FISMAnimationData*>(It.Value))
+        {
+            if (Row->AnimState == State)
+            {
+                ExactMatch = Row;
+                break;
+            }
+            if (Row->AnimState == UnitData::Idle)
+            {
+                IdleMatch = Row;
+            }
+        }
+    }
+
+    return ExactMatch ? ExactMatch : IdleMatch;
+}
+
 UUnitAnimationProcessor::UUnitAnimationProcessor()
 {
     bRequiresGameThreadExecution = true;
@@ -60,6 +100,12 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 // 1. Check for State Change and Update Targets
                 if (AnimFrag.LastProcessedState != CurrentState)
                 {
+                    // Only latch LastProcessedState once the change has actually been applied. The
+                    // skeletal and no-table paths always apply; the ISM path may defer (and retry next
+                    // frame) if its target instance isn't ready, so it never latches a state whose
+                    // custom data was never written.
+                    bool bCommitted = true;
+
                     if (VisualFrag.bUseSkeletalMovement)
                     {
                         if (UUnitBaseAnimInstance* AnimInst = Cast<UUnitBaseAnimInstance>(UnitBase->GetMesh()->GetAnimInstance()))
@@ -88,78 +134,92 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                     }
                     else if (AnimFrag.ISMAnimationDataTable)
                     {
-                        for (auto It : AnimFrag.ISMAnimationDataTable->GetRowMap())
+                        // Resolve the target instance first; we only commit the state change once we
+                        // can actually write to it.
+                        int32 InstanceIndex = INDEX_NONE;
+                        UInstancedStaticMeshComponent* TargetISM = nullptr;
+
+                        // 1. Attempt: Via VisualFragment
+                        if (VisualFrag.VisualInstances.Num() > 0)
                         {
-                            if (FISMAnimationData* RowData = reinterpret_cast<FISMAnimationData*>(It.Value))
+                            InstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
+                            TargetISM = VisualFrag.VisualInstances[0].TargetISM.Get();
+                        }
+
+                        // 2. Attempt: Fallback to UnitBase
+                        if (InstanceIndex == INDEX_NONE)
+                        {
+                            if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
                             {
-                                if (RowData->AnimState == CurrentState)
-                                {
-                                    AnimFrag.PrevTargetStateCustomDataValue = AnimFrag.TargetStateCustomDataValue;
-                                    AnimFrag.PrevStartTime = AnimFrag.CurrentStartTime;
-                                    AnimFrag.PrevStartFrame = AnimFrag.CurrentStartFrame;
-                                    AnimFrag.PrevEndFrame = AnimFrag.CurrentEndFrame;
-                                    AnimFrag.PrevPlayRate = AnimFrag.CurrentPlayRate;
-
-                                    AnimFrag.TargetStateCustomDataValue = RowData->StateCustomDataValue;
-                                    AnimFrag.TransitionRate_1 = RowData->TransitionRate;
-                                    AnimFrag.CurrentStartTime = CurrentWorldTime;
-                                    AnimFrag.CurrentStartFrame = RowData->StartFrame;
-                                    AnimFrag.CurrentEndFrame = RowData->EndFrame;
-                                    AnimFrag.CurrentPlayRate = RowData->PlayRate;
-
-                                    AnimFrag.BlendAlpha = 0.0f;
-
-                                    int32 InstanceIndex = INDEX_NONE;
-                                    UInstancedStaticMeshComponent* TargetISM = nullptr;
-
-                                    // 1. Attempt: Via VisualFragment
-                                    if (VisualFrag.VisualInstances.Num() > 0)
-                                    {
-                                        InstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
-                                        TargetISM = VisualFrag.VisualInstances[0].TargetISM.Get();
-                                    }
-
-                                    // 2. Attempt: Fallback to UnitBase
-                                    if (InstanceIndex == INDEX_NONE)
-                                    {
-                                        if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase))
-                                        {
-                                            InstanceIndex = MassUnit->InstanceIndex;
-                                            TargetISM = MassUnit->ISMComponent;
-                                        }
-                                    }
-
-                                    if (TargetISM && InstanceIndex != INDEX_NONE)
-                                    {
-                                        // Automatische Korrektur der CustomData-Größe, falls zu klein
-                                        int32 RequiredFloats = FMath::Max(StateCustomDataIndex, FMath::Max(TransitionRateCustomDataIndex, FMath::Max(StartTimeCustomDataIndex, FMath::Max(StartFrameCustomDataIndex, FMath::Max(EndFrameCustomDataIndex, FMath::Max(PrevStateCustomDataIndex, FMath::Max(PrevStartTimeCustomDataIndex, FMath::Max(PrevStartFrameCustomDataIndex, FMath::Max(PrevEndFrameCustomDataIndex, FMath::Max(BlendAlphaCustomDataIndex, FMath::Max(PlayRateCustomDataIndex, PrevPlayRateCustomDataIndex))))))))))) + 1;
-                                        if (TargetISM->NumCustomDataFloats < RequiredFloats)
-                                        {
-                                            TargetISM->SetNumCustomDataFloats(RequiredFloats);
-                                        }
-                                        
-                                        TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, StartTimeCustomDataIndex, AnimFrag.CurrentStartTime, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, StartFrameCustomDataIndex, AnimFrag.CurrentStartFrame, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, EndFrameCustomDataIndex, AnimFrag.CurrentEndFrame, true);
-                                        
-                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevStateCustomDataIndex, AnimFrag.PrevTargetStateCustomDataValue, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevStartTimeCustomDataIndex, AnimFrag.PrevStartTime, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevStartFrameCustomDataIndex, AnimFrag.PrevStartFrame, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevEndFrameCustomDataIndex, AnimFrag.PrevEndFrame, true);
-                                        
-                                        TargetISM->SetCustomDataValue(InstanceIndex, BlendAlphaCustomDataIndex, AnimFrag.BlendAlpha, true);
-
-                                        TargetISM->SetCustomDataValue(InstanceIndex, PlayRateCustomDataIndex, AnimFrag.CurrentPlayRate, true);
-                                        TargetISM->SetCustomDataValue(InstanceIndex, PrevPlayRateCustomDataIndex, AnimFrag.PrevPlayRate, true);
-                                    }
-                                    break;
-                                }
+                                InstanceIndex = MassUnit->InstanceIndex;
+                                TargetISM = MassUnit->ISMComponent;
                             }
                         }
+
+                        // The ISM is pre-sized to RequiredCustomDataFloats at creation. We must NOT call
+                        // SetNumCustomDataFloats here: on a pooled/shared ISM it reallocates and zero-fills
+                        // EVERY instance's custom data, wiping other units' animation state mid-play. If the
+                        // target is missing or (defensively) still undersized, defer and retry next frame
+                        // instead of latching a state whose data never got written.
+                        if (TargetISM && InstanceIndex != INDEX_NONE && TargetISM->NumCustomDataFloats >= RequiredCustomDataFloats)
+                        {
+                            // Exact row -> Idle fallback -> safe static pose (never leaves stale/zero data).
+                            const FISMAnimationData* RowData = FindISMRowForStateOrIdle(AnimFrag.ISMAnimationDataTable, CurrentState);
+
+                            AnimFrag.PrevTargetStateCustomDataValue = AnimFrag.TargetStateCustomDataValue;
+                            AnimFrag.PrevStartTime = AnimFrag.CurrentStartTime;
+                            AnimFrag.PrevStartFrame = AnimFrag.CurrentStartFrame;
+                            AnimFrag.PrevEndFrame = AnimFrag.CurrentEndFrame;
+                            AnimFrag.PrevPlayRate = AnimFrag.CurrentPlayRate;
+
+                            if (RowData)
+                            {
+                                AnimFrag.TargetStateCustomDataValue = RowData->StateCustomDataValue;
+                                AnimFrag.TransitionRate_1 = RowData->TransitionRate;
+                                AnimFrag.CurrentStartFrame = RowData->StartFrame;
+                                AnimFrag.CurrentEndFrame = RowData->EndFrame;
+                                AnimFrag.CurrentPlayRate = RowData->PlayRate;
+                            }
+                            else
+                            {
+                                // No matching row and no Idle row: write an explicit, non-degenerate static
+                                // pose so the unit stays visible/animated instead of freezing on zero data.
+                                AnimFrag.TargetStateCustomDataValue = 0.0f;
+                                AnimFrag.TransitionRate_1 = 0.5f;
+                                AnimFrag.CurrentStartFrame = 0.0f;
+                                AnimFrag.CurrentEndFrame = 1.0f;
+                                AnimFrag.CurrentPlayRate = 1.0f;
+                            }
+                            AnimFrag.CurrentStartTime = CurrentWorldTime;
+                            AnimFrag.BlendAlpha = 0.0f;
+
+                            TargetISM->SetCustomDataValue(InstanceIndex, StateCustomDataIndex, AnimFrag.TargetStateCustomDataValue, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, TransitionRateCustomDataIndex, AnimFrag.TransitionRate_1, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, StartTimeCustomDataIndex, AnimFrag.CurrentStartTime, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, StartFrameCustomDataIndex, AnimFrag.CurrentStartFrame, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, EndFrameCustomDataIndex, AnimFrag.CurrentEndFrame, true);
+
+                            TargetISM->SetCustomDataValue(InstanceIndex, PrevStateCustomDataIndex, AnimFrag.PrevTargetStateCustomDataValue, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, PrevStartTimeCustomDataIndex, AnimFrag.PrevStartTime, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, PrevStartFrameCustomDataIndex, AnimFrag.PrevStartFrame, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, PrevEndFrameCustomDataIndex, AnimFrag.PrevEndFrame, true);
+
+                            TargetISM->SetCustomDataValue(InstanceIndex, BlendAlphaCustomDataIndex, AnimFrag.BlendAlpha, true);
+
+                            TargetISM->SetCustomDataValue(InstanceIndex, PlayRateCustomDataIndex, AnimFrag.CurrentPlayRate, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, PrevPlayRateCustomDataIndex, AnimFrag.PrevPlayRate, true);
+                        }
+                        else
+                        {
+                            // Target ISM not ready/undersized -> retry next frame (do not latch).
+                            bCommitted = false;
+                        }
                     }
-                    AnimFrag.LastProcessedState = CurrentState;
+
+                    if (bCommitted)
+                    {
+                        AnimFrag.LastProcessedState = CurrentState;
+                    }
                 }
             }
 
