@@ -85,6 +85,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Construction|Drone")
 	void SetDronePlaneISM(UInstancedStaticMeshComponent* InISM);
 
+	// When true, the DronePlane flickers irregularly while visible (during DroneStage == 3).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	bool bDronePlaneFlicker = true;
+
+	// Multiplier on the flicker frequency; higher = faster flicker. 0 = no flicker (always on).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone", meta = (ClampMin = "0.0"))
+	float DronePlaneFlickerSpeed = 1.0f;
+
 	UPROPERTY()
 	int32 Rep_DroneStage = 0;
 

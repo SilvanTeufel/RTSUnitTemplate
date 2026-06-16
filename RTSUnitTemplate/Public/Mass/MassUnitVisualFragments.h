@@ -294,6 +294,13 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     // (DroneStage == 3); hidden (zero scale) otherwise. Invalid when no plane is configured.
     UPROPERTY(Transient)
     TWeakObjectPtr<UInstancedStaticMeshComponent> DronePlaneTemplateISM;
+
+    // Irregular flicker for the DronePlane while it is visible (DroneStage == 3).
+    UPROPERTY()
+    bool bDronePlaneFlicker = false;
+
+    UPROPERTY()
+    float DronePlaneFlickerSpeed = 1.0f;
 };
 
 template<>

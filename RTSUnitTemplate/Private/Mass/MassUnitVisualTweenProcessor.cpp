@@ -438,9 +438,22 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                             Effect.DroneBaseScale);
                         NewTransform = NewTransform * DroneTransform;
 
-                        // Only visible during the vertical-move stage (Stage 3). Hide it (zero scale,
-                        // position kept) in every other stage so it pops back in at the right place.
-                        if (Effect.DroneStage != 3) {
+                        // Visible only during the vertical-move stage (Stage 3). When flicker is enabled,
+                        // gate visibility on an irregular overlapping-sine pattern for an organic strobe.
+                        bool bPlaneVisible = (Effect.DroneStage == 3);
+                        if (bPlaneVisible && Effect.bDronePlaneFlicker) {
+                            const float FlickerVal =
+                                FMath::Sin(Effect.DroneTimer * 25.f * Effect.DronePlaneFlickerSpeed) +
+                                FMath::Sin(Effect.DroneTimer * 13.f * Effect.DronePlaneFlickerSpeed) +
+                                FMath::Sin(Effect.DroneTimer * 37.f * Effect.DronePlaneFlickerSpeed);
+                            // Threshold sets the on/off duty cycle (-0.5 keeps it "on" more than "off").
+                            bPlaneVisible = (FlickerVal > -0.5f);
+                        }
+
+                        // Hide by zeroing scale (position kept). When visible, leave the composed scale
+                        // (DroneBaseScale * the plane's BaseOffset scale) untouched so the plane's authored
+                        // size is preserved rather than forced to DroneBaseScale.
+                        if (!bPlaneVisible) {
                             NewTransform.SetScale3D(FVector::ZeroVector);
                         }
                     }

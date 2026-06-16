@@ -268,6 +268,8 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		// Keep the optional DronePlane template reference current (assigned locally per machine via
 		// SetDronePlaneISM). Set outside the one-time drone-init block so it tracks late assignment.
 		VisualEffect.DronePlaneTemplateISM = ConstructionUnit->DronePlaneISM;
+		VisualEffect.bDronePlaneFlicker = ConstructionUnit->bDronePlaneFlicker;
+		VisualEffect.DronePlaneFlickerSpeed = ConstructionUnit->DronePlaneFlickerSpeed;
 
 		if (ConstructionUnit->DroneBehavior && !VisualEffect.bDroneEnabled)
 		{
