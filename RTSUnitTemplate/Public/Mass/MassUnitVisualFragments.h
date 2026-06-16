@@ -301,6 +301,10 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 
     UPROPERTY()
     float DronePlaneFlickerSpeed = 1.0f;
+
+    // Auto-computed factor that fits the DronePlane projection to the WorkArea (server + client).
+    UPROPERTY()
+    FVector DronePlaneScale = FVector::OneVector;
 };
 
 template<>

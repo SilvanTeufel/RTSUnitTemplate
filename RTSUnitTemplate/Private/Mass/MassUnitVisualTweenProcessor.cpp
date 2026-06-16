@@ -435,7 +435,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                         const FTransform DroneTransform(
                             Effect.DroneVisualRotation,
                             Effect.DroneVisualOffset + Effect.DroneOrbitCenter,
-                            Effect.DroneBaseScale);
+                            Effect.DroneBaseScale * Effect.DronePlaneScale);
                         NewTransform = NewTransform * DroneTransform;
 
                         // Visible only during the vertical-move stage (Stage 3). When flicker is enabled,

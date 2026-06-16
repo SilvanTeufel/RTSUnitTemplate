@@ -13,6 +13,7 @@
 #include "Mass/MassUnitVisualFragments.h"
 #include "MassEntitySubsystem.h"
 #include "GAS/AttributeSetBase.h"
+#include "Engine/StaticMesh.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Actors/Waypoint.h"
 #include "GameModes/ResourceGameMode.h"
@@ -270,6 +271,34 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		VisualEffect.DronePlaneTemplateISM = ConstructionUnit->DronePlaneISM;
 		VisualEffect.bDronePlaneFlicker = ConstructionUnit->bDronePlaneFlicker;
 		VisualEffect.DronePlaneFlickerSpeed = ConstructionUnit->DronePlaneFlickerSpeed;
+
+		// Auto-fit the DronePlane projection to the WorkArea, mirroring the construction-unit fit
+		// (NewScale * 2 * ScaleConstructionUnit, see BuildStateProcessor). The drone actor itself is not
+		// scaled, so the plane needs its own scale factor; computing it here keeps server and client in
+		// step. Runs every sync (outside the one-time init block) so it tracks late ISM/area assignment.
+		if (ConstructionUnit->DronePlaneISM && ConstructionUnit->WorkArea && ConstructionUnit->WorkArea->Mesh)
+		{
+			if (const UStaticMesh* PlaneMesh = ConstructionUnit->DronePlaneISM->GetStaticMesh())
+			{
+				const FVector MeshSize = PlaneMesh->GetBoundingBox().GetSize();
+				// World-space bounds on purpose (NOT CalcBounds(GetRelativeTransform()) as the canonical
+				// unit fit uses): the plane is a child of the DRONE entity, so the WorkArea actor's scale
+				// never enters the plane's final transform — we must size against the WorkArea's actual
+				// world footprint or a runtime-scaled WorkArea (Multicast_SetScale) would mismatch.
+				const FVector AreaSize = ConstructionUnit->WorkArea->Mesh->Bounds.GetBox().GetSize();
+
+				if (MeshSize.X > KINDA_SMALL_NUMBER && MeshSize.Y > KINDA_SMALL_NUMBER &&
+					AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+				{
+					const float Margin = 0.98f;
+					const float ScaleX = (AreaSize.X * Margin) / MeshSize.X;
+					const float ScaleY = (AreaSize.Y * Margin) / MeshSize.Y;
+					const float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
+					VisualEffect.DronePlaneScale =
+						FVector(Uniform, Uniform, Uniform) * 2.f * ConstructionUnit->WorkArea->ScaleConstructionUnit;
+				}
+			}
+		}
 
 		if (ConstructionUnit->DroneBehavior && !VisualEffect.bDroneEnabled)
 		{
