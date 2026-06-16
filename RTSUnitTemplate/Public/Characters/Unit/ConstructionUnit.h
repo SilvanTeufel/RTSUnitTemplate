@@ -8,6 +8,7 @@
 class AWorkArea;
 class UPrimitiveComponent;
 class USceneComponent;
+class UInstancedStaticMeshComponent;
 
 UCLASS()
 class RTSUNITTEMPLATE_API AConstructionUnit : public AUnitBase
@@ -69,6 +70,20 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
 	float DroneSpawnPitch = 90.f;
+
+	// Optional "DronePlane" projection ISM. When assigned (via SetDronePlaneISM) it follows the
+	// drone as a rigid child — keeping its relative Blueprint offset — and is only shown during
+	// the vertical-move stage (DroneStage == 3). Assign on EVERY machine (the reference is a local
+	// component pointer, not replicated); the setter registers the visual on demand, so it is safe
+	// from BeginPlay or the OnMassRegistrationFinished Blueprint event. Shows as None in the editor
+	// — it is populated at runtime by SetDronePlaneISM.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction|Drone")
+	UInstancedStaticMeshComponent* DronePlaneISM = nullptr;
+
+	// Register an additional ISM as the "DronePlane" projection: stores the reference, ensures the
+	// component participates in the Mass visual system, and propagates it to the visual fragment.
+	UFUNCTION(BlueprintCallable, Category = "Construction|Drone")
+	void SetDronePlaneISM(UInstancedStaticMeshComponent* InISM);
 
 	UPROPERTY()
 	int32 Rep_DroneStage = 0;

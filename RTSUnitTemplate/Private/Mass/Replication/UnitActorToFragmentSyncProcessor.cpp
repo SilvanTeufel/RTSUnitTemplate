@@ -265,6 +265,10 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		VisualEffect.OscillationOffsetB = ConstructionUnit->Rep_VE_OscillationOffsetB;
 		VisualEffect.OscillationCyclesPerSecond = ConstructionUnit->Rep_VE_OscillationCyclesPerSecond;
 
+		// Keep the optional DronePlane template reference current (assigned locally per machine via
+		// SetDronePlaneISM). Set outside the one-time drone-init block so it tracks late assignment.
+		VisualEffect.DronePlaneTemplateISM = ConstructionUnit->DronePlaneISM;
+
 		if (ConstructionUnit->DroneBehavior && !VisualEffect.bDroneEnabled)
 		{
 			VisualEffect.bDroneEnabled = true;

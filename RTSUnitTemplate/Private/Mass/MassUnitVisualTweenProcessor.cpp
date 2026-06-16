@@ -421,9 +421,37 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                 // Drone Behavior
                 if (Effect.bDroneEnabled) {
-                    NewTransform.AddToTranslation(Effect.DroneVisualOffset + Effect.DroneOrbitCenter);
-                    NewTransform.SetRotation(Effect.DroneVisualRotation * NewTransform.GetRotation());
-                    NewTransform.SetScale3D(Effect.DroneBaseScale * NewTransform.GetScale3D());
+                    const bool bIsDronePlane =
+                        Effect.DronePlaneTemplateISM.IsValid() &&
+                        Instance.TemplateISM == Effect.DronePlaneTemplateISM;
+
+                    if (bIsDronePlane) {
+                        // The DronePlane projection is a rigid child of the drone: compose its relative
+                        // Blueprint offset UNDERNEATH the drone's simulated transform (transform
+                        // multiplication, matching how the placement processor later applies the entity
+                        // transform: FinalTransform = CurrentRelativeTransform * BaseTransform). This keeps
+                        // the plane at its relative offset AND rotates/scales that offset with the drone,
+                        // instead of merely adding an un-rotated world offset.
+                        const FTransform DroneTransform(
+                            Effect.DroneVisualRotation,
+                            Effect.DroneVisualOffset + Effect.DroneOrbitCenter,
+                            Effect.DroneBaseScale);
+                        NewTransform = NewTransform * DroneTransform;
+
+                        // Only visible during the vertical-move stage (Stage 3). Hide it (zero scale,
+                        // position kept) in every other stage so it pops back in at the right place.
+                        if (Effect.DroneStage != 3) {
+                            NewTransform.SetScale3D(FVector::ZeroVector);
+                        }
+                    }
+                    else {
+                        // Main mesh / other instances keep the original actor-local additive placement, so
+                        // concurrent oscillation / location tweens / non-identity base offsets are
+                        // unaffected by the rigid-child composition above.
+                        NewTransform.AddToTranslation(Effect.DroneVisualOffset + Effect.DroneOrbitCenter);
+                        NewTransform.SetRotation(Effect.DroneVisualRotation * NewTransform.GetRotation());
+                        NewTransform.SetScale3D(Effect.DroneBaseScale * NewTransform.GetScale3D());
+                    }
                 }
 
                 Instance.CurrentRelativeTransform = NewTransform;

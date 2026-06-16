@@ -297,7 +297,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent);
 
-	/** Returns the actual ISM component and instance index used by the Mass Visual Manager. 
+	/** Register a single additional ISM as a Mass visual instance immediately, even after the one-time
+	 *  Mass registration pass has completed. RegisterAdditionalVisualsToMass early-outs once
+	 *  bMassVisualsRegistered is set, so an ISM added later would otherwise never receive a pooled
+	 *  visual instance. This tracks the component (InitializeAdditionalISM) and, when the Mass entity is
+	 *  already live, creates its visual via the visual manager. Idempotent (AssignUnitVisual reuses an
+	 *  existing instance for the same template); safe to call before the entity exists (the component is
+	 *  then picked up by the normal registration pass). Returns true if a visual was created now. */
+	UFUNCTION(BlueprintCallable, Category = Mass)
+	bool RegisterAdditionalVisualNow(UInstancedStaticMeshComponent* InISMComponent);
+
+	/** Returns the actual ISM component and instance index used by the Mass Visual Manager.
 	 * Matches the TemplateISM (e.g. ISMComponent or an Additional ISM) to the manager's instance.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Mass|Visual")

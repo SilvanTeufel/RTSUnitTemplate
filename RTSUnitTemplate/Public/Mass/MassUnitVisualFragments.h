@@ -288,6 +288,12 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 
     UPROPERTY()
     FVector DroneBaseScale = FVector::OneVector;
+
+    // Optional "DronePlane" projection. The visual instance whose TemplateISM matches this is
+    // composed as a rigid child of the drone and only shown during the vertical-move stage
+    // (DroneStage == 3); hidden (zero scale) otherwise. Invalid when no plane is configured.
+    UPROPERTY(Transient)
+    TWeakObjectPtr<UInstancedStaticMeshComponent> DronePlaneTemplateISM;
 };
 
 template<>
