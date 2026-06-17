@@ -3980,6 +3980,24 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 						}
 						NewConstruction->SetActorScale3D(NewScale * 2.f * UnitBase->BuildArea->ScaleConstructionUnit);
 					}
+					else if (bIsDrone && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+					{
+						// Drones intentionally keep ActorScale = 1: the Mass drone simulation (orbit radius,
+						// spawn/cruise heights, offsets) is authored in unscaled actor-local space, so scaling
+						// the actor would inflate the entire flight path by ActorScale. Instead size ONLY the
+						// CapsuleComponent so the clickable/collision volume matches the WorkArea, leaving the
+						// drone mesh, projection, and flight untouched. Living flying units derive their Z from
+						// FlyHeight (NOT the capsule half-height — see UActorTransformSyncProcessor::
+						// HandleGroundAndHeight), so growing the capsule does not lift the orbiting drone.
+						if (UCapsuleComponent* Capsule = NewConstruction->GetCapsuleComponent())
+						{
+							const float CapMargin = 0.98f;
+							const float NewRadius = FMath::Max(AreaSize.X, AreaSize.Y) * 0.5f * CapMargin;
+							// SetCapsuleSize requires HalfHeight >= Radius; clamp up so a flat WorkArea stays valid.
+							const float NewHalfHeight = FMath::Max(AreaSize.Z * 0.5f, NewRadius);
+							Capsule->SetCapsuleSize(NewRadius, NewHalfHeight, true);
+						}
+					}
 				}
 
 				// Step 2: Finish spawning — BeginPlay/RegisterVisualsToMass will now see the correct scale

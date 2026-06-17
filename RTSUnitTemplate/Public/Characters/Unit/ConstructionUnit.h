@@ -93,6 +93,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone", meta = (ClampMin = "0.0"))
 	float DronePlaneFlickerSpeed = 1.0f;
 
+	// Upper bound on the uniform scale factor the DronePlane may reach when fitting the WorkArea.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone", meta = (ClampMin = "0.1"))
+	float MaxDronePlaneScale = 10.0f;
+
 	UPROPERTY()
 	int32 Rep_DroneStage = 0;
 

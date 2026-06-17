@@ -271,6 +271,7 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 		VisualEffect.DronePlaneTemplateISM = ConstructionUnit->DronePlaneISM;
 		VisualEffect.bDronePlaneFlicker = ConstructionUnit->bDronePlaneFlicker;
 		VisualEffect.DronePlaneFlickerSpeed = ConstructionUnit->DronePlaneFlickerSpeed;
+		VisualEffect.MaxDronePlaneScale = ConstructionUnit->MaxDronePlaneScale;
 
 		// Auto-fit the DronePlane projection to the WorkArea, mirroring the construction-unit fit
 		// (NewScale * 2 * ScaleConstructionUnit, see BuildStateProcessor). The drone actor itself is not
@@ -293,7 +294,9 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 					const float Margin = 0.98f;
 					const float ScaleX = (AreaSize.X * Margin) / MeshSize.X;
 					const float ScaleY = (AreaSize.Y * Margin) / MeshSize.Y;
-					const float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
+					float Uniform = FMath::Max(FMath::Min(ScaleX, ScaleY), 0.1f);
+					// Cap how large the projection may grow to fit the WorkArea.
+					Uniform = FMath::Min(Uniform, ConstructionUnit->MaxDronePlaneScale);
 					VisualEffect.DronePlaneScale =
 						FVector(Uniform, Uniform, Uniform) * 2.f * ConstructionUnit->WorkArea->ScaleConstructionUnit;
 				}

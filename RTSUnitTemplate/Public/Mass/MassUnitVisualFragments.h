@@ -305,6 +305,10 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     // Auto-computed factor that fits the DronePlane projection to the WorkArea (server + client).
     UPROPERTY()
     FVector DronePlaneScale = FVector::OneVector;
+
+    // Upper bound on the DronePlane fit factor (synced from the actor).
+    UPROPERTY()
+    float MaxDronePlaneScale = 10.0f;
 };
 
 template<>
