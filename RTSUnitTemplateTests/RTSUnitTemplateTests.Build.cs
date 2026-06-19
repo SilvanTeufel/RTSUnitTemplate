@@ -13,6 +13,7 @@ public class RTSUnitTemplateTests : ModuleRules
             "Engine",
             "FunctionalTesting",
             "RTSUnitTemplate",
+            "MassCore",
             "MassEntity",
             "MassCommon",
             "MassNavigation",

@@ -59,6 +59,13 @@ namespace UnitData
 	};
 }
 
+// UE 5.8: UHT no longer emits a StaticEnum<> declaration for legacy namespaced UENUMs
+// (only enum class types get one). The specialization is still *defined* in UnitData.gen.cpp,
+// so we forward-declare it here to keep StaticEnum<UnitData::EState>() callable across modules.
+// In 5.7 the primary StaticEnum<T>() template was declared-but-undefined and linked through;
+// in 5.8 it is = delete, turning the missing declaration into a hard C2280 error.
+template<> RTSUNITTEMPLATE_API UEnum* StaticEnum<UnitData::EState>();
+
 UENUM(BlueprintType)
 enum class EWinLoseCondition : uint8
 {

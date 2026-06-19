@@ -17,6 +17,7 @@ public class RTSUnitTemplate : ModuleRules
             "Engine",
             "NetCore",
             "UMG",
+            "MassCore",
             "MassEntity",
             "MassCommon",
             "MassReplication",
@@ -52,7 +53,7 @@ public class RTSUnitTemplate : ModuleRules
             "InputCore",
 
             // Misc
-            "StructUtils", "Json", "JsonUtilities", "RenderCore", "Landscape",
+            "Json", "JsonUtilities", "RenderCore", "Landscape",
             "NNE"
         });
         

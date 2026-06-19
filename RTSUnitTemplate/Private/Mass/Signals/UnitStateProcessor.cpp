@@ -47,7 +47,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Characters/Unit/UnitBase.h"
-#include "InstancedStruct.h"
+#include "StructUtils/InstancedStruct.h"
 #include "Mass/Signals/MySignals.h"
 #include "Actors/Projectile.h"
 #include "Actors/EffectArea.h"

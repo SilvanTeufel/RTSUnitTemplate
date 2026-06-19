@@ -6,7 +6,6 @@
 #include "NNERuntimeCPU.h" // Important: Include the specific CPU runtime header
 #include "NNETypes.h"
 #include "NNERuntimeRunSync.h"     // <-- ADD THIS for FTensorBinding
-#include "NNEClasses.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "AIController.h"
