@@ -303,7 +303,7 @@ public:
 	FVector CPoint = FVector(0.f,0.f, 0.f);
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "RectangleScaleSelectionFactor", Keywords = "RTSUnitTemplate RectangleScaleSelectionFactor"), Category = "RTSUnitTemplate")
-	float RectangleScaleSelectionFactor = 0.9;
+	float RectangleScaleSelectionFactor = 0.9f;
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "GetMousePos2D", Keywords = "RTSUnitTemplate GetMousePos2D"), Category = "RTSUnitTemplate")
 	FVector2D GetMousePos2D();

@@ -36,7 +36,7 @@ public:
 	FTimerHandle TickTimerHandle;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float UpdateInterval = 0.05;
+	float UpdateInterval = 0.05f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void TimerTick();

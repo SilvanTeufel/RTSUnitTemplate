@@ -232,7 +232,7 @@ namespace UE::Mass::Debug // Optional: Use a namespace for organization
 
         // --- Check all relevant tags using the Composition's Tag Bitset ---
         // Primary States
-        const auto& Tags = Composition.GetTags();
+        const FMassArchetypeCompositionDescriptor& Tags = Composition;
         if (Tags.Contains<FMassStateIdleTag>())      { PresentTags += TEXT(" Idle"); bFoundTags = true; }
         if (Tags.Contains<FMassStateChaseTag>())     { PresentTags += TEXT(" Chase"); bFoundTags = true; }
         if (Tags.Contains<FMassStateAttackTag>())    { PresentTags += TEXT(" Attack"); bFoundTags = true; }

@@ -12,7 +12,7 @@
 #include "MassCommandBuffer.h"
 #include "Core/UnitData.h"
 #include "Core/WorkerData.h"
-#include "MassExternalSubsystemTraits.h"
+#include "Mass/ExternalSubsystemTraits.h"
 #include "MassVisibilityInterface.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "NiagaraComponent.h"
@@ -1068,8 +1068,8 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 	// 2. Get the composition descriptor for the archetype
 	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
 
-	// 3. Check if the tag is present in the composition's tag bitset
-	return Composition.GetTags().Contains(TagType);
+	// 3. Check if the tag is present in the composition
+	return Composition.Contains(TagType);
 }
 
 template<typename FragmentType>
@@ -1098,8 +1098,7 @@ bool DoesEntityHaveFragment(
 	// Ensure the struct pointer is valid before dereferencing
 	if (FragmentStruct)
 	{
-		// Dereference the pointer to pass a reference to Contains
-		return Composition.GetFragments().Contains(FragmentStruct);
+		return Composition.Contains(FragmentStruct);
 	}
 
 	// If StaticStruct() somehow returned nullptr, the fragment isn't valid or found.
@@ -1123,7 +1122,7 @@ const FragmentType* TryGetFragmentDataPtr(const FMassEntityManager& EntityManage
 	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
 	const UScriptStruct* FragmentStruct = FragmentType::StaticStruct();
 
-	if (!FragmentStruct || !Composition.GetFragments().Contains(FragmentStruct))
+	if (!FragmentStruct || !Composition.Contains(FragmentStruct))
 	{
 		return nullptr;
 	}
@@ -1148,7 +1147,7 @@ FragmentType* TryGetFragmentDataPtrMutable(FMassEntityManager& EntityManager, FM
 	const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
 	const UScriptStruct* FragmentStruct = FragmentType::StaticStruct();
 
-	if (!FragmentStruct || !Composition.GetFragments().Contains(FragmentStruct))
+	if (!FragmentStruct || !Composition.Contains(FragmentStruct))
 	{
 		return nullptr;
 	}

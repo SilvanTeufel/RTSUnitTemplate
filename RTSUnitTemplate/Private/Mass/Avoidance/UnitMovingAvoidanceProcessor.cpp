@@ -24,7 +24,7 @@
 #include "MassLODFragments.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "Mass/UnitMassTag.h"
-#include "MassExternalSubsystemTraits.h"
+#include "Mass/ExternalSubsystemTraits.h"
  
  namespace UE::UnitMassAvoidance
 {

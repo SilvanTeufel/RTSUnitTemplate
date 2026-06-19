@@ -137,7 +137,7 @@ void AExtendedControllerBase::Tick(float DeltaSeconds)
 
 								const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntityUnsafe(Entity);
 								const FMassArchetypeCompositionDescriptor& Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
-								const FMassFragmentBitSet& Fragments = Composition.GetFragments();
+								const FMassArchetypeCompositionDescriptor& Fragments = Composition;
 
 								FString FragLog = TEXT("Fragments:");
 								bool bFound = false;
