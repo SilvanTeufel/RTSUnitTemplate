@@ -120,8 +120,8 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetBlendPoints(AUnitBase* Unit, float Deltaseconds);
-	
+
 	FUnitAnimData* UnitAnimData;
 
-	
+
 };

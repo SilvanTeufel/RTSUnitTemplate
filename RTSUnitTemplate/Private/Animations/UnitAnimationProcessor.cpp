@@ -71,7 +71,7 @@ void UUnitAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-    
+
     EntityQuery.RegisterWithProcessor(*this);
 }
 

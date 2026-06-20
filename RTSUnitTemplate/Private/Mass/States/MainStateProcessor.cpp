@@ -122,7 +122,7 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 // EffectAreas mit MaxHealth 0 sterben nur bei expliziter Zerstörungsanforderung
                 bShouldDie = ImpactFragPtr->bPendingDestruction;
             }
-            
+
             if (bShouldDie)
             {
                 if (SignalSubsystem)
@@ -182,7 +182,7 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             {
                 bShouldDie = ImpactFragPtr->bPendingDestruction;
             }
-            
+
             if (bShouldDie)
             {
                 HandleUnitDeathClient(Entity, ChunkContext);

@@ -43,7 +43,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 	if (OwningActor != nullptr) {
 		AUnitBase* UnitBase = Cast<AUnitBase>(OwningActor);
 		if (UnitBase != nullptr && UnitBase->IsOnViewport) {
-			
+
 			if (UnitBase->MassActorBindingComponent)
 			{
 				const FMassEntityHandle Entity = UnitBase->MassActorBindingComponent->GetEntityHandle();

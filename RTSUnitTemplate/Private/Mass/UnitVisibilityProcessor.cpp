@@ -334,7 +334,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			if (bChanged)
 			{
 				EntitiesToSignal.Add(ChunkCtx.GetEntity(i));
-				
+
 				Vis.bLastIsMyTeam = Vis.bIsMyTeam;
 				Vis.bLastIsOnViewport = Vis.bIsOnViewport;
 				Vis.bLastIsVisibleEnemy = Vis.bIsVisibleEnemy;

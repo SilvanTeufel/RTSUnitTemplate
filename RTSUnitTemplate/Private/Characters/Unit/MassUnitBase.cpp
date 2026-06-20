@@ -1007,8 +1007,20 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 		UE_LOG(LogTemp, Warning, TEXT("ASpawnerUnit (%s): RemoveTagFromEntity failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
 	}
-	
-	
+
+	// [False-death fix] Entry guard: never switch a genuinely ALIVE unit (GAS initialized -> MaxHealth>0,
+	// Health>0) to the Dead tag. The Dead tag is added directly in the Dead branch below and is the Mass
+	// counterpart of the SetUnitState(Dead) guard; gating it HERE (before any other state tags are stripped)
+	// avoids leaving the unit tagless. This catches the client re-applying a stale/transient StoredUnitState
+	// as well as any replicated-state artifact. Real deaths reach here with Health already 0 and still pass;
+	// EffectAreas (MaxHealth==0) are not gated.
+	if (TagToAdd == FMassStateDeadTag::StaticStruct() && Attributes &&
+		Attributes->GetHealth() > 0.f && Attributes->GetMaxHealth() > 0.f)
+	{
+		return false;
+	}
+
+
 	// Remove the tag
 	if (TagToAdd != FMassStateIdleTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateIdleTag>(EntityHandle);
 	if (TagToAdd != FMassStateChaseTag::StaticStruct()) EntityManager->Defer().RemoveTag<FMassStateChaseTag>(EntityHandle);

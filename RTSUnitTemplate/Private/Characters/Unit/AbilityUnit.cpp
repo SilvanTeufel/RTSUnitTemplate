@@ -345,6 +345,18 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	const ENetMode NetMode = GetNetMode();
 	const bool bCanCallBPEvents = (NetMode != NM_DedicatedServer);
 
+	// [False-death fix] SINGLE CHOKEPOINT for every Dead transition. UnitState (and, on authority, the
+	// replicated StoredUnitState that the client's UnitClientTagSyncProcessor re-applies as FMassStateDeadTag)
+	// is written below. A unit that is genuinely ALIVE -- GAS initialized (MaxHealth>0) and Health>0 -- must
+	// never enter Dead: such a call is an initialization / replication artifact (e.g. a stale or transient
+	// StoredUnitState) and would hide/freeze a full-HP unit. Real deaths set Health to 0 *before* calling
+	// SetUnitState(Dead), so they pass. EffectAreas (MaxHealth==0) are not gated.
+	if (NewUnitState == UnitData::Dead && Attributes &&
+		Attributes->GetHealth() > 0.f && Attributes->GetMaxHealth() > 0.f)
+	{
+		return;
+	}
+
 	if (NewUnitState == UnitData::Run ||
 		NewUnitState == UnitData::Chase ||
 		NewUnitState == UnitData::Patrol ||
