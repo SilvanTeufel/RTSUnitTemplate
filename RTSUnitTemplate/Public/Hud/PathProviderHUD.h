@@ -10,9 +10,6 @@
 #include "Engine/DataTable.h"
 #include "Actors/DijkstraCenter.h"
 #include "Actors/NoPathFindingArea.h"
-#if PLATFORM_WINDOWS
-#include "Windows/AllowWindowsPlatformTypes.h"
-#endif
 #include "DrawDebugHelpers.h"
 #include "PathProviderHUD.generated.h"
 

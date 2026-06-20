@@ -622,6 +622,7 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         			{
                         				EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
                         				Worker->BuildArea->RemoveWorkerFromArray(Worker);
+                        				Worker->BuildArea = nullptr;
                         				SetTag = true;
                         			}
                         		}
@@ -672,6 +673,9 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                     				if (Worker->BuildArea && Worker->BuildArea->Workers.Num() > Worker->BuildArea->MaxWorkerCount)
                     				{
                     					UpdateUnitMovement(Entity , UnitBase);
+                    					EntityManager.Defer().AddTag<FMassStateGoToBaseTag>(Entity);
+                    					Worker->BuildArea->RemoveWorkerFromArray(Worker);
+                    					Worker->BuildArea = nullptr;
                     					SetTag = true;
                     				}
                     			}
@@ -2309,17 +2313,26 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
    								float SavedHealth = 0.f;
    								float SavedShield = 0.f;
    								bool bHasSavedStats = false;
-   								if (UnitBase->BuildArea->ConstructionUnit)
-   								{
-   									if (UnitBase->BuildArea->ConstructionUnit->Attributes)
-   									{
-   										SavedHealth = UnitBase->BuildArea->ConstructionUnit->Attributes->GetHealth();
-   										SavedShield = UnitBase->BuildArea->ConstructionUnit->Attributes->GetShield();
-   										bHasSavedStats = true;
-   									}
-   									UnitBase->BuildArea->ConstructionUnit->Destroy(false, true);
-   									UnitBase->BuildArea->ConstructionUnit = nullptr;
-   								}
+								if (AConstructionUnit* CU = Cast<AConstructionUnit>(UnitBase->BuildArea->ConstructionUnit))
+								{
+									if (CU->Attributes)
+									{
+										SavedHealth = CU->Attributes->GetHealth();
+										SavedShield = CU->Attributes->GetShield();
+										bHasSavedStats = true;
+									}
+
+									if (CU->DroneBehavior)
+									{
+										CU->SetLifeSpan(4.0f);
+										CU->SetActorEnableCollision(false);
+									}
+									else
+									{
+										CU->Destroy(false, true);
+									}
+									UnitBase->BuildArea->ConstructionUnit = nullptr;
+								}
    								FUnitSpawnParameter SpawnParameter;
 								SpawnParameter.UnitBaseClass = UnitBase->BuildArea->BuildingClass;
 								SpawnParameter.UnitOffset = FVector(0.f, 0.f, UnitBase->BuildArea->BuildZOffset);
@@ -2803,17 +2816,16 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					if (UnitBase )
 					{
-						
 						UnitBase->UnitControlTimer = StateFrag->StateTimer;
 
 						// Extension path handled via helper when the Mass entity is the ConstructionUnit
-						if (AConstructionUnit* Construction = Cast<AConstructionUnit>(UnitBase))
-						{
-							if (HandleExtensionCastForConstructionUnit(EntityManager, Entity, StateFrag, Construction))
+							if (AConstructionUnit* Construction = Cast<AConstructionUnit>(UnitBase))
 							{
-								continue;
+								if (HandleExtensionCastForConstructionUnit(EntityManager, Entity, StateFrag, Construction))
+								{
+									continue;
+								}
 							}
-						}
 
 						// Allow workers in Build state and non-worker buildings in Casting state to progress build
 						if (!UnitBase->IsWorker && (!UnitBase->BuildArea || !DoesEntityHaveTag(EntityManager, Entity, FMassStateCastingTag::StaticStruct())))
@@ -2892,6 +2904,11 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 									}
 									StateFrag->StateTimer = 0.f;
 									UnitBase->UnitControlTimer = 0.f;
+
+									if (UnitBase->BuildArea)
+									{
+										UnitBase->BuildArea->Workers.Empty();
+									}
 
 									// Stop ConstructionUnit pulsation when casting ends
 									if (UnitBase->BuildArea && UnitBase->BuildArea->ConstructionUnit)
@@ -3686,9 +3703,11 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 	{
 		return false; // not handled
 	}
-	AWorkArea* WA = Construction->BuildArea;
+	AWorkArea* WA = Construction->BuildArea ? Construction->BuildArea : Construction->WorkArea;
+	float BuildTimeLimit = WA ? WA->BuildTime : Construction->CastTime;
+
 	// For construction units, we always skip the worker path regardless
-	if (!WA)
+	if (!WA && BuildTimeLimit <= 0.f)
 	{
 		return true; // handled (skip worker path)
 	}
@@ -3697,15 +3716,29 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 	Construction->OpenHealthWidget = true;
 	Construction->bShowLevelOnly = false;
 
-	// Keep timers in sync with WA
-	if (WA->CurrentBuildTime > Construction->UnitControlTimer)
+	// Keep timers in sync with WA if present
+	if (WA)
 	{
-		StateFrag->StateTimer = WA->CurrentBuildTime;
-		Construction->UnitControlTimer = WA->CurrentBuildTime;
+		if (WA->CurrentBuildTime > Construction->UnitControlTimer)
+		{
+			StateFrag->StateTimer = WA->CurrentBuildTime;
+			Construction->UnitControlTimer = WA->CurrentBuildTime;
+		}
+		else
+		{
+			WA->CurrentBuildTime = Construction->UnitControlTimer;
+		}
 	}
-	else
+
+	// Drone Behavior Stage 6 (Despawn) trigger
+	if (Construction->DroneBehavior)
 	{
-		WA->CurrentBuildTime = Construction->UnitControlTimer;
+		const float Remaining = BuildTimeLimit - Construction->UnitControlTimer;
+		if (Construction->Rep_DroneStage < 5 && BuildTimeLimit > 0.f && (Construction->UnitControlTimer > BuildTimeLimit * 0.9f || Remaining < 2.0f)) // 10% before end or 2s before end
+		{
+			Construction->Rep_DroneStage = 5;
+			Construction->ForceNetUpdate();
+		}
 	}
 	// If CU died, hide and lock out respawn
 	if (Construction->Attributes)
@@ -3713,23 +3746,26 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 		if (Construction->Attributes->GetHealth() <= 0.f)
 		{
 			Construction->SetHidden(true);
-			WA->bConstructionUnitSpawned = true;
+			if (WA)
+			{
+				WA->bConstructionUnitSpawned = true;
+			}
 			return true; // handled
 		}
 	}
 	// Health/shield growth based on progress
-	const float Progress = FMath::Clamp(Construction->UnitControlTimer / FMath::Max(0.001f, WA->BuildTime), 0.f, 1.f);
+	const float Progress = FMath::Clamp(Construction->UnitControlTimer / FMath::Max(0.001f, BuildTimeLimit), 0.f, 1.f);
 	if (Construction->Attributes)
 	{
 		const float MaxHP = Construction->Attributes->GetMaxHealth();
 		const float MaxShield = Construction->Attributes->GetMaxShield();
-		float PreviousProgress = WA->LastAppliedBuildProgress;
+		float PreviousProgress = WA ? WA->LastAppliedBuildProgress : 0.f;
 		const float CurrentHealth = Construction->Attributes->GetHealth();
 		const float CurrentShield = Construction->Attributes->GetShield();
 		
 		// If LastAppliedBuildProgress is still 0 but health is already significant,
 		// initialize it from health to prevent a progress "jump" on the first sync.
-		if (PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
+		if (WA && PreviousProgress <= 0.f && MaxHP > KINDA_SMALL_NUMBER)
 		{
 			PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
 			WA->LastAppliedBuildProgress = PreviousProgress;
@@ -3745,7 +3781,10 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 			const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
 			Construction->SetShield(NewShield);
 			Construction->UpdateWidget();
-			WA->LastAppliedBuildProgress = Progress;
+			if (WA)
+			{
+				WA->LastAppliedBuildProgress = Progress;
+			}
 		}
 	}
 	return true; // handled
@@ -3758,6 +3797,10 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 
 	if (!UnitBase->BuildArea || (!UnitBase->BuildArea->AllowAddingWorkers && UnitBase->BuildArea->Origin != UnitBase))
 	{
+		if (DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct()))
+		{
+			return;
+		}
 		UnitBase->SwitchEntityTag(FMassStateGoToBaseTag::StaticStruct());
 		return;
 	}
@@ -3777,6 +3820,14 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 	{
 		if (Worker->BuildArea && Worker->IsWorker)
 		{
+			// Check capacity to prevent overcrowding
+			if (Worker->BuildArea->Workers.Num() >= Worker->BuildArea->MaxWorkerCount && !Worker->BuildArea->Workers.Contains(Worker))
+			{
+				FMassEntityHandle MutableEntity = Entity;
+				SwitchState(UnitSignals::GoToBase, MutableEntity, EntityManager);
+				Worker->BuildArea = nullptr;
+				return;
+			}
 			Worker->BuildArea->AddWorkerToArray(Worker);
 		}
 	}
@@ -3868,11 +3919,27 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 						NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
 					}
 				}
-				// assign pointers if it is a AConstructionUnit
+				// Assign pointers if it is a AConstructionUnit
 				if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
 				{
 					CU->Worker = UnitBase;
 					CU->WorkArea = UnitBase->BuildArea;
+					CU->CastTime = UnitBase->CastTime;
+
+					if (UnitBase->BuildArea->IsExtensionArea)
+					{
+						CU->UnitState = UnitData::Casting;
+						CU->UnitStatePlaceholder = UnitData::Idle;
+						CU->StoredUnitState = UnitData::Casting;
+						CU->SwitchEntityTagByState(UnitData::Casting, UnitData::Idle);
+					}
+					else
+					{
+						CU->UnitState = UnitData::Idle;
+						CU->UnitStatePlaceholder = UnitData::Idle;
+						CU->StoredUnitState = UnitData::Idle;
+						CU->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+					}
 
 					if (CU->SetOffsetsDueToWorkAreaBounds && UnitBase->BuildArea->Mesh)
 					{
@@ -3887,7 +3954,13 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					NewConstruction->GetRootComponent()->UpdateComponentToWorld(); // ensure bounds are valid pre-spawn
 					FBox PreBox = NewConstruction->GetComponentsBoundingBox(true);
 					FVector UnitSize = PreBox.GetSize();
-					if (!UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+					bool bIsDrone = false;
+					if (const AConstructionUnit* CU_DroneCheck = Cast<AConstructionUnit>(NewConstruction))
+					{
+						bIsDrone = CU_DroneCheck->DroneBehavior;
+					}
+
+					if (!bIsDrone && !UnitSize.IsNearlyZero(1e-3f) && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
 					{
 						const float Margin = 0.98f;
 						const float ScaleX = (AreaSize.X * Margin) / UnitSize.X;
@@ -3906,6 +3979,24 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 							}
 						}
 						NewConstruction->SetActorScale3D(NewScale * 2.f * UnitBase->BuildArea->ScaleConstructionUnit);
+					}
+					else if (bIsDrone && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
+					{
+						// Drones intentionally keep ActorScale = 1: the Mass drone simulation (orbit radius,
+						// spawn/cruise heights, offsets) is authored in unscaled actor-local space, so scaling
+						// the actor would inflate the entire flight path by ActorScale. Instead size ONLY the
+						// CapsuleComponent so the clickable/collision volume matches the WorkArea, leaving the
+						// drone mesh, projection, and flight untouched. Living flying units derive their Z from
+						// FlyHeight (NOT the capsule half-height — see UActorTransformSyncProcessor::
+						// HandleGroundAndHeight), so growing the capsule does not lift the orbiting drone.
+						if (UCapsuleComponent* Capsule = NewConstruction->GetCapsuleComponent())
+						{
+							const float CapMargin = 0.98f;
+							const float NewRadius = FMath::Max(AreaSize.X, AreaSize.Y) * 0.5f * CapMargin;
+							// SetCapsuleSize requires HalfHeight >= Radius; clamp up so a flat WorkArea stays valid.
+							const float NewHalfHeight = FMath::Max(AreaSize.Z * 0.5f, NewRadius);
+							Capsule->SetCapsuleSize(NewRadius, NewHalfHeight, true);
+						}
 					}
 				}
 
@@ -3945,19 +4036,23 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 						}
 					}
 				}
-				// store pointer on area
-				UnitBase->BuildArea->ConstructionUnit = NewConstruction;
-				UnitBase->BuildArea->bConstructionUnitSpawned = true;
-				// start construction animations (rotate + oscillate) for remaining build time (95%)
-				if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
+		// store pointer on area
+		UnitBase->BuildArea->ConstructionUnit = NewConstruction;
+		UnitBase->BuildArea->bConstructionUnitSpawned = true;
+
+		// start construction animations (rotate + oscillate) for remaining build time (95%)
+		if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
 				{
-					const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
-					CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
-					CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
-					// Start multiplicative pulsating scale around base (configured on construction unit)
-					if (CU_Anim->bPulsateScaleDuringBuild)
+					if (!CU_Anim->DroneBehavior)
 					{
-						CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+						const float AnimDuration = UnitBase->BuildArea->BuildTime * 0.95f; // BuildTime minus 5%
+						CU_Anim->MulticastStartRotateVisual(CU_Anim->DefaultRotateAxis, CU_Anim->DefaultRotateDegreesPerSecond, AnimDuration);
+						CU_Anim->MulticastStartOscillateVisual(CU_Anim->DefaultOscOffsetA, CU_Anim->DefaultOscOffsetB, CU_Anim->DefaultOscillationCyclesPerSecond, AnimDuration);
+						// Start multiplicative pulsating scale around base (configured on construction unit)
+						if (CU_Anim->bPulsateScaleDuringBuild)
+						{
+							CU_Anim->MulticastPulsateScale(CU_Anim->PulsateMinMultiplier, CU_Anim->PulsateMaxMultiplier, CU_Anim->PulsateTimeMinToMax, true);
+						}
 					}
 				}
 				// set initial health (>=5%)
@@ -3974,6 +4069,24 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 				}
 			}
 		}
+		// Drone Stage 5 Trigger for normal builds
+		if (UnitBase->BuildArea->ConstructionUnit)
+		{
+			if (AConstructionUnit* CU_Drone = Cast<AConstructionUnit>(UnitBase->BuildArea->ConstructionUnit))
+			{
+				if (CU_Drone->DroneBehavior && CU_Drone->Rep_DroneStage < 5)
+				{
+					const float BuildTimeLimit = UnitBase->BuildArea->BuildTime;
+					const float Remaining = BuildTimeLimit - UnitBase->UnitControlTimer;
+					if (UnitBase->UnitControlTimer > BuildTimeLimit * 0.9f || Remaining < 2.0f)
+					{
+						CU_Drone->Rep_DroneStage = 5;
+						CU_Drone->ForceNetUpdate();
+					}
+				}
+			}
+		}
+
 		// Update health and shield over time additively based on progress delta
 		if (UnitBase->BuildArea->ConstructionUnit && UnitBase->BuildArea->ConstructionUnit->Attributes)
 		{

@@ -640,7 +640,7 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 	{
 		if(Worker)
 		{
-			if(!AllAreas[i]->PlannedBuilding && (AllAreas[i]->TeamId == Worker->TeamId || AllAreas[i]->TeamId == 0))
+			if(!AllAreas[i]->PlannedBuilding && !AllAreas[i]->IsExtensionArea && (AllAreas[i]->TeamId == Worker->TeamId || AllAreas[i]->TeamId == 0))
 			{
 				ClosestAreas.Add(AllAreas[i]);
 			}

@@ -43,6 +43,11 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 		ISMComponent->SetupAttachment(RootComponent);
 		// ISMComponent->SetVisibility(false);
 		ISMComponent->SetIsReplicated(false);
+		// The animation processor writes custom-data indices 1..12 (13 floats). Size the template here
+		// so it is correct before any instance is added, and so the value copied into the pooled ISM in
+		// UUnitVisualManager::AssignUnitVisual is never undersized. No instances exist at construction,
+		// so this just sets the default count.
+		ISMComponent->NumCustomDataFloats = 13;
 	}
 
 	
@@ -1490,6 +1495,35 @@ void AMassUnitBase::InitializeAdditionalISM(UInstancedStaticMeshComponent* InISM
 			InISMComponent->AddInstance(LocalIdentityTransform, false);
 		}
 	}
+}
+
+bool AMassUnitBase::RegisterAdditionalVisualNow(UInstancedStaticMeshComponent* InISMComponent)
+{
+	if (!InISMComponent) return false;
+
+	// Track the component like any other additional ISM (AddUnique + local visibility/collision disable).
+	InitializeAdditionalISM(InISMComponent);
+
+	if (!GetWorld() || !GetWorld()->IsGameWorld()) return false;
+
+	// RegisterAdditionalVisualsToMass only runs once during Mass setup (it early-outs after
+	// bMassVisualsRegistered), so an ISM added afterwards would never receive a pooled visual. Create it
+	// directly here when the Mass entity is live. AssignUnitVisual reuses an existing instance for the
+	// same template (idempotent) and is a safe no-op while the entity is inactive, in which case the
+	// component is still picked up by the normal registration pass because it is now in the array.
+	if (MassActorBindingComponent)
+	{
+		if (UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>())
+		{
+			const FMassEntityHandle EntityHandle = MassActorBindingComponent->GetEntityHandle();
+			if (EntityHandle.IsValid())
+			{
+				VisualManager->AssignUnitVisual(EntityHandle, InISMComponent, this);
+				return true;
+			}
+		}
+	}
+	return false;
 }
 
 bool AMassUnitBase::GetMassVisualInstance(UInstancedStaticMeshComponent* TemplateISM, UInstancedStaticMeshComponent*& OutComponent, int32& OutInstanceIndex) const

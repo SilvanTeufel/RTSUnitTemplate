@@ -5,6 +5,7 @@
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "NiagaraComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "GameFramework/Actor.h"
 #include "Core/UnitData.h"
 #include "Mass/MassUnitVisualFragments.h"
@@ -16,6 +17,7 @@ AConstructionUnit::AConstructionUnit(const FObjectInitializer& ObjectInitializer
 	// Likely stationary
 	CanMove = false;
 	bIsConstructionUnit = true;
+	PrimaryActorTick.bCanEverTick = false;
 }
 
 void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -26,6 +28,7 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetA);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetB);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationCyclesPerSecond);
+	DOREPLIFETIME(AConstructionUnit, DroneBehavior);
 }
 
 void AConstructionUnit::BeginPlay()
@@ -47,6 +50,35 @@ void AConstructionUnit::SetCharacterVisibility(bool desiredVisibility)
 void AConstructionUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
+}
+
+void AConstructionUnit::SetDronePlaneISM(UInstancedStaticMeshComponent* InISM)
+{
+	DronePlaneISM = InISM;
+
+	if (InISM)
+	{
+		if (!InISM->GetStaticMesh())
+		{
+			// The plane is rendered through the pooled Mass visual path, which silently drops a template
+			// that has no static mesh — warn so a missing mesh doesn't read as "wiring failed".
+			UE_LOG(LogTemp, Warning,
+				TEXT("SetDronePlaneISM: DronePlane ISM on %s has no StaticMesh; the plane will not render via Mass."),
+				*GetName());
+		}
+
+		// Register the plane as a Mass visual instance now. This works whether called before or after the
+		// one-time Mass registration pass (which early-outs once registered), so it is safe from BeginPlay
+		// and from the OnMassRegistrationFinished Blueprint event.
+		RegisterAdditionalVisualNow(InISM);
+	}
+
+	// Propagate immediately if the visual fragment already exists (covers the drone-already-active case).
+	// UUnitActorToFragmentSyncProcessor::SyncVisualEffect also refreshes this every frame.
+	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
+	{
+		EffectFrag->DronePlaneTemplateISM = InISM;
+	}
 }
 
 UPrimitiveComponent* AConstructionUnit::ResolveVisualComponent() const

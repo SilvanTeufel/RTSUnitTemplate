@@ -128,7 +128,11 @@ void UCastingStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             // Set rotation flag at cast start
             //if (StateFrag.StateTimer < ExecutionInterval)
             {
-                TargetFrag.bRotateTowardsAbility = true;
+                // Only request ability-facing rotation when a genuine target location exists.
+                // Construction/drone units enter Casting without ever setting an ability target
+                // (AbilityTargetLocation stays zero); requesting rotation there makes the base
+                // yaw toward world origin and jitters the orbiting ISM (magnified by the lever arm).
+                TargetFrag.bRotateTowardsAbility = !TargetFrag.AbilityTargetLocation.IsNearlyZero();
             }
 
             // Increase the timer by the processor interval
@@ -263,7 +267,11 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             // At cast start, set rotate towards ability flag
             //if (StateFrag.StateTimer < ExecutionInterval)
             {
-                TargetFrag.bRotateTowardsAbility = true;
+                // Only request ability-facing rotation when a genuine target location exists.
+                // Construction/drone units enter Casting without ever setting an ability target
+                // (AbilityTargetLocation stays zero); requesting rotation there makes the base
+                // yaw toward world origin and jitters the orbiting ISM (magnified by the lever arm).
+                TargetFrag.bRotateTowardsAbility = !TargetFrag.AbilityTargetLocation.IsNearlyZero();
             }
 
             // 3. Increment cast timer. This modification stays here.

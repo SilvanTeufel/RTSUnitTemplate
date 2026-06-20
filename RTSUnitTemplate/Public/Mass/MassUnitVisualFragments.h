@@ -227,6 +227,88 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
 
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> DishTargetISM;
+
+    // Drone Behavior
+    UPROPERTY()
+    bool bDroneEnabled = false;
+
+    UPROPERTY()
+    FVector DroneOffset = FVector::ZeroVector;
+
+    UPROPERTY()
+    FQuat DroneRotation = FQuat::Identity;
+
+    UPROPERTY(Transient)
+    FVector DroneVisualOffset = FVector::ZeroVector;
+
+    UPROPERTY(Transient)
+    FQuat DroneVisualRotation = FQuat::Identity;
+
+    // Drone Behavior state for local simulation
+    UPROPERTY()
+    int32 DroneStage = 0;
+    UPROPERTY()
+    int32 DroneLastStage = -1;
+    UPROPERTY()
+    float DroneTimer = 0.f;
+    UPROPERTY()
+    float DroneCurrentAngle = 0.f;
+    UPROPERTY()
+    float DroneTargetAngle = 0.f;
+    UPROPERTY()
+    float DroneTargetHeight = 0.f;
+    UPROPERTY()
+    float DroneBuildingHeight = 300.f;
+    UPROPERTY()
+    FVector2D DroneOrbitRadius = FVector2D(400.f, 400.f);
+    UPROPERTY()
+    FVector DroneOrbitCenter = FVector::ZeroVector;
+    UPROPERTY()
+    float DroneOrbitSpeed = 45.f;
+    UPROPERTY()
+    float DroneRotationSpeed = 5.f;
+    UPROPERTY()
+    float DroneInterpSpeed = 2.f;
+    UPROPERTY()
+    float DroneAscentSpeed = 2000.f;
+    UPROPERTY()
+    float DroneSpawnHeight = 1500.f;
+    UPROPERTY()
+    float DroneSpawnPitch = -45.f;
+
+    // Stage 3 (Vertical Move) bounce state — randomized once per entry into stage 3
+    UPROPERTY(Transient)
+    float DroneBounceBaseHeight = 0.f;
+    UPROPERTY(Transient)
+    float DroneBounceAmplitude = 0.f;
+    UPROPERTY(Transient)
+    float DroneBounceCycles = 0.f;
+    UPROPERTY(Transient)
+    float DroneBounceDuration = 0.f;
+
+    UPROPERTY()
+    FVector DroneBaseScale = FVector::OneVector;
+
+    // Optional "DronePlane" projection. The visual instance whose TemplateISM matches this is
+    // composed as a rigid child of the drone and only shown during the vertical-move stage
+    // (DroneStage == 3); hidden (zero scale) otherwise. Invalid when no plane is configured.
+    UPROPERTY(Transient)
+    TWeakObjectPtr<UInstancedStaticMeshComponent> DronePlaneTemplateISM;
+
+    // Irregular flicker for the DronePlane while it is visible (DroneStage == 3).
+    UPROPERTY()
+    bool bDronePlaneFlicker = false;
+
+    UPROPERTY()
+    float DronePlaneFlickerSpeed = 1.0f;
+
+    // Auto-computed factor that fits the DronePlane projection to the WorkArea (server + client).
+    UPROPERTY()
+    FVector DronePlaneScale = FVector::OneVector;
+
+    // Upper bound on the DronePlane fit factor (synced from the actor).
+    UPROPERTY()
+    float MaxDronePlaneScale = 10.0f;
 };
 
 template<>

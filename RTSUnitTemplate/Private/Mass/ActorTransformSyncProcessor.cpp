@@ -485,6 +485,16 @@ void UActorTransformSyncProcessor::RotateTowardsTarget(AUnitBase* UnitBase, FMas
 
 bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, const FMassAITargetFragment& AbilityTarget, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
 {
+    // Guard: an unset ability target location is the zero vector. Subtracting the actor
+    // location would then make Dir point at world origin, spuriously yawing the BASE
+    // transform (PositionedTransform). For construction/drone units that cast without a
+    // real target this base-yaw is magnified by the orbit lever arm (DroneOrbitCenter)
+    // into visible ISM jitter. Treat as "reached" so the caller clears bRotateTowardsAbility.
+    if (AbilityTarget.AbilityTargetLocation.IsNearlyZero())
+    {
+        return true;
+    }
+
     // Calculate direction from the unit to the ability's target location
     FVector Dir = AbilityTarget.AbilityTargetLocation - CurrentActorLocation;
     Dir.Z = 0.f;  // Flatten to the XY plane for rotation

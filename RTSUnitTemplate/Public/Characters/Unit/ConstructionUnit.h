@@ -8,6 +8,7 @@
 class AWorkArea;
 class UPrimitiveComponent;
 class USceneComponent;
+class UInstancedStaticMeshComponent;
 
 UCLASS()
 class RTSUNITTEMPLATE_API AConstructionUnit : public AUnitBase
@@ -39,6 +40,74 @@ public:
 	FVector Rep_VE_OscillationOffsetB = FVector::ZeroVector;
 	UPROPERTY(Replicated)
 	float Rep_VE_OscillationCyclesPerSecond = 0.f;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	bool DroneBehavior = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	FVector2D DroneOrbitRadius = FVector2D(300.f, 300.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	FVector DroneOrbitCenter = FVector::ZeroVector;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneMeshSafetyBuffer = 150.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneOrbitSpeed = 45.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneRotationSpeed = 5.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneInterpSpeed = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneAscentSpeed = 2000.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneSpawnHeight = 1500.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneSpawnPitch = 90.f;
+
+	// Optional "DronePlane" projection ISM. When assigned (via SetDronePlaneISM) it follows the
+	// drone as a rigid child — keeping its relative Blueprint offset — and is only shown during
+	// the vertical-move stage (DroneStage == 3). Assign on EVERY machine (the reference is a local
+	// component pointer, not replicated); the setter registers the visual on demand, so it is safe
+	// from BeginPlay or the OnMassRegistrationFinished Blueprint event. Shows as None in the editor
+	// — it is populated at runtime by SetDronePlaneISM.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Construction|Drone")
+	UInstancedStaticMeshComponent* DronePlaneISM = nullptr;
+
+	// Register an additional ISM as the "DronePlane" projection: stores the reference, ensures the
+	// component participates in the Mass visual system, and propagates it to the visual fragment.
+	UFUNCTION(BlueprintCallable, Category = "Construction|Drone")
+	void SetDronePlaneISM(UInstancedStaticMeshComponent* InISM);
+
+	// When true, the DronePlane flickers irregularly while visible (during DroneStage == 3).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	bool bDronePlaneFlicker = true;
+
+	// Multiplier on the flicker frequency; higher = faster flicker. 0 = no flicker (always on).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone", meta = (ClampMin = "0.0"))
+	float DronePlaneFlickerSpeed = 1.0f;
+
+	// Upper bound on the uniform scale factor the DronePlane may reach when fitting the WorkArea.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone", meta = (ClampMin = "0.1"))
+	float MaxDronePlaneScale = 10.0f;
+
+	UPROPERTY()
+	int32 Rep_DroneStage = 0;
+
+	UPROPERTY()
+	float Rep_DroneTargetAngle = 0.f;
+
+	UPROPERTY()
+	float Rep_DroneTargetHeight = 0.f;
+
+	UPROPERTY()
+	float BuildingMaxHeight = 300.f;
 
 	// Optional override for which component to animate (if null we try to auto-detect a mesh; fallback to RootComponent/Actor)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Construction|Anim")
@@ -91,7 +160,7 @@ public:
 	
  // Query if the pulsating scale is currently active on this client
  UFUNCTION(BlueprintCallable, BlueprintPure, Category = "Construction|Pulsate")
- bool IsPulsatingScaleActive() const { return bPulsateActive; }
+ bool IsPulsatingScaleActive() const { return (Rep_VE_ActiveEffects & (1 << 0)) != 0; }
 
  // Utility: immediately mark this construction site as dead, zero its health, and hide it
  UFUNCTION(BlueprintCallable, Category = Construction)
@@ -101,35 +170,7 @@ public:
  UFUNCTION(Server, Reliable)
  void Server_KillConstructionUnit();
 
- protected:
- // Resolve which component we will animate
- UPrimitiveComponent* ResolveVisualComponent() const;
-
- // Runtime state (not replicated)
- float Rotate_Duration = 0.f;
- float Rotate_Elapsed = 0.f;
- FVector Rotate_Axis = FVector(0.f, 0.f, 0.f);
- float Rotate_DegreesPerSec = 0.f;
- TWeakObjectPtr<USceneComponent> Rotate_TargetComp;
- bool Rotate_UseActor = false;
-
- float Osc_Duration = 0.f;
- float Osc_Elapsed = 0.f;
- float Osc_CyclesPerSec = 1.f;
- FVector Osc_OffsetA = FVector::ZeroVector;
- FVector Osc_OffsetB = FVector(0.f, 0.f, 50.f);
- FVector Osc_BaseRelativeLoc = FVector::ZeroVector;
- FVector Osc_BaseActorLoc = FVector::ZeroVector;
- TWeakObjectPtr<USceneComponent> Osc_TargetComp;
- bool Osc_UseActor = false;
-
- // Pulsate runtime state
- bool bPulsateActive = false;
- FVector Pulsate_BaseScale = FVector(1.f, 1.f, 1.f);
- FVector Pulsate_Min = FVector(0.9f, 0.9f, 0.9f);
- FVector Pulsate_Max = FVector(1.1f, 1.1f, 1.1f);
- float Pulsate_HalfPeriod = 0.75f;
- float Pulsate_Elapsed = 0.f;
- TWeakObjectPtr<USceneComponent> Pulsate_TargetComp;
- bool Pulsate_UseActor = false;
+	protected:
+	// Resolve which component we will animate
+	UPrimitiveComponent* ResolveVisualComponent() const;
 };
