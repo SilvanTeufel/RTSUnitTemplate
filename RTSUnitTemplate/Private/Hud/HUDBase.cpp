@@ -686,8 +686,8 @@ void AHUDBase::HandleSelectionRectangle()
 
 		for (AUnitBase* Unit : NewUnitBases) {
 			if (!Unit) continue;
-			const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
-			if (Controller && Unit->CanBeSelected && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0) && !SUnit)
+			//const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
+			if (Controller && Unit->CanBeSelected && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0)) //  && !SUnit
 			{
 				FVector2D ScreenLocation;
 				if (Controller->ProjectWorldLocationToScreen(Unit->GetActorLocation(), ScreenLocation))
@@ -695,7 +695,7 @@ void AHUDBase::HandleSelectionRectangle()
 					if (ScreenLocation.X >= SelectionRectMin.X && ScreenLocation.X <= SelectionRectMax.X &&
 						ScreenLocation.Y >= SelectionRectMin.Y && ScreenLocation.Y <= SelectionRectMax.Y)
 					{
-						if (Unit->GetOwner() == nullptr) Unit->SetOwner(Controller);
+						//if (Unit->GetOwner() == nullptr) Unit->SetOwner(Controller);
 						Unit->SetSelected();
 						SelectedUnits.Emplace(Unit);
 						SelectedUnitsSet.Add(Unit);

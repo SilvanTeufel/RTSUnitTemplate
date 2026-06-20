@@ -113,13 +113,23 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 
 void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, FMassCombatStatsFragment& Stats)
 {
-	if (Unit.Attributes)
+	// TeamId is a replicated actor property (not a GAS attribute) and can always be synced.
+	Stats.TeamId = Unit.TeamId;
+
+	// Only import GAS-derived stats once the AbilitySystem attributes have actually replicated/
+	// initialized. On clients GetHealth()/GetMaxHealth() transiently return 0 right after spawn
+	// (before the GAS attributes replicate). Writing that 0 into the fragment makes
+	// MainStateProcessor::ExecuteClient wrongly flag the still-alive unit as Dead, which then
+	// stomps the replicated CanBeSelected (-> not selectable) and hides it (-> broken animation).
+	// GetMaxHealth() <= 0 is the reliable "GAS not yet initialized" indicator; on the server the
+	// attributes are always initialized so this guard is a no-op there. A legitimate death (Health
+	// drops to 0 while MaxHealth stays > 0) still passes through unchanged.
+	if (Unit.Attributes && Unit.Attributes->GetMaxHealth() > 0.f)
 	{
 		Stats.Health = Unit.Attributes->GetHealth();
 		Stats.Shield = Unit.Attributes->GetShield();
 		Stats.MaxHealth = Unit.Attributes->GetMaxHealth();
 		Stats.MaxShield = Unit.Attributes->GetMaxShield();
-		Stats.TeamId = Unit.TeamId;
 
 		Stats.AttackDamage = Unit.Attributes->GetAttackDamage();
 		Stats.AttackRange = Unit.Attributes->GetRange();

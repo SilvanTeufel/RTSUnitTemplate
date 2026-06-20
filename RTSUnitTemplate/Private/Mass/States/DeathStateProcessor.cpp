@@ -21,7 +21,6 @@
 #include "Subsystems/UnitVisualManager.h"
 #include "Hud/HUDBase.h"
 
-
 UDeathStateProcessor::UDeathStateProcessor(): EntityQuery()
 {
     ExecutionFlags = (int32)EProcessorExecutionFlags::All;
@@ -39,7 +38,6 @@ void UDeathStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite); // Timer
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadWrite); // Anhalten
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
-    
     EntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -104,7 +102,14 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
                 if (UnitBase)
                 {
                     UnitBase->SetDeselected();
-                    UnitBase->CanBeSelected = false;
+                    // CanBeSelected is a replicated property -> only the server may write it.
+                    // If a client writes it here (e.g. after a transient false-death) the server
+                    // never re-replicates the unchanged true value, leaving the unit permanently
+                    // unselectable on that client. Let replication be the single source of truth.
+                    if (UnitBase->HasAuthority())
+                    {
+                        UnitBase->CanBeSelected = false;
+                    }
                     UnitBase->OpenHealthWidget = false;
                     UnitBase->bShowLevelOnly = false;
              
@@ -168,6 +173,9 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
                 {
                     if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
                     {
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[DeathProc/HideUnit] %s NetMode=%d -> SetDeathVisualState(true) (Mesh wird versteckt)"),
+                            *Unit->GetName(), (int)Unit->GetNetMode());
                         Unit->SetDeathVisualState(true);
                     }
                     else if (AEffectArea* Area = Cast<AEffectArea>(Actor))
@@ -242,6 +250,10 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             
             if (PrevTimer <= KINDA_SMALL_NUMBER)
             {
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[DeathProc/Client] Entity[%d:%d] ist als TOT in DeathStateProcessor angekommen -> StartDead/RemoveDeadUnit (HideActorTime=%.2f)"),
+                    Entity.Index, Entity.SerialNumber, CharacteristicsFragment.HideActorTime);
+
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::StartDead, Entity);
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::RemoveDeadUnit, Entity);
 
