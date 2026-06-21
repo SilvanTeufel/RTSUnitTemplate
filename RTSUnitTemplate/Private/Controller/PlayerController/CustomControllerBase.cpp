@@ -927,6 +927,24 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 			else Unit->RemoveFriendlyFocusEntityTarget();
 		}
 
+		// Worker move-command prediction: clear job + AutoMining on client to match server
+		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit))
+		{
+			Worker->AutoMining = false;
+			if (IsValid(Worker->BuildArea))
+			{
+				Worker->BuildArea->StartedBuilding = false;
+				Worker->BuildArea->PlannedBuilding = false;
+				Worker->BuildArea->RemoveWorkerFromArray(Worker);
+				Worker->BuildArea = nullptr;
+			}
+			if (IsValid(Worker->ResourcePlace))
+			{
+				Worker->ResourcePlace->RemoveWorkerFromArray(Worker);
+				Worker->ResourcePlace = nullptr;
+			}
+		}
+
 		const FVector& NewTargetLocation = NewTargetLocations[Index];
 		const float DesiredSpeed = DesiredSpeeds[Index];
 		
@@ -946,6 +964,10 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] Missing FMassAIStateFragment. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
+
+		// Crucial: reset switching state so the move command is processed immediately by client processors
+		AiStatePtr->SwitchingState = false;
+		AiStatePtr->StateTimer = 0.f;
 		
 		AiStatePtr->StoredLocation = NewTargetLocation;
 		
