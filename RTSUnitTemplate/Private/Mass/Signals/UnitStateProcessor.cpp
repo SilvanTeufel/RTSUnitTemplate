@@ -65,6 +65,14 @@
 #include "Core/RTSUnitUtils.h"
 using namespace RTSUnitUtils;
 
+// Diagnostic: set `RTS.WorkerMineLog 1` in the console to trace why an idle worker does/doesn't
+// switch to GoToResourceExtraction. Logs once per SynchronizeUnitState worker pass.
+static TAutoConsoleVariable<int32> CVarRTS_WorkerMineLog(
+	TEXT("RTS.WorkerMineLog"),
+	0,
+	TEXT("Log idle-worker auto-mining gating in UUnitStateProcessor::SynchronizeUnitState (0=off, 1=on)."),
+	ECVF_Default);
+
 namespace
 {
 	FVector ComputeImpactSurfaceXY(const AActor* Attacker, const AActor* Target)
@@ -1238,9 +1246,91 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 
 				TArray<FMassEntityHandle> CapturedEntitys;
 				CapturedEntitys.Emplace(CapturedEntity);
-    	
-    
-    			if (WorkerStats && WorkerStats->AutoMining && !StrongUnitActor->Base->IsFlying
+
+    	if (CVarRTS_WorkerMineLog.GetValueOnGameThread() != 0)
+    	{
+    		const bool bIdleTag = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateIdleTag::StaticStruct());
+    		const bool bPatrolIdleTag = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStatePatrolIdleTag::StaticStruct());
+    		const bool bRunTag = DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateRunTag::StaticStruct());
+    		const UEnum* UnitStateEnum = StaticEnum<UnitData::EState>();
+    		const FString StateName = UnitStateEnum ? UnitStateEnum->GetNameStringByValue((int64)StrongUnitActor->GetUnitState()) : FString::FromInt((int32)StrongUnitActor->GetUnitState());
+    		UE_LOG(LogTemp, Warning,
+    			TEXT("[WorkerMineLog] %s NM=%d State=%s | Tags(Idle=%d PatrolIdle=%d Run=%d) | Actor(AutoMining=%d Follow=%d Hold=%d) | Base(valid=%d flying=%d) | Resource(valid=%d amt=%.1f) | WorkerStats(AutoMining=%d BaseAvail=%d ResAvail=%d) | RGM=%d"),
+    			*StrongUnitActor->GetName(),
+    			(int32)(GTWorld ? GTWorld->GetNetMode() : NM_Standalone),
+    			*StateName,
+    			bIdleTag, bPatrolIdleTag, bRunTag,
+    			StrongUnitActor->AutoMining ? 1 : 0,
+    			StrongUnitActor->FollowUnit ? 1 : 0,
+    			StrongUnitActor->bHoldPosition ? 1 : 0,
+    			IsValid(StrongUnitActor->Base) ? 1 : 0,
+    			(IsValid(StrongUnitActor->Base) && StrongUnitActor->Base->IsFlying) ? 1 : 0,
+    			IsValid(StrongUnitActor->ResourcePlace) ? 1 : 0,
+    			IsValid(StrongUnitActor->ResourcePlace) ? StrongUnitActor->ResourcePlace->AvailableResourceAmount : -1.f,
+    			(WorkerStats && WorkerStats->AutoMining) ? 1 : 0,
+    			(WorkerStats && WorkerStats->BaseAvailable) ? 1 : 0,
+    			(WorkerStats && WorkerStats->ResourceAvailable) ? 1 : 0,
+    			ResourceGameMode ? 1 : 0);
+    	}
+
+    	// --- AutoMining strand recovery (server-only) ---
+    	// A worker whose ResourcePlace got depleted/destroyed (HandleGetResource nulls it) has its
+    	// WorkerStats->AutoMining force-gated to false in SynchronizeStatsFromActorToFragment
+    	// (BaseAvailable && ResourceAvailable). The idle->GoToResourceExtraction trigger below requires
+    	// that gated flag, so it can never re-fire and the worker is stranded in Idle forever.
+    	// Re-scan for a fresh base/resource area in place. Needs the auth GameMode (null on clients).
+    	{
+    		const bool bWorkerIdleLike =
+    			(DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStateIdleTag::StaticStruct())
+    			 && StrongUnitActor->GetUnitState() == UnitData::Idle)
+    			|| DoesEntityHaveTag(GTEntityManager, CapturedEntity, FMassStatePatrolIdleTag::StaticStruct());
+
+    		const bool bHasUsableResource =
+    			StrongUnitActor->ResourcePlace && StrongUnitActor->ResourcePlace->AvailableResourceAmount > 0.f;
+
+    		if (State && StrongUnitActor->AutoMining && bWorkerIdleLike && !bHasUsableResource
+    			&& !StrongUnitActor->FollowUnit && !StrongUnitActor->bHoldPosition)
+    		{
+    			const float Now = GTWorld->GetTimeSeconds();
+    			if (Now >= State->NextAutoMineScanTime)
+    			{
+    				State->NextAutoMineScanTime = Now + 0.5f; // throttle ~2x/sec
+
+    				if (!ResourceGameMode)
+    					ResourceGameMode = Cast<AResourceGameMode>(GTWorld->GetAuthGameMode());
+
+    				if (ResourceGameMode)
+    				{
+    					// Ensure a living base to scan from.
+    					if (!StrongUnitActor->Base || StrongUnitActor->Base->GetUnitState() == UnitData::Dead)
+    					{
+    						StrongUnitActor->Base = ResourceGameMode->GetClosestBaseFromArray(StrongUnitActor, ResourceGameMode->WorkAreaGroups.BaseAreas);
+    					}
+
+    					if (IsValid(StrongUnitActor->Base) && !StrongUnitActor->Base->IsFlying)
+    					{
+    						bool CanAffordConstruction = false;
+    						if (StrongUnitActor->BuildArea && StrongUnitActor->BuildArea->IsPaid)
+    							CanAffordConstruction = true;
+    						else if (StrongUnitActor->BuildArea)
+    							CanAffordConstruction = ResourceGameMode->CanAffordConstruction(StrongUnitActor->BuildArea->ConstructionCost, StrongUnitActor->TeamId);
+
+    						// In-place rescan: assigns a fresh ResourcePlace/Base and switches the actor state.
+    						// The state-mirror block + UpdateUnitMovement tail below propagate it to Mass tags
+    						// and kick movement; next SyncUnitBase re-arms WorkerStats->AutoMining.
+    						StrongUnitActor->Base->HandleBaseArea(StrongUnitActor, ResourceGameMode, CanAffordConstruction);
+    					}
+    				}
+    			}
+    		}
+    	}
+
+    			// Key off the ACTOR flag (source of truth), NOT the gated WorkerStats->AutoMining fragment.
+    			// Requires an already-assigned, live deposit; the no-resource case is handled by the
+    			// rescan block above (which calls HandleBaseArea to acquire one).
+    			if (StrongUnitActor->AutoMining
+						   && IsValid(StrongUnitActor->Base) && !StrongUnitActor->Base->IsFlying
+						   && IsValid(StrongUnitActor->ResourcePlace) && StrongUnitActor->ResourcePlace->AvailableResourceAmount > 0.f
 						   && !StrongUnitActor->FollowUnit
 						   && !StrongUnitActor->bHoldPosition
 						   && ((DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateIdleTag::StaticStruct())

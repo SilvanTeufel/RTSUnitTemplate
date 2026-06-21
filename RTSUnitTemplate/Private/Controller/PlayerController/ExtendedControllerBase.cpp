@@ -5293,8 +5293,13 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)
 {
 	if (!Worker || !Worker->IsWorker) return;
-	
+
 	Worker->ResourcePlace = WorkArea;
+	// Re-enable auto-mining: a deliberate right-click on a resource node restarts the continuous
+	// gather cycle. A prior move command sets AutoMining=false (CustomControllerBase) and nothing
+	// else turns it back on, so without this the worker mines exactly once and then idles forever
+	// (the idle->GoToResourceExtraction trigger in UUnitStateProcessor keys off Worker->AutoMining).
+	Worker->AutoMining = true;
 	Worker->SetUnitState(UnitData::GoToResourceExtraction);
 	Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);
 
