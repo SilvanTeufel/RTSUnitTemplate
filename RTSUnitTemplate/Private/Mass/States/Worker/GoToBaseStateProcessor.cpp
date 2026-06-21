@@ -169,8 +169,10 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
         return;
     }
 
+    if (!SignalSubsystem) return;
+
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
@@ -187,6 +189,11 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             const FTransform& CurrentTransform = TransformList[i].GetTransform();
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            if (StateFrag.SwitchingStateClient)
+            {
+                continue;
+            }
 
             bool bReachedBaseOrNoBase = false;
 
@@ -207,7 +214,15 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
 
             if (bReachedBaseOrNoBase)
             {
-                StateFrag.SwitchingState = true;
+                StateFrag.SwitchingStateClient = true;
+                
+                StopMovement(MoveTarget, World);
+                
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ReachedBase, Entity);
+                }
+
                 auto& Defer = ChunkContext.Defer();
 
                 // Remove movement and action tags

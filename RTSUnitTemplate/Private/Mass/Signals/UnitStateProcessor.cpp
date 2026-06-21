@@ -456,6 +456,10 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
 	
             if (ActorFragPtr)
             {
+                if (StateFragment)
+                {
+                    StateFragment->SwitchingStateClient = false;
+                }
                 AActor* Actor = ActorFragPtr->GetMutable(); 
                 if (IsValid(Actor)) 
                 {

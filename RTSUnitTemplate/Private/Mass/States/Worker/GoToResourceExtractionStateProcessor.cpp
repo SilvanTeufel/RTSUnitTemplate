@@ -13,7 +13,7 @@
 
 UGoToResourceExtractionStateProcessor::UGoToResourceExtractionStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::All;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -81,12 +81,13 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
     if (!SignalSubsystem) return;
 
-    
+    const bool bIsClient = World->IsNetMode(NM_Client);
+
     // Using deferred signal commands via Context, no manual arrays or AsyncTask dispatch needed
 
     EntityQuery.ForEachEntityChunk(Context,
         // Capture World for helper functions
-        [this, World](FMassExecutionContext& ChunkContext)
+        [this, World, bIsClient](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -109,22 +110,58 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             const FMassCombatStatsFragment& CombatStats = CombatStatsList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
-            AIState.StateTimer += ExecutionInterval;
+            if (bIsClient)
+            {
+                if (AIState.SwitchingStateClient)
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                AIState.StateTimer += ExecutionInterval;
+            }
+
             // --- 1. Check Target Validity ---
             
             if (!WorkerStatsFrag.ResourceAvailable)
             {
-                // Target is lost or invalid. Signal to go idle or find a new task.
-                if (SignalSubsystem)
+                if (bIsClient)
                 {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                    AIState.SwitchingStateClient = true;
+                    auto& Defer = ChunkContext.Defer();
+                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                    Defer.AddTag<FMassStateGoToBaseTag>(Entity);
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                    }
+                }
+                else
+                {
+                    // Target is lost or invalid. Signal to go idle or find a new task.
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                    }
                 }
                 continue;
             }
             
-            if (WorkerStatsFrag.BuildingAreaAvailable && !AIState.SwitchingState)
+            if (WorkerStatsFrag.BuildingAreaAvailable && !AIState.SwitchingState && !AIState.SwitchingStateClient)
             {
-                AIState.SwitchingState = true; 
+                if (bIsClient)
+                {
+                    AIState.SwitchingStateClient = true;
+                    auto& Defer = ChunkContext.Defer();
+                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                    Defer.AddTag<FMassStateGoToBuildTag>(Entity);
+                }
+                else
+                {
+                    AIState.SwitchingState = true; 
+                }
+
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBuild, Entity);
@@ -136,9 +173,20 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             
             MoveTarget.DistanceToGoal = DistanceToTargetCenter - WorkerStatsFrag.ResourceArrivalDistance; // Update distance
 
-            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState)
+            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState && !AIState.SwitchingStateClient)
             {
-                AIState.SwitchingState = true;
+                if (bIsClient)
+                {
+                    AIState.SwitchingStateClient = true;
+                    auto& Defer = ChunkContext.Defer();
+                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
+                    Defer.AddTag<FMassStateResourceExtractionTag>(Entity);
+                }
+                else
+                {
+                    AIState.SwitchingState = true;
+                }
+
                 // Stop movement and mirror to clients when reaching the resource
                 StopMovement(MoveTarget, World);
                 // Queue signals thread-safely using the deferred command buffer

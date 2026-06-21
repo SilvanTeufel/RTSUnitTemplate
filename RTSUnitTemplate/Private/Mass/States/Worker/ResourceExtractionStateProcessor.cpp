@@ -204,6 +204,12 @@ void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Con
             
             FMassAIStateFragment& StateFrag = StateList[i];
             const FMassWorkerStatsFragment& WorkerStatsFrag = WorkerStatsList[i];
+            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+
+            if (StateFrag.SwitchingStateClient)
+            {
+                continue;
+            }
 
             if (WorkerStatsFrag.BuildingAreaAvailable)
             {
@@ -213,10 +219,24 @@ void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Con
             
             StateFrag.StateTimerClient += ExecutionInterval;
 
-            if (StateFrag.StateTimerClient >= (WorkerStatsFrag.ResourceExtractionTime-ExecutionInterval))
+            if (StateFrag.StateTimerClient >= (WorkerStatsFrag.ResourceExtractionTime - ExecutionInterval))
             {
                 StateFrag.StateTimerClient = 0.f;
-                ScaleEntitiesToSignal.Add(ChunkContext.GetEntity(i));
+                ScaleEntitiesToSignal.Add(Entity);
+                
+                // Prediction transition
+                StateFrag.SwitchingStateClient = true;
+                StateFrag.PlaceholderSignal = UnitSignals::GoToResourceExtraction;
+                
+                auto& Defer = ChunkContext.Defer();
+                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
+                Defer.AddTag<FMassStateGoToBaseTag>(Entity);
+                
+                if (SignalSubsystem)
+                {
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GetResource, Entity);
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
+                }
             }
         }
     });
