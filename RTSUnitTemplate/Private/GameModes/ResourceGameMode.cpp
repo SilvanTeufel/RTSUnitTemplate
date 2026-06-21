@@ -579,6 +579,10 @@ TArray<AWorkArea*> AResourceGameMode::GetFiveClosestResourcePlaces(AWorkingUnitB
 	AllAreas.Append(WorkAreaGroups.LegendaryAreas);
 	// Exclude BaseAreas and BuildAreas if they are not considered resource places
 
+	// Skip depleted resource areas (AvailableResourceAmount <= 0) and any stale/invalid pointers so
+	// workers are never assigned to a place they cannot actually extract from.
+	AllAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area) || Area->AvailableResourceAmount <= 0.f; });
+
 	// Sort all areas by distance to the worker's base (if available), otherwise use worker location
 	// This ensures resources are selected based on proximity to the base, not the worker's current position
 	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base)) 
@@ -753,6 +757,10 @@ TArray<AWorkArea*> AResourceGameMode::GetAllResourcePlaces(AWorkingUnitBase* Wor
 	AllAreas.Append(WorkAreaGroups.RareAreas);
 	AllAreas.Append(WorkAreaGroups.EpicAreas);
 	AllAreas.Append(WorkAreaGroups.LegendaryAreas);
+
+	// Skip depleted resource areas (AvailableResourceAmount <= 0) and any stale/invalid pointers so
+	// workers are never assigned to a place they cannot actually extract from.
+	AllAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area) || Area->AvailableResourceAmount <= 0.f; });
 
 	// Sort all areas by distance to the worker's base (if available), otherwise use worker location
 	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base))

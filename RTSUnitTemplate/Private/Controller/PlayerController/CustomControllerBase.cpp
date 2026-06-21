@@ -502,6 +502,30 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 			else Unit->RemoveFriendlyFocusEntityTarget();
 		}
 
+		// Worker move-command authority: a player move order must win. Clear the worker's job +
+		// AutoMining so the server-side WorkerSyncProcessor (auto-mine trigger, auto-mine recovery
+		// rescan, actor-state->tag mirror, and the periodic UpdateMoveTarget) cannot re-route a unit
+		// the player just commanded. Mirrors the single-unit CorrectSetUnitMoveTarget reset (which the
+		// batch path was missing), plus AutoMining=false (the recovery block keys off Unit->AutoMining
+		// directly, so nulling ResourcePlace alone is not enough). Re-mining is a deliberate later
+		// action (right-clicking a resource node re-assigns ResourcePlace + AutoMining).
+		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit))
+		{
+			Worker->AutoMining = false;
+			if (IsValid(Worker->BuildArea))
+			{
+				Worker->BuildArea->StartedBuilding = false;
+				Worker->BuildArea->PlannedBuilding = false;
+				Worker->BuildArea->RemoveWorkerFromArray(Worker);
+				Worker->BuildArea = nullptr;
+			}
+			if (IsValid(Worker->ResourcePlace))
+			{
+				Worker->ResourcePlace->RemoveWorkerFromArray(Worker);
+				Worker->ResourcePlace = nullptr;
+			}
+		}
+
 		// Mass entity handle
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
 		

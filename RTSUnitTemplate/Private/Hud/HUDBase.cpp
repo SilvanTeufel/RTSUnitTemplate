@@ -54,18 +54,24 @@ void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, fl
 	if (TotalScreenLen <= KINDA_SMALL_NUMBER) return;
 
 	// Umrechnungsfaktor von 3D zu Screen (grob für die Dash-Länge)
-	float Total3DLen = FVector::Dist(Start, End);
-	float Scale = TotalScreenLen / Total3DLen;
+	const float Total3DLen = FVector::Dist(Start, End);
+	const float Scale = (Total3DLen > KINDA_SMALL_NUMBER) ? (TotalScreenLen / Total3DLen) : 1.f;
 
 	const FVector2D StepDir = Dir / TotalScreenLen;
-	const float ScreenDashLen = FMath::Max(1.f, DashLen * Scale);
-	const float ScreenGapLen = FMath::Max(0.f, GapLen * Scale);
+	const float ScreenDashLen = FMath::Max(1.f, FMath::IsFinite(DashLen) ? DashLen * Scale : 0.f);
+	const float ScreenGapLen = FMath::Max(0.f, FMath::IsFinite(GapLen) ? GapLen * Scale : 0.f);
+	const float Period = ScreenDashLen + ScreenGapLen; // ScreenDashLen >= 1px, so always advances
 
 	float Traveled = 0.f;
 	FLinearColor LineColor(Color);
 	LineColor.A = (Color.A / 255.f);
 
-	while (Traveled < TotalScreenLen)
+	// Hard backstop on the segment count: an extreme projection (an endpoint near the
+	// camera) can make TotalScreenLen huge while the period stays ~1px, which would
+	// otherwise flood Canvas->DrawItem with thousands of items every frame.
+	const int32 MaxSegments = FMath::Clamp(FMath::CeilToInt(TotalScreenLen / Period), 0, 4094) + 2;
+
+	for (int32 i = 0; i < MaxSegments && Traveled < TotalScreenLen; ++i)
 	{
 		const float ThisDash = FMath::Min(ScreenDashLen, TotalScreenLen - Traveled);
 		const FVector2D SegStart = ScreenStart + StepDir * Traveled;
@@ -77,7 +83,7 @@ void AHUDBase::DrawDashedLine3D(const FVector& InStart, const FVector& InEnd, fl
 		LineItem.BlendMode = SE_BLEND_Translucent;
 		Canvas->DrawItem(LineItem);
 
-		Traveled += ThisDash + ScreenGapLen;
+		Traveled += Period;
 	}
 }
 
@@ -89,22 +95,47 @@ void AHUDBase::DrawDashedLine2D(const FVector2D& Start, const FVector2D& End, fl
 	const float TotalLen = Dir.Size();
 	if (TotalLen <= KINDA_SMALL_NUMBER) return;
 
+	// Sanitize inputs: a non-positive (or non-finite) dash+gap period would never
+	// advance Traveled, turning the loop into an unbounded Canvas->DrawItem flood that
+	// exhausts memory. NaN/Inf are routed into the solid-line fallback below.
+	DashLen = FMath::IsFinite(DashLen) ? FMath::Max(0.f, DashLen) : 0.f;
+	GapLen  = FMath::IsFinite(GapLen)  ? FMath::Max(0.f, GapLen)  : 0.f;
+	const float Period = DashLen + GapLen;
+
 	const FVector2D StepDir = Dir / TotalLen;
-	float Traveled = 0.f;
 
-	while (Traveled < TotalLen)
+	// Degenerate pattern (no length to advance by): fall back to a solid line so the
+	// border is still visible instead of either drawing nothing or hanging.
+	if (Period <= KINDA_SMALL_NUMBER)
 	{
-		const float ThisDash = FMath::Min(DashLen, TotalLen - Traveled);
-		const FVector2D SegStart = Start + StepDir * Traveled;
-		const FVector2D SegEnd = Start + StepDir * (Traveled + ThisDash);
-
-		FCanvasLineItem LineItem(SegStart, SegEnd);
+		FCanvasLineItem LineItem(Start, End);
 		LineItem.LineThickness = Thickness;
 		LineItem.SetColor(Color);
 		LineItem.BlendMode = SE_BLEND_Translucent;
 		Canvas->DrawItem(LineItem);
+		return;
+	}
 
-		Traveled += ThisDash + GapLen;
+	// Hard backstop on the segment count so bad data can never blow up allocation.
+	const int32 MaxSegments = FMath::Clamp(FMath::CeilToInt(TotalLen / Period), 0, 4094) + 2;
+
+	float Traveled = 0.f;
+	for (int32 i = 0; i < MaxSegments && Traveled < TotalLen; ++i)
+	{
+		const float ThisDash = FMath::Min(DashLen, TotalLen - Traveled);
+		if (ThisDash > 0.f)
+		{
+			const FVector2D SegStart = Start + StepDir * Traveled;
+			const FVector2D SegEnd = Start + StepDir * (Traveled + ThisDash);
+
+			FCanvasLineItem LineItem(SegStart, SegEnd);
+			LineItem.LineThickness = Thickness;
+			LineItem.SetColor(Color);
+			LineItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(LineItem);
+		}
+
+		Traveled += Period;
 	}
 }
 
@@ -116,14 +147,36 @@ void AHUDBase::DrawDashDottedLine2D(const FVector2D& Start, const FVector2D& End
 	const float TotalLen = Dir.Size();
 	if (TotalLen <= KINDA_SMALL_NUMBER) return;
 
-	const FVector2D StepDir = Dir / TotalLen;
-	float Traveled = 0.f;
-	const float DotLen = Thickness;
+	// Sanitize inputs: a non-positive (or non-finite) dash+dot+gap period would never
+	// advance Traveled, turning the loop into an unbounded Canvas->DrawItem flood that
+	// exhausts memory. NaN/Inf are routed into the solid-line fallback below.
+	DashLen = FMath::IsFinite(DashLen) ? FMath::Max(0.f, DashLen) : 0.f;
+	GapLen  = FMath::IsFinite(GapLen)  ? FMath::Max(0.f, GapLen)  : 0.f;
+	const float DotLen = FMath::IsFinite(Thickness) ? FMath::Max(0.f, Thickness) : 0.f;
+	const float Period = DashLen + DotLen + 2.f * GapLen;
 
-	while (Traveled < TotalLen)
+	const FVector2D StepDir = Dir / TotalLen;
+
+	// Degenerate pattern (no length to advance by): fall back to a solid line so the
+	// border is still visible instead of either drawing nothing or hanging.
+	if (Period <= KINDA_SMALL_NUMBER)
+	{
+		FCanvasLineItem LineItem(Start, End);
+		LineItem.LineThickness = Thickness;
+		LineItem.SetColor(Color);
+		LineItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(LineItem);
+		return;
+	}
+
+	// Hard backstop on the segment count so bad data can never blow up allocation.
+	const int32 MaxSegments = FMath::Clamp(FMath::CeilToInt(TotalLen / Period), 0, 4094) + 2;
+
+	float Traveled = 0.f;
+	for (int32 i = 0; i < MaxSegments && Traveled < TotalLen; ++i)
 	{
 		// Dash
-		float ThisDash = FMath::Min(DashLen, TotalLen - Traveled);
+		const float ThisDash = FMath::Min(DashLen, TotalLen - Traveled);
 		if (ThisDash > 0.f)
 		{
 			FCanvasLineItem LineItem(Start + StepDir * Traveled, Start + StepDir * (Traveled + ThisDash));
@@ -139,7 +192,7 @@ void AHUDBase::DrawDashDottedLine2D(const FVector2D& Start, const FVector2D& End
 		if (Traveled >= TotalLen) break;
 
 		// Dot
-		float ThisDot = FMath::Min(DotLen, TotalLen - Traveled);
+		const float ThisDot = FMath::Min(DotLen, TotalLen - Traveled);
 		if (ThisDot > 0.f)
 		{
 			FCanvasLineItem LineItem(Start + StepDir * Traveled, Start + StepDir * (Traveled + ThisDot));
@@ -183,7 +236,7 @@ void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor
 	// Size Culling
 	if (!bDisableSizeCulling && VecX.SizeSquared() < 16.f && VecY.SizeSquared() < 16.f) return;
 
-	const int32 Segments = (InSegments > 0) ? InSegments : 16;
+	const int32 Segments = FMath::Clamp((InSegments > 0) ? InSegments : 16, 3, 256);
 	const float AngleStep = 2.0f * PI / Segments;
 	
 	float CosStep, SinStep;
@@ -420,7 +473,7 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 	}
 
 	// Höhere Segmentanzahl für rotierende Stile für weiches Fading erzwingen
-	int32 Segments = (InSegments > 0) ? InSegments : 32;
+	int32 Segments = FMath::Clamp((InSegments > 0) ? InSegments : 32, 3, 256);
 	if (InSegments <= 0) {
 		if (Settings.Style == ESelectionIndicatorStyle::RotatingPartialCircle || Settings.Style == ESelectionIndicatorStyle::RotatingOctagon)
 			Segments = 64;
@@ -1203,7 +1256,9 @@ void AHUDBase::DrawAllHealthBars()
 			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle && BaseSegments <= 0) BaseSegments = 32;
 			if (BaseSegments > 0)
 			{
-				EffectiveSettings.Segments = FMath::Max(4, FMath::FloorToInt(BaseSegments * SegmentScale));
+				// Clamp the upper bound too: an unclamped (e.g. Blueprint-set) Segments would
+				// otherwise drive billions of per-unit, per-frame Canvas->DrawItem calls.
+				EffectiveSettings.Segments = FMath::Clamp(FMath::FloorToInt(BaseSegments * SegmentScale), 4, 256);
 			}
 
 			float MaxRadius = FMath::Max(FinalRadiusX, FinalRadiusY);

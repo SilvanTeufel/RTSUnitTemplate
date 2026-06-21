@@ -247,6 +247,16 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 {
 	if (!ResourceGameMode) return;
 
+	// A held-but-depleted deposit (emptied without being destroyed, e.g. loaded from a save) is not
+	// extractable. Release it up front - decrement our per-type worker slot (symmetric with the +1
+	// paid on assignment) and forget it - so the logic below treats this worker as unassigned and
+	// never re-registers it onto a dead deposit. GetAllResourcePlaces already filters such places.
+	if (IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->AvailableResourceAmount <= 0.f)
+	{
+		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+		UnitBase->ResourcePlace = nullptr;
+	}
+
 	const bool bWorkerDistributionSet = ResourceGameMode->IsWorkerDistributionSet(UnitBase->TeamId);
 
 	TArray<AWorkArea*> AllWorkPlaces = ResourceGameMode->GetAllResourcePlaces(UnitBase);

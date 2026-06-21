@@ -319,6 +319,16 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 {
 	if (!ResourceGameMode) return;
 
+	// A held-but-depleted deposit (emptied without being destroyed, e.g. loaded from a save) is not
+	// extractable. Release it up front - decrement our per-type worker slot (symmetric with the +1
+	// paid on assignment) and forget it - so the logic below treats this worker as unassigned and
+	// never re-registers it onto a dead deposit. GetAllResourcePlaces already filters such places.
+	if (IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->AvailableResourceAmount <= 0.f)
+	{
+		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+		UnitBase->ResourcePlace = nullptr;
+	}
+
 	const bool bWorkerDistributionSet = ResourceGameMode->IsWorkerDistributionSet(Worker->TeamId);
 
 	TArray<AWorkArea*> AllWorkPlaces = ResourceGameMode->GetAllResourcePlaces(Worker);
@@ -737,6 +747,17 @@ void AWorkArea::OnOverflowTimer()
 			if (AWorkingUnitBase* W = Cast<AWorkingUnitBase>(Unit))
 			{
 				W->BuildArea = nullptr;
+				// If this overflow eviction pulls the worker off a resource deposit it is counted on,
+				// give back its per-type worker slot and clear the assignment so CurrentWorkers stays
+				// symmetric (it is leaving this->Workers just below) and it re-seeks a new place.
+				if (W->ResourcePlace == this)
+				{
+					if (AResourceGameMode* RGM = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
+					{
+						RGM->AddCurrentWorkersForResourceType(W->TeamId, ConvertToResourceType(Type), -1.0f);
+						W->ResourcePlace = nullptr;
+					}
+				}
 			}
 		}
 		// Remove worker from array via helper (ensures consistent behavior)

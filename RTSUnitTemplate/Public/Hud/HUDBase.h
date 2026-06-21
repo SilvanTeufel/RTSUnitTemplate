@@ -38,7 +38,7 @@ struct FHealthBarSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
 	float Thickness = 4.f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health", meta = (ClampMin = "0", ClampMax = "256"))
 	int32 Segments = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Health")
@@ -155,16 +155,16 @@ struct FSelectionRectangleSettings
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
 	FLinearColor BorderColor = FLinearColor(0, 1, 0, 1.0f);
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection", meta = (ClampMin = "0.0"))
 	float BorderThickness = 2.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
 	TEnumAsByte<ERectangleBorderType> BorderType = Line;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection", meta = (ClampMin = "0.0"))
 	float DashLength = 10.0f;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection", meta = (ClampMin = "0.0"))
 	float GapLength = 5.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Selection")
