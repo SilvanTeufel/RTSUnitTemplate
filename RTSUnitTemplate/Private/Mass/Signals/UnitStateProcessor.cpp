@@ -1361,54 +1361,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     				SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
 				}
     	
-				/*
-    			if(StrongUnitActor->GetUnitState() != UnitData::GoToBuild && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
-    				StrongUnitActor->SetUnitState(UnitData::GoToBuild);
-				}else if(StrongUnitActor->GetUnitState() != UnitData::ResourceExtraction && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
-					StrongUnitActor->SetUnitState(UnitData::ResourceExtraction);
-				}else if(StrongUnitActor->GetUnitState() != UnitData::Build && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
-					StrongUnitActor->SetUnitState(UnitData::Build);
-				}else if(StrongUnitActor->GetUnitState() != UnitData::GoToResourceExtraction && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
-					StrongUnitActor->SetUnitState(UnitData::GoToResourceExtraction);
-				}else if(StrongUnitActor->GetUnitState() != UnitData::GoToBase && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
-					StrongUnitActor->SetUnitState(UnitData::GoToBase);
-				}*/
-    	
-    			// DIAGNOSTIC EXPERIMENT (temporarily disabled): actor-state -> Mass-tag recovery.
-    			// This band-aid did not help (SwitchState's deferred AddTag also failed to stick),
-    			// which points at the deferred-command buffer itself being destabilized rather than a
-    			// missing recovery case. Disabled to isolate the root (the FlushCommands() in
-    			// ACustomControllerBase::Batch_CorrectSetUnitMoveTargets is reverted in the same pass).
-    			/*
-    			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
-					State->StateTimer = 0.f;
-					SwitchState(UnitSignals::ResourceExtraction, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->GetUnitState() == UnitData::Build && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateBuildTag::StaticStruct())){
-					State->StateTimer = 0.f;
-					SwitchState(UnitSignals::Build, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->GetUnitState() == UnitData::GoToResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToResourceExtractionTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
-					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
-				}else if(StrongUnitActor->GetUnitState() == UnitData::Run && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateRunTag::StaticStruct())){
-					SwitchState(UnitSignals::Run, CapturedEntity, GTEntityManager);
-				}
-				*/
-    	
-   				// Debug logging for UnitState, Tags, and BuildArea before movement update
-
-   		
    				UpdateUnitMovement(CapturedEntity , StrongUnitActor); 
-
-   				// Log current UnitState at the end of SynchronizeUnitState to trace state changes
-   				/*{
-   					const UEnum* UnitStateEnum = StaticEnum<UnitData::EState>();
-   					const uint8 RawState = (uint8)StrongUnitActor->GetUnitState();
-   					const FString StateName = UnitStateEnum ? UnitStateEnum->GetNameStringByValue((int64)RawState) : FString::FromInt(RawState);
-   					UE_LOG(LogTemp, Warning, TEXT("[SynchronizeUnitState][END] Unit=%s State=%s (%d)"), *StrongUnitActor->GetName(), *StateName, RawState);
-   				}*/
    	}); // Ende AsyncTask Lambda
 }
 
