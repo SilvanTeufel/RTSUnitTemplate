@@ -8,10 +8,10 @@
 #include "MassSignalSubsystem.h"
 #include "Async/Async.h"
 #include "Engine/World.h"
+#include "MassActorSubsystem.h"
 #include "Mass/Signals/MySignals.h"
 #include "Mass/UnitMassTag.h"
-
-// No Actor includes needed
+#include "Characters/Unit/UnitBase.h"
 
 UGoToBaseStateProcessor::UGoToBaseStateProcessor(): EntityQuery()
 {
@@ -30,8 +30,12 @@ void UGoToBaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite); // To update movement
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly); // Get BaseArrivalDistance, BasePosition, BaseRadius
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // Get RunSpeed
-    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly); 
+    EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);    // Update StateTimer
+    // Client prediction: filled on the client to anticipate the server stop (Optional so the
+    // server query still matches entities that lack it). Actor is read for MovementAcceptanceRadius.
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     // NO FGoToBaseTargetFragment - info moved to WorkerStats
 
     // State Tag
@@ -161,103 +165,40 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
     }); // End ForEachEntityChunk
 }
 
+// CLIENT: prediction only. The previous implementation authored the next state's tag here off the
+// un-replicated WorkerStats + PlaceholderSignal. WorkerStats.BaseAvailable defaults to false on the
+// client, so that path fired immediately and -- combined with the bubble re-applying tags without
+// hysteresis -- produced the documented per-cycle GetUnitState flip / broken animation. The bubble
+// is now the sole tag authority for workers; here we only predict movement toward the replicated
+// MoveTarget.Center so the client anticipates the server stop instead of overshooting the base.
 void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
-    UWorld* World = Context.GetWorld();
-    if (!World)
-    {
-        return;
-    }
-
-    if (!SignalSubsystem) return;
-
     EntityQuery.ForEachEntityChunk(Context,
-        [this, World, &EntityManager](FMassExecutionContext& ChunkContext)
+        [this](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
-        const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
-        const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
-        auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
-        auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        TArrayView<FMassClientPredictionFragment> PredList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
+        if (PredList.Num() == 0) return;
+
+        const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+        const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            FMassAIStateFragment& StateFrag = StateList[i];
-            FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-            const FMassWorkerStatsFragment& WorkerStats = WorkerStatsList[i];
-            const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
-            const FTransform& CurrentTransform = TransformList[i].GetTransform();
-            const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+            const FVector CurrentLocation = TransformList[i].GetTransform().GetLocation();
+            const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
-            if (StateFrag.SwitchingStateClient)
+            float ArrivalDistance = ArrivalDistanceMultiplier * 50.f; // fallback if actor not resolved yet
+            if (ActorList.Num() > 0)
             {
-                continue;
-            }
-
-            bool bReachedBaseOrNoBase = false;
-
-            // If base not available, switch to next state locally
-            if (!WorkerStats.BaseAvailable || WorkerStats.BuildingAreaAvailable)
-            {
-                bReachedBaseOrNoBase = true;
-            }
-            else
-            {
-                // Arrival check using GoToBase conditions
-                const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BasePosition);
-                if (DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance && !StateFrag.SwitchingState)
+                if (const AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].Get()))
                 {
-                    bReachedBaseOrNoBase = true;
+                    ArrivalDistance = ArrivalDistanceMultiplier * Unit->MovementAcceptanceRadius;
                 }
             }
 
-            if (bReachedBaseOrNoBase)
-            {
-                StateFrag.SwitchingStateClient = true;
-
-                auto& Defer = ChunkContext.Defer();
-
-                // Remove movement and action tags
-                Defer.RemoveTag<FMassStateRunTag>(Entity);
-                Defer.RemoveTag<FMassStateChaseTag>(Entity);
-                Defer.RemoveTag<FMassStateAttackTag>(Entity);
-                Defer.RemoveTag<FMassStatePauseTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolRandomTag>(Entity);
-                Defer.RemoveTag<FMassStatePatrolIdleTag>(Entity);
-                Defer.RemoveTag<FMassStateCastingTag>(Entity);
-                Defer.RemoveTag<FMassStateIsAttackedTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBaseTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateBuildTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
-                Defer.RemoveTag<FMassStateGoToRepairTag>(Entity);
-                Defer.RemoveTag<FMassStateRepairTag>(Entity);
-                Defer.RemoveTag<FMassStateIdleTag>(Entity);
-
-                // Add next tag based on prediction / server-intended next state
-                if (StateFrag.PlaceholderSignal == UnitSignals::GoToResourceExtraction)
-                    Defer.AddTag<FMassStateGoToResourceExtractionTag>(Entity);
-                else if (StateFrag.PlaceholderSignal == UnitSignals::GoToBuild)
-                    Defer.AddTag<FMassStateGoToBuildTag>(Entity);
-                else if (StateFrag.PlaceholderSignal == UnitSignals::Build)
-                    Defer.AddTag<FMassStateBuildTag>(Entity);
-                else if (StateFrag.PlaceholderSignal == UnitSignals::ResourceExtraction)
-                    Defer.AddTag<FMassStateResourceExtractionTag>(Entity);
-                else if (StateFrag.PlaceholderSignal == UnitSignals::GoToRepair)
-                    Defer.AddTag<FMassStateGoToRepairTag>(Entity);
-                else if (StateFrag.PlaceholderSignal == UnitSignals::Repair)
-                    Defer.AddTag<FMassStateRepairTag>(Entity);
-                else if (StateFrag.PlaceholderSignal == UnitSignals::Idle)
-                    Defer.AddTag<FMassStateIdleTag>(Entity);
-
-                continue;
-            }else
-            {
-                auto& Defer = ChunkContext.Defer();
-                Defer.RemoveTag<FMassStateIdleTag>(Entity);
-            }
+            PredictWorkerStop(PredList[i], CurrentLocation, MoveTarget.Center, MoveTarget.DesiredSpeed.Get(), ArrivalDistance);
         }
     });
 }

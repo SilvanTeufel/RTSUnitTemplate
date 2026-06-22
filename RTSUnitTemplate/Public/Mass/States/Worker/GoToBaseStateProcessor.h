@@ -25,7 +25,12 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
-	
+
+	// Must match UUnitStateProcessor::ArrivalDistanceMultiplier so client-predicted stop point
+	// lands where the server actually halts (server uses this * MovementAcceptanceRadius).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float ArrivalDistanceMultiplier = 5.f;
+
 private:
 	FMassEntityQuery EntityQuery;
 

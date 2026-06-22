@@ -965,8 +965,12 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 			continue;
 		}
 
-		// Crucial: reset switching state so the move command is processed immediately by client processors
+		// Crucial: reset switching state so the move command is processed immediately by client processors.
+		// SwitchingStateClient must also be cleared: several client state processors early-out
+		// (`if (SwitchingStateClient) continue;`) while it is latched true (e.g. from a worker arrival
+		// transition), which would make them skip the freshly commanded unit for a tick.
 		AiStatePtr->SwitchingState = false;
+		AiStatePtr->SwitchingStateClient = false;
 		AiStatePtr->StateTimer = 0.f;
 		
 		AiStatePtr->StoredLocation = NewTargetLocation;
@@ -992,6 +996,9 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 			PredFrag->PredDesiredSpeed = DesiredSpeed;
 			PredFrag->PredAcceptanceRadius = AcceptanceRadii[Index];
 			PredFrag->bHasData = true;
+			// Stamp the command time so ApplyReplicatedTagBits can let this predicted Run beat the
+			// stale replicated worker bits for a bounded grace window (see bSuppressWorkerStomp).
+			PredFrag->CommandPredictTime = World->GetTimeSeconds();
 		}
 
 		// Update path fragment for client-side visualization/logic if Shift is held

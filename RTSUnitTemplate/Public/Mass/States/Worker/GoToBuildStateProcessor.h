@@ -20,8 +20,16 @@ public:
 	virtual void InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager) override;
 	virtual void Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) override;
 
+	void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+	void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
+
+	// Must match UUnitStateProcessor::ArrivalDistanceMultiplier so client-predicted stop point
+	// lands where the server actually halts (server uses this * MovementAcceptanceRadius).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float ArrivalDistanceMultiplier = 5.f;
 	
 private:
 	FMassEntityQuery EntityQuery;

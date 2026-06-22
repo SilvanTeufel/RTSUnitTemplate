@@ -7,12 +7,14 @@
 #include "MassExecutionContext.h"
 #include "MassSignalSubsystem.h"
 #include "MassNavigationFragments.h"
+#include "MassActorSubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "Characters/Unit/UnitBase.h"
 
 UGoToRepairStateProcessor::UGoToRepairStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Client | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -30,6 +32,8 @@ void UGoToRepairStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+    // Client prediction fragment (Optional so server query still matches entities without it).
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateGoToRepairTag>(EMassFragmentPresence::All);
 
@@ -67,13 +71,50 @@ void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
     }
     TimeSinceLastRun -= ExecutionInterval;
 
+    if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+    {
+        ExecuteClient(EntityManager, Context);
+    }
+    else
+    {
+        ExecuteServer(EntityManager, Context);
+    }
+}
+
+// CLIENT: prediction only (no tag authoring, no MoveTarget writes). For repair the server keeps
+// MoveTarget.Center on the follow ring around the friendly target, so Center is already the stop
+// point -> predict toward it directly (arrival distance 0). Center is replicated each update, so
+// the client tracks the (moving) target between replications instead of stalling.
+void UGoToRepairStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    EntityQuery.ForEachEntityChunk(Context,
+        [this](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        TArrayView<FMassClientPredictionFragment> PredList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
+        if (PredList.Num() == 0) return;
+
+        const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            const FVector CurrentLocation = TransformList[i].GetTransform().GetLocation();
+            const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+            PredictWorkerStop(PredList[i], CurrentLocation, MoveTarget.Center, MoveTarget.DesiredSpeed.Get(), 0.f);
+        }
+    });
+}
+
+void UGoToRepairStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
     if (!SignalSubsystem)
     {
         return;
     }
 
     UWorld* World = EntityManager.GetWorld();
-    
+
     EntityQuery.ForEachEntityChunk(Context,
         [this, &EntityManager, World](FMassExecutionContext& ChunkContext)
     {

@@ -167,6 +167,12 @@ struct FMassClientPredictionFragment : public FMassFragment
 
 	UPROPERTY()
 	FVector Location = FVector::ZeroVector;
+
+	// World time (seconds) when the player last issued a client-predicted MOVE command for this unit.
+	// Used as a bounded grace window so a freshly predicted Run can beat stale replicated worker bits
+	// without permanently suppressing a *later* genuine server worker command. <0 = none.
+	UPROPERTY()
+	float CommandPredictTime = -1000.f;
 };
 
 USTRUCT()
@@ -1019,6 +1025,50 @@ inline void StopMovement(FMassMoveTargetFragment& MoveTarget, UWorld* World)
 	// Andere Felder wie Center, SlackRadius etc. bleiben unverndert, sind aber fr Stand egal.
 }
 
+// CLIENT-ONLY worker movement prediction (mirrors the proven Chase/Run prediction pattern).
+// Workers are server-AI-driven: on the client the destination is known ONLY through the
+// *replicated* FMassMoveTargetFragment (Center/DesiredSpeed), never through
+// FMassWorkerStatsFragment (which is NOT replicated). For Base/Build/Resource the replicated
+// Center is the node center, while the server halts `ArrivalDistance` short of it
+// (ArrivalDistanceMultiplier * MovementAcceptanceRadius). We therefore predict a stop point
+// that far short of Center so the client anticipates the server's stop instead of running all
+// the way to the node and snapping back when the stop replicates.
+//
+// This writes ONLY the prediction fragment. It never touches the authoritative MoveTarget and
+// never authors a state tag on the client (client-side worker tag authoring is what caused the
+// documented per-cycle GetUnitState flip / broken animation, so it is deliberately avoided).
+inline void PredictWorkerStop(
+	FMassClientPredictionFragment& Pred,
+	const FVector& CurrentLocation,
+	const FVector& TargetCenter,
+	float ReplicatedSpeed,
+	float ArrivalDistance,
+	float AcceptanceRadius = 50.f)
+{
+	FVector ToCenter = TargetCenter - CurrentLocation;
+	ToCenter.Z = 0.f;
+	const float Dist2D = ToCenter.Size2D();
+	const float Arrival = FMath::Max(0.f, ArrivalDistance);
+
+	if (ReplicatedSpeed > KINDA_SMALL_NUMBER && Dist2D > Arrival + KINDA_SMALL_NUMBER)
+	{
+		// Aim at the point ArrivalDistance short of the node center. Anchored to the replicated
+		// Center, so it stays a stable world point as we approach (no run-away with local motion).
+		const FVector Dir = ToCenter / Dist2D;
+		Pred.Location = TargetCenter - Dir * Arrival;
+		Pred.PredDesiredSpeed = ReplicatedSpeed;
+	}
+	else
+	{
+		// Inside the arrival band, or the server has already stopped moving: hold locally so the
+		// local mover does not creep toward the node ahead of the next replication.
+		Pred.Location = CurrentLocation;
+		Pred.PredDesiredSpeed = 0.f;
+	}
+	Pred.PredAcceptanceRadius = FMath::Max(1.f, AcceptanceRadius);
+	Pred.bHasData = true;
+}
+
 inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, FMassAIStateFragment* StateFragPtr, UNavigationSystemV1* NavSys, UWorld* World, float Speed)
 {
 	FVector BaseWaypointLocation = PatrolFrag.TargetWaypointLocation; // Muss korrekt gesetzt sein!
@@ -1603,9 +1653,32 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 {
 	// If client-side prediction is active, skip syncing certain tags (start with Idle)
 	bool bPredicting = false;
+	float CommandPredictTime = -1000.f;
 	if (const FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
 	{
 		bPredicting = Pred->bHasData;
+		CommandPredictTime = Pred->CommandPredictTime;
+	}
+
+	// Fresh player MOVE command vs. stale replicated worker bits.
+	// When the player right-clicks a busy worker, the client predicts Run locally (worker tags
+	// removed, Run added) but the bubble keeps replicating the OLD worker state for ~0.5s (2Hz)
+	// until the server processes the order. Without this guard the worker-tag SetTags below would
+	// re-add the stale job tag AND the WorkerMask block would strip the predicted Run every apply,
+	// so the worker snaps back to its job and the move appears ignored (needs repeating).
+	//
+	// Suppress that re-stamp only while ALL of: prediction active (Pred.bHasData), the client already
+	// holds the predicted Run tag, AND we are inside a short grace window since the command was issued.
+	// Normal worker travel holds a worker tag (not Run) here, so it is unaffected. The time window is a
+	// hard backstop so a LATER genuine server worker order (e.g. move-then-mine, which does not go
+	// through client move-prediction) is not suppressed indefinitely if bHasData never converges.
+	bool bSuppressWorkerStomp = false;
+	if (bPredicting && DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct()))
+	{
+		constexpr float CommandPredictGraceWindow = 0.6f; // ~ one 2Hz replication interval + headroom
+		const UWorld* PredWorld = EntityManager.GetWorld();
+		const float Now = PredWorld ? PredWorld->GetTimeSeconds() : 0.f;
+		bSuppressWorkerStomp = (CommandPredictTime >= 0.f) && ((Now - CommandPredictTime) < CommandPredictGraceWindow);
 	}
 
 	// Defer commands to safely modify tags on the client
@@ -1697,28 +1770,33 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		SetTag(UnitTagBits::Casting,             FMassStateCastingTag());
 		SetTag(UnitTagBits::Charging,            FMassStateChargingTag());
 		SetTag(UnitTagBits::IsAttacked,          FMassStateIsAttackedTag());
-		SetTag(UnitTagBits::Build,               FMassStateBuildTag());
-		SetTag(UnitTagBits::ResourceExtraction,  FMassStateResourceExtractionTag());
-		SetTag(UnitTagBits::GoToResource,        FMassStateGoToResourceExtractionTag());
-		SetTag(UnitTagBits::GoToBuild,           FMassStateGoToBuildTag());
-		SetTag(UnitTagBits::GoToBase,            FMassStateGoToBaseTag());
-		// Repair flow
-		SetTag(UnitTagBits::GoToRepair,         FMassStateGoToRepairTag());
-		SetTag(UnitTagBits::Repair,             FMassStateRepairTag());
-
-		// Remove conflicting tags if any worker tag is synced
-		const uint32 WorkerMask = UnitTagBits::Build | UnitTagBits::ResourceExtraction | 
-								 UnitTagBits::GoToResource | UnitTagBits::GoToBuild | 
-								 UnitTagBits::GoToBase | UnitTagBits::GoToRepair | 
-								 UnitTagBits::Repair | UnitTagBits::Casting;
-		
-		if ((Bits & WorkerMask) != 0)
+		// Worker job tags + the conflicting-tag strip are suppressed while the player's freshly
+		// predicted Run must win over stale replicated worker bits (see bSuppressWorkerStomp above).
+		if (!bSuppressWorkerStomp)
 		{
-			EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
-			EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
-			EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
-			EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
-			EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
+			SetTag(UnitTagBits::Build,               FMassStateBuildTag());
+			SetTag(UnitTagBits::ResourceExtraction,  FMassStateResourceExtractionTag());
+			SetTag(UnitTagBits::GoToResource,        FMassStateGoToResourceExtractionTag());
+			SetTag(UnitTagBits::GoToBuild,           FMassStateGoToBuildTag());
+			SetTag(UnitTagBits::GoToBase,            FMassStateGoToBaseTag());
+			// Repair flow
+			SetTag(UnitTagBits::GoToRepair,         FMassStateGoToRepairTag());
+			SetTag(UnitTagBits::Repair,             FMassStateRepairTag());
+
+			// Remove conflicting tags if any worker tag is synced
+			const uint32 WorkerMask = UnitTagBits::Build | UnitTagBits::ResourceExtraction |
+									 UnitTagBits::GoToResource | UnitTagBits::GoToBuild |
+									 UnitTagBits::GoToBase | UnitTagBits::GoToRepair |
+									 UnitTagBits::Repair | UnitTagBits::Casting;
+
+			if ((Bits & WorkerMask) != 0)
+			{
+				EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
+				EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
+				EntityManager.Defer().RemoveTag<FMassStateAttackTag>(Entity);
+				EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
+				EntityManager.Defer().RemoveTag<FMassStateChaseTag>(Entity);
+			}
 		}
 		SetTag(UnitTagBits::PatrolIdle,          FMassStatePatrolIdleTag());
 		SetTag(UnitTagBits::PatrolRandom,        FMassStatePatrolRandomTag());

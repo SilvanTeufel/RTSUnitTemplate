@@ -7,13 +7,15 @@
 #include "Async/Async.h"
 
 // --- Include your specific project Fragments, Tags, and Signals ---
+#include "MassActorSubsystem.h"
 #include "Mass/UnitMassTag.h"       // Contains State Tags (FMassStateGoToResourceExtractionTag)
 #include "Mass/Signals/MySignals.h"
+#include "Characters/Unit/UnitBase.h"
 
 
 UGoToResourceExtractionStateProcessor::UGoToResourceExtractionStateProcessor(): EntityQuery()
 {
-    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
+    ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Client | (int32)EProcessorExecutionFlags::Standalone;
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
@@ -33,6 +35,10 @@ void UGoToResourceExtractionStateProcessor::ConfigureQueries(const TSharedRef<FM
     EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadWrite);    // Write new move target / stop movement
     EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+    // Client prediction: filled on the client to anticipate the server stop (Optional so the
+    // server query still matches entities that lack it). Actor is read for MovementAcceptanceRadius.
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     // EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly); // Might read velocity to see if stuck? Optional.
 
 
@@ -72,26 +78,74 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
-        return; 
+        return;
     }
     TimeSinceLastRun -= ExecutionInterval;
-    
+
+    if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
+    {
+        ExecuteClient(EntityManager, Context);
+    }
+    else
+    {
+        ExecuteServer(EntityManager, Context);
+    }
+}
+
+// CLIENT: prediction only. The previous build re-authored worker state tags here (and self-
+// signalled), which fought the bubble's tag re-application without hysteresis and caused the
+// documented per-cycle GetUnitState flip / broken animation. That is gone: the bubble is the sole
+// tag authority for workers. ResourceAvailable / BuildingAreaAvailable live in the un-replicated
+// WorkerStats and are meaningless on the client, so we ignore them and only predict movement
+// toward the replicated MoveTarget.Center.
+void UGoToResourceExtractionStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
+    EntityQuery.ForEachEntityChunk(Context,
+        [this](FMassExecutionContext& ChunkContext)
+    {
+        const int32 NumEntities = ChunkContext.GetNumEntities();
+        TArrayView<FMassClientPredictionFragment> PredList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
+        if (PredList.Num() == 0) return;
+
+        const TConstArrayView<FTransformFragment> TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+        const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
+
+        for (int32 i = 0; i < NumEntities; ++i)
+        {
+            const FVector CurrentLocation = TransformList[i].GetTransform().GetLocation();
+            const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+
+            float ArrivalDistance = ArrivalDistanceMultiplier * 50.f; // fallback if actor not resolved yet
+            if (ActorList.Num() > 0)
+            {
+                if (const AUnitBase* Unit = Cast<AUnitBase>(ActorList[i].Get()))
+                {
+                    ArrivalDistance = ArrivalDistanceMultiplier * Unit->MovementAcceptanceRadius;
+                }
+            }
+
+            PredictWorkerStop(PredList[i], CurrentLocation, MoveTarget.Center, MoveTarget.DesiredSpeed.Get(), ArrivalDistance);
+        }
+    });
+}
+
+void UGoToResourceExtractionStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
+{
     UWorld* World = Context.GetWorld(); // Get World via Context
     if (!World) return;
 
     if (!SignalSubsystem) return;
 
-    const bool bIsClient = World->IsNetMode(NM_Client);
-
     // Using deferred signal commands via Context, no manual arrays or AsyncTask dispatch needed
 
     EntityQuery.ForEachEntityChunk(Context,
         // Capture World for helper functions
-        [this, World, bIsClient](FMassExecutionContext& ChunkContext)
+        [this, World](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
         if (NumEntities == 0) return;
-            
+
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         const auto WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
@@ -101,7 +155,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
-            
+
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             FMassAIStateFragment& AIState = AIStateList[i];
             const FTransform& Transform = TransformList[i].GetTransform();
@@ -110,57 +164,23 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             const FMassCombatStatsFragment& CombatStats = CombatStatsList[i];
             FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
 
-            if (bIsClient)
-            {
-                if (AIState.SwitchingStateClient)
-                {
-                    continue;
-                }
-            }
-            else
-            {
-                AIState.StateTimer += ExecutionInterval;
-            }
+            AIState.StateTimer += ExecutionInterval;
 
             // --- 1. Check Target Validity ---
-            
+
             if (!WorkerStatsFrag.ResourceAvailable)
             {
-                if (bIsClient)
+                // Target is lost or invalid. Signal to go idle or find a new task.
+                if (SignalSubsystem)
                 {
-                    AIState.SwitchingStateClient = true;
-                    auto& Defer = ChunkContext.Defer();
-                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                    Defer.AddTag<FMassStateGoToBaseTag>(Entity);
-                    if (SignalSubsystem)
-                    {
-                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
-                    }
-                }
-                else
-                {
-                    // Target is lost or invalid. Signal to go idle or find a new task.
-                    if (SignalSubsystem)
-                    {
-                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
-                    }
+                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
                 }
                 continue;
             }
-            
-            if (WorkerStatsFrag.BuildingAreaAvailable && !AIState.SwitchingState && !AIState.SwitchingStateClient)
+
+            if (WorkerStatsFrag.BuildingAreaAvailable && !AIState.SwitchingState)
             {
-                if (bIsClient)
-                {
-                    AIState.SwitchingStateClient = true;
-                    auto& Defer = ChunkContext.Defer();
-                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                    Defer.AddTag<FMassStateGoToBuildTag>(Entity);
-                }
-                else
-                {
-                    AIState.SwitchingState = true; 
-                }
+                AIState.SwitchingState = true;
 
                 if (SignalSubsystem)
                 {
@@ -170,22 +190,12 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
             }
 
             const float DistanceToTargetCenter = FVector::Dist2D(Transform.GetLocation(), WorkerStatsFrag.ResourcePosition);
-            
+
             MoveTarget.DistanceToGoal = DistanceToTargetCenter - WorkerStatsFrag.ResourceArrivalDistance; // Update distance
 
-            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState && !AIState.SwitchingStateClient)
+            if (DistanceToTargetCenter <= WorkerStatsFrag.ResourceArrivalDistance && !AIState.SwitchingState)
             {
-                if (bIsClient)
-                {
-                    AIState.SwitchingStateClient = true;
-                    auto& Defer = ChunkContext.Defer();
-                    Defer.RemoveTag<FMassStateGoToResourceExtractionTag>(Entity);
-                    Defer.AddTag<FMassStateResourceExtractionTag>(Entity);
-                }
-                else
-                {
-                    AIState.SwitchingState = true;
-                }
+                AIState.SwitchingState = true;
 
                 // Stop movement and mirror to clients when reaching the resource
                 StopMovement(MoveTarget, World);
@@ -196,7 +206,7 @@ void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityMa
                 }
                 continue;
             }
-            
+
            // if (!AIState.SwitchingState)
                 //UpdateMoveTarget(MoveTarget, WorkerStatsFrag.ResourcePosition, CombatStats.RunSpeed, World);
         }
