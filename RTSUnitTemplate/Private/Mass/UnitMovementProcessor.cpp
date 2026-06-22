@@ -17,6 +17,16 @@
 #include "Async/Async.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
+#include "HAL/IConsoleManager.h"
+
+// Diagnostic: set `RTS.BuildDriftLog 1` to confirm why a stationary worker (Build/ResourceExtraction/
+// Repair) drifts on the client. Logs the leftover client prediction (bHasData/Location vs current,
+// speeds) for such units in UUnitMovementProcessor::ExecuteClient.
+static TAutoConsoleVariable<int32> CVarRTS_BuildDriftLog(
+	TEXT("RTS.BuildDriftLog"),
+	0,
+	TEXT("Log stale client prediction on stationary worker states (0=off, 1=on)."),
+	ECVF_Default);
 
 UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
 {
@@ -202,12 +212,42 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             FUnitNavigationPathFragment& PathFrag = PathList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
-            
+
+            // Stationary worker states (Build / ResourceExtraction / Repair) must NOT be locally moved on
+            // the client. A prediction left over from the preceding GoTo state (Pred.bHasData=true with a
+            // now-frozen Location) makes this mover keep steering toward that stale point - and the
+            // Pred.bHasData branch below bumps a zero DesiredSpeed up to 100 - so the unit drifts/jitters
+            // while the server (DesiredSpeed=0, no prediction) stands completely still. Drop the stale
+            // prediction and hold; the reconciler keeps the unit at the authoritative server position.
+            {
+                const bool bStationaryWorker =
+                    DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
+                    DoesEntityHaveTag(EntityManager, Entity, FMassStateResourceExtractionTag::StaticStruct()) ||
+                    DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
+                if (bStationaryWorker)
+                {
+                    FMassClientPredictionFragment& PredHold = PredList[i];
+                    if (CVarRTS_BuildDriftLog.GetValueOnGameThread() != 0)
+                    {
+                        const FVector CurLoc = CurrentMassTransform.GetLocation();
+                        UE_LOG(LogTemp, Warning, TEXT("[BuildDrift] %s stationary: bHasData=%d PredLoc=%s Cur=%s PredSpeed=%.1f MTSpeed=%.1f distToPred=%.1f"),
+                            *GetNameSafe(ActorList[i].Get()), PredHold.bHasData ? 1 : 0,
+                            *PredHold.Location.ToString(), *CurLoc.ToString(),
+                            PredHold.PredDesiredSpeed, MoveTarget.DesiredSpeed.Get(), FVector::Dist2D(CurLoc, PredHold.Location));
+                    }
+                    PredHold.bHasData = false;
+                    Steering.DesiredVelocity = FVector::ZeroVector;
+                    PathFrag.ResetPath();
+                    PathFrag.bIsPathfindingInProgress = false;
+                    continue;
+                }
+            }
+
             FVector CurrentLocation = CurrentMassTransform.GetLocation();
             FVector FinalDestination = MoveTarget.Center;
             float DesiredSpeedUsed = MoveTarget.DesiredSpeed.Get();
             float AcceptanceRadiusUsed = MoveTarget.SlackRadius;
-            
+
             FMassClientPredictionFragment& Pred = PredList[i];
             if (Pred.bHasData)
             {
