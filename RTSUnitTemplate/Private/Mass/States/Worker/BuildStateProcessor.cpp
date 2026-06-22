@@ -14,6 +14,7 @@
 #include "Mass/Signals/MySignals.h"
 #include "MassActorSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/ConstructionUnit.h"
 
@@ -36,6 +37,7 @@ void UBuildStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadWrite); // For BuildAreaPosition
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly); // For TeamID
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional); // Read replicated BuildArea to face it (server+client)
 
     // State Tag
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::All);
@@ -150,16 +152,9 @@ void UBuildStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         }
     }
 
-    // Rotation Logic
-    auto TransformList = Context.GetMutableFragmentView<FTransformFragment>();
-    FTransform& CurrentTransform = TransformList[EntityIdx].GetMutableTransform();
-    FVector LookDir = (WorkerStats.BuildAreaPosition - CurrentTransform.GetLocation());
-    LookDir.Z = 0.f;
-    if (!LookDir.IsNearlyZero())
-    {
-        FQuat TargetRotation = FRotationMatrix::MakeFromX(LookDir).ToQuat();
-        CurrentTransform.SetRotation(TargetRotation);
-    }
+    // Face the build area center (NOT WorkerStats.BuildAreaPosition, which is the worker's own
+    // stand-point on the area edge -> LookDir was ~0, so facing never really worked).
+    FaceBuildArea(Context, EntityIdx);
 }
 
 void UBuildStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
@@ -169,9 +164,45 @@ void UBuildStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     AIState.StateTimer += ExecutionInterval;
     AIState.DeltaTime = ExecutionInterval;
 
+    // Face the build area locally on the client too. BuildArea is replicated, so the client can aim at
+    // the same center the server does (rotation/yaw replication alone was not reliably orienting it).
+    FaceBuildArea(Context, EntityIdx);
+
     if (SignalSubsystem)
     {
         // SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::SyncConstructionScale, Entity);
+    }
+}
+
+void UBuildStateProcessor::FaceBuildArea(FMassExecutionContext& Context, const int32 EntityIdx)
+{
+    const TConstArrayView<FMassActorFragment> ActorList = Context.GetFragmentView<FMassActorFragment>();
+    if (!ActorList.IsValidIndex(EntityIdx))
+    {
+        return;
+    }
+
+    const AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(ActorList[EntityIdx].Get());
+    if (!Worker || !IsValid(Worker->BuildArea))
+    {
+        return;
+    }
+
+    const TArrayView<FTransformFragment> TransformList = Context.GetMutableFragmentView<FTransformFragment>();
+    FTransform& CurrentTransform = TransformList[EntityIdx].GetMutableTransform();
+
+    FVector LookDir = Worker->BuildArea->GetActorLocation() - CurrentTransform.GetLocation();
+    LookDir.Z = 0.f;
+    if (LookDir.IsNearlyZero())
+    {
+        return;
+    }
+
+    const FQuat TargetRotation = FRotationMatrix::MakeFromX(LookDir).ToQuat();
+    const float AngleErrorDeg = FMath::RadiansToDegrees(CurrentTransform.GetRotation().AngularDistance(TargetRotation));
+    if (AngleErrorDeg > BuildFacingToleranceDeg)
+    {
+        CurrentTransform.SetRotation(TargetRotation);
     }
 }
 

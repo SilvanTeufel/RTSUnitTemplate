@@ -97,6 +97,8 @@ protected:
 
 	void UpdateExtractionSounds(float DeltaSeconds);
 
+	void LogSelectedUnitsMassTags();
+
 
 	// Separate function for processing held abilities
 	void ProcessHeldAbilities();
