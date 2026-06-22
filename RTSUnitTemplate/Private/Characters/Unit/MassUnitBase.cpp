@@ -3,6 +3,7 @@
 
 #include "Characters/Unit/MassUnitBase.h"
 
+#include "HAL/IConsoleManager.h" // RTS.TagTraceLog diagnostic
 #include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/BuildingBase.h"
@@ -467,6 +468,20 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	{
 		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTagByState failed - Entity %s is no longer valid."), *GetName(), *EntityHandle.DebugGetDescription());
 		return false;
+	}
+
+	{
+		// Diagnostic (shares the RTS.TagTraceLog CVar registered in UnitStateProcessor.cpp): trace the
+		// actor-side tag switch path (work-area assignment, save load). Correlate with [TagTrace]
+		// SwitchState lines and the per-frame tag dump to localize where a worker's tag is lost.
+		static IConsoleVariable* TagTraceCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("RTS.TagTraceLog"));
+		if (TagTraceCVar && TagTraceCVar->GetInt() != 0)
+		{
+			const UEnum* StEnum = StaticEnum<UnitData::EState>();
+			const FString StateName = StEnum ? StEnum->GetNameStringByValue((int64)UState.GetValue()) : TEXT("?");
+			UE_LOG(LogTemp, Warning, TEXT("[TagTrace] %s SwitchEntityTagByState(UState=%s) | entity=%s"),
+				*GetName(), *StateName, *EntityHandle.DebugGetDescription());
+		}
 	}
 
 	// Remove all state tags

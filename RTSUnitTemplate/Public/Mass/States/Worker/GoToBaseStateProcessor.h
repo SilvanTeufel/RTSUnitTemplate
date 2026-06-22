@@ -31,6 +31,22 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ArrivalDistanceMultiplier = 5.f;
 
+	// --- Crowd settle (server) ---
+	// When many workers return to a depleted base they pile up and the outer ones can never reach
+	// the tight arrival ring, so they push against the crowd forever (Run-jitter, never Idle).
+	// A worker that is already near the base (within ArrivalDistance * this multiplier) but is
+	// effectively blocked (2D speed below the threshold for at least MinStateTime in GoToBase) is
+	// treated as arrived: it runs the normal ReachedBase path (deposits its load, re-evaluates work,
+	// goes Idle when nothing is left). Harmless during active mining (deposit + reassign still fire).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float CrowdSettleRadiusMultiplier = 4.0f;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float CrowdSettleSpeedThreshold = 50.f;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float CrowdSettleMinStateTime = 1.5f;
+
 private:
 	FMassEntityQuery EntityQuery;
 

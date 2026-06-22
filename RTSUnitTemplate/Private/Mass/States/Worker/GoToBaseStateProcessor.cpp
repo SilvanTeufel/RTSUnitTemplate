@@ -36,6 +36,7 @@ void UGoToBaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     // server query still matches entities that lack it). Actor is read for MovementAcceptanceRadius.
     EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional); // crowd-settle: detect blocked workers
     // NO FGoToBaseTargetFragment - info moved to WorkerStats
 
     // State Tag
@@ -107,6 +108,8 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
 
         const TArrayView<FMassAIStateFragment> AIStateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const TArrayView<FMassMoveTargetFragment> MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
+        const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
+        const bool bHasVelocity = VelocityList.Num() > 0;
 
         const int32 NumEntities = ChunkContext.GetNumEntities();
         for (int32 i = 0; i < NumEntities; ++i)
@@ -155,7 +158,28 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
                 }
                 continue;
             }
-            
+
+            // --- 1b. Crowd settle ---
+            // Outer workers in a pile-up can never reach the tight arrival ring. If we are already
+            // near the base but effectively blocked (not moving) after a moment in GoToBase, settle
+            // here via the same ReachedBase path so we deposit + go Idle instead of jittering forever.
+            if (bHasVelocity && !AIState.SwitchingState &&
+                AIState.StateTimer >= CrowdSettleMinStateTime &&
+                DistanceToTargetCenter <= WorkerStats.BaseArrivalDistance * CrowdSettleRadiusMultiplier)
+            {
+                const float Speed2D = VelocityList[i].Value.Size2D();
+                if (Speed2D <= CrowdSettleSpeedThreshold)
+                {
+                    AIState.SwitchingState = true;
+                    StopMovement(MoveTarget, World);
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ReachedBase, Entity);
+                    }
+                    continue;
+                }
+            }
+
             //if (!AIState.SwitchingState)
                 //UpdateMoveTarget(MoveTarget, WorkerStats.BasePosition, CombatStatsList[i].RunSpeed, World);
             

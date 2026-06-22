@@ -185,15 +185,21 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 }
             }
 
-            if (!StateFrag.StoredLocation.IsNearlyZero())
+            // Generic "walk back to the commanded StoredLocation when bumped" behavior is for regular
+            // units. Workers must be EXCLUDED: their idle/next-action is decided by the job system
+            // (HandleBaseArea), and StoredLocation is not replicated, so on the client it is stale.
+            // For a worker that the server settled near a crowded base (StoredLocation = unreachable
+            // base center), this would re-run it toward the center every tick -> the Idle<->Run flip.
+            if (!DoesEntityHaveFragment<FMassWorkerStatsFragment>(EntityManager, Entity) &&
+                !StateFrag.StoredLocation.IsNearlyZero())
             {
                 const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
                 const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
                 const float Threshold = MoveTarget.SlackRadius * TresholdAcceptanceMultiplier;
-                
+
                 if (Dist2D > Threshold)
                 {
-                    
+
                     if (bHasPredList)
                     {
                         FMassClientPredictionFragment& Pred = PredictionList[i];
@@ -322,7 +328,12 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 }
             }
 
-            if (!StateFrag.StoredLocation.IsNearlyZero())
+            // Workers are excluded from the generic "walk back to StoredLocation" idle behavior (see the
+            // matching client-side comment). Otherwise a worker settled near a crowded base (StoredLocation
+            // = unreachable base center) would be re-run toward the center every tick, undoing the
+            // crowd-settle in GoToBaseStateProcessor and oscillating Idle<->Run.
+            if (!DoesEntityHaveFragment<FMassWorkerStatsFragment>(EntityManager, Entity) &&
+                !StateFrag.StoredLocation.IsNearlyZero())
             {
                 const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
                 const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];

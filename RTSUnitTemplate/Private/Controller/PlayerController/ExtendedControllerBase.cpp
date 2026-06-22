@@ -5100,8 +5100,16 @@ void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
 		}
 		
 		Worker->BuildArea = nullptr;
-		Worker->SetUnitState(UnitData::Idle);
-		Worker->SwitchEntityTagByState(UnitData::Idle, Worker->UnitStatePlaceholder);
+
+		// NOTE: Do NOT switch state/tags to Idle here. StopWork is always followed by the action that
+		// owns the next state: CheckClickOnWorkArea either reassigns work (SwitchEntityTagByState(GoToX))
+		// or the right-click falls through to RunUnitsAndSetWaypointsMass -> Batch_CorrectSetUnitMoveTargets
+		// (+Run). If StopWork ALSO queued SwitchEntityTagByState(Idle) in the same frame, the two deferred
+		// tag sets collided in one Mass flush (AddTag<Idle>+RemoveTag<Idle> and AddTag<Run>+RemoveTag<Run>
+		// -> Remove wins -> the entity ended up with NO state tag at all, so no processor moved it and it
+		// snapped back to Build). Cleanup + refund stay here; the follow-up action sets the state cleanly.
+		// (A standalone StopWork with no follow-up leaves the now-BuildArea-less worker tagged Build for one
+		// tick; BuildStateProcessor then routes it out via !BuildingAreaAvailable -> GoToBase -> Idle.)
 	}
 }
 

@@ -73,6 +73,17 @@ static TAutoConsoleVariable<int32> CVarRTS_WorkerMineLog(
 	TEXT("Log idle-worker auto-mining gating in UUnitStateProcessor::SynchronizeUnitState (0=off, 1=on)."),
 	ECVF_Default);
 
+// Diagnostic: set `RTS.TagTraceLog 1` to trace every UUnitStateProcessor::SwitchState call
+// (which removes all state tags then adds the one matching the signal). Shows, per call, the unit,
+// the requested signal, and whether the unit ALREADY has the target tag. Correlate with the per-frame
+// tag dump: if e.g. SwitchState(Build) is logged but the dump stays tagless, the deferred AddTag is
+// not being applied; if it is never logged, the transition is not reaching SwitchState.
+static TAutoConsoleVariable<int32> CVarRTS_TagTraceLog(
+	TEXT("RTS.TagTraceLog"),
+	0,
+	TEXT("Log every UUnitStateProcessor::SwitchState tag transition (0=off, 1=on)."),
+	ECVF_Default);
+
 namespace
 {
 	FVector ComputeImpactSurfaceXY(const AActor* Attacker, const AActor* Target)
@@ -477,6 +488,17 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
             
                     if (UnitBase)
                     {
+                        if (CVarRTS_TagTraceLog.GetValueOnGameThread() != 0)
+                        {
+                            const bool bHadRun   = DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct());
+                            const bool bHadBuild = DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct());
+                            const bool bHadGoToBuild = DoesEntityHaveTag(EntityManager, Entity, FMassStateGoToBuildTag::StaticStruct());
+                            const UEnum* StEnum = StaticEnum<UnitData::EState>();
+                            const FString ActorState = StEnum ? StEnum->GetNameStringByValue((int64)UnitBase->GetUnitState()) : TEXT("?");
+                            UE_LOG(LogTemp, Warning, TEXT("[TagTrace] %s SwitchState(signal=%s) | actorState=%s | hadTags(Run=%d Build=%d GoToBuild=%d) | entity=%s"),
+                                *UnitBase->GetName(), *SignalName.ToString(), *ActorState,
+                                bHadRun ? 1 : 0, bHadBuild ? 1 : 0, bHadGoToBuild ? 1 : 0, *Entity.DebugGetDescription());
+                        }
                         // *** Mass Tag Modifications MUST be inside the Game Thread Task ***
                         // --- Remove old tags ---
                         // Note: Using EntityManager directly here, NOT a separate command buffer object usually.
@@ -1217,7 +1239,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     	if(StrongUnitActor->GetUnitState() == UnitData::Casting && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateCastingTag::StaticStruct())){
 						SwitchState(UnitSignals::Casting, CapturedEntity, GTEntityManager);
 		}
-    	
+
     	if(StrongUnitActor->GetUnitState() == UnitData::Idle && DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateRunTag::StaticStruct())){
     		if (FMassAIStateFragment* StateFrag = GTEntityManager.GetFragmentDataPtr<FMassAIStateFragment>(CapturedEntity))
     		{
@@ -1352,6 +1374,12 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 					StrongUnitActor->SetUnitState(UnitData::GoToBase);
 				}*/
     	
+    			// DIAGNOSTIC EXPERIMENT (temporarily disabled): actor-state -> Mass-tag recovery.
+    			// This band-aid did not help (SwitchState's deferred AddTag also failed to stick),
+    			// which points at the deferred-command buffer itself being destabilized rather than a
+    			// missing recovery case. Disabled to isolate the root (the FlushCommands() in
+    			// ACustomControllerBase::Batch_CorrectSetUnitMoveTargets is reverted in the same pass).
+    			/*
     			if(StrongUnitActor->GetUnitState() == UnitData::GoToBuild && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBuildTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBuild, CapturedEntity, GTEntityManager);
 				}else if(StrongUnitActor->GetUnitState() == UnitData::ResourceExtraction && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateResourceExtractionTag::StaticStruct())){
@@ -1364,7 +1392,10 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
 					SwitchState(UnitSignals::GoToResourceExtraction, CapturedEntity, GTEntityManager);
 				}else if(StrongUnitActor->GetUnitState() == UnitData::GoToBase && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateGoToBaseTag::StaticStruct())){
 					SwitchState(UnitSignals::GoToBase, CapturedEntity, GTEntityManager);
+				}else if(StrongUnitActor->GetUnitState() == UnitData::Run && !DoesEntityHaveTag(GTEntityManager,CapturedEntity, FMassStateRunTag::StaticStruct())){
+					SwitchState(UnitSignals::Run, CapturedEntity, GTEntityManager);
 				}
+				*/
     	
    				// Debug logging for UnitState, Tags, and BuildArea before movement update
 
