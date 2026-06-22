@@ -1235,7 +1235,14 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 	{
 		if (UnitOwner) // Use data from Actor if available
 		{
+			StateFragment->CanMove = UnitOwner->CanMove;
 			StateFragment->StateTimer = UnitOwner->UnitControlTimer;
+
+			if (!UnitOwner->CanMove)
+			{
+				EntityManager.Defer().AddTag<FMassStateStopMovementTag>(EntityHandle);
+			}
+			
 			TEnumAsByte<UnitData::EState> State = UnitOwner->GetUnitState();
 			
 			 // map every state to its FName signal

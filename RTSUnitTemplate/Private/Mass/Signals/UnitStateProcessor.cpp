@@ -83,6 +83,7 @@ namespace
 
 UUnitStateProcessor::UUnitStateProcessor(): EntityQuery()
 {
+	ExecutionFlags = (int32)EProcessorExecutionFlags::Server | (int32)EProcessorExecutionFlags::Standalone;
     ProcessingPhase = EMassProcessingPhase::PostPhysics; // Run fairly late
 	bRequiresGameThreadExecution = true;
     bAutoRegisterWithProcessingPhases = true; // Don't need ticking execute
@@ -1037,14 +1038,17 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
         		{
         			GTEntityManager.Defer().RemoveTag<FMassStateStopMovementTag>(CapturedEntity);
         			if (StrongUnitActor->HasAuthority() && StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_UnregisterObstacle();
-        		}else if(!StrongUnitActor->CanMove && !bHasDeadTag && CharFragment->CanManipulateNavMesh)
+        		} else if(!StrongUnitActor->CanMove && !bHasDeadTag)
         		{
         			GTEntityManager.Defer().AddTag<FMassStateStopMovementTag>(CapturedEntity);
 
-                    // Dirty-Flag setzen, um den korrigierenden Lauf des PlacementProcessors zu triggern
-                    CharFragment->bTransformDirty = true;
+        			if (CharFragment->CanManipulateNavMesh)
+        			{
+        				// Dirty-Flag setzen, um den korrigierenden Lauf des PlacementProcessors zu triggern
+        				CharFragment->bTransformDirty = true;
                     
-        			if (StrongUnitActor->HasAuthority() && !StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_RegisterBuildingAsObstacle();
+        				if (StrongUnitActor->HasAuthority() && !StrongUnitActor->NavObstacleProxy) StrongUnitActor->Multicast_RegisterBuildingAsObstacle();
+        			}
         		}
         	}
         	
@@ -1291,11 +1295,7 @@ void UUnitStateProcessor::SynchronizeUnitState(FMassEntityHandle Entity)
     		if (State && StrongUnitActor->AutoMining && bWorkerIdleLike && !bHasUsableResource
     			&& !StrongUnitActor->FollowUnit && !StrongUnitActor->bHoldPosition)
     		{
-    			const float Now = GTWorld->GetTimeSeconds();
-    			if (Now >= State->NextAutoMineScanTime)
     			{
-    				State->NextAutoMineScanTime = Now + 0.5f; // throttle ~2x/sec
-
     				if (!ResourceGameMode)
     					ResourceGameMode = Cast<AResourceGameMode>(GTWorld->GetAuthGameMode());
 

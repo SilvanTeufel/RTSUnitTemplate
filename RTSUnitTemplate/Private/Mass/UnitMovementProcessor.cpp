@@ -179,6 +179,16 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             Steering.DesiredVelocity = FVector::ZeroVector;
 
             const FMassAIStateFragment& AIState = AIStateList[i];
+            const FMassMoveTargetFragment& MoveTarget = TargetList[i];
+            
+            if (const AActor* Actor = ActorList[i].Get())
+            {
+                if (Actor->GetName().Contains(TEXT("ConstructionSite")) || Actor->GetName().Contains(TEXT("ConstructionUnit")))
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] UnitMovementProcessor Client: %s - AIState.CanMove: %s, IsInitialized: %s, Target: %s, Speed: %f"), 
+                        *Actor->GetName(), AIState.CanMove ? TEXT("True") : TEXT("False"), AIState.IsInitialized ? TEXT("True") : TEXT("False"), *MoveTarget.Center.ToString(), MoveTarget.DesiredSpeed.Get());
+                }
+            }
             
             if (!AIState.IsInitialized)
             {
@@ -190,7 +200,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             }
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
-            const FMassMoveTargetFragment& MoveTarget = TargetList[i];
             FUnitNavigationPathFragment& PathFrag = PathList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             
@@ -367,13 +376,23 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             Steering.DesiredVelocity = FVector::ZeroVector; // Default to stopped for this frame
 
             const FMassAIStateFragment& AIState = AIStateList[i];
+            FMassMoveTargetFragment& MoveTarget = TargetList[i];
+
+            if (const AActor* Actor = ActorList[i].Get())
+            {
+                if (Actor->GetName().Contains(TEXT("ConstructionSite")) || Actor->GetName().Contains(TEXT("ConstructionUnit")))
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] UnitMovementProcessor Server: %s - AIState.CanMove: %s, IsInitialized: %s, Target: %s, Speed: %f"), 
+                        *Actor->GetName(), AIState.CanMove ? TEXT("True") : TEXT("False"), AIState.IsInitialized ? TEXT("True") : TEXT("False"), *MoveTarget.Center.ToString(), MoveTarget.DesiredSpeed.Get());
+                }
+            }
+
             if (!AIState.CanMove || !AIState.IsInitialized)
             {
                 continue;
             }
             
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
-            FMassMoveTargetFragment& MoveTarget = TargetList[i];
             FUnitNavigationPathFragment& PathFrag = PathList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
             

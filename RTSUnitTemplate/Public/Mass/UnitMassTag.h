@@ -519,11 +519,6 @@ struct FMassAIStateFragment : public FMassFragment
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	uint8 SyncIdleCount = 0;
 
-	// Server-side throttle for the AutoMining strand-recovery rescan in
-	// UUnitStateProcessor::SynchronizeUnitState (World->GetTimeSeconds() based, ~2x/sec).
-	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
-	float NextAutoMineScanTime = 0.f;
-
 };
 
 template<>

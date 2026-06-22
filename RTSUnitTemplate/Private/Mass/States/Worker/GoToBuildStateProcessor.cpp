@@ -129,9 +129,6 @@ void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassE
                 }
                 continue;
             }
-            
-            //if (!AIState.SwitchingState)
-                //UpdateMoveTarget(MoveTarget, WorkerStats.BuildAreaPosition, Stats.RunSpeed, World);
         } // End loop through entities
     }); // End ForEachEntityChunk
 

@@ -232,19 +232,20 @@ void UResourceExtractionStateProcessor::ClientExecute(FMassExecutionContext& Con
                 Defer.RemoveTag<FMassStateResourceExtractionTag>(Entity);
                 Defer.AddTag<FMassStateGoToBaseTag>(Entity);
                 
+                /*
                 if (SignalSubsystem)
                 {
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GetResource, Entity);
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::GoToBase, Entity);
-                }
+                }*/
             }
         }
     });
-
+    /*
     if (EntitiesToSignal.Num() > 0 && SignalSubsystem)
     {
         SignalSubsystem->SignalEntities(UnitSignals::ResourceExtraction, EntitiesToSignal);
-    }
+    }*/
 
     if (ScaleEntitiesToSignal.Num() > 0 && SignalSubsystem)
     {

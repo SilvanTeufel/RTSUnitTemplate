@@ -215,13 +215,6 @@ void UGoToBaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, F
             if (bReachedBaseOrNoBase)
             {
                 StateFrag.SwitchingStateClient = true;
-                
-                StopMovement(MoveTarget, World);
-                
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ReachedBase, Entity);
-                }
 
                 auto& Defer = ChunkContext.Defer();
 

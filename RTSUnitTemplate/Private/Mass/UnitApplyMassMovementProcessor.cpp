@@ -2,6 +2,7 @@
 #include "Mass/UnitApplyMassMovementProcessor.h"
 
 #include "MassCommonFragments.h"
+#include "MassActorSubsystem.h"
 #include "MassCommonTypes.h"
 #include "MassLODFragments.h"
 #include "MassMovementFragments.h"
@@ -36,6 +37,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	EntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly); 
 	
@@ -75,6 +78,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite);
 	ClientEntityQuery.AddRequirement<FMassForceFragment>(EMassFragmentAccess::ReadWrite);
 	ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
+	ClientEntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
+	ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	//ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	ClientEntityQuery.AddRequirement<FMassSteeringFragment>(EMassFragmentAccess::ReadOnly);
 	ClientEntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
@@ -146,6 +151,8 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharacteristicsList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FMassAIStateFragment> AIStateList = LocalContext.GetFragmentView<FMassAIStateFragment>();
+        const TConstArrayView<FMassActorFragment> ActorList = LocalContext.GetFragmentView<FMassActorFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
         
@@ -155,6 +162,26 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
             const FMassSteeringFragment& Steering = SteeringList[EntityIndex];
             FMassForceFragment& Force = ForceList[EntityIndex];
             FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
+            const FMassAIStateFragment& AIState = AIStateList[EntityIndex];
+
+            if (!AIState.CanMove)
+            {
+                Velocity.Value = FVector::ZeroVector;
+                Force.Value = FVector::ZeroVector;
+                continue;
+            }
+
+            if (const AActor* Actor = ActorList[EntityIndex].Get())
+            {
+                if (Actor->GetName().Contains(TEXT("ConstructionSite")) || Actor->GetName().Contains(TEXT("ConstructionUnit")))
+                {
+                     if (!Velocity.Value.IsNearlyZero() || !Steering.DesiredVelocity.IsNearlyZero() || !Force.Value.IsNearlyZero())
+                     {
+                        UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] UnitApplyMassMovementProcessor Client: %s - Velocity: %s, Steering: %s, Force: %s"), 
+                            *Actor->GetName(), *Velocity.Value.ToString(), *Steering.DesiredVelocity.ToString(), *Force.Value.ToString());
+                     }
+                }
+            }
 
             const float OriginalZVelocity = Velocity.Value.Z;
             const FVector DesiredVelocity = Steering.DesiredVelocity;
@@ -242,6 +269,8 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharacteristicsList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TConstArrayView<FMassAIStateFragment> AIStateList = LocalContext.GetFragmentView<FMassAIStateFragment>();
+        const TConstArrayView<FMassActorFragment> ActorList = LocalContext.GetFragmentView<FMassActorFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
 
@@ -251,6 +280,26 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             const FMassSteeringFragment& Steering = SteeringList[EntityIndex];
             FMassForceFragment& Force = ForceList[EntityIndex];
             FTransform& CurrentTransform = LocationList[EntityIndex].GetMutableTransform();
+            const FMassAIStateFragment& AIState = AIStateList[EntityIndex];
+
+            if (!AIState.CanMove)
+            {
+                Velocity.Value = FVector::ZeroVector;
+                Force.Value = FVector::ZeroVector;
+                continue;
+            }
+
+            if (const AActor* Actor = ActorList[EntityIndex].Get())
+            {
+                if (Actor->GetName().Contains(TEXT("ConstructionSite")) || Actor->GetName().Contains(TEXT("ConstructionUnit")))
+                {
+                     if (!Velocity.Value.IsNearlyZero() || !Steering.DesiredVelocity.IsNearlyZero() || !Force.Value.IsNearlyZero())
+                     {
+                        UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] UnitApplyMassMovementProcessor Server: %s - Velocity: %s, Steering: %s, Force: %s"), 
+                            *Actor->GetName(), *Velocity.Value.ToString(), *Steering.DesiredVelocity.ToString(), *Force.Value.ToString());
+                     }
+                }
+            }
 
             const float OriginalZVelocity = Velocity.Value.Z;
             const FVector DesiredVelocity = Steering.DesiredVelocity;
