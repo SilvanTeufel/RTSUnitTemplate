@@ -3,7 +3,6 @@
 
 #include "Controller/PlayerController/CustomControllerBase.h"
 
-#include "HAL/IConsoleManager.h" // RTS.TagTraceLog diagnostic
 #include "EngineUtils.h"
 #include "Landscape.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
@@ -660,19 +659,6 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 
 		// Tags manipulation
 		if (!bIsMovingWhileAttacking) EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
-
-		{
-			// Diagnostic (shares the RTS.TagTraceLog CVar registered in UnitStateProcessor.cpp): trace
-			// that the move command queued +Run / -worker tags for this unit. Correlate with the
-			// [TagTrace] SwitchState lines and the per-frame tag dump to see whether the Run tag sticks.
-			static IConsoleVariable* TagTraceCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("RTS.TagTraceLog"));
-			if (TagTraceCVar && TagTraceCVar->GetInt() != 0)
-			{
-				const bool bHadRun = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateRunTag::StaticStruct());
-				UE_LOG(LogTemp, Warning, TEXT("[TagTrace] %s BatchMove queued +Run (bMovingWhileAttacking=%d, hadRunBefore=%d)"),
-					*GetNameSafe(Unit), bIsMovingWhileAttacking ? 1 : 0, bHadRun ? 1 : 0);
-			}
-		}
 
 		if (AttackT || (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking))
 		{

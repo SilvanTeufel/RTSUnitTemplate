@@ -17,16 +17,6 @@
 #include "Async/Async.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
-#include "HAL/IConsoleManager.h"
-
-// Diagnostic: set `RTS.BuildDriftLog 1` to confirm why a stationary worker (Build/ResourceExtraction/
-// Repair) drifts on the client. Logs the leftover client prediction (bHasData/Location vs current,
-// speeds) for such units in UUnitMovementProcessor::ExecuteClient.
-static TAutoConsoleVariable<int32> CVarRTS_BuildDriftLog(
-	TEXT("RTS.BuildDriftLog"),
-	0,
-	TEXT("Log stale client prediction on stationary worker states (0=off, 1=on)."),
-	ECVF_Default);
 
 UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
 {
@@ -226,16 +216,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
                 if (bStationaryWorker)
                 {
-                    FMassClientPredictionFragment& PredHold = PredList[i];
-                    if (CVarRTS_BuildDriftLog.GetValueOnGameThread() != 0)
-                    {
-                        const FVector CurLoc = CurrentMassTransform.GetLocation();
-                        UE_LOG(LogTemp, Warning, TEXT("[BuildDrift] %s stationary: bHasData=%d PredLoc=%s Cur=%s PredSpeed=%.1f MTSpeed=%.1f distToPred=%.1f"),
-                            *GetNameSafe(ActorList[i].Get()), PredHold.bHasData ? 1 : 0,
-                            *PredHold.Location.ToString(), *CurLoc.ToString(),
-                            PredHold.PredDesiredSpeed, MoveTarget.DesiredSpeed.Get(), FVector::Dist2D(CurLoc, PredHold.Location));
-                    }
-                    PredHold.bHasData = false;
+                    PredList[i].bHasData = false;
                     Steering.DesiredVelocity = FVector::ZeroVector;
                     PathFrag.ResetPath();
                     PathFrag.bIsPathfindingInProgress = false;
