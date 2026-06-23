@@ -114,7 +114,10 @@ public:
 		bool bResetHoldPosition = true,
 		bool bResetFollowTarget = true);
 
-	// Server wrapper to validate and then trigger the multicast from the authority
+	// Server wrapper to validate and then trigger the multicast from the authority.
+	// bOriginatorPredictsLocally: set true when the calling client already applied local prediction
+	// (e.g. right-click move) -> the server skips the Client_Predict round-trip back to that originator
+	// to avoid double-applying. Other callers leave it false and keep receiving the round-trip.
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_Batch_CorrectSetUnitMoveTargets(
 		UObject* WorldContextObject,
@@ -124,19 +127,38 @@ public:
 		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false,
 		bool bResetHoldPosition = true,
-		bool bResetFollowTarget = true);
+		bool bResetFollowTarget = true,
+		bool bOriginatorPredictsLocally = false);
 
-	// Client-side prediction: apply Run tag and local MoveTarget updates on each client
+	// Client-side prediction: apply Run tag and local MoveTarget updates on each client.
+	// Units are referenced by replicated UnitIndex (not actor pointers): object refs in RPCs null
+	// out when their NetGUID isn't mapped at receive time (common under combat relevance churn),
+	// whereas an int32 always serializes and the client resolves it locally via the binding cache.
 	UFUNCTION(Client, Reliable)
 	void Client_Predict_Batch_CorrectSetUnitMoveTargets(
 		UObject* WorldContextObject,
-		const TArray<AUnitBase*>& Units,
+		const TArray<int32>& UnitIndices,
 		const TArray<FVector>& NewTargetLocations,
 		const TArray<float>& DesiredSpeeds,
 		const TArray<float>& AcceptanceRadii,
 		bool AttackT = false,
 		bool bResetHoldPosition = true,
 		bool bResetFollowTarget = true);
+
+	// Applies one unit's local move prediction (Run tag, MoveTarget/Pred fragment, state-tag cleanup).
+	// Shared by the Client_Predict RPC handler (other clients, resolved via cache) and by the commanding
+	// client's immediate local prediction (valid local refs, no server round-trip). The caller is
+	// responsible for flushing deferred Mass commands afterwards (so a batch flushes once).
+	void ApplyMovePredictionToUnit(
+		FMassEntityManager& EntityManager,
+		UWorld* World,
+		AUnitBase* Unit,
+		const FVector& NewTargetLocation,
+		float DesiredSpeed,
+		float AcceptanceRadius,
+		bool AttackT,
+		bool bResetHoldPosition,
+		bool bResetFollowTarget);
 
 	// Batch initialization of units without formation logic, projecting each to its own position on NavMesh.
 	void Batch_KickUnits(const TArray<AUnitBase*>& Units);

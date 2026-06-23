@@ -333,11 +333,11 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	// Inform every client to predict locally for this single unit
 	if (UWorld* PCWorld = GetWorld())
 	{
-		TArray<AUnitBase*> UnitsArr;
+		TArray<int32> IndicesArr;
 		TArray<FVector> LocationsArr;
 		TArray<float> SpeedsArr;
 		TArray<float> RadiiArr;
-		UnitsArr.Add(Unit);
+		IndicesArr.Add(Unit ? Unit->UnitIndex : INDEX_NONE);
 		LocationsArr.Add(FinalTargetLocation);
 		SpeedsArr.Add(DesiredSpeed);
 		RadiiArr.Add(AcceptanceRadius);
@@ -345,7 +345,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT, true, true);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, IndicesArr, LocationsArr, SpeedsArr, RadiiArr, AttackT, true, true);
 			}
 		}
 	}
@@ -704,7 +704,8 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	const TArray<float>& AcceptanceRadii,
 	bool AttackT,
 	bool bResetHoldPosition,
-	bool bResetFollowTarget)
+	bool bResetFollowTarget,
+	bool bOriginatorPredictsLocally)
 {
 	// Diagnostics: server received batch move
 	//UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
@@ -719,21 +720,26 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 		for (int32 i = 0; i < Units.Num(); i += MaxBatchSize)
 		{
 			int32 CurrentBatchNum = FMath::Min(MaxBatchSize, Units.Num() - i);
-			
-			TArray<AUnitBase*> BatchUnits;
+
+			// Send replicated UnitIndices (not actor pointers) so clients resolve units locally
+			// via the binding cache; this avoids RPC object refs nulling out when their NetGUID
+			// isn't mapped on the receiving client (the "stuck unit in combat" bug).
+			TArray<int32> BatchIndices;
 			TArray<FVector> BatchLocations;
 			TArray<float> BatchSpeeds;
 			TArray<float> BatchRadii;
 
-			BatchUnits.Reserve(CurrentBatchNum);
+			BatchIndices.Reserve(CurrentBatchNum);
 			BatchLocations.Reserve(CurrentBatchNum);
 			BatchSpeeds.Reserve(CurrentBatchNum);
 			BatchRadii.Reserve(CurrentBatchNum);
-			
+
 			for (int32 j = 0; j < CurrentBatchNum; ++j)
 			{
 				int32 GlobalIdx = i + j;
-				BatchUnits.Add(Units[GlobalIdx]);
+				const AUnitBase* U = Units[GlobalIdx];
+				// INDEX_NONE keeps arrays aligned; the client skips those entries.
+				BatchIndices.Add(U ? U->UnitIndex : INDEX_NONE);
 				BatchLocations.Add(NewTargetLocations[GlobalIdx]);
 				BatchSpeeds.Add(DesiredSpeeds[GlobalIdx]);
 				BatchRadii.Add(AcceptanceRadii[GlobalIdx]);
@@ -743,7 +749,13 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 			{
 				if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 				{
-					PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, BatchUnits, BatchLocations, BatchSpeeds, BatchRadii, AttackT, bResetHoldPosition, bResetFollowTarget);
+					// Skip the originator's round-trip when it already predicted locally (this == the
+					// commanding client's server-side PC), so its units aren't double-applied.
+					if (bOriginatorPredictsLocally && PC == this)
+					{
+						continue;
+					}
+					PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, BatchIndices, BatchLocations, BatchSpeeds, BatchRadii, AttackT, bResetHoldPosition, bResetFollowTarget);
 				}
 			}
 		}
@@ -832,9 +844,191 @@ void ACustomControllerBase::Batch_KickUnits(const TArray<AUnitBase*>& Units)
 	EntityManager.FlushCommands();
 }
 
+void ACustomControllerBase::ApplyMovePredictionToUnit(
+	FMassEntityManager& EntityManager,
+	UWorld* World,
+	AUnitBase* Unit,
+	const FVector& NewTargetLocation,
+	float DesiredSpeed,
+	float AcceptanceRadius,
+	bool AttackT,
+	bool bResetHoldPosition,
+	bool bResetFollowTarget)
+{
+	if (!Unit || !World)
+	{
+		return;
+	}
+	if (!Unit->IsInitialized)
+	{
+		return;
+	}
+	if (!Unit->CanMove)
+	{
+		return;
+	}
+	if (Unit->UnitState == UnitData::Dead)
+	{
+		return;
+	}
+
+	if (bResetHoldPosition)
+	{
+		Unit->bHoldPosition = false;
+	}
+
+	if (bResetFollowTarget)
+	{
+		Unit->ApplyFollowTarget(nullptr);
+		if (!Unit->MassActorBindingComponent->CanMoveWhileAttacking) Unit->RemoveFocusEntityTarget();
+		else Unit->RemoveFriendlyFocusEntityTarget();
+	}
+
+	// Worker move-command prediction: clear job + AutoMining on client to match server
+	if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit))
+	{
+		Worker->AutoMining = false;
+		if (IsValid(Worker->BuildArea))
+		{
+			Worker->BuildArea->StartedBuilding = false;
+			Worker->BuildArea->PlannedBuilding = false;
+			Worker->BuildArea->RemoveWorkerFromArray(Worker);
+			Worker->BuildArea = nullptr;
+		}
+		if (IsValid(Worker->ResourcePlace))
+		{
+			Worker->ResourcePlace->RemoveWorkerFromArray(Worker);
+			Worker->ResourcePlace = nullptr;
+		}
+	}
+
+	FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+
+	if (!EntityManager.IsEntityValid(MassEntityHandle))
+	{
+		return;
+	}
+
+	FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
+
+	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
+	if (!AiStatePtr)
+	{
+		return;
+	}
+
+	// Crucial: reset switching state so the move command is processed immediately by client processors.
+	// SwitchingStateClient must also be cleared: several client state processors early-out
+	// (`if (SwitchingStateClient) continue;`) while it is latched true (e.g. from a worker arrival
+	// transition), which would make them skip the freshly commanded unit for a tick.
+	AiStatePtr->SwitchingState = false;
+	AiStatePtr->SwitchingStateClient = false;
+	AiStatePtr->StateTimer = 0.f;
+
+	AiStatePtr->StoredLocation = NewTargetLocation;
+
+	bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
+	bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
+
+	if (!bIsMovingWhileAttacking)
+	{
+		AiStatePtr->PlaceholderSignal = UnitSignals::Run;
+	}
+
+	// Add Run tag so client processors include this entity immediately
+	if (!bIsMovingWhileAttacking)
+	{
+		Unit->SetUnitState(UnitData::Run);
+		EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
+	}
+	// Tagging and prediction
+	if (FMassClientPredictionFragment* PredFrag = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(MassEntityHandle))
+	{
+		PredFrag->Location = NewTargetLocation;
+		PredFrag->PredDesiredSpeed = DesiredSpeed;
+		PredFrag->PredAcceptanceRadius = AcceptanceRadius;
+		PredFrag->bHasData = true;
+		// Stamp the command time so ApplyReplicatedTagBits can let this predicted Run beat the
+		// stale replicated worker bits for a bounded grace window (see bSuppressWorkerStomp).
+		PredFrag->CommandPredictTime = World->GetTimeSeconds();
+	}
+
+	// Update path fragment for client-side visualization/logic if Shift is held
+	if (this->IsShiftPressed && Unit->bIsMassUnit)
+	{
+		if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
+		{
+			if (PathFrag->Waypoints.Num() < 10)
+			{
+				PathFrag->Waypoints.Add(NewTargetLocation);
+				PathFrag->bAttackMoveDuringPath = AttackT;
+				PathFrag->bAttackToggled = AttackT;
+				PathFrag->bIgnoreEnemiesDuringPath = !AttackT;
+			}
+		}
+	}
+	else if (!this->IsShiftPressed && Unit->bIsMassUnit)
+	{
+		if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
+		{
+			PathFrag->Waypoints.Reset();
+			PathFrag->CurrentIndex = 0;
+			PathFrag->bIgnoreEnemiesDuringPath = false;
+			PathFrag->bAttackMoveDuringPath = false;
+		}
+	}
+	// Ensure client won't skip movement this tick
+	AiStatePtr->CanMove = true;
+	if (bResetHoldPosition)
+	{
+		AiStatePtr->HoldPosition = false;
+	}
+
+	// Reset local path state to avoid stale path following from previous order
+	if (FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(MassEntityHandle))
+	{
+		PathFrag->ResetPath();
+		PathFrag->bIsPathfindingInProgress = false;
+	}
+
+	if (AttackT || (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking))
+	{
+		if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
+		{
+			EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
+		}
+	}
+	else
+	{
+		EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
+	}
+
+	// Strip other mutually exclusive state tags
+	EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
+
+	if (!bIsMovingWhileAttacking)
+	{
+		EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
+		EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
+	}
+
+	EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateRepairTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
+	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+}
+
 void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Implementation(
 	UObject* WorldContextObject,
-	const TArray<AUnitBase*>& Units,
+	const TArray<int32>& UnitIndices,
 	const TArray<FVector>& NewTargetLocations,
 	const TArray<float>& DesiredSpeeds,
 	const TArray<float>& AcceptanceRadii,
@@ -874,7 +1068,17 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	}
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
-	const int32 Count = FMath::Min3(Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+	const int32 Count = FMath::Min3(UnitIndices.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num());
+
+	// Resolve units locally from their replicated UnitIndex via the shared binding cache.
+	// Refresh once up front (throttled); if a commanded unit is missing (recent spawn) we force a
+	// single rescan below and retry, so freshly-spawned units aren't silently dropped.
+	URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>();
+	if (CacheSub)
+	{
+		CacheSub->RebuildBindingCacheIfNeeded();
+	}
+	bool bForcedCacheRebuild = false;
 
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
 	if (NavSys && NewTargetLocations.Num() > 0)
@@ -890,189 +1094,33 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Begin batch: Units=%d Targets=%d Speeds=%d Count=%d World=%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), Count, *GetNameSafe(World));
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
-		AUnitBase* Unit = Units[Index];
+		const int32 UnitIndex = UnitIndices[Index];
+		if (UnitIndex == INDEX_NONE)
+		{
+			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%d] UnitIndex == INDEX_NONE. Skipping."), Index);
+			continue;
+		}
+
+		// UnitIndex -> binding component -> owning actor. Resolved locally, so it survives even when
+		// an actor-pointer RPC arg would have arrived null (unmapped NetGUID under relevance churn).
+		UMassActorBindingComponent* Bind = CacheSub ? CacheSub->FindBindingByUnitIndex(UnitIndex) : nullptr;
+		if (!Bind && CacheSub && !bForcedCacheRebuild)
+		{
+			// Commanded unit not cached yet (recent spawn): force one rescan this batch and retry.
+			CacheSub->RebuildBindingCacheIfNeeded(0.f);
+			bForcedCacheRebuild = true;
+			Bind = CacheSub->FindBindingByUnitIndex(UnitIndex);
+		}
+		AUnitBase* Unit = Bind ? Cast<AUnitBase>(Bind->GetOwner()) : nullptr;
 		if (!Unit)
 		{
-			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%d] Unit is null. Skipping."), Index);
-			continue;
-		}
-		
-		if (!Unit->IsInitialized)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
-			continue;
-		}
-		if (!Unit->CanMove)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
-			continue;
-		}
-		
-		if (Unit->UnitState == UnitData::Dead)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
-			continue;
-		}
-		
-
-		if (bResetHoldPosition)
-		{
-			Unit->bHoldPosition = false;
-		}
-
-		if (bResetFollowTarget)
-		{
-			Unit->ApplyFollowTarget(nullptr);
-			if (!Unit->MassActorBindingComponent->CanMoveWhileAttacking) Unit->RemoveFocusEntityTarget();
-			else Unit->RemoveFriendlyFocusEntityTarget();
-		}
-
-		// Worker move-command prediction: clear job + AutoMining on client to match server
-		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit))
-		{
-			Worker->AutoMining = false;
-			if (IsValid(Worker->BuildArea))
-			{
-				Worker->BuildArea->StartedBuilding = false;
-				Worker->BuildArea->PlannedBuilding = false;
-				Worker->BuildArea->RemoveWorkerFromArray(Worker);
-				Worker->BuildArea = nullptr;
-			}
-			if (IsValid(Worker->ResourcePlace))
-			{
-				Worker->ResourcePlace->RemoveWorkerFromArray(Worker);
-				Worker->ResourcePlace = nullptr;
-			}
-		}
-
-		const FVector& NewTargetLocation = NewTargetLocations[Index];
-		const float DesiredSpeed = DesiredSpeeds[Index];
-		
-		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-
-		if (!EntityManager.IsEntityValid(MassEntityHandle))
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] MassEntityHandle invalid. Skipping."), *NewTargetLocation.ToString());
+			//UE_LOG(LogTemp, Warning, TEXT("[BatchMove][Client][%d] No unit for UnitIndex=%d. Skipping."), Index, UnitIndex);
 			continue;
 		}
 
-		FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
-
-		FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
-		if (!AiStatePtr)
-		{
-			//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction][%s] Missing FMassAIStateFragment. Skipping."), *GetNameSafe(Unit));
-			continue;
-		}
-
-		// Crucial: reset switching state so the move command is processed immediately by client processors.
-		// SwitchingStateClient must also be cleared: several client state processors early-out
-		// (`if (SwitchingStateClient) continue;`) while it is latched true (e.g. from a worker arrival
-		// transition), which would make them skip the freshly commanded unit for a tick.
-		AiStatePtr->SwitchingState = false;
-		AiStatePtr->SwitchingStateClient = false;
-		AiStatePtr->StateTimer = 0.f;
-		
-		AiStatePtr->StoredLocation = NewTargetLocation;
-		
-		bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
-		bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
-
-		if (!bIsMovingWhileAttacking)
-		{
-			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
-		}
-		
-		// Add Run tag so client processors include this entity immediately
-		if (!bIsMovingWhileAttacking)
-		{
-			Unit->SetUnitState(UnitData::Run);
-			EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
-		}
-		// Tagging and prediction
-		if (FMassClientPredictionFragment* PredFrag = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(MassEntityHandle))
-		{
-			PredFrag->Location = NewTargetLocation;
-			PredFrag->PredDesiredSpeed = DesiredSpeed;
-			PredFrag->PredAcceptanceRadius = AcceptanceRadii[Index];
-			PredFrag->bHasData = true;
-			// Stamp the command time so ApplyReplicatedTagBits can let this predicted Run beat the
-			// stale replicated worker bits for a bounded grace window (see bSuppressWorkerStomp).
-			PredFrag->CommandPredictTime = World->GetTimeSeconds();
-		}
-
-		// Update path fragment for client-side visualization/logic if Shift is held
-		if (this->IsShiftPressed && Unit->bIsMassUnit)
-		{
-			if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
-			{
-				if (PathFrag->Waypoints.Num() < 10)
-				{
-					PathFrag->Waypoints.Add(NewTargetLocation);
-					PathFrag->bAttackMoveDuringPath = AttackT;
-					PathFrag->bAttackToggled = AttackT;
-					PathFrag->bIgnoreEnemiesDuringPath = !AttackT;
-				}
-			}
-		}
-		else if (!this->IsShiftPressed && Unit->bIsMassUnit)
-		{
-			if (FMassUnitPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FMassUnitPathFragment>(MassEntityHandle))
-			{
-				PathFrag->Waypoints.Reset();
-				PathFrag->CurrentIndex = 0;
-				PathFrag->bIgnoreEnemiesDuringPath = false;
-				PathFrag->bAttackMoveDuringPath = false;
-			}
-		}
-		// Ensure client won't skip movement this tick
-		AiStatePtr->CanMove = true;
-		if (bResetHoldPosition)
-		{
-			AiStatePtr->HoldPosition = false;
-		}
-		
-		// Reset local path state to avoid stale path following from previous order
-		if (FUnitNavigationPathFragment* PathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(MassEntityHandle))
-		{
-			PathFrag->ResetPath();
-			PathFrag->bIsPathfindingInProgress = false;
-		}
-		//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Tagging %s: +Run +PredFrag(bHasData=1), Dest=%s, Speed=%.1f, Radius=%.1f, AttackT=%d"),
-		//	*GetNameSafe(Unit), *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, AttackT ? 1 : 0);
-		if (AttackT || (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking))
-		{
-			if (AiStatePtr->CanAttack && AiStatePtr->IsInitialized)
-			{
-				EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
-			}
-		}
-		else
-		{
-			EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
-		}
-
-		// Strip other mutually exclusive state tags
-		EntityManager.Defer().RemoveTag<FMassStateIdleTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateChaseTag>(MassEntityHandle);
-		
-		if (!bIsMovingWhileAttacking)
-		{
-			EntityManager.Defer().RemoveTag<FMassStateAttackTag>(MassEntityHandle);
-			EntityManager.Defer().RemoveTag<FMassStatePauseTag>(MassEntityHandle);
-		}
-
-		EntityManager.Defer().RemoveTag<FMassStatePatrolRandomTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStatePatrolIdleTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateCastingTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateIsAttackedTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateGoToBaseTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateGoToBuildTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateBuildTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateRepairTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
-		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+		// Apply the shared prediction logic for this resolved unit. Skips (not initialized / can't move /
+		// dead / invalid entity) are handled inside the helper. Flush happens once after the loop.
+		ApplyMovePredictionToUnit(EntityManager, World, Unit, NewTargetLocations[Index], DesiredSpeeds[Index], AcceptanceRadii[Index], AttackT, bResetHoldPosition, bResetFollowTarget);
 	}
 	// Ensure deferred commands (tags added/removed) are applied immediately so prediction is visible to processors
 	EntityManager.FlushCommands();
@@ -1188,11 +1236,11 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 	// Inform every client to predict locally for this single unit (ability path)
 	if (UWorld* PCWorld = GetWorld())
 	{
-		TArray<AUnitBase*> UnitsArr;
+		TArray<int32> IndicesArr;
 		TArray<FVector> LocationsArr;
 		TArray<float> SpeedsArr;
 		TArray<float> RadiiArr;
-		UnitsArr.Add(Unit);
+		IndicesArr.Add(Unit ? Unit->UnitIndex : INDEX_NONE);
 		LocationsArr.Add(NewTargetLocation);
 		SpeedsArr.Add(DesiredSpeed);
 		RadiiArr.Add(AcceptanceRadius);
@@ -1200,7 +1248,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
 		{
 			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, UnitsArr, LocationsArr, SpeedsArr, RadiiArr, AttackT, true, true);
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, IndicesArr, LocationsArr, SpeedsArr, RadiiArr, AttackT, true, true);
 			}
 		}
 	}
@@ -2685,7 +2733,23 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	{
     		BatchRadii.Add(Unit->MovementAcceptanceRadius);
     	}
-		Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, BatchRadii, false, true, true);
+		// bOriginatorPredictsLocally = true: this client predicts locally just below, so the server
+		// won't echo a redundant Client_Predict back to us.
+		Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), BatchUnits, BatchLocs, BatchSpeeds, BatchRadii, false, true, true, true);
+
+		// Local immediate prediction on the commanding client: its own selected units react this frame
+		// instead of waiting for the server round-trip Client_Predict RPC (which can drop units under
+		// relevance churn). The server still applies authority and re-affirms to every client afterwards
+		// (idempotent re-stamp). Listen-server hosts already move via the authoritative Batch_ path, so
+		// only remote clients predict locally here; refs are the locally-selected units (always valid).
+		if (!HasAuthority())
+		{
+			for (int32 i = 0; i < BatchUnits.Num(); ++i)
+			{
+				ApplyMovePredictionToUnit(EntityManager, GetWorld(), BatchUnits[i], BatchLocs[i], BatchSpeeds[i], BatchRadii[i], false, true, true);
+			}
+			EntityManager.FlushCommands();
+		}
     }
 
     if (WaypointSound && PlayWaypoint)
