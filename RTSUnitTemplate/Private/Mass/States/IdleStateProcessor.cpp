@@ -216,15 +216,20 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 }
             }
 
-            // --- NEU: Prediction für Idle-Einheiten sicherstellen ---
-            // Wenn wir hier ankommen, bleibt die Einheit im Idle-Zustand.
-            // Wir setzen die Prediction auf Stop, um lokales Drift zu verhindern.
+            // --- Prediction für echte Idle-Einheiten LOSLASSEN ---
+            // Wenn wir hier ankommen, bleibt die Einheit im Idle-Zustand (angekommen / steht).
+            // Frueher wurde hier Pred.bHasData=true gesetzt ("Drift verhindern") - das bewirkte aber das
+            // GEGENTEIL: solange Pred.bHasData==true ist, gilt im ClientReplicationProcessor bIsMoving=true,
+            // wodurch der Reconciler die lokale Velocity NICHT daempft und der Per-Frame-Mover die Einheit
+            // zwischen den 10Hz-Reconcile-Ticks weiterschiebt -> End-Position-Jitter. Im echten Idle gibt der
+            // Reconciler (bIsMoving=false -> Hard-Damp) die Autoritaet ueber die Position; wir lassen die
+            // Prediction daher los.
             if (bHasPredList)
             {
                 FMassClientPredictionFragment& Pred = PredictionList[i];
                 Pred.Location = Transform.GetLocation();
                 Pred.PredDesiredSpeed = 0.f;
-                Pred.bHasData = true;
+                Pred.bHasData = false;
             }
             StateFrag.StoredLocation = Transform.GetLocation();
         }

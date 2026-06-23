@@ -57,6 +57,7 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "Steering/MassSteeringFragments.h"
+#include "Mass/UnitNavigationFragments.h" // FUnitNavigationPathFragment (reset local path on hard snap)
 
 UClientReplicationProcessor::UClientReplicationProcessor()
 	: EntityQuery(*this)
@@ -371,6 +372,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							{
 								// NEU: Wenn der Server keine Bewegung mehr signalisiert, muss der Client lokal stoppen.
 								// Dies verhindert, dass der lokale MovementProcessor die Einheit gegen die Replikation schiebt.
+								// Zusaetzlich: MoveTarget.Center auf die AUTORITATIVE Position re-ankern. Sonst bleibt Center
+								// auf dem letzten Bewegungsziel "stale" stehen, der Konvergenz-Clear im UnitMovementProcessor
+								// (Dist2D(MoveTarget.Center, Pred.Location) <= r^2) feuert nie, Pred.bHasData bleibt ewig true
+								// und der lokale Mover kaempft gegen den Reconciler -> End-Position-Jitter.
+								MT.Center = FVector(UseItem->Location);
 								if (MT.DesiredSpeed.Get() > 0.f)
 								{
 									MT.DesiredSpeed.Set(0.f);
@@ -390,6 +396,17 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				const FVector TargetLocation = FinalXf.GetLocation();
 				const float DistanceSq = FVector::DistSquared2D(CurrentLocation, TargetLocation);
 
+				// --- Server-Bewegungs-Tracking (Fix E) ---
+				// Vorherige autoritative Position merken, um zu erkennen, ob die SERVER-Einheit sich tatsaechlich
+				// bewegt. Im Klumpen/an Ecken blockiert die Avoidance die Einheit KURZ VOR ihrem kommandierten Slot:
+				// der Server meldet weiterhin nominell Bewegung (DesiredSpeed>0, Slot_TargetIsMove), also feuert der
+				// Server-Stop-Pfad (Fix B/C) nie - aber die autoritative Position kommt nicht voran. Der Client steuert
+				// lokal weiter zum unerreichbaren Slot, waehrend der Reconciler ihn am Ruhepunkt haelt -> starkes
+				// Ecken-/Klumpen-Jitter. ActualAuthMove (echte Bewegung) vs. erwartete (speed*dt) klassifiziert "blockiert".
+				const FVector PrevAuthLocation = ReplicatedTransformList[EntityIdx].Transform.GetLocation();
+				const float ActualAuthMove = PrevAuthLocation.IsNearlyZero() ? 1.0e9f : FVector::Dist2D(TargetLocation, PrevAuthLocation);
+				ReplicatedTransformList[EntityIdx].Transform = FinalXf; // fuer den naechsten Reconcile-Tick merken
+
 				// --- NEU: Following detection ---
 				const bool bIsFollowing = (AITargetList.IsValidIndex(EntityIdx) && EntityManager.IsEntityActive(AITargetList[EntityIdx].FriendlyTargetEntity)) ||
 										   DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassUnitYawFollowTag::StaticStruct());
@@ -404,6 +421,21 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				if (bUseFullReplication || JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
 				{
 					ClientXf = FinalXf;
+
+					// Nach einem Hard-Snap/Teleport ist der lokale Nav-Pfad VERALTET: seine Waypoints sind relativ
+					// zur ALTEN Position vor dem Sprung. Das Pfad-Following im UnitMovementProcessor wuerde dann zu
+					// (jetzt hinter der Einheit liegenden) Waypoints zuruecksteuern -> kaempft gegen den Reconciler
+					// -> Jitter. Pfad verwerfen, damit der Mover im naechsten Tick einen FRISCHEN Pfad von der neuen
+					// autoritativen Position plant (neu rechnen statt auf den alten Pfad zurueck). Nur bei echtem
+					// Sprung (JustLinked / Distanz-Snap), nicht im Full-Replication-Modus (der spiegelt eh jeden Tick).
+					if (JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
+					{
+						if (FUnitNavigationPathFragment* NavPathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(ChunkCtx.GetEntity(EntityIdx)))
+						{
+							NavPathFrag->ResetPath();
+							NavPathFrag->bIsPathfindingInProgress = false;
+						}
+					}
 				}
 				else if (!DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateDeadTag::StaticStruct()))
 				{
@@ -498,6 +530,39 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							
 							// NEU: Auch die Lenkung (Avoidance/Movement) sofort unterbinden
 							if (SteeringList.IsValidIndex(EntityIdx)) SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
+						}
+					}
+
+					// --- Server-Stop Residual-Damping ---
+					// Wenn der Server autoritativ steht (kein Move-Slot -> DesiredSpeed 0), aber eine veraltete /
+					// haengende Client-Prediction (Pred.bHasData) bIsMoving=true haelt, daempft die obige Logik
+					// (nur bei !bIsMoving) die lokale Velocity NICHT -> der Per-Frame-Mover schiebt die Einheit
+					// zwischen den 10Hz-Reconcile-Ticks weiter -> Jitter im Stand / an NavMesh-Kanten. Hier wird die
+					// Rest-Bewegung gekillt und die haengende Prediction losgelassen. GESCHUETZT durch das
+					// Command-Grace-Fenster, damit ein frisch client-kommandierter Move nicht zerstoert wird, bevor
+					// der Server ihn zurueck-repliziert (sonst bricht die Instant-Move-Prediction wieder).
+					{
+						const float SrvDesiredSpeed = MoveTargetList.IsValidIndex(EntityIdx) ? MoveTargetList[EntityIdx].DesiredSpeed.Get() : 0.f;
+						const bool bServerStopped = SrvDesiredSpeed <= 10.f;
+						// Blocked/settled: der Server WILL fahren (DesiredSpeed>0), aber die autoritative Position kommt
+						// kaum voran (Klumpen/Ecken-Avoidance) UND wir sind schon nah dran -> als angekommen behandeln.
+						const float ExpectedAuthMove = SrvDesiredSpeed * AccumulatedDelta;
+						const bool bServerBlocked = !bServerStopped && DistanceSq < FMath::Square(75.f) &&
+							ActualAuthMove < (ExpectedAuthMove * 0.25f);
+						const bool bRecentlyCommanded = PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].CommandPredictTime >= 0.f &&
+							(World->GetTimeSeconds() - PredList[EntityIdx].CommandPredictTime) < 0.6f;
+						if ((bServerStopped || bServerBlocked) && !bRecentlyCommanded && !bIsStationaryAttack)
+						{
+							// Ziel-/Ankunftsreferenz auf die AUTORITATIVE Position re-ankern, damit der client-eigene
+							// Ankunftscheck (UnitMovementProcessor / RunStateProcessor) "angekommen" erkennt und
+							// Run->Idle wechselt (wo IdleStateProcessor die Prediction loslaesst), statt den
+							// unerreichbaren kommandierten Slot ewig zu jagen. Sobald der Server wieder wirklich
+							// vorankommt (ActualAuthMove steigt), fliesst das replizierte Move-Ziel automatisch zurueck.
+							if (MoveTargetList.IsValidIndex(EntityIdx)) MoveTargetList[EntityIdx].Center = TargetLocation;
+							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.05f;
+							if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
+							if (SteeringList.IsValidIndex(EntityIdx)) SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
+							if (PredList.IsValidIndex(EntityIdx)) PredList[EntityIdx].bHasData = false;
 						}
 					}
 

@@ -667,9 +667,20 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                             if (FVector::DistSquared(PathEndLoc, EndLocation) > FMath::Square(10.0f))
                             {
                                 PathFrag->PathTargetLocation = PathEndLoc;
-                                if (FMassMoveTargetFragment* TargetFrag = System.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+                                // CLIENT: MoveTarget.Center NICHT mit dem LOKALEN Pfad-Ende ueberschreiben.
+                                // MoveTarget.Center ist der REPLIZIERTE autoritative Server-Endpunkt (Bubble TargetLoc,
+                                // MassUnitReplicatorBase.cpp:357 -> ClientReplicationProcessor.cpp:358). Das clientseitige
+                                // Pathfinding endet besonders an Cliffs/DirtyAreas/NavMesh-Loechern an einem ANDEREN Punkt
+                                // als der Server (Partial Paths / abweichende Projektion). Setzt der Client damit seinen
+                                // eigenen Endpunkt, jagt die Einheit ein anderes Ziel als der Server, "kommt nie an" und
+                                // jittert im Stand. Der lokale Pfad steuert weiterhin via PathTargetLocation/CurrentPath;
+                                // nur die Ziel-/Ankunftsreferenz (MoveTarget.Center) bleibt server-autoritativ.
+                                if (!bClientWorld)
                                 {
-                                    TargetFrag->Center = PathEndLoc;
+                                    if (FMassMoveTargetFragment* TargetFrag = System.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+                                    {
+                                        TargetFrag->Center = PathEndLoc;
+                                    }
                                 }
                             }
                             else

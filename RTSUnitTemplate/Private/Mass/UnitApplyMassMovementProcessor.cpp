@@ -15,6 +15,19 @@
 #include "AI/Navigation/NavigationTypes.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "HAL/IConsoleManager.h"
+
+// CLIENT-ONLY multiplier for the avoidance/separation/soft-avoidance Force before it is integrated into
+// local motion. On the client the avoidance processors (UnitSeparationProcessor / UnitSoftAvoidanceProcessor /
+// UnitMovingAvoidanceProcessor, all Server|Client|Standalone) run a FULL local sim whose Force fights the
+// authoritative reconciler on the same FTransformFragment -> clump/corner/dirty-area jitter. Since the server's
+// authoritative (already-separated) positions are replicated, the client doesn't need full local avoidance.
+// <1 weakens it (smoother), 1=full, 0=disabled. Tunable live via console.
+static TAutoConsoleVariable<float> CVarRTS_ClientAvoidanceForceScale(
+	TEXT("net.RTS.Client.AvoidanceForceScale"),
+	0.25f,
+	TEXT("Client-only multiplier for avoidance Force before local integration. <1 reduces local avoidance that fights the reconciler (clump/corner/dirty-area jitter). 1=full, 0=disabled."),
+	ECVF_Default);
 
 UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery()
 {
@@ -139,8 +152,9 @@ void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager,
 void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
-   
-    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    const float AvoidanceScale = CVarRTS_ClientAvoidanceForceScale.GetValueOnGameThread();
+
+    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime, AvoidanceScale](FMassExecutionContext& LocalContext)
     {
         const int32 NumEntities = LocalContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -191,7 +205,10 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
 
             const FVector CurrentHorizontalVelocity(Velocity.Value.X, Velocity.Value.Y, 0.f);
             const FVector DesiredHorizontalVelocity(DesiredVelocity.X, DesiredVelocity.Y, 0.f);
-            const FVector HorizontalAvoidanceForce(AvoidanceForce.X, AvoidanceForce.Y, 0.f);
+            // CLIENT: avoidance Force is weakened (AvoidanceScale) because the authoritative, already-separated
+            // server positions are replicated & reconciled; full local avoidance would fight the reconciler and
+            // cause clump/corner/dirty-area jitter. Steering toward the goal is unaffected.
+            const FVector HorizontalAvoidanceForce = FVector(AvoidanceForce.X, AvoidanceForce.Y, 0.f) * AvoidanceScale;
 
             FVector AccelInput = (DesiredHorizontalVelocity - CurrentHorizontalVelocity);
             AccelInput = AccelInput.GetClampedToMaxSize(Acceleration);
@@ -222,7 +239,7 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
                 FNavLocation ProjectedLocation;
                 // Use capsule-based extent to detect if we are on the mesh or inside a DirtyArea
                 bool bNeedsAvoidance = false;
-                if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) || 
+                if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) ||
                     FVector::DistSquared2D(NewLocation, ProjectedLocation.Location) > FMath::Square(5.f))
                 {
                     bNeedsAvoidance = true;
