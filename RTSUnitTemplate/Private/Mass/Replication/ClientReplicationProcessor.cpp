@@ -32,6 +32,21 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplication_UnlinkDebounceSecon
     TEXT("Seconds to wait after the registry changes before executing unlink reconciliation."),
     ECVF_Default);
 
+// #2b context-aware reconciliation softening: in a tight/dense spot (FMassSoftAvoidanceTag present) gently
+// reduce the correction gain Kp and widen the tolerance so the reconciler pulls a moving unit back LESS hard
+// while local crowd avoidance jostles it -> less corner/curve micro-fighting. Faded (CornerSoftenWeight) to
+// avoid Kp flicker from the per-tick tag toggling; skipped within the command grace window.
+static TAutoConsoleVariable<float> CVarRTS_ClientCornerSoftenKpScale(
+    TEXT("net.RTS.Client.CornerSoftenKpScale"),
+    0.6f,
+    TEXT("Kp multiplier applied to a MOVING unit in a tight/dense spot (faded). 1=off (no softening)."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ClientCornerSoftenTolScale(
+    TEXT("net.RTS.Client.CornerSoftenTolScale"),
+    1.5f,
+    TEXT("MinError tolerance multiplier applied to a MOVING unit in a tight/dense spot (faded). 1=off."),
+    ECVF_Default);
+
 #include "MassCommonFragments.h"
 #include "MassEntityTypes.h"
 #include "Mass/Traits/UnitReplicationFragments.h"
@@ -471,6 +486,25 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 					float CurrentKp = bIsStationaryAttack ? 1.0f : Kp;
 					float CurrentMinErrorSq = bIsStationaryAttack ? 1.0f : MinErrorForCorrectionSq; // Nur 1cm Toleranz im Stand
+
+					// #2b: kontextabhaengiges Weichmachen fuer BEWEGTE Einheiten an dichten/engen Stellen
+					// (FMassSoftAvoidanceTag). Kp runter + Toleranz hoch -> der Reconciler zieht eine Einheit, die
+					// gerade von der Crowd-Avoidance gestossen wird, weniger hart zurueck -> weniger Kurven-Mikro-Jitter.
+					// Gefadet (CornerSoftenWeight, FInterpTo) gegen Kp-Flicker durch das Pro-Tick-Togglen des Tags;
+					// im Command-Grace-Fenster uebersprungen (frische Prediction bleibt knackig). Server bleibt autoritativ.
+					if (PredList.IsValidIndex(EntityIdx))
+					{
+						const bool bTightSpot = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassSoftAvoidanceTag::StaticStruct());
+						float& CornerW = PredList[EntityIdx].CornerSoftenWeight;
+						CornerW = FMath::FInterpTo(CornerW, bTightSpot ? 1.f : 0.f, AccumulatedDelta, 6.f);
+						const bool bRecentlyCommandedSoft = PredList[EntityIdx].CommandPredictTime >= 0.f &&
+							(World->GetTimeSeconds() - PredList[EntityIdx].CommandPredictTime) < 0.6f;
+						if (CornerW > KINDA_SMALL_NUMBER && !bIsStationaryAttack && !bRecentlyCommandedSoft)
+						{
+							CurrentKp *= FMath::Lerp(1.f, CVarRTS_ClientCornerSoftenKpScale.GetValueOnGameThread(), CornerW);
+							CurrentMinErrorSq *= FMath::Lerp(1.f, CVarRTS_ClientCornerSoftenTolScale.GetValueOnGameThread(), CornerW);
+						}
+					}
 
 					if (bIsFollowing)
 					{

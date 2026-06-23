@@ -9,6 +9,18 @@
 #include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "NavigationSystem.h"
+#include "HAL/IConsoleManager.h"
+#include "Engine/World.h" // UWorld::IsNetMode / NM_Client
+
+// CLIENT-ONLY multiplier for the separation (lateral unit-unit push) force. Separation's lateral shove is the
+// main residual client jitter source when many units funnel a tight curve (large Overlap -> strong sideways
+// push -> fights the authoritative reconciler). Weakened hard on the client (server keeps full separation, is
+// authoritative & smooth). Soft-avoidance (keeps units ON the mesh) is intentionally NOT weakened. Live-tunable.
+static TAutoConsoleVariable<float> CVarRTS_ClientSeparationForceScale(
+	TEXT("net.RTS.Client.SeparationForceScale"),
+	0.1f,
+	TEXT("Client-only multiplier for unit-unit separation push (lateral). <1 reduces the tight-curve clump jitter fighting the reconciler. 1=full, 0=off."),
+	ECVF_Default);
 
 namespace
 {
@@ -247,7 +259,12 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		return;
 	}
 
-	auto ApplyToQuery = [&AccumPush](FMassExecutionContext& LocalContext)
+	// Weaken the separation push on the client only (server stays authoritative at full strength).
+	const UWorld* SepWorld = Context.GetWorld();
+	const float ClientSepScale = (SepWorld && SepWorld->IsNetMode(NM_Client))
+		? CVarRTS_ClientSeparationForceScale.GetValueOnGameThread() : 1.f;
+
+	auto ApplyToQuery = [&AccumPush, ClientSepScale](FMassExecutionContext& LocalContext)
 	{
 		const int32 Num = LocalContext.GetNumEntities();
 		auto ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
@@ -256,7 +273,7 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			const FMassEntityHandle Entity = LocalContext.GetEntity(i);
 			if (const FVector* Push = AccumPush.Find(Entity))
 			{
-				ForceList[i].Value += Horizontal(*Push);
+				ForceList[i].Value += Horizontal(*Push) * ClientSepScale;
 			}
 		}
 	};

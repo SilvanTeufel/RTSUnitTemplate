@@ -10,6 +10,18 @@
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "HAL/IConsoleManager.h"
+#include "Engine/World.h" // UWorld::IsNetMode / NM_Client
+
+// CLIENT-ONLY multiplier for the soft-avoidance (push-back-onto-navmesh) force. Default 1.0 = FULL: unlike
+// separation, this force keeps units ON the navmesh at corners/edges and largely AGREES with the reconciler
+// (both push toward valid server-authoritative positions), so it is intentionally not weakened. Exposed for
+// tuning only (lower it if soft-avoidance ever fights the reconciler).
+static TAutoConsoleVariable<float> CVarRTS_ClientSoftAvoidanceForceScale(
+	TEXT("net.RTS.Client.SoftAvoidanceForceScale"),
+	1.0f,
+	TEXT("Client-only multiplier for soft-avoidance (on-navmesh push) force. Default 1.0 (full). Keeps units on the mesh at corners."),
+	ECVF_Default);
 
 UUnitSoftAvoidanceProcessor::UUnitSoftAvoidanceProcessor()
 {
@@ -48,7 +60,11 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		return;
 	}
 
-	EntityQuery.ForEachEntityChunk(Context, [this, NavSys, &EntityManager](FMassExecutionContext& LocalContext)
+	const UWorld* SoftWorld = Context.GetWorld();
+	const float ClientSoftScale = (SoftWorld && SoftWorld->IsNetMode(NM_Client))
+		? CVarRTS_ClientSoftAvoidanceForceScale.GetValueOnGameThread() : 1.f;
+
+	EntityQuery.ForEachEntityChunk(Context, [this, NavSys, &EntityManager, ClientSoftScale](FMassExecutionContext& LocalContext)
 	{
 		const int32 Num = LocalContext.GetNumEntities();
 		const auto Transforms = LocalContext.GetFragmentView<FTransformFragment>();
@@ -133,7 +149,7 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
                     
                     if (Distance > 5.f || bHasTag || bInDirtyArea) 
                     {
-                        const FVector PushForce = ToNavMesh.GetSafeNormal() * AvoidanceStrength;
+                        const FVector PushForce = ToNavMesh.GetSafeNormal() * AvoidanceStrength * ClientSoftScale;
                         ForceList[i].Value += PushForce;
                         
                         if (Debug)

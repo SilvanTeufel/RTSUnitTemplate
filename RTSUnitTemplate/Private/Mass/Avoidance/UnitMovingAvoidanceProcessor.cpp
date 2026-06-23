@@ -25,7 +25,17 @@
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/ExternalSubsystemTraits.h"
- 
+#include "HAL/IConsoleManager.h"
+
+// CLIENT-ONLY multiplier for the moving-avoidance (predictive agent/obstacle) steering force. Weakened on the
+// client (server stays authoritative & smooth) so this local avoidance doesn't fight the reconciler. Separate
+// from separation (kept lower) and soft-avoidance (kept full). Live-tunable.
+static TAutoConsoleVariable<float> CVarRTS_ClientMovingAvoidanceForceScale(
+	TEXT("net.RTS.Client.MovingAvoidanceForceScale"),
+	0.3f,
+	TEXT("Client-only multiplier for moving-avoidance steering force. <1 reduces local avoidance fighting the reconciler. 1=full, 0=off."),
+	ECVF_Default);
+
  namespace UE::UnitMassAvoidance
 {
 	namespace Tweakables
@@ -1137,7 +1147,10 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
 			SteeringForce *= NearStartScaling * NearEndScaling;
 
-			Force.Value = UE::MassNavigation::ClampVector(SteeringForce, MaxSteerAccel); // Assume unit mass
+			// CLIENT-ONLY: weaken so local moving-avoidance doesn't fight the authoritative reconciler.
+			const float ClientMoveAvoidScale = (World && World->IsNetMode(NM_Client))
+				? CVarRTS_ClientMovingAvoidanceForceScale.GetValueOnGameThread() : 1.f;
+			Force.Value = UE::MassNavigation::ClampVector(SteeringForce, MaxSteerAccel) * ClientMoveAvoidScale; // Assume unit mass
 
 #if WITH_MASSGAMEPLAY_DEBUG
 			const FVector AgentAvoidSteeringForce = SteeringForce - OldSteeringForce;

@@ -180,6 +180,12 @@ struct FMassClientPredictionFragment : public FMassFragment
 	// not mistaken for a clump block (which would re-anchor the target + damp -> a corner stall).
 	UPROPERTY()
 	int32 ServerBlockedStreak = 0;
+
+	// Eased 0..1 weight for context-aware reconciliation softening (#2b): rises toward 1 while the unit
+	// is in a tight/dense spot (FMassSoftAvoidanceTag present), falls toward 0 otherwise. Smoothly faded
+	// (FInterpTo) so the per-tick toggling of the tag does not cause Kp flicker.
+	UPROPERTY()
+	float CornerSoftenWeight = 0.f;
 };
 
 USTRUCT()
