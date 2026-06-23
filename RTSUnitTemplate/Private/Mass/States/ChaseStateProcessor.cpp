@@ -148,6 +148,11 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
+            // === BatchDiag (TEMP): unit still in Chase tag after a move command => command didn't strip Chase ===
+            RTS_BatchDiagLog(TEXT("CHASE-CLIENT"), World, EntityManager, Entity,
+                Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
+                bHasPrediction ? &PredictionList[i] : nullptr);
+
             if (StateFrag.SwitchingStateClient)
             {
                 StateFrag.SwitchingStateClient = false;

@@ -190,6 +190,12 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 }
             }
             
+            // === BatchDiag (TEMP): mover would skip a commanded unit -> it can't move this frame. ===
+            if (!AIState.IsInitialized || !AIState.CanMove)
+            {
+                RTS_BatchDiagLog(TEXT("MOVE-SKIP(cantmove)"), World, EntityManager, Entity,
+                    Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, &PredList[i]);
+            }
             if (!AIState.IsInitialized)
             {
                 continue;
@@ -198,7 +204,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             {
                 continue;
             }
-            
+
             const FTransform& CurrentMassTransform = TransformList[i].GetTransform();
             FUnitNavigationPathFragment& PathFrag = PathList[i];
             const FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
@@ -252,6 +258,9 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 // Clear prediction when server target converges to predicted (2D check)
                 if (FVector::DistSquared2D(MoveTarget.Center, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
                 {
+                    // === BatchDiag (TEMP): prediction dropped because stale MoveTarget.Center is near Pred.Location. ===
+                    RTS_BatchDiagLog(TEXT("MOVE-CONVERGE-CLEAR"), World, EntityManager, Entity,
+                        Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, &Pred);
                     Pred.bHasData = false;
                 }
             }

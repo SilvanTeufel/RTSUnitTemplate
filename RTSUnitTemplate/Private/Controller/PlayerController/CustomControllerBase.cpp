@@ -351,6 +351,79 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	}
 }
 
+TArray<FVector> ACustomControllerBase::AdjustBatchTargetsForNav(const TArray<AUnitBase*>& Units, const TArray<FVector>& InTargets)
+{
+	TArray<FVector> Result = InTargets;
+
+	UWorld* World = GetWorld();
+	if (!World) return Result;
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
+	if (!NavSys || InTargets.Num() == 0) return Result;
+
+	// Trigger the (relatively expensive) re-projection only when at least one target is off-navmesh or
+	// in a dirty (UNavArea_Obstacle) area. The common case (all points valid) returns the input unchanged.
+	bool bNeedsFormationAdjust = false;
+	FVector FormationCenter = InTargets[0];
+	for (const FVector& Loc : InTargets)
+	{
+		FNavLocation NavLoc;
+		const bool bOnNav = NavSys->ProjectPointToNavigation(Loc, NavLoc, NavMeshProjectionExtent);
+		bool bDirty = false;
+		if (bOnNav)
+		{
+			const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
+			if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+			{
+				const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
+				const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
+				bDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
+			}
+		}
+		if (!bOnNav || bDirty)
+		{
+			bNeedsFormationAdjust = true;
+			break;
+		}
+	}
+	if (!bNeedsFormationAdjust) return Result;
+
+	// ValidateAndAdjustGridLocation snaps the whole grid (shift first, per-point fallback) onto valid,
+	// non-dirty navmesh and returns per-slot offsets. It sorts its LocalUnits by radius, so match the
+	// offsets back to the input order via the same stable sort.
+	TArray<FVector> OutOffsets;
+	float UsedSpacing = 0.f;
+	ValidateAndAdjustGridLocation(Units, FormationCenter, OutOffsets, UsedSpacing);
+
+	TArray<AUnitBase*> SortedUnits = Units;
+	SortedUnits.Sort([](const AUnitBase& A, const AUnitBase& B) {
+		float RA = 50.0f;
+		if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+		float RB = 50.0f;
+		if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+		if (FMath::IsNearlyEqual(RA, RB)) return A.GetName() > B.GetName();
+		return RA > RB;
+	});
+
+	TMap<AUnitBase*, FVector> TempOffsets;
+	for (int32 i = 0; i < SortedUnits.Num(); ++i)
+	{
+		if (OutOffsets.IsValidIndex(i))
+		{
+			TempOffsets.Add(SortedUnits[i], OutOffsets[i]);
+		}
+	}
+
+	for (int32 i = 0; i < Result.Num(); ++i)
+	{
+		if (Units.IsValidIndex(i) && Units[i])
+		{
+			Result[i] = FormationCenter + TempOffsets.FindRef(Units[i]);
+		}
+	}
+
+	return Result;
+}
+
 void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContextObject,
 	const TArray<AUnitBase*>& Units,
 	const TArray<FVector>& NewTargetLocations,
@@ -360,7 +433,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	bool bResetHoldPosition,
 	bool bResetFollowTarget)
 {
-	
+
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	if (!World)
 	{
@@ -377,70 +450,13 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
-	bool bNeedsFormationAdjust = false;
-	FVector FormationCenter = (NewTargetLocations.Num() > 0) ? NewTargetLocations[0] : FVector::ZeroVector;
-	
-	if (NavSys && NewTargetLocations.Num() > 0)
-	{
-		// Check ALL target locations to see if we need formation adjustment
-		for (const FVector& Loc : NewTargetLocations)
-		{
-			FNavLocation NavLoc;
-			const bool bOnNav = NavSys->ProjectPointToNavigation(Loc, NavLoc, NavMeshProjectionExtent);
-			bool bDirty = false;
-			if (bOnNav)
-			{
-				const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
-				if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
-				{
-					const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
-					const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
-					bDirty = PolyAreaClass && PolyAreaClass->IsChildOf(UNavArea_Obstacle::StaticClass());
-				}
-			}
-			if (!bOnNav || bDirty)
-			{
-				bNeedsFormationAdjust = true;
-				break;
-			}
-		}
-	}
 
-	// If needed, adjust formation center & build new per-unit targets using ValidateAndAdjustGridLocation
-	TArray<FVector> AdjustedTargets;
-	if (bNeedsFormationAdjust)
-	{
-		TArray<FVector> OutOffsets;
-		float UsedSpacing = 0.f;
-		ValidateAndAdjustGridLocation(Units, FormationCenter, OutOffsets, UsedSpacing);
-		
-		// ValidateAndAdjustGridLocation sorts its LocalUnits. 
-		// We need to match the offsets back to the input Units order using a stable sort.
-		TArray<AUnitBase*> SortedUnits = Units;
-		SortedUnits.Sort([](const AUnitBase& A, const AUnitBase& B) {
-			float RA = 50.0f;
-			if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
-			float RB = 50.0f;
-			if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
-			if (FMath::IsNearlyEqual(RA, RB)) return A.GetName() > B.GetName();
-			return RA > RB;
-		});
-
-		TMap<AUnitBase*, FVector> TempOffsets;
-		for (int32 i = 0; i < SortedUnits.Num(); ++i)
-		{
-			if (OutOffsets.IsValidIndex(i))
-			{
-				TempOffsets.Add(SortedUnits[i], OutOffsets[i]);
-			}
-		}
-
-		AdjustedTargets.SetNum(Units.Num());
-		for (int32 i = 0; i < Units.Num(); ++i)
-		{
-			AdjustedTargets[i] = FormationCenter + TempOffsets.FindRef(Units[i]);
-		}
-	}
+	// Nav-validate the per-unit targets via the shared single-source-of-truth helper. When the commanding
+	// client already adjusted (right-click move) these are already valid -> no-op here; other callers
+	// (attack-move/transporter/path) get validated here. Server_Batch_... forwards these same UsedTargets
+	// to every client, so the server and all clients steer toward identical destinations (the off-nav /
+	// dirty-area divergence that left client units stuck while the server moved them).
+	const TArray<FVector> UsedTargets = AdjustBatchTargetsForNav(Units, NewTargetLocations);
 
 	if (Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num() || Units.Num() != AcceptanceRadii.Num())
 	{
@@ -451,8 +467,7 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		AUnitBase* Unit = Units[Index];
-		const FVector& OriginalTargetLocation = NewTargetLocations[Index];
-		FVector UseLocation = (bNeedsFormationAdjust && AdjustedTargets.IsValidIndex(Index)) ? AdjustedTargets[Index] : OriginalTargetLocation;
+		FVector UseLocation = UsedTargets.IsValidIndex(Index) ? UsedTargets[Index] : NewTargetLocations[Index];
 		const float DesiredSpeed = DesiredSpeeds[Index];
 		const float AcceptanceRadius = AcceptanceRadii[Index];
 
@@ -709,8 +724,14 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 {
 	// Diagnostics: server received batch move
 	//UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
+	// Single source of truth: nav-validate the targets ONCE here, use them for the authoritative move
+	// AND forward the SAME points to every client below (the right-click path already pre-adjusted on the
+	// commanding client, so this is a no-op for it; attack-move/transporter/path callers get validated
+	// here). This guarantees server and all clients steer toward identical destinations.
+	const TArray<FVector> UsedTargets = AdjustBatchTargetsForNav(Units, NewTargetLocations);
+
 	// Apply authoritative changes on the server
-	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii, AttackT, bResetHoldPosition, bResetFollowTarget);
+	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, UsedTargets, DesiredSpeeds, AcceptanceRadii, AttackT, bResetHoldPosition, bResetFollowTarget);
 
 
 	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
@@ -740,7 +761,9 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 				const AUnitBase* U = Units[GlobalIdx];
 				// INDEX_NONE keeps arrays aligned; the client skips those entries.
 				BatchIndices.Add(U ? U->UnitIndex : INDEX_NONE);
-				BatchLocations.Add(NewTargetLocations[GlobalIdx]);
+				// Forward the nav-VALIDATED target (not the raw one) so every client predicts to the same
+				// point the server actually moves the unit to (fixes off-nav/dirty client prediction stall).
+				BatchLocations.Add(UsedTargets.IsValidIndex(GlobalIdx) ? UsedTargets[GlobalIdx] : NewTargetLocations[GlobalIdx]);
 				BatchSpeeds.Add(DesiredSpeeds[GlobalIdx]);
 				BatchRadii.Add(AcceptanceRadii[GlobalIdx]);
 			}
@@ -859,16 +882,23 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 	{
 		return;
 	}
+	// === BatchDiag (TEMP) ===
+	UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-entry        Idx=%d IsInit=%d CanMove=%d State=%d MoveTo=%s"),
+		Unit->UnitIndex, Unit->IsInitialized ? 1 : 0, Unit->CanMove ? 1 : 0, (int32)Unit->UnitState, *NewTargetLocation.ToString());
+	// === /BatchDiag ===
 	if (!Unit->IsInitialized)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN !IsInitialized Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 	if (!Unit->CanMove)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN !CanMove Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 	if (Unit->UnitState == UnitData::Dead)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN Dead Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 
@@ -906,6 +936,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 
 	if (!EntityManager.IsEntityValid(MassEntityHandle))
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN InvalidHandle Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 
@@ -929,6 +960,13 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 
 	bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
 	bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
+
+	// === BatchDiag (TEMP) ===
+	UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-decision     Idx=%d bCanMoveWhileAtk=%d wasAtk/Pause=%d -> bIsMovingWhileAtk=%d (Run added=%d, Atk/Pause removed=%d, Detect %s)"),
+		Unit->UnitIndex, (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking) ? 1 : 0, bIsAttackingOrPausing ? 1 : 0,
+		bIsMovingWhileAttacking ? 1 : 0, !bIsMovingWhileAttacking ? 1 : 0, !bIsMovingWhileAttacking ? 1 : 0,
+		(AttackT || (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking)) ? TEXT("kept") : TEXT("removed"));
+	// === /BatchDiag ===
 
 	if (!bIsMovingWhileAttacking)
 	{
@@ -2728,6 +2766,14 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 
     if (BatchUnits.Num() > 0)
     {
+    	// Single source of truth: snap any off-nav / dirty-area formation slots to nearest valid points
+    	// HERE, on the commanding client, so the SAME validated targets drive (a) the local prediction
+    	// below and (b) the server (which re-validates to a no-op and forwards these to all clients).
+    	// Previously the server adjusted independently while the client predicted to the raw off-nav point
+    	// -> client units appeared stuck while the server moved them. RecalculateFormation does not
+    	// nav-validate its per-slot offsets, so this step is what guarantees reachable predicted targets.
+    	BatchLocs = AdjustBatchTargetsForNav(BatchUnits, BatchLocs);
+
     	TArray<float> BatchRadii;
     	for (AUnitBase* Unit : BatchUnits)
     	{

@@ -241,6 +241,15 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     }
 
 
+    // === BatchDiag (TEMP): Pause client entry. If a recently-commanded unit still shows here with
+    // Pause tag, the move command did not strip Pause and ApplyAttackStopLogic will freeze it. ===
+    if (!Stats.bCanMoveWhileAttacking)
+    {
+        RTS_BatchDiagLog(TEXT("PAUSE-CLIENT(freeze)"), EntityManager.GetWorld(), EntityManager, Entity,
+            Cast<AUnitBase>(Actor) ? Cast<AUnitBase>(Actor)->UnitIndex : -1,
+            EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity));
+    }
+
     ApplyAttackStopLogic(Context, Stats, TargetFrag, Entity, EntityIdx);
 
     StateFrag.StateTimerClient += ExecutionInterval;

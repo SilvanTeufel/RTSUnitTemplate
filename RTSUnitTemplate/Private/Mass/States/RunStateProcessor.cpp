@@ -113,6 +113,11 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
 
+            // === BatchDiag (TEMP): commanded unit being processed in Run. Watch Det flag + whether it re-engages below. ===
+            RTS_BatchDiagLog(TEXT("RUN-CLIENT"), World, EntityManager, Entity,
+                Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
+                bHasPredList ? &PredictionList[i] : nullptr);
+
             if (StateFrag.SwitchingStateClient)
             {
                 StateFrag.SwitchingStateClient = false;
@@ -182,6 +187,10 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                     {
                         if (!StateFrag.SwitchingStateClient)
                         {
+                            // === BatchDiag (TEMP): RUN re-engages a commanded unit back into Chase (Detect + valid target survived). ===
+                            RTS_BatchDiagLog(TEXT("RUN-REENGAGE->Chase"), World, EntityManager, Entity,
+                                Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
+                                bHasPredList ? &PredictionList[i] : nullptr);
                             SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                         }
                         continue;

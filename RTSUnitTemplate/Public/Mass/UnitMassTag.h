@@ -1122,6 +1122,30 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 	return Composition.Contains(TagType);
 }
 
+// === BatchDiag (TEMP) ===========================================================================
+// Temporary diagnostic logging for the "combat-engaged units don't move on client after BatchMove"
+// bug. Gated on FMassClientPredictionFragment::CommandPredictTime so only units that received a
+// move command within the last few seconds are logged (avoids per-frame spam). Remove by deleting
+// every `[BatchDiag]` reference (grep). Pass UnitIndex from the call site (actor cast lives there).
+inline void RTS_BatchDiagLog(const TCHAR* Where, const UWorld* World, const FMassEntityManager& EM,
+	const FMassEntityHandle& Entity, int32 UnitIndex, const FMassClientPredictionFragment* Pred)
+{
+	if (!World || !Pred) return;
+	const float Since = World->GetTimeSeconds() - Pred->CommandPredictTime;
+	if (Since < 0.f || Since > 3.0f) return; // only recently-commanded units
+	UE_LOG(LogTemp, Warning,
+		TEXT("[BatchDiag] %-20s Idx=%d Run=%d Chase=%d Atk=%d Pause=%d Idle=%d Det=%d | Pred has=%d spd=%.0f loc=%s | since=%.2f"),
+		Where, UnitIndex,
+		DoesEntityHaveTag(EM, Entity, FMassStateRunTag::StaticStruct())    ? 1 : 0,
+		DoesEntityHaveTag(EM, Entity, FMassStateChaseTag::StaticStruct())  ? 1 : 0,
+		DoesEntityHaveTag(EM, Entity, FMassStateAttackTag::StaticStruct()) ? 1 : 0,
+		DoesEntityHaveTag(EM, Entity, FMassStatePauseTag::StaticStruct())  ? 1 : 0,
+		DoesEntityHaveTag(EM, Entity, FMassStateIdleTag::StaticStruct())   ? 1 : 0,
+		DoesEntityHaveTag(EM, Entity, FMassStateDetectTag::StaticStruct()) ? 1 : 0,
+		Pred->bHasData ? 1 : 0, Pred->PredDesiredSpeed, *Pred->Location.ToString(), Since);
+}
+// === /BatchDiag =================================================================================
+
 template<typename FragmentType>
 bool DoesEntityHaveFragment(
    const FMassEntityManager& EntityManager,

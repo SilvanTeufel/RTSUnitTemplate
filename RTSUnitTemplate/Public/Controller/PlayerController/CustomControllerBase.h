@@ -101,6 +101,15 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_SetUnitsFollowTarget(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT = false);
 
+	// Single source of truth for nav-validated batch move targets. Given the per-unit raw targets,
+	// returns targets where any point on a dirty (UNavArea_Obstacle) or off-navmesh area has been
+	// snapped to the nearest valid point via ValidateAndAdjustGridLocation (whole-grid shift first,
+	// per-point snap as a fallback). Returns the input unchanged when every point is already valid.
+	// Called on the commanding client (right-click move) BEFORE prediction + RPC, and on the server,
+	// so server and all clients use identical destinations (fixes client units appearing stuck while
+	// the server moved them, when a formation slot landed off-nav/dirty).
+	TArray<FVector> AdjustBatchTargetsForNav(const TArray<AUnitBase*>& Units, const TArray<FVector>& InTargets);
+
 	// Batched version to reduce per-unit RPC spamming when issuing group move orders
 	// Now multicast so that all clients receive the movement updates, but invoked by a server wrapper
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
