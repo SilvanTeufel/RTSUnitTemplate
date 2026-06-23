@@ -424,16 +424,35 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 					// Nach einem Hard-Snap/Teleport ist der lokale Nav-Pfad VERALTET: seine Waypoints sind relativ
 					// zur ALTEN Position vor dem Sprung. Das Pfad-Following im UnitMovementProcessor wuerde dann zu
-					// (jetzt hinter der Einheit liegenden) Waypoints zuruecksteuern -> kaempft gegen den Reconciler
-					// -> Jitter. Pfad verwerfen, damit der Mover im naechsten Tick einen FRISCHEN Pfad von der neuen
-					// autoritativen Position plant (neu rechnen statt auf den alten Pfad zurueck). Nur bei echtem
-					// Sprung (JustLinked / Distanz-Snap), nicht im Full-Replication-Modus (der spiegelt eh jeden Tick).
+					// (jetzt hinter der Einheit liegenden) Waypoints zuruecksteuern -> kaempft gegen den Reconciler.
+					// LOESUNG: nicht den ganzen Pfad verwerfen (das erzwang ein asynchrones Re-Pathfinding, waehrenddessen
+					// die Steering-Velocity auf 0 gesetzt wird -> kurzer Stall an scharfen Ecken!), sondern den vorhandenen
+					// Pfad behalten und nur den CurrentPathPointIndex auf den der gesnappten Position naechsten Wegpunkt
+					// re-syncen (und auf den naechsten VORWAERTS steuern). Kein Rueckwaertssteuern UND kein Re-Pathfind-Stall.
+					// Nur bei echtem Sprung (JustLinked / Distanz-Snap), nicht im Full-Replication-Modus.
 					if (JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
 					{
 						if (FUnitNavigationPathFragment* NavPathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(ChunkCtx.GetEntity(EntityIdx)))
 						{
-							NavPathFrag->ResetPath();
-							NavPathFrag->bIsPathfindingInProgress = false;
+							if (NavPathFrag->HasValidPath() && NavPathFrag->CurrentPath->IsValid() && NavPathFrag->CurrentPath->GetPathPoints().Num() > 1)
+							{
+								const TArray<FNavPathPoint>& Pts = NavPathFrag->CurrentPath->GetPathPoints();
+								const FVector SnappedLoc = FinalXf.GetLocation();
+								int32 NearestIdx = NavPathFrag->CurrentPathPointIndex;
+								float BestDistSq = TNumericLimits<float>::Max();
+								for (int32 p = 0; p < Pts.Num(); ++p)
+								{
+									const float DSq = FVector::DistSquared2D(SnappedLoc, Pts[p].Location);
+									if (DSq < BestDistSq) { BestDistSq = DSq; NearestIdx = p; }
+								}
+								NavPathFrag->CurrentPathPointIndex = FMath::Min(NearestIdx + 1, Pts.Num() - 1);
+							}
+							else
+							{
+								// Kein gueltiger Pfad -> frisch planen (faellt auf das urspruengliche Verhalten zurueck).
+								NavPathFrag->ResetPath();
+								NavPathFrag->bIsPathfindingInProgress = false;
+							}
 						}
 					}
 				}
@@ -545,10 +564,21 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						const float SrvDesiredSpeed = MoveTargetList.IsValidIndex(EntityIdx) ? MoveTargetList[EntityIdx].DesiredSpeed.Get() : 0.f;
 						const bool bServerStopped = SrvDesiredSpeed <= 10.f;
 						// Blocked/settled: der Server WILL fahren (DesiredSpeed>0), aber die autoritative Position kommt
-						// kaum voran (Klumpen/Ecken-Avoidance) UND wir sind schon nah dran -> als angekommen behandeln.
+						// kaum voran (Klumpen/Ecken-Avoidance) UND wir sind schon nah dran. ACHTUNG: eine Einzeltick-Messung
+						// kann "kurz langsam beim Kurvenfahren an scharfen Ecken" nicht von "im Klumpen blockiert"
+						// unterscheiden. Daher Persistenz: erst nach mehreren aufeinanderfolgenden Ticks (~0.5s) als
+						// blockiert werten. So loest ein kurzes Abbremsen in der Kurve KEIN faelschliches Re-Anker+Damp
+						// (= Ecken-Stall) aus, ein echter Klumpen-Block (haelt sekundenlang an) dagegen schon.
 						const float ExpectedAuthMove = SrvDesiredSpeed * AccumulatedDelta;
-						const bool bServerBlocked = !bServerStopped && DistanceSq < FMath::Square(75.f) &&
+						const bool bBlockedThisTick = !bServerStopped && DistanceSq < FMath::Square(75.f) &&
 							ActualAuthMove < (ExpectedAuthMove * 0.25f);
+						if (PredList.IsValidIndex(EntityIdx))
+						{
+							PredList[EntityIdx].ServerBlockedStreak = bBlockedThisTick
+								? FMath::Min(PredList[EntityIdx].ServerBlockedStreak + 1, 1000)
+								: 0;
+						}
+						const bool bServerBlocked = PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].ServerBlockedStreak >= 5; // ~0.5s anhaltend
 						const bool bRecentlyCommanded = PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].CommandPredictTime >= 0.f &&
 							(World->GetTimeSeconds() - PredList[EntityIdx].CommandPredictTime) < 0.6f;
 						if ((bServerStopped || bServerBlocked) && !bRecentlyCommanded && !bIsStationaryAttack)

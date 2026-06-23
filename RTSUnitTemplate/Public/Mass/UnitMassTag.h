@@ -173,6 +173,13 @@ struct FMassClientPredictionFragment : public FMassFragment
 	// without permanently suppressing a *later* genuine server worker command. <0 = none.
 	UPROPERTY()
 	float CommandPredictTime = -1000.f;
+
+	// Consecutive reconcile ticks the server unit has appeared blocked/settled (authoritative position
+	// barely advancing despite DesiredSpeed>0). Used by ClientReplicationProcessor to require SUSTAINED
+	// blocking before treating a unit as arrived — so a brief slowdown while turning a sharp corner is
+	// not mistaken for a clump block (which would re-anchor the target + damp -> a corner stall).
+	UPROPERTY()
+	int32 ServerBlockedStreak = 0;
 };
 
 USTRUCT()
