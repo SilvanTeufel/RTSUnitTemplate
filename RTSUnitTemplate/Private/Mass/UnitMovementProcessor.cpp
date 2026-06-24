@@ -227,11 +227,19 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 }
             }
             
-            // === BatchDiag (TEMP): mover would skip a commanded unit -> it can't move this frame. ===
-            if (!AIState.IsInitialized || !AIState.CanMove)
+            // === [PredStall] error-only: a unit with an ACTIVE prediction (bHasData) the mover is about to
+            // SKIP because it can't move -> one reason a commanded client unit stands still. Gated on
+            // "predicting for >1s" so only genuinely-stuck units log (no per-frame spam). ===
+            if (PredList[i].bHasData && (!AIState.IsInitialized || !AIState.CanMove))
             {
-                RTS_BatchDiagLog(TEXT("MOVE-SKIP(cantmove)"), World, EntityManager, Entity,
-                    Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, &PredList[i]);
+                const float Since = World ? (World->GetTimeSeconds() - PredList[i].CommandPredictTime) : -1.f;
+                if (Since > 1.0f && Since < 1.2f)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[PredStall] CANTMOVE Idx=%d init=%d canMove=%d since=%.2f pred=%s cur=%s"),
+                        Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
+                        AIState.IsInitialized ? 1 : 0, AIState.CanMove ? 1 : 0, Since,
+                        *PredList[i].Location.ToString(), *TransformList[i].GetTransform().GetLocation().ToString());
+                }
             }
             if (!AIState.IsInitialized)
             {
@@ -355,6 +363,18 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                         Steering.DesiredVelocity = FVector::ZeroVector;
                         PathFrag.bIsPathfindingInProgress = false;
                         PathFrag.ResetPath();
+                        // [PredStall] error-only: start point won't project onto the (client) navmesh -> no path
+                        // requested -> unit stands. Client-specific if the client navmesh has holes the server lacks.
+                        if (Pred.bHasData)
+                        {
+                            const float Since = World ? (World->GetTimeSeconds() - Pred.CommandPredictTime) : -1.f;
+                            if (Since > 1.0f && Since < 1.2f)
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("[PredStall] PROJECT-FAIL Idx=%d since=%.2f cur=%s pred=%s"),
+                                    Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
+                                    Since, *CurrentLocation.ToString(), *Pred.Location.ToString());
+                            }
+                        }
                     }
                 }
                 else
@@ -402,7 +422,27 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             {
                  // GEÄNDERT: DirectSteer für Bodentruppen OHNE Pfad ist gefährlich.
                  // Wenn sie keinen Pfad haben, sollen sie stehen bleiben, nicht fliegen!
-                 Steering.DesiredVelocity = FVector::ZeroVector; 
+                 Steering.DesiredVelocity = FVector::ZeroVector;
+            }
+
+            // [PredStall] DECISIVE end-of-frame probe (no bHasData / no 1s gating): if a RECENTLY-COMMANDED unit
+            // ends this frame with ZERO steering, it stands this frame. This captures EVERY no-move branch in one
+            // place (arrived-collapse, no-path, pathing, degenerate-path, project-fail) and works even if the
+            // prediction was already cleared (CommandPredictTime survives a clear). If the stuck units NEVER
+            // appear here while standing, they are excluded from the client mover query entirely (a state-tag
+            // issue), NOT a movement-branch issue.
+            {
+                const float SinceCmd = World ? (World->GetTimeSeconds() - Pred.CommandPredictTime) : 999.f;
+                if (SinceCmd > 0.3f && SinceCmd < 0.6f && Steering.DesiredVelocity.IsNearlyZero())
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[PredStall] NOMOVE Idx=%d since=%.2f bHasData=%d arrived=%d distFinal=%.0f accept=%.0f hasPath=%d pathing=%d final=%s cur=%s pred=%s moveCtr=%s"),
+                        Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
+                        SinceCmd, Pred.bHasData ? 1 : 0,
+                        (FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadiusUsed)) ? 1 : 0,
+                        FVector::Dist2D(CurrentLocation, FinalDestination), AcceptanceRadiusUsed,
+                        PathFrag.HasValidPath() ? 1 : 0, PathFrag.bIsPathfindingInProgress ? 1 : 0,
+                        *FinalDestination.ToString(), *CurrentLocation.ToString(), *Pred.Location.ToString(), *MoveTarget.Center.ToString());
+                }
             }
         }
     });
@@ -675,7 +715,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
             if (!EntityManager.IsEntityValid(Entity)) return;
 
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
-                [Entity, PathResult, EndLocation, bClientWorld](FMassEntityManager& System)
+                [Entity, PathResult, EndLocation, bClientWorld, World](FMassEntityManager& System)
                 {
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
                     {
@@ -684,7 +724,23 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                         const bool bTargetChanged = FVector::DistSquared2D(PathFrag->PathTargetLocation, EndLocation) > FMath::Square(10.f);
                         if (bTargetChanged)
                         {
-                            return; 
+                            // [PredStall] error-only: the path we just computed is DISCARDED because the target moved
+                            // between request and return. If this fires every frame for a predicting unit, some other
+                            // client processor is THRASHING Pred.Location/MoveTarget -> the unit never gets a usable
+                            // path and stands. This is client-only (server has no Pred fragment).
+                            if (bClientWorld)
+                            {
+                                if (const FMassClientPredictionFragment* PredDbg = System.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+                                {
+                                    const float Since = World ? (World->GetTimeSeconds() - PredDbg->CommandPredictTime) : -1.f;
+                                    if (PredDbg->bHasData && Since > 1.0f && Since < 1.4f)
+                                    {
+                                        UE_LOG(LogTemp, Warning, TEXT("[PredStall] TARGET-THRASH since=%.2f requested=%s nowTarget=%s pred=%s"),
+                                            Since, *EndLocation.ToString(), *PathFrag->PathTargetLocation.ToString(), *PredDbg->Location.ToString());
+                                    }
+                                }
+                            }
+                            return;
                         }
 
                         if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 1)
@@ -711,6 +767,26 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                                         TargetFrag->Center = PathEndLoc;
                                     }
                                 }
+                                else
+                                {
+                                    // CLIENT FIX (partial path): the client mover steers to Pred.Location
+                                    // (FinalDestination), NOT MoveTarget.Center. For a target that is NOT fully
+                                    // reachable (gap / obstacle / off-nav / elevated) every path is PARTIAL and ends at
+                                    // PathEndLoc != Pred.Location. The mover's re-request gate fires whenever
+                                    // PathTargetLocation != FinalDestination, so the client re-requests EVERY frame
+                                    // (pathing=1 forever), never reaches the follow-path branch, and stands still -
+                                    // while the SERVER, which clamps MoveTarget.Center to PathEndLoc above, walks to the
+                                    // navmesh edge. Mirror that clamp onto the PREDICTION only (MoveTarget.Center stays
+                                    // server-authoritative): now PathTargetLocation == FinalDestination, the client
+                                    // follows the partial path to the reachable edge and arrives, matching the server.
+                                    if (FMassClientPredictionFragment* PredFrag = System.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+                                    {
+                                        if (PredFrag->bHasData)
+                                        {
+                                            PredFrag->Location = PathEndLoc;
+                                        }
+                                    }
+                                }
                             }
                             else
                             {
@@ -719,6 +795,23 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                         }
                         else
                         {
+                            // [PredStall] error-only: async path came back UNUSABLE (Fail / <=1 points) for a unit
+                            // that is still actively predicting -> it re-requests next frame and keeps standing.
+                            // result codes: 0=Invalid 1=Error 2=Fail 3=Success.
+                            if (bClientWorld)
+                            {
+                                if (const FMassClientPredictionFragment* PredDbg = System.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+                                {
+                                    const float Since = World ? (World->GetTimeSeconds() - PredDbg->CommandPredictTime) : -1.f;
+                                    if (PredDbg->bHasData && Since > 1.0f && Since < 1.4f)
+                                    {
+                                        UE_LOG(LogTemp, Warning, TEXT("[PredStall] PATH-FAIL result=%d numPts=%d since=%.2f end=%s pred=%s"),
+                                            (int32)PathResult.Result,
+                                            (PathResult.Path.IsValid() ? PathResult.Path->GetPathPoints().Num() : -1),
+                                            Since, *EndLocation.ToString(), *PredDbg->Location.ToString());
+                                    }
+                                }
+                            }
                             PathFrag->ResetPath();
                         }
                     }
