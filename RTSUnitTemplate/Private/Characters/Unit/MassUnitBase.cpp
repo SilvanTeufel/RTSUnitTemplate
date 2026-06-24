@@ -859,7 +859,12 @@ bool AMassUnitBase::RemoveFocusEntityTarget()
 	TargetFrag->TargetEntity.Reset();
 	TargetFrag->FriendlyTargetEntity.Reset();
 	TargetFrag->bHasValidTarget = false;
-	
+
+	// Invariant: FollowUnit is the single source of truth for follow (replicated; mirrored into the fragment
+	// by SyncAITarget every frame). Clear it here too — otherwise SyncAITarget would resurrect the just-cleared
+	// FriendlyTargetEntity on the client from the still-set FollowUnit.
+	if (AUnitBase* AsUnit = Cast<AUnitBase>(this)) AsUnit->FollowUnit = nullptr;
+
 	return true;
 }
 
@@ -888,7 +893,10 @@ bool AMassUnitBase::RemoveFriendlyFocusEntityTarget()
 	
 	TargetFrag->FriendlyTargetEntity.Reset();
 	//TargetFrag->bHasValidTarget = false;
-	
+
+	// Invariant: also clear FollowUnit (source of truth) so SyncAITarget doesn't restore the follow on the client.
+	if (AUnitBase* AsUnit = Cast<AUnitBase>(this)) AsUnit->FollowUnit = nullptr;
+
 	return true;
 }
 

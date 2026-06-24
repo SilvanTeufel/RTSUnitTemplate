@@ -18,7 +18,22 @@
 #include "Actors/Waypoint.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Core/RTSUnitUtils.h"
+#include "HAL/IConsoleManager.h"
 using namespace RTSUnitUtils;
+
+// When a unit is FOLLOWING (FollowUnit set) the client must steer toward the replicated formation position
+// (FMassMoveTargetFragment.Center), NOT a stale local move-prediction. A leftover Pred.bHasData=true from an
+// earlier move command (whose Pred.Location can never converge to the now-far formation slot) deadlocks the unit
+// in place (mover targets the stale Pred forever). When such a stale Pred is detected on a follower we clear
+// bHasData so the mover falls back to the live MoveTarget.Center (UnitMovementProcessor steers there when bHasData==false).
+static TAutoConsoleVariable<int32> CVarRTS_ClientFollowStalePredClear(
+	TEXT("RTS.ClientFollowStalePredClear"), 1,
+	TEXT("Client: clear a stale local move-prediction on a following unit so it resumes following the replicated formation position. 0=off."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ClientFollowStalePredDist(
+	TEXT("RTS.ClientFollowStalePredDist"), 600.f,
+	TEXT("Client: if a following unit's Pred.Location is farther than this (cm, 2D) from the replicated MoveTarget.Center, the Pred is treated as stale and cleared."),
+	ECVF_Default);
 
 
 UUnitActorToFragmentSyncProcessor::UUnitActorToFragmentSyncProcessor()
@@ -242,6 +257,60 @@ void UUnitActorToFragmentSyncProcessor::SyncAITarget(const AUnitBase& Unit, FMas
 		else
 		{
 			AITarget.FriendlyTargetEntity.Reset();
+		}
+
+		// === Follow stale-prediction clear (the real fix) + STOMP diag.
+		// A FOLLOWING unit must steer toward the replicated formation position (FMassMoveTargetFragment.Center).
+		// A leftover Pred.bHasData=true from an earlier move command pins the mover to a stale Pred.Location that
+		// can never converge to the now-distant formation slot -> the unit deadlocks in place while the leader walks
+		// away. When such a stale Pred is detected on an active follower we clear bHasData; the mover then falls back
+		// to the live MoveTarget.Center (UnitMovementProcessor steers there when bHasData==false) and follow resumes.
+		{
+			const UWorld* DiagWorld = Unit.GetWorld();
+			const double DiagNow = DiagWorld ? DiagWorld->GetTimeSeconds() : 0.0;
+			static TMap<int32, TWeakObjectPtr<AUnitBase>> PrevFollow;
+			static TMap<int32, double> LastLog;
+			const int32 Idx = Unit.UnitIndex;
+
+			TWeakObjectPtr<AUnitBase>& Prev = PrevFollow.FindOrAdd(Idx);
+			if (Prev.IsValid() && Unit.FollowUnit == nullptr)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[FollowDiag] STOMP Idx=%d FollowUnit went %s -> null (server overwrote / cleared)"), Idx, *GetNameSafe(Prev.Get()));
+			}
+			Prev = Unit.FollowUnit;
+
+			if (Unit.FollowUnit && EntityManager.IsEntityActive(AITarget.FriendlyTargetEntity))
+			{
+				const FMassEntityHandle SelfH = Unit.MassActorBindingComponent ? Unit.MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+				if (EntityManager.IsEntityValid(SelfH))
+				{
+					FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(SelfH);
+					const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(SelfH);
+					if (Pred && Pred->bHasData && MT)
+					{
+						const float StaleDist = FVector::Dist2D(Pred->Location, MT->Center);
+						const float StaleThresh = FMath::Max(0.f, CVarRTS_ClientFollowStalePredDist.GetValueOnGameThread());
+						// Don't fight a freshly issued command (0.6s grace, same window the reconciler uses).
+						const bool bRecentlyCommanded = Pred->CommandPredictTime >= 0.f && (DiagNow - (double)Pred->CommandPredictTime) < 0.6;
+						if (StaleDist > StaleThresh && !bRecentlyCommanded)
+						{
+							const bool bClear = CVarRTS_ClientFollowStalePredClear.GetValueOnGameThread() != 0;
+							if (bClear)
+							{
+								Pred->bHasData = false; // resume following the replicated formation slot
+							}
+							double& Last = LastLog.FindOrAdd(Idx);
+							if (DiagNow - Last > 1.0)
+							{
+								Last = DiagNow;
+								UE_LOG(LogTemp, Warning, TEXT("[FollowDiag] STALE-PRED %s Idx=%d FollowUnit=%s StaleDist=%.0f Pred=%s MoveTarget=%s"),
+									bClear ? TEXT("CLEARED") : TEXT("DETECTED"), Idx, *GetNameSafe(Unit.FollowUnit), StaleDist,
+									*Pred->Location.ToString(), *MT->Center.ToString());
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 }

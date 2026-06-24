@@ -400,24 +400,10 @@ void UMassUnitReplicatorBase::AddEntity(FMassEntityHandle Entity, FMassReplicati
                 NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsAbility;
             }
 
-            // Sync friendly target (Alternative for Slot 2 if no Ability)
-            if (!(NewItem.TagBits & UnitReplicationBits::Slot_ActionIsAbility))
-            {
-                uint32 FriendlyTargetNetIDVal = 0u;
-                if (AIT->FriendlyTargetEntity.IsSet() && EntityManager.IsEntityActive(AIT->FriendlyTargetEntity))
-                {
-                    if (const FMassNetworkIDFragment* TgtNet = EntityManager.GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
-                    {
-                        FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
-                    }
-                }
-                if (FriendlyTargetNetIDVal != 0)
-                {
-                    NewItem.ActionID = FriendlyTargetNetIDVal;
-                    NewItem.ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
-                    NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsFriendly;
-                }
-            }
+            // Friendly follow target is NO LONGER replicated via the contended Action slot. It is replicated
+            // reliably via AUnitBase::FollowUnit (UPROPERTY Replicated) and mirrored into the fragment by
+            // UnitActorToFragmentSyncProcessor::SyncAITarget. This frees the Action slot from friendly contention
+            // (previously a following unit that fired a projectile lost its friendly target on the client).
         }
         
         if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
@@ -829,24 +815,8 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsAbility;
                             }
 
-                            // Sync friendly target (Alternative for Slot 2 if no Ability)
-                            if (!(NewItem.TagBits & UnitReplicationBits::Slot_ActionIsAbility))
-                            {
-                                uint32 FriendlyTargetNetIDVal = 0u;
-                                if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
-                                {
-                                    if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
-                                    {
-                                        FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
-                                    }
-                                }
-                                if (FriendlyTargetNetIDVal != 0)
-                                {
-                                    NewItem.ActionID = FriendlyTargetNetIDVal;
-                                    NewItem.ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
-                                    NewItem.TagBits |= UnitReplicationBits::Slot_ActionIsFriendly;
-                                }
-                            }
+                            // Friendly follow target now replicated via AUnitBase::FollowUnit + SyncAITarget
+                            // (no longer via the contended Action slot). See block 1 comment.
                         }
 
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))
@@ -997,23 +967,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
                                 Item->ActionLoc = FVector(AIT->AbilityTargetLocation);
                                 RebuiltTagBits |= UnitReplicationBits::Slot_ActionIsAbility;
                             }
-                            else
-                            {
-                                uint32 FriendlyTargetNetIDVal = 0u;
-                                if (AIT->FriendlyTargetEntity.IsSet() && EM->IsEntityValid(AIT->FriendlyTargetEntity))
-                                {
-                                    if (const FMassNetworkIDFragment* TgtNet = EM->GetFragmentDataPtr<FMassNetworkIDFragment>(AIT->FriendlyTargetEntity))
-                                    {
-                                        FriendlyTargetNetIDVal = TgtNet->NetID.GetValue();
-                                    }
-                                }
-                                if (FriendlyTargetNetIDVal != 0)
-                                {
-                                    Item->ActionID = FriendlyTargetNetIDVal;
-                                    Item->ActionLoc = FVector(AIT->LastKnownFriendlyLocation);
-                                    RebuiltTagBits |= UnitReplicationBits::Slot_ActionIsFriendly;
-                                }
-                            }
+                            // (no friendly-slot else: friendly follow target now via FollowUnit + SyncAITarget)
                         }
 
                         if (const FMassAIStateFragment* AIS = EM->GetFragmentDataPtr<FMassAIStateFragment>(EH))

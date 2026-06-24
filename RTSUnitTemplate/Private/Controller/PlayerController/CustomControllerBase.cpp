@@ -1882,6 +1882,39 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 				if (bFriendly)
 				{
 					Server_SetUnitsFollowTarget(SelectedUnits, HitUnit);
+
+						// #2 Local instant follow prediction (client): set FollowUnit now so SyncAITarget writes
+						// FriendlyTargetEntity THIS frame instead of waiting ~0.5s for FollowUnit to replicate, and
+						// drop any lingering move prediction so the unit doesn't keep heading to its old target during
+						// the gap (the "server follows, client goes elsewhere" symptom). Replicated FollowUnit +
+						// SyncAITarget stay the authoritative confirmation (Fix #1, already present).
+						if (!HasAuthority())
+						{
+							if (UMassEntitySubsystem* MassSub = GetWorld() ? GetWorld()->GetSubsystem<UMassEntitySubsystem>() : nullptr)
+							{
+								FMassEntityManager& EM = MassSub->GetMutableEntityManager();
+								const FMassEntityHandle TgtH = HitUnit->MassActorBindingComponent ? HitUnit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+								for (AUnitBase* U : SelectedUnits)
+								{
+									if (!U || U == HitUnit || !U->MassActorBindingComponent) continue;
+									U->FollowUnit = HitUnit;
+									const FMassEntityHandle H = U->MassActorBindingComponent->GetMassEntityHandle();
+									if (!EM.IsEntityValid(H)) continue;
+									if (FMassAITargetFragment* AIT = EM.GetFragmentDataPtr<FMassAITargetFragment>(H))
+									{
+										if (EM.IsEntityActive(TgtH))
+										{
+											AIT->FriendlyTargetEntity = TgtH;
+											AIT->LastKnownFriendlyLocation = HitUnit->GetActorLocation();
+										}
+									}
+									if (FMassClientPredictionFragment* Pred = EM.GetFragmentDataPtr<FMassClientPredictionFragment>(H))
+									{
+										Pred->bHasData = false; // drop stale move prediction so follow takes over
+									}
+								}
+							}
+						}
 					return true;
 				}
 				else

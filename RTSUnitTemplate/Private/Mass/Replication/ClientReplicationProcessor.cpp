@@ -307,23 +307,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							AIT.IsFocusedOnTarget = (PE & UnitReplicationBits::Packed_IsFocusedOnTarget) != 0;
 							AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
 							
-							// Action Slot 2 (Abilities and Friendly Targets)
+							// Action Slot 2 (Abilities only now). The FRIENDLY follow target is no longer carried in
+							// this contended slot — it is replicated via AUnitBase::FollowUnit and written into
+							// AIT.FriendlyTargetEntity / LastKnownFriendlyLocation by UnitActorToFragmentSyncProcessor::
+							// SyncAITarget. (Projectile target is handled in the AI State block below.)
 							if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsAbility)
 							{
 								AIT.AbilityTargetLocation = FVector(UseItem->ActionLoc);
-							}
-							else if ((UseItem->TagBits & UnitReplicationBits::Slot_ActionIsFriendly) && !(UseItem->TagBits & UnitReplicationBits::Slot_ActionIsProjectile))
-							{
-								AIT.LastKnownFriendlyLocation = FVector(UseItem->ActionLoc);
-								const FMassEntityHandle* FoundFriendly = (UseItem->ActionID != 0) ? GlobalNetToEntity.Find(UseItem->ActionID) : nullptr;
-								if (FoundFriendly && EntityManager.IsEntityActive(*FoundFriendly))
-								{
-									AIT.FriendlyTargetEntity = *FoundFriendly;
-								}
-								else
-								{
-									// AIT.FriendlyTargetEntity.Reset(); // Keep as memory
-								}
 							}
 						}
 

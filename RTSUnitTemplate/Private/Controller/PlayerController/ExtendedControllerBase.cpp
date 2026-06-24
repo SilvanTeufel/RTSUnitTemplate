@@ -5625,6 +5625,18 @@ void AExtendedControllerBase::LogSelectedUnitsMassTags()
 		return;
 	}
 
+	// Only log for the local human player. This runs in Tick() before the
+	// IsLocalController() guard, so without this check it would also fire for
+	// server-spawned AI controllers (which own their own HUDBase + SelectedUnits)
+	// and for remote player-controller proxies. Note: AI PCs have no remote
+	// NetConnection, so IsLocalController() returns true for them too - bIsAi is
+	// what actually filters them out. Result otherwise: tags get logged even when
+	// the local player has nothing selected.
+	if (!IsLocalController() || bIsAi)
+	{
+		return;
+	}
+
 	if (UWorld* World = GetWorld())
 	{
 		const float CurrentTime = World->GetTimeSeconds();
