@@ -301,10 +301,18 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 {
                     AcceptanceRadiusUsed = 100.f;
                 }
-                // Clear prediction when server target converges to predicted (2D check)
-                if (FVector::DistSquared2D(MoveTarget.Center, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
+                // Clear the prediction ONLY when the UNIT has actually reached its predicted target.
+                // PREVIOUS BUG: this compared MoveTarget.Center vs Pred.Location. With replication ON, the server
+                // replicates MoveTarget.Center == the commanded target (== Pred.Location) almost immediately, so the
+                // condition was satisfied the instant the bubble delivered the new MoveTarget.Center - while the unit
+                // was still at the START (cur far away). That cleared the prediction every command, local movement
+                // stopped, and the unit snapped on the next 10Hz replication tick ("held, then snaps"). With
+                // replication OFF it never fired because MoveTarget.Center stayed stale. Per the invariant
+                // "a prediction must not be cleared while the unit has not reached its target", gate the clear on the
+                // UNIT's distance to Pred.Location, not the server target's.
+                if (FVector::DistSquared2D(CurrentLocation, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-CONVERGE Idx=%d MoveTarget=%s Pred=%s cur=%s accept=%.0f dist=%.0f"), Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, *MoveTarget.Center.ToString(), *Pred.Location.ToString(), *CurrentLocation.ToString(), AcceptanceRadiusUsed, FVector::Dist2D(MoveTarget.Center, Pred.Location));
+                    UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-CONVERGE Idx=%d MoveTarget=%s Pred=%s cur=%s accept=%.0f distToTarget=%.0f"), Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, *MoveTarget.Center.ToString(), *Pred.Location.ToString(), *CurrentLocation.ToString(), AcceptanceRadiusUsed, FVector::Dist2D(CurrentLocation, Pred.Location));
                     Pred.bHasData = false;
                 }
             }

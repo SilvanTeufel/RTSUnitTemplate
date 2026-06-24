@@ -19,7 +19,7 @@ public:
 
 	// Global toggle: when true, use full replication (directly set transform). When false, use reconciliation via steering/force.
 	bool bUseFullReplication = false;
-	bool bSkipReplication = true;
+	bool bSkipReplication = false;
 	bool bStopMovementReplication = false;
 	
 	float TimeSinceLastRun = 0.0f;
