@@ -501,8 +501,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							(World->GetTimeSeconds() - PredList[EntityIdx].CommandPredictTime) < 0.6f;
 						if (CornerW > KINDA_SMALL_NUMBER && !bIsStationaryAttack && !bRecentlyCommandedSoft)
 						{
-							CurrentKp *= FMath::Lerp(1.f, CVarRTS_ClientCornerSoftenKpScale.GetValueOnGameThread(), CornerW);
-							CurrentMinErrorSq *= FMath::Lerp(1.f, CVarRTS_ClientCornerSoftenTolScale.GetValueOnGameThread(), CornerW);
+							CurrentKp *= FMath::Lerp(1.f, CVarRTS_ClientCornerSoftenKpScale.GetValueOnAnyThread(), CornerW);
+							CurrentMinErrorSq *= FMath::Lerp(1.f, CVarRTS_ClientCornerSoftenTolScale.GetValueOnAnyThread(), CornerW);
 						}
 					}
 

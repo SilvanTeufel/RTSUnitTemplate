@@ -262,7 +262,7 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	// Weaken the separation push on the client only (server stays authoritative at full strength).
 	const UWorld* SepWorld = Context.GetWorld();
 	const float ClientSepScale = (SepWorld && SepWorld->IsNetMode(NM_Client))
-		? CVarRTS_ClientSeparationForceScale.GetValueOnGameThread() : 1.f;
+		? CVarRTS_ClientSeparationForceScale.GetValueOnAnyThread() : 1.f;
 
 	auto ApplyToQuery = [&AccumPush, ClientSepScale](FMassExecutionContext& LocalContext)
 	{

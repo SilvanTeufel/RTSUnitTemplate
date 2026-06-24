@@ -62,7 +62,7 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 	const UWorld* SoftWorld = Context.GetWorld();
 	const float ClientSoftScale = (SoftWorld && SoftWorld->IsNetMode(NM_Client))
-		? CVarRTS_ClientSoftAvoidanceForceScale.GetValueOnGameThread() : 1.f;
+		? CVarRTS_ClientSoftAvoidanceForceScale.GetValueOnAnyThread() : 1.f;
 
 	EntityQuery.ForEachEntityChunk(Context, [this, NavSys, &EntityManager, ClientSoftScale](FMassExecutionContext& LocalContext)
 	{

@@ -1148,8 +1148,10 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 			SteeringForce *= NearStartScaling * NearEndScaling;
 
 			// CLIENT-ONLY: weaken so local moving-avoidance doesn't fight the authoritative reconciler.
+			// NOTE: this lambda runs on Mass WORKER threads -> must use GetValueOnAnyThread() (GetValueOnGameThread()
+			// trips an ensure: GetShadowIndex()==0).
 			const float ClientMoveAvoidScale = (World && World->IsNetMode(NM_Client))
-				? CVarRTS_ClientMovingAvoidanceForceScale.GetValueOnGameThread() : 1.f;
+				? CVarRTS_ClientMovingAvoidanceForceScale.GetValueOnAnyThread() : 1.f;
 			Force.Value = UE::MassNavigation::ClampVector(SteeringForce, MaxSteerAccel) * ClientMoveAvoidScale; // Assume unit mass
 
 #if WITH_MASSGAMEPLAY_DEBUG
