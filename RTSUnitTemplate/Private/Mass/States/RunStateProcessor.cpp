@@ -148,6 +148,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                     if (bHasPredList)
                     {
                         FMassClientPredictionFragment& Pred = PredictionList[i];
+                        if (Pred.bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] OVERWRITE-RUN-HOLD Idx=%d Pred %s -> %s (HoldPosition)"), Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, *Pred.Location.ToString(), *StateFrag.StoredLocation.ToString()); }
                         Pred.Location = StateFrag.StoredLocation;
                         Pred.PredDesiredSpeed = Stats.RunSpeed;
                         Pred.PredAcceptanceRadius = 100.f;
@@ -159,8 +160,17 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                 continue;
             }
             
-            FVector FinalDestination = MoveTarget.Center;
-            float AcceptanceRadius = MoveTarget.SlackRadius;
+            // A unit with a FRESH client prediction (bHasData) must measure "arrival" against its COMMANDED target
+            // (Pred.Location), NOT the replicated MoveTarget.Center. The latter can be stale (the new target hasn't
+            // round-tripped through the server yet — and with replication off it NEVER updates), so the unit standing
+            // near the OLD MoveTarget.Center is falsely flagged "arrived" right after a command -> SwitchToIdleState
+            // resets Pred.Location to the current position -> the mover's convergence check clears bHasData -> the
+            // prediction is destroyed before it can drive movement. Using Pred.Location breaks that cycle.
+            const bool bClientPredicting = bHasPredList && PredictionList[i].bHasData;
+            FVector FinalDestination = bClientPredicting ? PredictionList[i].Location : MoveTarget.Center;
+            float AcceptanceRadius = bClientPredicting
+                ? FMath::Max(PredictionList[i].PredAcceptanceRadius, MoveTarget.SlackRadius)
+                : MoveTarget.SlackRadius;
 
             // Only arrival check on client (skip if following a unit)
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
@@ -351,12 +361,13 @@ void URunStateProcessor::SwitchToIdleState(FMassEntityManager& EntityManager, FM
         {
             if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
             {
+                if (Pred->bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] OVERWRITE-SWITCH-IDLE Pred %s -> cur %s (RunStateProc arrival/hold)"), *Pred->Location.ToString(), *TransformFrag->GetTransform().GetLocation().ToString()); }
                 Pred->Location = TransformFrag->GetTransform().GetLocation();
             }
             Pred->PredDesiredSpeed = 0.f;
             Pred->bHasData = true;
         }
-        
+
         StateFrag.SwitchingStateClient = true;
         Defer.RemoveTag<FMassStateRunTag>(Entity);
         Defer.RemoveTag<FMassStateChaseTag>(Entity);

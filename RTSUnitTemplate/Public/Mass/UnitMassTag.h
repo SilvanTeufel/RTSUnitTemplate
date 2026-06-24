@@ -1145,7 +1145,7 @@ inline void RTS_BatchDiagLog(const TCHAR* Where, const UWorld* World, const FMas
 {
 	if (!World || !Pred) return;
 	const float Since = World->GetTimeSeconds() - Pred->CommandPredictTime;
-	if (Since < 0.f || Since > 3.0f) return; // only recently-commanded units
+	if (Since < 0.f || Since > -1.0f) return; // [BatchDiag] DISABLED (too noisy at 120 units). Re-enable: change -1.0f back to 3.0f.
 	UE_LOG(LogTemp, Warning,
 		TEXT("[BatchDiag] %-20s Idx=%d Run=%d Chase=%d Atk=%d Pause=%d Idle=%d Det=%d | Pred has=%d spd=%.0f loc=%s | since=%.2f"),
 		Where, UnitIndex,

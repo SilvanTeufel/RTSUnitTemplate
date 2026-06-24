@@ -259,6 +259,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
                 if (bStationaryWorker)
                 {
+                    if (PredList[i].bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-WORKER i=%d"), i); }
                     PredList[i].bHasData = false;
                     Steering.DesiredVelocity = FVector::ZeroVector;
                     PathFrag.ResetPath();
@@ -295,9 +296,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 // Clear prediction when server target converges to predicted (2D check)
                 if (FVector::DistSquared2D(MoveTarget.Center, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
                 {
-                    // === BatchDiag (TEMP): prediction dropped because stale MoveTarget.Center is near Pred.Location. ===
-                    RTS_BatchDiagLog(TEXT("MOVE-CONVERGE-CLEAR"), World, EntityManager, Entity,
-                        Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, &Pred);
+                    UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-CONVERGE Idx=%d MoveTarget=%s Pred=%s cur=%s accept=%.0f dist=%.0f"), Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, *MoveTarget.Center.ToString(), *Pred.Location.ToString(), *CurrentLocation.ToString(), AcceptanceRadiusUsed, FVector::Dist2D(MoveTarget.Center, Pred.Location));
                     Pred.bHasData = false;
                 }
             }

@@ -1,4 +1,4 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
@@ -46,7 +46,7 @@ static TAutoConsoleVariable<float> CVarRTS_ClientCornerSoftenTolScale(
     1.5f,
     TEXT("MinError tolerance multiplier applied to a MOVING unit in a tight/dense spot (faded). 1=off."),
     ECVF_Default);
-// IDEA 2 — tunable reconcile cadence. The position correction (VInterpTo toward the authoritative bubble Location)
+// IDEA 2 Ã¢â‚¬â€ tunable reconcile cadence. The position correction (VInterpTo toward the authoritative bubble Location)
 // runs at this rate. The default 10Hz creates a structural "beat" against the 60Hz local mover. Lowering this runs
 // the correction MORE often (toward per-frame), shrinking the beat in the SIM (Idea 1 already hides it visually).
 // Fix C/E blocked-detection is ratio-based (ExpectedAuthMove = DesiredSpeed*AccumulatedDelta), so it auto-scales and
@@ -56,6 +56,32 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReconcileInterval(
     TEXT("net.RTS.ClientReplication.ReconcileInterval"),
     0.1f,
     TEXT("Seconds between client reconcile/correction ticks (default 0.1=10Hz). Lower = more frequent correction = smaller 10Hz beat, but higher CPU. e.g. 0.0333=30Hz, 0.0166=60Hz."),
+    ECVF_Default);
+
+// When the reconciler HARD-SNAPS a unit to the authoritative position (divergence exceeded the snap range), the
+// local move-prediction is stale by definition Ã¢â‚¬â€ keeping it makes the mover drag the unit back to the now-invalid
+// Pred.Location, re-diverging and snapping again (or hanging). Releasing it lets the mover resume from the snapped
+// position toward the replicated MoveTarget.Center. Grace-guarded so a just-issued client command is not nuked.
+static TAutoConsoleVariable<int32> CVarRTS_ClientSnapClearsPrediction(
+    TEXT("RTS.ClientSnapClearsPrediction"),
+    0, // DEFAULT OFF: clearing on snap also nukes legitimate ahead-of-server prediction. See note below.
+    TEXT("Client: on a hard reconcile snap, release a stale local move-prediction (bHasData=false) so the unit resyncs to server data. 0=off."),
+    ECVF_Default);
+
+// Replication-staleness guard for the server-stop/blocked prediction clear. Under heavy load (e.g. 120 units +
+// mining workers) the bubble can't deliver every entity's position every 10Hz reconcile tick, so many ticks show
+// ActualAuthMove==0 (NO fresh data) for units that ARE moving server-side. The stop/blocked detector misreads that
+// as "stopped/blocked" and kills+damps the prediction -> units FREEZE. With the guard on, a stop/blocked conclusion
+// is only drawn on ticks where FRESH authoritative data actually arrived (ActualAuthMove > FreshEps).
+static TAutoConsoleVariable<int32> CVarRTS_ClientReplStaleGuard(
+    TEXT("RTS.ClientReplStaleGuard"),
+    1,
+    TEXT("Client: ignore no-fresh-data reconcile ticks when deciding server-stopped/blocked (prevents prediction freeze under load). 0=off (old behavior)."),
+    ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ClientReplFreshEps(
+    TEXT("RTS.ClientReplFreshEps"),
+    1.0f,
+    TEXT("Client: min authoritative move (cm, 2D) between reconcile ticks to count as FRESH replication data. <= this = treated as 'no new data', not as a block."),
     ECVF_Default);
 
 #include "MassCommonFragments.h"
@@ -308,7 +334,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							AIT.bHasValidTarget = (PE & UnitReplicationBits::Packed_HasValidTarget) != 0;
 							
 							// Action Slot 2 (Abilities only now). The FRIENDLY follow target is no longer carried in
-							// this contended slot — it is replicated via AUnitBase::FollowUnit and written into
+							// this contended slot Ã¢â‚¬â€ it is replicated via AUnitBase::FollowUnit and written into
 							// AIT.FriendlyTargetEntity / LastKnownFriendlyLocation by UnitActorToFragmentSyncProcessor::
 							// SyncAITarget. (Projectile target is handled in the AI State block below.)
 							if (UseItem->TagBits & UnitReplicationBits::Slot_ActionIsAbility)
@@ -427,6 +453,19 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				const float ActualAuthMove = PrevAuthLocation.IsNearlyZero() ? 1.0e9f : FVector::Dist2D(TargetLocation, PrevAuthLocation);
 				ReplicatedTransformList[EntityIdx].Transform = FinalXf; // fuer den naechsten Reconcile-Tick merken
 
+					// === Client-side prediction must DRIVE local movement when server data is STALE ===
+					// ActualAuthMove==0 EXACTLY means NO fresh bubble update arrived this reconcile (common at 120 units
+					// under load). Reconciling a PREDICTING unit back toward its last (stale) authoritative position fights
+					// the local mover -> the unit appears frozen until replication catches up (the whole point of prediction
+					// is to move locally in the meantime). So on a stale tick, if the unit is predicting, let the mover run
+					// FREE: skip snap, skip position correction, skip the backward-pull damp and the stop/blocked clear.
+					// Once fresh data arrives (bFreshAuthData), normal reconciliation resumes. Gated by RTS.ClientReplStaleGuard.
+					const bool bStaleGuard = CVarRTS_ClientReplStaleGuard.GetValueOnAnyThread() != 0;
+					const float FreshAuthEps = CVarRTS_ClientReplFreshEps.GetValueOnAnyThread();
+					const bool bFreshAuthData = !bStaleGuard || (ActualAuthMove > FreshAuthEps);
+					const bool bIsPredicting = PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData;
+					const bool bLetPredictionRun = bStaleGuard && bIsPredicting && !bFreshAuthData;
+
 				// --- NEU: Following detection ---
 				const bool bIsFollowing = (AITargetList.IsValidIndex(EntityIdx) && EntityManager.IsEntityActive(AITargetList[EntityIdx].FriendlyTargetEntity)) ||
 										   DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassUnitYawFollowTag::StaticStruct());
@@ -434,7 +473,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				float CurrentSnapRange = FullReplicationDistance;
 				if (bIsFollowing)
 				{
-					// INTENTIONAL: give followers a LARGER snap range (snap LATER, more tolerance) — the *3.5 is
+					// INTENTIONAL: give followers a LARGER snap range (snap LATER, more tolerance) Ã¢â‚¬â€ the *3.5 is
 					// wanted. Server and client cannot compute identical follow positions (CalculateFollowPosition is
 					// self-referential on the follower's own position and the leader moves), so followers legitimately
 					// diverge more; snapping them as eagerly as normal units would cause constant teleport-snapping.
@@ -443,7 +482,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					CurrentSnapRange *= 3.5f;
 				}
 
-				if (bUseFullReplication || JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
+				// Don't snap a PREDICTING unit back to STALE data (no fresh update this tick) Ã¢â‚¬â€ that's the prediction
+				// legitimately running ahead, not a real divergence. JustLinked / full-replication still snap.
+				const bool bDistanceSnap = (DistanceSq > FMath::Square(CurrentSnapRange)) && !bLetPredictionRun;
+				if (bUseFullReplication || JustLinked[EntityIdx] || bDistanceSnap)
 				{
 					ClientXf = FinalXf;
 
@@ -457,7 +499,23 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					// Nur bei echtem Sprung (JustLinked / Distanz-Snap), nicht im Full-Replication-Modus.
 					if (JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
 					{
-						if (FUnitNavigationPathFragment* NavPathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(ChunkCtx.GetEntity(EntityIdx)))
+						// After a hard snap the local move-prediction is stale by definition (we just teleported the
+							// client onto the authoritative position because it had diverged past the snap range). Release it
+							// so the mover resumes from the snapped position toward the replicated MoveTarget.Center, instead
+							// of dragging back to the now-invalid Pred.Location (which would re-diverge -> snap again / hang).
+							// Grace-guarded: a just-issued client command predicts ahead legitimately and must not be nuked.
+							if (CVarRTS_ClientSnapClearsPrediction.GetValueOnAnyThread() != 0 &&
+								PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData)
+							{
+								const bool bRecentlyCommandedSnap = PredList[EntityIdx].CommandPredictTime >= 0.f &&
+									(World->GetTimeSeconds() - PredList[EntityIdx].CommandPredictTime) < 0.6f;
+								if (!bRecentlyCommandedSnap)
+								{
+									PredList[EntityIdx].bHasData = false;
+								}
+							}
+
+							if (FUnitNavigationPathFragment* NavPathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(ChunkCtx.GetEntity(EntityIdx)))
 						{
 							if (NavPathFrag->HasValidPath() && NavPathFrag->CurrentPath->IsValid() && NavPathFrag->CurrentPath->GetPathPoints().Num() > 1)
 							{
@@ -485,7 +543,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				{
 					// --- Location Reconciliation ---
 					
-					// 1. Prüfen, ob die Einheit logisch stationär sein MUSS (Angriff/Pause ohne Bewegung)
+					// 1. PrÃƒÂ¼fen, ob die Einheit logisch stationÃƒÂ¤r sein MUSS (Angriff/Pause ohne Bewegung)
 					const bool bHasAttackTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateAttackTag::StaticStruct());
 					const bool bHasPauseTag = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStatePauseTag::StaticStruct());
 					const bool bIsIdle = DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct());
@@ -528,7 +586,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					//if (bIsMoving)
 					{
 						// Increase tolerance and decrease correction speed while moving to prevent stuttering
-						CurrentMinErrorSq *= 2.0f; // Toleranz während der Fahrt: 200 (ca. 14 cm) statt bisher 100 (10 cm)
+						CurrentMinErrorSq *= 2.0f; // Toleranz wÃƒÂ¤hrend der Fahrt: 200 (ca. 14 cm) statt bisher 100 (10 cm)
 						CurrentKp *= 0.4f;
 
 						if (bIsFollowing)
@@ -539,7 +597,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						// If the server is pulling us backwards, be even more gentle
 						const FVector Forward = ClientXf.GetRotation().GetForwardVector();
 						const FVector ErrorDir = (TargetLocation - CurrentLocation).GetSafeNormal();
-						if (FVector::DotProduct(Forward, ErrorDir) < -0.2f)
+						if (!bLetPredictionRun && FVector::DotProduct(Forward, ErrorDir) < -0.2f)
 						{
 							CurrentKp *= 0.5f;
 
@@ -553,13 +611,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					}
 					//else
 					//{
-						// NEU: Auch im Stillstand eine leichte Dämpfung beibehalten, um Jitter zu vermeiden.
+						// NEU: Auch im Stillstand eine leichte DÃƒÂ¤mpfung beibehalten, um Jitter zu vermeiden.
 						//CurrentMinErrorSq *= 1.25f;
 						//CurrentKp *= 0.75f;
 					//}
 
 					const float ErrorRatio = DistanceSq / CurrentMinErrorSq;
-					if (ErrorRatio > 1.0f)
+					if (!bLetPredictionRun && ErrorRatio > 1.0f)
 					{
 						// NEU: Soft-Threshold Gewichtung (Fade-in von 0.0 auf 1.0)
 						const float SoftWeight = FMath::Clamp(ErrorRatio - 1.0f, 0.0f, 1.0f);
@@ -585,10 +643,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						ClientXf.SetLocation(NewLocation);
 
 						// NEU: Verhindert, dass die lokale Physik die Korrektur sofort wieder aushebelt
-						// KORREKTUR: Nur dämpfen, wenn die Einheit laut Replikation NICHT in Bewegung ist oder stationär angreift.
+						// KORREKTUR: Nur dÃƒÂ¤mpfen, wenn die Einheit laut Replikation NICHT in Bewegung ist oder stationÃƒÂ¤r angreift.
 						if (!bIsMoving || bIsStationaryAttack)
 						{
-							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.05f; // Härtere Bremse
+							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.05f; // HÃƒÂ¤rtere Bremse
 							if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
 							
 							// NEU: Auch die Lenkung (Avoidance/Movement) sofort unterbinden
@@ -606,15 +664,23 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					// der Server ihn zurueck-repliziert (sonst bricht die Instant-Move-Prediction wieder).
 					{
 						const float SrvDesiredSpeed = MoveTargetList.IsValidIndex(EntityIdx) ? MoveTargetList[EntityIdx].DesiredSpeed.Get() : 0.f;
-						const bool bServerStopped = SrvDesiredSpeed <= 10.f;
+						const float ExpectedAuthMove = SrvDesiredSpeed * AccumulatedDelta;
+						// Replication-staleness guard (RTS.ClientReplStaleGuard): ActualAuthMove==0 EXACTLY means NO fresh
+						// bubble update arrived since the last reconcile (common at 120 units under load), NOT that the
+						// server unit stopped/blocked. Only trust a stop/blocked conclusion on FRESH-data ticks.
+						const bool bAuthMovingFast = ActualAuthMove > (ExpectedAuthMove * 0.5f); // fresh data shows clear progress
+						// Stale-move-bit guard: if fresh data shows the unit clearly STILL moving, a replicated
+						// DesiredSpeed<=10 read is stale -> do NOT treat as stopped (e.g. log NetID=116 ActualMove=78, SrvSpd=0).
+						const bool bServerStopped = (SrvDesiredSpeed <= 10.f) && !(bStaleGuard && bAuthMovingFast);
 						// Blocked/settled: der Server WILL fahren (DesiredSpeed>0), aber die autoritative Position kommt
 						// kaum voran (Klumpen/Ecken-Avoidance) UND wir sind schon nah dran. ACHTUNG: eine Einzeltick-Messung
 						// kann "kurz langsam beim Kurvenfahren an scharfen Ecken" nicht von "im Klumpen blockiert"
 						// unterscheiden. Daher Persistenz: erst nach mehreren aufeinanderfolgenden Ticks (~0.5s) als
 						// blockiert werten. So loest ein kurzes Abbremsen in der Kurve KEIN faelschliches Re-Anker+Damp
 						// (= Ecken-Stall) aus, ein echter Klumpen-Block (haelt sekundenlang an) dagegen schon.
-						const float ExpectedAuthMove = SrvDesiredSpeed * AccumulatedDelta;
-						const bool bBlockedThisTick = !bServerStopped && DistanceSq < FMath::Square(75.f) &&
+						// Only count a tick toward the blocked streak when FRESH data arrived (bFreshAuthData). A no-data
+						// tick (ActualAuthMove==0 under load) resets the streak instead of falsely building it.
+						const bool bBlockedThisTick = !bServerStopped && bFreshAuthData && DistanceSq < FMath::Square(75.f) &&
 							ActualAuthMove < (ExpectedAuthMove * 0.25f);
 						if (PredList.IsValidIndex(EntityIdx))
 						{
@@ -625,7 +691,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						const bool bServerBlocked = PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].ServerBlockedStreak >= 5; // ~0.5s anhaltend
 						const bool bRecentlyCommanded = PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].CommandPredictTime >= 0.f &&
 							(World->GetTimeSeconds() - PredList[EntityIdx].CommandPredictTime) < 0.6f;
-						if ((bServerStopped || bServerBlocked) && !bRecentlyCommanded && !bIsStationaryAttack)
+						if ((bServerStopped || bServerBlocked) && !bRecentlyCommanded && !bIsStationaryAttack && !bLetPredictionRun)
 						{
 							// Ziel-/Ankunftsreferenz auf die AUTORITATIVE Position re-ankern, damit der client-eigene
 							// Ankunftscheck (UnitMovementProcessor / RunStateProcessor) "angekommen" erkennt und
@@ -636,22 +702,23 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.05f;
 							if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
 							if (SteeringList.IsValidIndex(EntityIdx)) SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
-							if (PredList.IsValidIndex(EntityIdx)) PredList[EntityIdx].bHasData = false;
-						}
+							if (PredList.IsValidIndex(EntityIdx)) { if (PredList[EntityIdx].bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-RECON-SB NetID=%u stopped=%d blocked=%d"), NetIDList.IsValidIndex(EntityIdx) ? NetIDList[EntityIdx].NetID.GetValue() : 0u, bServerStopped ? 1 : 0, bServerBlocked ? 1 : 0); } PredList[EntityIdx].bHasData = false; }
 					}
 
-					// --- Rotation Reconciliation ---
+					}
+
+						// --- Rotation Reconciliation ---
 					float FinalKpRot = KpRot;
 
-					// Wenn die Einheit stationär ist (Idle, HoldPosition, stationärer Angriff), 
+					// Wenn die Einheit stationÃƒÂ¤r ist (Idle, HoldPosition, stationÃƒÂ¤rer Angriff), 
 					// schalten wir die Korrektur aus (0.0f), um Wackeln durch Netzwerk-Jitter zu verhindern.
 					if (bIsStationaryAttack || DoesEntityHaveTag(EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateIdleTag::StaticStruct()))
 					{
 						FinalKpRot = 0.0f;
 					}
 					
-					// NEU: Wenn die Einheit lokal zum Ziel rotiert, dämpfen wir die Korrektur durch die Replikation stark ab.
-					// Dies verhindert das "Gegensteuern" der Replikation gegen die flüssige lokale Vorhersage.
+					// NEU: Wenn die Einheit lokal zum Ziel rotiert, dÃƒÂ¤mpfen wir die Korrektur durch die Replikation stark ab.
+					// Dies verhindert das "Gegensteuern" der Replikation gegen die flÃƒÂ¼ssige lokale Vorhersage.
 					const bool bIsFollowTarget = FollowList.IsValidIndex(EntityIdx);
 					const bool bHasAITarget = AITargetList.IsValidIndex(EntityIdx) && AITargetList[EntityIdx].bHasValidTarget;
 
@@ -669,7 +736,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
  					const float AbsYawError = FMath::Abs(YawError);
  					if (AbsYawError > ((bIsStationaryAttack && !bIsFollowing) ? 0.1f : MinYawErrorForCorrectionDeg))
  					{
- 						// NEU: Auch hier fadet die Korrekturstärke sanft ein (außer bei stationärem Angriff für sofortiges Snapping)
+ 						// NEU: Auch hier fadet die KorrekturstÃƒÂ¤rke sanft ein (auÃƒÅ¸er bei stationÃƒÂ¤rem Angriff fÃƒÂ¼r sofortiges Snapping)
  						const float RotSoftWeight = (bIsStationaryAttack && !bIsFollowing) ? 1.0f : FMath::Clamp((AbsYawError - MinYawErrorForCorrectionDeg) / MinYawErrorForCorrectionDeg, 0.0f, 1.0f);
  						const float FinalKpRotSoft = FinalKpRot * RotSoftWeight;
 

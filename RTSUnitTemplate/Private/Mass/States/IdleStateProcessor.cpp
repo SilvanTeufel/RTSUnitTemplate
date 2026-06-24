@@ -227,6 +227,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             if (bHasPredList)
             {
                 FMassClientPredictionFragment& Pred = PredictionList[i];
+                if (Pred.bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-IDLE i=%d predLoc=%s cmdTime=%.2f"), i, *Pred.Location.ToString(), Pred.CommandPredictTime); }
                 Pred.Location = Transform.GetLocation();
                 Pred.PredDesiredSpeed = 0.f;
                 Pred.bHasData = false;

@@ -97,7 +97,7 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				if (VisualEffectList.Num() > 0) SyncVisualEffect(*Unit, VisualEffectList[EntityIndex]);
 				if (AllianceList.Num() > 0) AllianceList[EntityIndex].AlliedTeamsMask = Unit->AlliedTeamsMask;
 				
-				// KORREKTUR: Zugriff über EntityManager für optionale Fragmente
+				// KORREKTUR: Zugriff Ã¼ber EntityManager fÃ¼r optionale Fragmente
 				FMassEntityHandle EntityHandle = ChunkContext.GetEntity(EntityIndex);
 				if (FMassPatrolFragment* PatrolFrag = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(EntityHandle))
 				{
@@ -259,59 +259,31 @@ void UUnitActorToFragmentSyncProcessor::SyncAITarget(const AUnitBase& Unit, FMas
 			AITarget.FriendlyTargetEntity.Reset();
 		}
 
-		// === Follow stale-prediction clear (the real fix) + STOMP diag.
-		// A FOLLOWING unit must steer toward the replicated formation position (FMassMoveTargetFragment.Center).
-		// A leftover Pred.bHasData=true from an earlier move command pins the mover to a stale Pred.Location that
-		// can never converge to the now-distant formation slot -> the unit deadlocks in place while the leader walks
-		// away. When such a stale Pred is detected on an active follower we clear bHasData; the mover then falls back
-		// to the live MoveTarget.Center (UnitMovementProcessor steers there when bHasData==false) and follow resumes.
-		{
-			const UWorld* DiagWorld = Unit.GetWorld();
-			const double DiagNow = DiagWorld ? DiagWorld->GetTimeSeconds() : 0.0;
-			static TMap<int32, TWeakObjectPtr<AUnitBase>> PrevFollow;
-			static TMap<int32, double> LastLog;
-			const int32 Idx = Unit.UnitIndex;
-
-			TWeakObjectPtr<AUnitBase>& Prev = PrevFollow.FindOrAdd(Idx);
-			if (Prev.IsValid() && Unit.FollowUnit == nullptr)
-			{
-				UE_LOG(LogTemp, Warning, TEXT("[FollowDiag] STOMP Idx=%d FollowUnit went %s -> null (server overwrote / cleared)"), Idx, *GetNameSafe(Prev.Get()));
-			}
-			Prev = Unit.FollowUnit;
-
-			if (Unit.FollowUnit && EntityManager.IsEntityActive(AITarget.FriendlyTargetEntity))
-			{
-				const FMassEntityHandle SelfH = Unit.MassActorBindingComponent ? Unit.MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-				if (EntityManager.IsEntityValid(SelfH))
-				{
-					FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(SelfH);
-					const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(SelfH);
-					if (Pred && Pred->bHasData && MT)
+					// Follow stale-prediction clear: a leftover Pred.bHasData from an earlier move pins the mover to a stale
+					// Pred.Location that never converges to the now-distant formation slot -> the follower deadlocks. Clear it
+					// so the mover falls back to the live MoveTarget.Center. CVar-gated (RTS.ClientFollowStalePredClear).
+					if (Unit.FollowUnit && EntityManager.IsEntityActive(AITarget.FriendlyTargetEntity) && CVarRTS_ClientFollowStalePredClear.GetValueOnGameThread() != 0)
 					{
-						const float StaleDist = FVector::Dist2D(Pred->Location, MT->Center);
-						const float StaleThresh = FMath::Max(0.f, CVarRTS_ClientFollowStalePredDist.GetValueOnGameThread());
-						// Don't fight a freshly issued command (0.6s grace, same window the reconciler uses).
-						const bool bRecentlyCommanded = Pred->CommandPredictTime >= 0.f && (DiagNow - (double)Pred->CommandPredictTime) < 0.6;
-						if (StaleDist > StaleThresh && !bRecentlyCommanded)
+						const FMassEntityHandle SelfH = Unit.MassActorBindingComponent ? Unit.MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+						if (EntityManager.IsEntityValid(SelfH))
 						{
-							const bool bClear = CVarRTS_ClientFollowStalePredClear.GetValueOnGameThread() != 0;
-							if (bClear)
+							FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(SelfH);
+							const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(SelfH);
+							if (Pred && Pred->bHasData && MT)
 							{
-								Pred->bHasData = false; // resume following the replicated formation slot
-							}
-							double& Last = LastLog.FindOrAdd(Idx);
-							if (DiagNow - Last > 1.0)
-							{
-								Last = DiagNow;
-								UE_LOG(LogTemp, Warning, TEXT("[FollowDiag] STALE-PRED %s Idx=%d FollowUnit=%s StaleDist=%.0f Pred=%s MoveTarget=%s"),
-									bClear ? TEXT("CLEARED") : TEXT("DETECTED"), Idx, *GetNameSafe(Unit.FollowUnit), StaleDist,
-									*Pred->Location.ToString(), *MT->Center.ToString());
+								const float StaleDist = FVector::Dist2D(Pred->Location, MT->Center);
+								const float StaleThresh = FMath::Max(0.f, CVarRTS_ClientFollowStalePredDist.GetValueOnGameThread());
+								const UWorld* W = Unit.GetWorld();
+								const double Now = W ? W->GetTimeSeconds() : 0.0;
+								const bool bRecentlyCommanded = Pred->CommandPredictTime >= 0.f && (Now - (double)Pred->CommandPredictTime) < 0.6;
+								if (StaleDist > StaleThresh && !bRecentlyCommanded)
+								{
+									UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-FOLLOW-STALE Idx=%d StaleDist=%.0f"), Unit.UnitIndex, StaleDist);
+									Pred->bHasData = false; // resume following the replicated formation slot
+								}
 							}
 						}
 					}
-				}
-			}
-		}
 	}
 }
 
@@ -363,7 +335,7 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 				const FVector MeshSize = PlaneMesh->GetBoundingBox().GetSize();
 				// World-space bounds on purpose (NOT CalcBounds(GetRelativeTransform()) as the canonical
 				// unit fit uses): the plane is a child of the DRONE entity, so the WorkArea actor's scale
-				// never enters the plane's final transform — we must size against the WorkArea's actual
+				// never enters the plane's final transform â€” we must size against the WorkArea's actual
 				// world footprint or a runtime-scaled WorkArea (Multicast_SetScale) would mismatch.
 				const FVector AreaSize = ConstructionUnit->WorkArea->Mesh->Bounds.GetBox().GetSize();
 
@@ -481,7 +453,7 @@ void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, 
 
 	if (!Impact.bIsInitializedOnClient)
 	{
-		// Sicherheitsnetz: Falls SetupMassOnEffectArea zu früh durchkam (z.B. BaseRadius noch 0)
+		// Sicherheitsnetz: Falls SetupMassOnEffectArea zu frÃ¼h durchkam (z.B. BaseRadius noch 0)
 		if (!Area.HasAuthority() && Area.BaseRadius <= 0.1f)
 		{
 			return; 
@@ -543,7 +515,7 @@ void UUnitActorToFragmentSyncProcessor::SyncEffectArea(const AEffectArea& Area, 
 
     if (!Area.HasAuthority())
     {
-        // Übertrage den replizierten Status vom Actor in das Fragment
+        // Ãœbertrage den replizierten Status vom Actor in das Fragment
         Impact.bIsScalingAfterImpact = Area.bIsScalingAfterImpact;
         Impact.bImpactScaleTriggered = Area.bImpactScaleTriggered;
         

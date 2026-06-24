@@ -882,10 +882,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 	{
 		return;
 	}
-	// === BatchDiag (TEMP) ===
-	UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-entry        Idx=%d IsInit=%d CanMove=%d State=%d MoveTo=%s"),
-		Unit->UnitIndex, Unit->IsInitialized ? 1 : 0, Unit->CanMove ? 1 : 0, (int32)Unit->UnitState, *NewTargetLocation.ToString());
-	// === /BatchDiag ===
+	// [BatchDiag] APPLY-entry log removed (noise).
 	if (!Unit->IsInitialized)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN !IsInitialized Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
@@ -961,12 +958,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 	bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
 	bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
 
-	// === BatchDiag (TEMP) ===
-	UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-decision     Idx=%d bCanMoveWhileAtk=%d wasAtk/Pause=%d -> bIsMovingWhileAtk=%d (Run added=%d, Atk/Pause removed=%d, Detect %s)"),
-		Unit->UnitIndex, (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking) ? 1 : 0, bIsAttackingOrPausing ? 1 : 0,
-		bIsMovingWhileAttacking ? 1 : 0, !bIsMovingWhileAttacking ? 1 : 0, !bIsMovingWhileAttacking ? 1 : 0,
-		(AttackT || (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking)) ? TEXT("kept") : TEXT("removed"));
-	// === /BatchDiag ===
+	// [BatchDiag] APPLY-decision log removed (noise).
 
 	if (!bIsMovingWhileAttacking)
 	{
@@ -986,6 +978,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 		PredFrag->PredDesiredSpeed = DesiredSpeed;
 		PredFrag->PredAcceptanceRadius = AcceptanceRadius;
 		PredFrag->bHasData = true;
+		UE_LOG(LogTemp, Warning, TEXT("[PredLife] SET Idx=%d loc=%s spd=%.0f accept=%.0f hold=%d resetHold=%d"), Unit ? Unit->UnitIndex : -1, *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, Unit ? (Unit->bHoldPosition ? 1 : 0) : -1, bResetHoldPosition ? 1 : 0);
 		// Stamp the command time so ApplyReplicatedTagBits can let this predicted Run beat the
 		// stale replicated worker bits for a bounded grace window (see bSuppressWorkerStomp).
 		PredFrag->CommandPredictTime = World->GetTimeSeconds();
