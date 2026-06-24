@@ -730,17 +730,24 @@ bool APerformanceUnit::ComputeLocalVisibility() const
 {
 	const bool bInherent = ComputeInherentVisibility();
 
-	// Viewport optimization is for local rendering only.
-	// On a Server (Listen or Dedicated), we ignore it for this calculation 
-	// to prevent bForceHidden from replicating to clients based on the host's camera.
+	// Viewport culling is a LOCAL rendering optimization: hide units the local camera
+	// can't see. Apply it on every machine that actually renders a local view
+	// (Standalone, Listen-server host, Client) and skip it only on a Dedicated server,
+	// which has no local viewport (and where UUnitVisibilityProcessor never computes
+	// bIsOnViewport, so the flag would be a meaningless default).
+	//
+	// This stays replication-safe: the only REPLICATED visibility flag
+	// (FMassVisualEffectFragment::bForceHidden) is driven by ComputeInherentVisibility()
+	// via SetUnitVisualVisible(), never by this function -- so a host's camera can never
+	// hide units on remote clients through here.
 	const ENetMode CurrentNetMode = GetUnitNetMode();
-	if (CurrentNetMode < NM_Client)
+	if (CurrentNetMode == NM_DedicatedServer)
 	{
 		return bInherent;
 	}
 
 	const bool bResult = IsOnViewport && bInherent;
-	
+
 	return bResult;
 }
 

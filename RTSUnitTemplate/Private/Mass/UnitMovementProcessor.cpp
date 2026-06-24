@@ -18,6 +18,43 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
 
+// Projection-based, MONOTONIC path-index advance (shared by client + server path-following).
+// The old logic advanced PathFrag.CurrentPathPointIndex ONLY when the unit was within PathWaypointAcceptanceRadius
+// of the CURRENT waypoint. If the unit was pushed PAST a waypoint (overshoot / sideways separation shove / volatile
+// FOLLOW target) without entering that radius, the index STALLED and the unit steered BACKWARD toward the passed
+// waypoint -> the "waypoint error" jerk (worst on FOLLOW, where the follow target is self-referential + the leader
+// moves, so re-pathfinding is constant and early waypoints land near/behind the unit). Instead we project the unit
+// onto the path polyline and steer toward the FORWARD end of the closest segment, clamped to never go backward
+// (monotonic). Bounded look-ahead keeps it cheap and avoids skipping across hairpins. 2D (flat navigation).
+static void RTS_AdvancePathIndexByProjection(FUnitNavigationPathFragment& PathFrag, const TArray<FNavPathPoint>& PathPoints, const FVector& CurrentLocation)
+{
+	const int32 NumPts = PathPoints.Num();
+	if (NumPts < 2) return;
+	const int32 Cur = FMath::Clamp(PathFrag.CurrentPathPointIndex, 0, NumPts - 1);
+	const int32 StartSeg = FMath::Max(0, Cur - 1);                 // include the segment leading to the current target
+	const int32 EndSeg = FMath::Min(NumPts - 2, Cur + 4);          // bounded look-ahead (cheap; realistic overshoot)
+	int32 BestTargetIdx = Cur;
+	float BestSegDistSq = TNumericLimits<float>::Max();
+	for (int32 Seg = StartSeg; Seg <= EndSeg; ++Seg)
+	{
+		const FVector A = PathPoints[Seg].Location;
+		const FVector B = PathPoints[Seg + 1].Location;
+		FVector AB = B - A; AB.Z = 0.f;
+		const float ABLenSq = AB.SizeSquared();
+		if (ABLenSq <= KINDA_SMALL_NUMBER) continue;
+		FVector AP = CurrentLocation - A; AP.Z = 0.f;
+		const float T = FMath::Clamp(FVector::DotProduct(AP, AB) / ABLenSq, 0.f, 1.f);
+		const FVector Proj = A + AB * T;
+		const float DistSq = FVector::DistSquared2D(CurrentLocation, Proj);
+		if (DistSq < BestSegDistSq)
+		{
+			BestSegDistSq = DistSq;
+			BestTargetIdx = Seg + 1; // steer toward the forward end of the segment the unit is currently on
+		}
+	}
+	PathFrag.CurrentPathPointIndex = FMath::Clamp(FMath::Max(Cur, BestTargetIdx), 0, NumPts - 1); // monotonic
+}
+
 UUnitMovementProcessor::UUnitMovementProcessor(): EntityQuery()
 {
     // Run BEFORE steering, avoidance, and movement integration
@@ -347,14 +384,10 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 }
 
                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
-                
-                if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
-                {
-                    if (FVector::DistSquared2D(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
-                    {
-                        ++PathFrag.CurrentPathPointIndex;
-                    }
-                }
+
+                // Monotonic projection-based advance (replaces proximity-only ++index that stalled on overshoot/
+                // pushed-past waypoints -> backward "waypoint error", worst on FOLLOW). See helper above.
+                RTS_AdvancePathIndexByProjection(PathFrag, PathPoints, CurrentLocation);
 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {
@@ -493,14 +526,11 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 }
 
                 const TArray<FNavPathPoint>& PathPoints = PathFrag.CurrentPath->GetPathPoints();
-                
-                if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
-                {
-                    if (FVector::DistSquared2D(CurrentLocation, PathPoints[PathFrag.CurrentPathPointIndex].Location) <= FMath::Square(PathWaypointAcceptanceRadius))
-                    {
-                        PathFrag.CurrentPathPointIndex++;
-                    }
-                }
+
+                // Monotonic projection-based advance (same logic as client; keeps server/client path-following
+                // identical so their trajectories don't diverge extra — important since FOLLOW positions already
+                // differ slightly between server and client).
+                RTS_AdvancePathIndexByProjection(PathFrag, PathPoints, CurrentLocation);
 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {

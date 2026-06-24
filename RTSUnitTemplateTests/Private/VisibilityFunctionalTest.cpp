@@ -102,9 +102,11 @@ void AVisibilityFunctionalTest::StartTest()
 	RunStep(false, true, true, true, true, TEXT("Step 3 (Detected Enemy)"));
 
 	// Scenario 4: Own Team, Off-screen
-	// Actor (SkelMesh) on Client should be hidden (optimization), 
-	// but Inherent (ISMs) should stay visible (to avoid server-viewport-poisoning).
-	bool bExpectedActorOffScreen = (GetWorld()->GetNetMode() < NM_Client);
+	// Actor (SkelMesh) should be hidden off-screen on any machine that renders a local
+	// view (Standalone / Listen host / Client). Only a Dedicated server (no local viewport)
+	// keeps it visible. Inherent visibility (ISMs/replication) always ignores the viewport
+	// so a host's camera never poisons remote clients.
+	bool bExpectedActorOffScreen = (GetWorld()->GetNetMode() == NM_DedicatedServer);
 	bool bExpectedInherentOffScreen = true; // Inherent visibility should ignore viewport
 	
 	RunStep(true, false, false, bExpectedActorOffScreen, bExpectedInherentOffScreen, TEXT("Step 4 (Off-screen)"));

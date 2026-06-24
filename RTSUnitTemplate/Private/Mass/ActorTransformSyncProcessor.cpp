@@ -12,6 +12,27 @@
 #include "GameFramework/Actor.h"
 #include "Async/Async.h"
 #include "NavigationSystem.h"
+#include "HAL/IConsoleManager.h"
+#include "Engine/World.h"
+
+// IDEA 1 — CLIENT render smoothing. The unit ACTOR's position is hard-copied from the authoritative Mass
+// FTransformFragment every frame (no smoothing) -> any residual high-frequency jitter in the fragment (10Hz
+// reconcile beat, correction yanks, avoidance leftovers) shows on screen 1:1. Here we render the actor at a
+// position that EASES toward the authoritative one (bounded max-lag), filtering the jitter at the OUTPUT while
+// the Mass fragment (gameplay/avoidance/selection-source) stays exact. Client-only; units only (effect areas
+// are excluded so their actor->fragment sync isn't fed a smoothed position). Source-agnostic catch-all.
+static TAutoConsoleVariable<int32> CVarRTS_ClientRenderSmoothing(
+	TEXT("net.RTS.Client.RenderSmoothing"), 1,
+	TEXT("Client-only: smooth the rendered unit actor position toward the authoritative Mass transform (filters residual jitter at the visual output). 1=on, 0=off."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ClientRenderSmoothingSpeed(
+	TEXT("net.RTS.Client.RenderSmoothingSpeed"), 14.0f,
+	TEXT("VInterpTo speed for client render smoothing. Higher = tighter/less lag (less smoothing); lower = smoother but more visual lag."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ClientRenderSmoothingMaxLag(
+	TEXT("net.RTS.Client.RenderSmoothingMaxLag"), 60.0f,
+	TEXT("Max horizontal distance (cm) the rendered actor may lag behind the authoritative position before being clamped (so big legit moves still follow promptly)."),
+	ECVF_Default);
 
 UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     : RepresentationSubsystem(nullptr) // Initialize pointer here
@@ -554,6 +575,8 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
         return;
     }
 
+    // NOTE: the client render smoothing (Idea 1) is applied UPSTREAM in ExecuteClient (the payload's NewTransform is
+    // already the smoothed VisualXf for units; the Mass fragment stays exact). Here we just apply it.
     for (const FActorTransformUpdatePayload& Update : PendingUpdates)
     {
         if (AActor* Actor = Update.ActorPtr.Get())
@@ -698,22 +721,41 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             // 2. Adjust height for ground snapping or flying
             HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation, bIsDead);
             
-            // 3. Apply final location and cache the result
+            // 3. Apply final location to the AUTHORITATIVE Mass fragment (exact — used by avoidance/gameplay/selection).
             MassTransform.SetLocation(FinalLocation);
 
             const bool bLocationChanged = !CurrentActorLocation.Equals(FinalLocation, 0.025f);
             const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.0001f);
 
-            CharList[i].PositionedTransform = MassTransform;
-            CharList[i].bTransformDirty |= (bLocationChanged || bRotationChanged);
+            // IDEA 1 — client render smoothing: build a SMOOTHED visual transform (separate from the exact fragment)
+            // that eases horizontally toward the authoritative location, filtering residual jitter at the OUTPUT.
+            // Both the ISM visual (PositionedTransform) and the actor use it; the fragment stays exact (no feedback).
+            // State = last frame's PositionedTransform. bVisualMoved keeps the ISM re-rendering while it eases in.
+            FTransform VisualXf = MassTransform;
+            bool bVisualMoved = false;
+            if (CVarRTS_ClientRenderSmoothing.GetValueOnAnyThread() != 0 && ActualDeltaTime > 0.f)
+            {
+                const FVector AuthLoc = MassTransform.GetLocation();
+                const FVector PrevVis = CharList[i].PositionedTransform.GetLocation();
+                FVector SmoothLoc = FMath::VInterpTo(PrevVis, AuthLoc, ActualDeltaTime, CVarRTS_ClientRenderSmoothingSpeed.GetValueOnAnyThread());
+                FVector Lag = SmoothLoc - AuthLoc; Lag.Z = 0.f;
+                const float MaxLag = FMath::Max(0.f, CVarRTS_ClientRenderSmoothingMaxLag.GetValueOnAnyThread());
+                if (Lag.SizeSquared() > FMath::Square(MaxLag)) SmoothLoc = AuthLoc + Lag.GetClampedToMaxSize(MaxLag);
+                SmoothLoc.Z = AuthLoc.Z;
+                VisualXf.SetLocation(SmoothLoc);
+                bVisualMoved = !PrevVis.Equals(SmoothLoc, 0.025f);
+            }
+
+            CharList[i].PositionedTransform = VisualXf;
+            CharList[i].bTransformDirty |= (bLocationChanged || bRotationChanged || bVisualMoved);
 
             const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= VisualISMActorSyncTime;
 
-            if (bLocationChanged || bRotationChanged)
+            if (bLocationChanged || bRotationChanged || bVisualMoved)
             {
                 if (UnitBase->bUseSkeletalMovement || bNeedsActorSync)
                 {
-                    PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
+                    PendingActorUpdates.Emplace(Actor, VisualXf, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
                     if (!UnitBase->bUseSkeletalMovement)
                     {
                         CharList[i].LastActorSyncTime = CurrentTime;

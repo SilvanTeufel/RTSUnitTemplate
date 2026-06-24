@@ -46,6 +46,17 @@ static TAutoConsoleVariable<float> CVarRTS_ClientCornerSoftenTolScale(
     1.5f,
     TEXT("MinError tolerance multiplier applied to a MOVING unit in a tight/dense spot (faded). 1=off."),
     ECVF_Default);
+// IDEA 2 — tunable reconcile cadence. The position correction (VInterpTo toward the authoritative bubble Location)
+// runs at this rate. The default 10Hz creates a structural "beat" against the 60Hz local mover. Lowering this runs
+// the correction MORE often (toward per-frame), shrinking the beat in the SIM (Idea 1 already hides it visually).
+// Fix C/E blocked-detection is ratio-based (ExpectedAuthMove = DesiredSpeed*AccumulatedDelta), so it auto-scales and
+// stays correct at any cadence. TRADE-OFF: the reconciler's heavy per-tick mapping (registry/bubble scan) also runs
+// at this rate, so very small values raise CPU cost on unit-heavy maps. Clamped to a sane floor.
+static TAutoConsoleVariable<float> CVarRTS_ClientReconcileInterval(
+    TEXT("net.RTS.ClientReplication.ReconcileInterval"),
+    0.1f,
+    TEXT("Seconds between client reconcile/correction ticks (default 0.1=10Hz). Lower = more frequent correction = smaller 10Hz beat, but higher CPU. e.g. 0.0333=30Hz, 0.0166=60Hz."),
+    ECVF_Default);
 
 #include "MassCommonFragments.h"
 #include "MassEntityTypes.h"
@@ -125,7 +136,11 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	if (bSkipReplication) return;
 
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
-	if (TimeSinceLastRun < ExecutionInterval) return;
+	// IDEA 2: cadence is CVar-tunable (default = ExecutionInterval 0.1). Floor at ~one frame so it can approach
+	// per-frame correction without busy-looping. Lower = smaller structural 10Hz beat in the sim (Idea 1 already
+	// hides it visually); raises reconcile CPU since the heavy mapping also runs at this rate.
+	const float ReconcileInterval = FMath::Max(0.0f, CVarRTS_ClientReconcileInterval.GetValueOnGameThread());
+	if (TimeSinceLastRun < ReconcileInterval) return;
 	const float AccumulatedDelta = TimeSinceLastRun;
 	TimeSinceLastRun = 0.f;
 	
@@ -429,8 +444,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				float CurrentSnapRange = FullReplicationDistance;
 				if (bIsFollowing)
 				{
-					// Reduce snaprange for followers to ensure they hard-snap sooner if they lag behind
-					CurrentSnapRange *= 3.5f; 
+					// INTENTIONAL: give followers a LARGER snap range (snap LATER, more tolerance) — the *3.5 is
+					// wanted. Server and client cannot compute identical follow positions (CalculateFollowPosition is
+					// self-referential on the follower's own position and the leader moves), so followers legitimately
+					// diverge more; snapping them as eagerly as normal units would cause constant teleport-snapping.
+					// (The smooth reconciler still pulls them in; the projection-based path-index advance handles the
+					// waypoint overshoot that the rare-snap previously left unfixed for followers.)
+					CurrentSnapRange *= 3.5f;
 				}
 
 				if (bUseFullReplication || JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
