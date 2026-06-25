@@ -267,7 +267,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
                 if (bStationaryWorker)
                 {
-                    if (PredList[i].bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-WORKER i=%d"), i); }
                     PredList[i].bHasData = false;
                     Steering.DesiredVelocity = FVector::ZeroVector;
                     PathFrag.ResetPath();
@@ -312,7 +311,6 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 // UNIT's distance to Pred.Location, not the server target's.
                 if (FVector::DistSquared2D(CurrentLocation, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-CONVERGE Idx=%d MoveTarget=%s Pred=%s cur=%s accept=%.0f distToTarget=%.0f"), Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, *MoveTarget.Center.ToString(), *Pred.Location.ToString(), *CurrentLocation.ToString(), AcceptanceRadiusUsed, FVector::Dist2D(CurrentLocation, Pred.Location));
                     Pred.bHasData = false;
                 }
             }

@@ -278,7 +278,6 @@ void UUnitActorToFragmentSyncProcessor::SyncAITarget(const AUnitBase& Unit, FMas
 								const bool bRecentlyCommanded = Pred->CommandPredictTime >= 0.f && (Now - (double)Pred->CommandPredictTime) < 0.6;
 								if (StaleDist > StaleThresh && !bRecentlyCommanded)
 								{
-									UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-FOLLOW-STALE Idx=%d StaleDist=%.0f"), Unit.UnitIndex, StaleDist);
 									Pred->bHasData = false; // resume following the replicated formation slot
 								}
 							}

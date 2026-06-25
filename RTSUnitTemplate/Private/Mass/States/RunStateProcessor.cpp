@@ -148,7 +148,6 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                     if (bHasPredList)
                     {
                         FMassClientPredictionFragment& Pred = PredictionList[i];
-                        if (Pred.bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] OVERWRITE-RUN-HOLD Idx=%d Pred %s -> %s (HoldPosition)"), Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1, *Pred.Location.ToString(), *StateFrag.StoredLocation.ToString()); }
                         Pred.Location = StateFrag.StoredLocation;
                         Pred.PredDesiredSpeed = Stats.RunSpeed;
                         Pred.PredAcceptanceRadius = 100.f;
@@ -274,8 +273,8 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
 
             // Recalculate follow position if moving and following
-            const bool bIsFriendlyActiveServer = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
-
+          const bool bIsFriendlyActiveServer = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+            /*
             if (bIsFriendlyActiveServer)
             {
                 FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
@@ -287,7 +286,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 FVector DesiredPos = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, &CharFrag, CurrentLocation, FriendlyLoc, World);
                 UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);
             }
-
+            */ 
             if (StateFrag.HoldPosition)
             {
                 StateFrag.StoredLocation = CurrentLocation;
@@ -361,7 +360,6 @@ void URunStateProcessor::SwitchToIdleState(FMassEntityManager& EntityManager, FM
         {
             if (const FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
             {
-                if (Pred->bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] OVERWRITE-SWITCH-IDLE Pred %s -> cur %s (RunStateProc arrival/hold)"), *Pred->Location.ToString(), *TransformFrag->GetTransform().GetLocation().ToString()); }
                 Pred->Location = TransformFrag->GetTransform().GetLocation();
             }
             Pred->PredDesiredSpeed = 0.f;

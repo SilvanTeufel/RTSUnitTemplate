@@ -277,7 +277,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             if (StateFrag.SwitchingState) continue;
 
             const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
-
+            /*
             if (bIsFriendlyActive && !StateFrag.HoldPosition)
             {
                 FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
@@ -298,7 +298,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                     continue;
                 }
-            }
+            }*/
             
             if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && !bIsFriendlyActive)
             {

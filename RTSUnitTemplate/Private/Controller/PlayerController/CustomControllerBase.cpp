@@ -978,7 +978,6 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 		PredFrag->PredDesiredSpeed = DesiredSpeed;
 		PredFrag->PredAcceptanceRadius = AcceptanceRadius;
 		PredFrag->bHasData = true;
-		UE_LOG(LogTemp, Warning, TEXT("[PredLife] SET Idx=%d loc=%s spd=%.0f accept=%.0f hold=%d resetHold=%d"), Unit ? Unit->UnitIndex : -1, *NewTargetLocation.ToString(), DesiredSpeed, AcceptanceRadius, Unit ? (Unit->bHoldPosition ? 1 : 0) : -1, bResetHoldPosition ? 1 : 0);
 		// Stamp the command time so ApplyReplicatedTagBits can let this predicted Run beat the
 		// stale replicated worker bits for a bounded grace window (see bSuppressWorkerStomp).
 		PredFrag->CommandPredictTime = World->GetTimeSeconds();

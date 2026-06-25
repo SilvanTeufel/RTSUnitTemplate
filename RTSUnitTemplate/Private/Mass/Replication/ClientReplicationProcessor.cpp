@@ -702,7 +702,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.05f;
 							if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
 							if (SteeringList.IsValidIndex(EntityIdx)) SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
-							if (PredList.IsValidIndex(EntityIdx)) { if (PredList[EntityIdx].bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-RECON-SB NetID=%u stopped=%d blocked=%d"), NetIDList.IsValidIndex(EntityIdx) ? NetIDList[EntityIdx].NetID.GetValue() : 0u, bServerStopped ? 1 : 0, bServerBlocked ? 1 : 0); } PredList[EntityIdx].bHasData = false; }
+							if (PredList.IsValidIndex(EntityIdx)) { PredList[EntityIdx].bHasData = false; }
 					}
 
 					}
