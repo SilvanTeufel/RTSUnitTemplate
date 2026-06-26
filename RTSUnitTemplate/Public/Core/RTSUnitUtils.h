@@ -167,28 +167,43 @@ namespace RTSUnitUtils
 			FollowRadius += CharacteristicsFrag->CapsuleRadius * (1.0f + UnitRadiusVariation * 0.5f);
 		}
     
-		FVector ToSelf2D = (CurrentLocation - FriendlyLoc);
-		ToSelf2D.Z = 0.f;
-		const float Len2D = ToSelf2D.Size2D();
-		const FVector Dir2D = (Len2D > KINDA_SMALL_NUMBER) ? (ToSelf2D / Len2D) : FVector::XAxisVector;
-		FVector DesiredPos = FriendlyLoc + Dir2D * FollowRadius;
-
-		float OffsetMag = FMath::Clamp(TargetFrag.FollowOffset, 0.f, FollowRadius);
-    
-		// Use CapsuleRadius for an automatic spread if FollowOffset is too small
-		if (CharacteristicsFrag && OffsetMag < CharacteristicsFrag->CapsuleRadius)
+		// --- Formation: half-circle / wedge BEHIND the friendly target ---
+		// Determine the direction the target is facing; the formation forms on the opposite side
+		// (behind the target). Fall back to the unit's own relative direction if no facing is available.
+		FVector Forward2D = FVector::ZeroVector;
+		if (const FTransformFragment* TargetXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
 		{
-			OffsetMag = CharacteristicsFrag->CapsuleRadius;
+			Forward2D = TargetXform->GetTransform().GetRotation().GetForwardVector();
+			Forward2D.Z = 0.f;
 		}
 
-		if (OffsetMag > 0.f)
+		FVector BackDir2D;
+		if (!Forward2D.IsNearlyZero())
 		{
-			const float Angle = UnitOffset * 2.0f * PI;
-			const float CosA = FMath::Cos(Angle);
-			const float SinA = FMath::Sin(Angle);
-			DesiredPos.X += CosA * OffsetMag;
-			DesiredPos.Y += SinA * OffsetMag;
+			BackDir2D = -Forward2D.GetSafeNormal();
 		}
+		else
+		{
+			// No facing available: keep the unit roughly on its current side of the target.
+			FVector ToSelf2D = (CurrentLocation - FriendlyLoc);
+			ToSelf2D.Z = 0.f;
+			BackDir2D = ToSelf2D.IsNearlyZero() ? FVector::XAxisVector : ToSelf2D.GetSafeNormal();
+		}
+
+		// Spread the followers across a half-circle (-90deg..+90deg) centered on the "behind" direction.
+		// The per-entity hash (UnitOffset) gives each follower a stable angular slot so they fan out into
+		// an arc instead of stacking on a single point.
+		const float ArcHalfAngleDeg = 90.f;
+		const float AngleDeg = (UnitOffset * 2.0f - 1.0f) * ArcHalfAngleDeg;
+		const FVector Dir2D = BackDir2D.RotateAngleAxis(AngleDeg, FVector::UpVector);
+
+		// Stagger the radius per unit so larger groups form a filled half-disc (depth) rather than a thin
+		// arc, giving a triangle/wedge-like silhouette behind the target.
+		float Radius = FollowRadius;
+		const float ExtraSpread = FMath::Max(TargetFrag.FollowOffset, CharacteristicsFrag ? CharacteristicsFrag->CapsuleRadius * 2.0f : 0.f);
+		Radius += ExtraSpread * UnitRadiusVariation;
+
+		FVector DesiredPos = FriendlyLoc + Dir2D * Radius;
 
 		// Use grounded Z if the target has characteristic data (buildings)
 		if (const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.FriendlyTargetEntity))

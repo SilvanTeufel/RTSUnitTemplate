@@ -286,7 +286,20 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 FVector DesiredPos = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, &CharFrag, CurrentLocation, FriendlyLoc, World);
                 UpdateMoveTarget(MoveTarget, DesiredPos, Stats.RunSpeed, World);
             }
-            */ 
+            */
+            if (bIsFriendlyActiveServer)
+            {
+                // On the server LastKnownFriendlyLocation is only set once (when the follow target is
+                // assigned) and is NOT kept up to date while the friendly moves. Read the live transform
+                // of the friendly entity so the follow position tracks its current position.
+                FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+                if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+                }
+                StateFrag.StoredLocation = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, &CharFrag, CurrentLocation, FriendlyLoc, World);
+            }
+            
             if (StateFrag.HoldPosition)
             {
                 StateFrag.StoredLocation = CurrentLocation;

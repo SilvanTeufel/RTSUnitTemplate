@@ -216,21 +216,31 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                 }
             }
 
-            // --- Prediction für echte Idle-Einheiten LOSLASSEN ---
-            // Wenn wir hier ankommen, bleibt die Einheit im Idle-Zustand (angekommen / steht).
-            // Frueher wurde hier Pred.bHasData=true gesetzt ("Drift verhindern") - das bewirkte aber das
-            // GEGENTEIL: solange Pred.bHasData==true ist, gilt im ClientReplicationProcessor bIsMoving=true,
-            // wodurch der Reconciler die lokale Velocity NICHT daempft und der Per-Frame-Mover die Einheit
-            // zwischen den 10Hz-Reconcile-Ticks weiterschiebt -> End-Position-Jitter. Im echten Idle gibt der
-            // Reconciler (bIsMoving=false -> Hard-Damp) die Autoritaet ueber die Position; wir lassen die
-            // Prediction daher los.
+
             if (bHasPredList)
             {
                 FMassClientPredictionFragment& Pred = PredictionList[i];
-                if (Pred.bHasData) { UE_LOG(LogTemp, Warning, TEXT("[PredLife] CLEAR-IDLE i=%d predLoc=%s cmdTime=%.2f"), i, *Pred.Location.ToString(), Pred.CommandPredictTime); }
-                Pred.Location = Transform.GetLocation();
+                const FVector CurrentLocation = Transform.GetLocation();
+                const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
+                
+                Pred.Location = CurrentLocation;
                 Pred.PredDesiredSpeed = 0.f;
-                Pred.bHasData = false;
+                
+                float AcceptanceRadiusUsed = MoveTarget.SlackRadius;
+                if (Pred.PredAcceptanceRadius > KINDA_SMALL_NUMBER)
+                {
+                    AcceptanceRadiusUsed = Pred.PredAcceptanceRadius;
+                }
+                else if (AcceptanceRadiusUsed <= KINDA_SMALL_NUMBER)
+                {
+                    AcceptanceRadiusUsed = 100.f;
+                }
+
+                if (FVector::DistSquared2D(CurrentLocation, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed) &&
+                    FVector::DistSquared2D(CurrentLocation, MoveTarget.Center) <= FMath::Square(AcceptanceRadiusUsed))
+                {
+                    Pred.bHasData = false;
+                }
             }
             StateFrag.StoredLocation = Transform.GetLocation();
         }
@@ -299,6 +309,19 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     continue;
                 }
             }*/
+            
+            if (bIsFriendlyActive)
+            {
+                // On the server LastKnownFriendlyLocation is only set once (when the follow target is
+                // assigned) and is NOT kept up to date while the friendly moves. Read the live transform
+                // of the friendly entity so the follow position tracks its current position.
+                FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+                if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+                {
+                    FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+                }
+                StateFrag.StoredLocation = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharFrag, Transform.GetLocation(), FriendlyLoc, World);
+            }
             
             if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && !bIsFriendlyActive)
             {

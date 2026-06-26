@@ -262,27 +262,6 @@ void UUnitActorToFragmentSyncProcessor::SyncAITarget(const AUnitBase& Unit, FMas
 					// Follow stale-prediction clear: a leftover Pred.bHasData from an earlier move pins the mover to a stale
 					// Pred.Location that never converges to the now-distant formation slot -> the follower deadlocks. Clear it
 					// so the mover falls back to the live MoveTarget.Center. CVar-gated (RTS.ClientFollowStalePredClear).
-					if (Unit.FollowUnit && EntityManager.IsEntityActive(AITarget.FriendlyTargetEntity) && CVarRTS_ClientFollowStalePredClear.GetValueOnGameThread() != 0)
-					{
-						const FMassEntityHandle SelfH = Unit.MassActorBindingComponent ? Unit.MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-						if (EntityManager.IsEntityValid(SelfH))
-						{
-							FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(SelfH);
-							const FMassMoveTargetFragment* MT = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(SelfH);
-							if (Pred && Pred->bHasData && MT)
-							{
-								const float StaleDist = FVector::Dist2D(Pred->Location, MT->Center);
-								const float StaleThresh = FMath::Max(0.f, CVarRTS_ClientFollowStalePredDist.GetValueOnGameThread());
-								const UWorld* W = Unit.GetWorld();
-								const double Now = W ? W->GetTimeSeconds() : 0.0;
-								const bool bRecentlyCommanded = Pred->CommandPredictTime >= 0.f && (Now - (double)Pred->CommandPredictTime) < 0.6;
-								if (StaleDist > StaleThresh && !bRecentlyCommanded)
-								{
-									Pred->bHasData = false; // resume following the replicated formation slot
-								}
-							}
-						}
-					}
 	}
 }
 

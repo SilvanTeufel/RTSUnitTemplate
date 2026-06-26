@@ -33,7 +33,7 @@ public:
 	float Kp = 8.0f; // proportional gain to turn error into desired velocity/accel
 	// If reconciliation error exceeds this distance (cm), perform a one-time full replication (snap) on that tick
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
-	float FullReplicationDistance = 300.f; // cm
+	float FullReplicationDistance = 1300.f; // cm
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float MinYawErrorForCorrectionDeg = 2.0f; // deg, threshold to start correcting

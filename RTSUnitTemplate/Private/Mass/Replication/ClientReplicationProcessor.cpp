@@ -499,23 +499,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					// Nur bei echtem Sprung (JustLinked / Distanz-Snap), nicht im Full-Replication-Modus.
 					if (JustLinked[EntityIdx] || DistanceSq > FMath::Square(CurrentSnapRange))
 					{
-						// After a hard snap the local move-prediction is stale by definition (we just teleported the
-							// client onto the authoritative position because it had diverged past the snap range). Release it
-							// so the mover resumes from the snapped position toward the replicated MoveTarget.Center, instead
-							// of dragging back to the now-invalid Pred.Location (which would re-diverge -> snap again / hang).
-							// Grace-guarded: a just-issued client command predicts ahead legitimately and must not be nuked.
-							if (CVarRTS_ClientSnapClearsPrediction.GetValueOnAnyThread() != 0 &&
-								PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData)
-							{
-								const bool bRecentlyCommandedSnap = PredList[EntityIdx].CommandPredictTime >= 0.f &&
-									(World->GetTimeSeconds() - PredList[EntityIdx].CommandPredictTime) < 0.6f;
-								if (!bRecentlyCommandedSnap)
-								{
-									PredList[EntityIdx].bHasData = false;
-								}
-							}
-
-							if (FUnitNavigationPathFragment* NavPathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(ChunkCtx.GetEntity(EntityIdx)))
+						if (FUnitNavigationPathFragment* NavPathFrag = EntityManager.GetFragmentDataPtr<FUnitNavigationPathFragment>(ChunkCtx.GetEntity(EntityIdx)))
 						{
 							if (NavPathFrag->HasValidPath() && NavPathFrag->CurrentPath->IsValid() && NavPathFrag->CurrentPath->GetPathPoints().Num() > 1)
 							{
@@ -702,7 +686,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							if (VelocityList.IsValidIndex(EntityIdx)) VelocityList[EntityIdx].Value *= 0.05f;
 							if (ForceList.IsValidIndex(EntityIdx)) ForceList[EntityIdx].Value = FVector::ZeroVector;
 							if (SteeringList.IsValidIndex(EntityIdx)) SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
-							if (PredList.IsValidIndex(EntityIdx)) { PredList[EntityIdx].bHasData = false; }
 					}
 
 					}

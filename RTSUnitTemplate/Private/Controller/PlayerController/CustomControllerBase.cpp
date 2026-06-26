@@ -1902,7 +1902,7 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 									}
 									if (FMassClientPredictionFragment* Pred = EM.GetFragmentDataPtr<FMassClientPredictionFragment>(H))
 									{
-										Pred->bHasData = false; // drop stale move prediction so follow takes over
+										//Pred->bHasData = false; // drop stale move prediction so follow takes over
 									}
 								}
 							}

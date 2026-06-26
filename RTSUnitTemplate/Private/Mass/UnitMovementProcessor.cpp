@@ -309,7 +309,8 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 // replication OFF it never fired because MoveTarget.Center stayed stale. Per the invariant
                 // "a prediction must not be cleared while the unit has not reached its target", gate the clear on the
                 // UNIT's distance to Pred.Location, not the server target's.
-                if (FVector::DistSquared2D(CurrentLocation, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed))
+                if (FVector::DistSquared2D(CurrentLocation, Pred.Location) <= FMath::Square(AcceptanceRadiusUsed) &&
+                    FVector::DistSquared2D(CurrentLocation, MoveTarget.Center) <= FMath::Square(AcceptanceRadiusUsed))
                 {
                     Pred.bHasData = false;
                 }
