@@ -226,6 +226,29 @@ void AControllerBase::SelectUnit(int Index)
 	}
 }
 
+void AControllerBase::RemoveUnitFromSelection(AUnitBase* Unit)
+{
+	if (!Unit || !HUDBase) return;
+
+	const int32 UnitIndex = HUDBase->SelectedUnits.Find(Unit);
+	HUDBase->SelectedUnits.Remove(Unit);
+	SelectedUnits = HUDBase->SelectedUnits;
+
+	if (UnitIndex != INDEX_NONE)
+	{
+		if (UnitIndex < CurrentUnitWidgetIndex)
+		{
+			CurrentUnitWidgetIndex--;
+		}
+		else if (UnitIndex == CurrentUnitWidgetIndex)
+		{
+			CurrentUnitWidgetIndex = HUDBase->SelectedUnits.Num() > 0
+				? FMath::Clamp(CurrentUnitWidgetIndex, 0, HUDBase->SelectedUnits.Num() - 1)
+				: 0;
+		}
+	}
+}
+
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
 {
 	if (!Unit) return;

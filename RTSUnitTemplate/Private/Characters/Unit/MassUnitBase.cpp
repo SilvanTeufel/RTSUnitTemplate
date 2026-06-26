@@ -1742,6 +1742,15 @@ bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
 		CharFrag->bTransformDirty = true;
 	}
 
+	// A hard reposition must also move the AI "anchor" (StoredLocation) so the idle/walk-back
+	// logic doesn't try to run the unit back to its old spot after a teleport/unload/save-restore.
+	// StoredLocation is not replicated, so doing it here (runs on server AND clients) keeps the
+	// client-side state processors in sync without a separate RPC.
+	if (FMassAIStateFragment* AIStateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+	{
+		AIStateFrag->StoredLocation = NewLocation;
+	}
+
 	return true;
 }
 

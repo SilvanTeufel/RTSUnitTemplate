@@ -4,6 +4,8 @@
 #include "Characters/Unit/TransportUnit.h"
 
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
+#include "Hud/HUDBase.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Widgets/UnitTimerWidget.h"
 #include "Characters/Unit/MassUnitBase.h"
@@ -250,7 +252,7 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 	if (!LoadedUnit) return;
 
 	LoadedUnit->SetActorLocation(FinalUnloadLocation);
-	LoadedUnit->SetTranslationLocation(FinalUnloadLocation);
+	LoadedUnit->SetTranslationLocation(FinalUnloadLocation); // also re-anchors StoredLocation (FMassAIStateFragment), server + clients
 	LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
 	LoadedUnit->StopMassMovement();
 	LoadedUnit->EnableDynamicObstacle(true);
@@ -274,6 +276,8 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 	LoadedUnit->IsInitialized = true;
 	LoadedUnit->CanActivateAbilities = true;
 	LoadedUnit->CanBeSelected = true;
+	// Reset the follow target after unloading (clears FollowUnit and the Mass AI target fragment)
+	LoadedUnit->ApplyFollowTarget(nullptr);
 	LoadedUnit->SwitchEntityTagByState(UnitData::Idle, LoadedUnit->UnitStatePlaceholder);
 }
 
@@ -285,6 +289,18 @@ void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToL
 	UnitToLoad->IsInitialized = false;
 	UnitToLoad->CanActivateAbilities = false;
 	UnitToLoad->CanBeSelected = false;
+
+	// Deselect the unit (hides the selection icon/decal), analogous to the death handling
+	UnitToLoad->SetDeselected();
+	
+	// Remove the unit from the local HUD/controller selection (like in DeathStateProcessor).
+	// Runs on every machine via the multicast; GetFirstPlayerController() is the local PC, so each
+	// player's own selection is cleared (needed for remote clients) without a separate RPC.
+	if (AControllerBase* PC = Cast<AControllerBase>(GetWorld()->GetFirstPlayerController()))
+	{
+		PC->RemoveUnitFromSelection(UnitToLoad);
+	}
+
 	UnitToLoad->AddStopMovementTagToEntity();
 	UnitToLoad->SetCollisionAndVisibility(false);
 
@@ -302,6 +318,10 @@ void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToL
 	}
 
 	UnitToLoad->SetActorLocation(TransporterLocation);
+	UnitToLoad->SetTranslationLocation(TransporterLocation);
+	UnitToLoad->UpdatePredictionFragment(TransporterLocation, 0.f);
+	UnitToLoad->StopMassMovement();
+	UnitToLoad->SwitchEntityTagByState(UnitData::Idle, UnitToLoad->UnitStatePlaceholder);
 	UnitToLoad->EnableDynamicObstacle(false);
 	UnitToLoad->EditUnitDetectable(false);
 }

@@ -113,32 +113,7 @@ void UDeathStateProcessor::HandleRemoveDeadUnit(FName SignalName, TArray<FMassEn
                     UnitBase->OpenHealthWidget = false;
                     UnitBase->bShowLevelOnly = false;
              
-                    {
-                        if (PC && PC->HUDBase)
-                        {
-                            int32 UnitIndex = PC->HUDBase->SelectedUnits.Find(UnitBase);
-                            PC->HUDBase->SelectedUnits.Remove(UnitBase);
-                            PC->SelectedUnits = PC->HUDBase->SelectedUnits;
-                            if (UnitIndex != INDEX_NONE)
-                            {
-                                if (UnitIndex < PC->CurrentUnitWidgetIndex)
-                                {
-                                    PC->CurrentUnitWidgetIndex--;
-                                }
-                                else if (UnitIndex == PC->CurrentUnitWidgetIndex)
-                                {
-                                    if (PC->HUDBase->SelectedUnits.Num() > 0)
-                                    {
-                                        PC->CurrentUnitWidgetIndex = FMath::Clamp(PC->CurrentUnitWidgetIndex, 0, PC->HUDBase->SelectedUnits.Num() - 1);
-                                    }
-                                    else
-                                    {
-                                        PC->CurrentUnitWidgetIndex = 0;
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    PC->RemoveUnitFromSelection(UnitBase);
                 }
             }
         }

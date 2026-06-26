@@ -143,7 +143,13 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWidgets(int Index);
-	
+
+	// Removes a unit from the local selection (HUD + controller SelectedUnits) and keeps
+	// CurrentUnitWidgetIndex consistent. Pure local UI bookkeeping, no replication — safe to
+	// call on any machine (operates on this PC's own HUDBase).
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveUnitFromSelection(AUnitBase* Unit);
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetRunLocation(AUnitBase* Unit, const FVector& DestinationLocation);
 	
