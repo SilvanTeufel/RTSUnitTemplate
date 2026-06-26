@@ -258,10 +258,6 @@ void UUnitActorToFragmentSyncProcessor::SyncAITarget(const AUnitBase& Unit, FMas
 		{
 			AITarget.FriendlyTargetEntity.Reset();
 		}
-
-					// Follow stale-prediction clear: a leftover Pred.bHasData from an earlier move pins the mover to a stale
-					// Pred.Location that never converges to the now-distant formation slot -> the follower deadlocks. Clear it
-					// so the mover falls back to the live MoveTarget.Center. CVar-gated (RTS.ClientFollowStalePredClear).
 	}
 }
 
