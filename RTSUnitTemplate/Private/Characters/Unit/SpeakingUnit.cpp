@@ -3,7 +3,7 @@
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Blueprint/UserWidget.h"
 #include "Kismet/GameplayStatics.h"
-#include "Sound\SoundCue.h"
+#include "Sound/SoundCue.h"
 #include "System/StoryTriggerQueueSubsystem.h"
 #include "Engine/GameInstance.h"
 

@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "Core/UnitData.h"
 #include "Kismet/GameplayStatics.h"
-#include "Sound\SoundCue.h"
+#include "Sound/SoundCue.h"
 #include "GameplayEffect.h"
 #include "GAS/GameplayAbilityBase.h"
 #include "Pickup.generated.h"
