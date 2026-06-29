@@ -120,6 +120,12 @@ FString URTSRuleBasedDeciderComponent::BuildCompositeActionJSON(const TArray<int
 
 	for (int32 Idx : Indices)
 	{
+		// Skip None/out-of-range sentinels (ERTSAIAction::None == 255) so a misconfigured action
+		// no longer spams "Invalid ActionIndex 255 provided" on every decision tick.
+		if (Idx < 0 || Idx == (int32)ERTSAIAction::None)
+		{
+			continue;
+		}
 		const FString ActionJson = Inference->GetActionAsJSON(Idx);
 		TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(ActionJson);
 		TSharedPtr<FJsonObject> Obj;
@@ -1014,7 +1020,12 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 			if (bWanderTwoStep)
 			{
 				TArray<int32> Steps;
-				Steps.Add((int32)WanderSelectionAction);
+				// Guard the selection step like the ability step below: a None-configured
+				// WanderSelectionAction (==255) must not be serialized (that was the per-tick 255 source).
+				if (WanderSelectionAction != ERTSAIAction::None)
+				{
+					Steps.Add((int32)WanderSelectionAction);
+				}
 				// If a specific ability is provided, use it; otherwise use the movement as the second step
 				Steps.Add((WanderAbilityAction != ERTSAIAction::None) ? (int32)WanderAbilityAction : ChosenIdx);
 				return BuildCompositeActionJSON(Steps, Inference);

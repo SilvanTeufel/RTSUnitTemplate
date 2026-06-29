@@ -956,7 +956,16 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             // 3. Apply final location and cache the result
             MassTransform.SetLocation(FinalLocation);
 
-            const bool bLocationChanged = !CurrentActorLocation.Equals(FinalLocation, 0.025f);
+            // ISM-FIX: GetMassActorLocation() liefert fuer ISM-Units (bUseSkeletalMovement==false) den
+            // LIVE-FTransformFragment-Wert zurueck (== FinalLocation.XY, da HandleGroundAndHeight nur Z
+            // veraendert). CurrentActorLocation kann horizontale Bewegung dadurch NIE erkennen ->
+            // bLocationChanged bleibt false -> bTransformDirty bleibt false -> der PlacementProcessor
+            // ueberspringt die ISM-Instanz (Skip-Gate) -> "Teleportieren" auf dem Server. Wie der Client
+            // (bVisualMoved) gegen die zuletzt gerenderte PositionedTransform vergleichen, BEVOR sie
+            // ueberschrieben wird. (SKM ist nicht betroffen: dort liefert GetMassActorLocation() die um
+            // einen Frame nachhinkende Actor-Position, und SKM rendert ohnehin ueber den Actor.)
+            const FVector PrevVisualLocation = CharList[i].PositionedTransform.GetLocation();
+            const bool bLocationChanged = !PrevVisualLocation.Equals(FinalLocation, 0.025f);
             const bool bRotationChanged = !CurrentRotation.Equals(MassTransform.GetRotation(), 0.0001f);
 
             CharList[i].PositionedTransform = MassTransform;

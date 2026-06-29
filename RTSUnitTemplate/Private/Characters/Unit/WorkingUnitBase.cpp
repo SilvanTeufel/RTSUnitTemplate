@@ -416,14 +416,14 @@ void AWorkingUnitBase::ClientReceiveWorkArea_Implementation(AWorkArea* ClientAre
 		return;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("ClientReceiveWorkArea: Successfully received replicated WorkArea: %s"), *ClientArea->GetName());
+	UE_LOG(LogTemp, Verbose, TEXT("ClientReceiveWorkArea: Successfully received replicated WorkArea: %s"), *ClientArea->GetName());
 	
 	if (!OwningPlayerController)
 	{
-		UE_LOG(LogTemp, Error, TEXT("No OwningPlayerController"));
+		UE_LOG(LogTemp, Verbose, TEXT("No OwningPlayerController"));
 		return;
 	}
-	
+
 	AExtendedControllerBase* ExtendedControllerBase = Cast<AExtendedControllerBase>(OwningPlayerController);
 	
 	if (!ExtendedControllerBase)

@@ -4349,7 +4349,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
 	if (!DraggedWorkArea)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because Unit has no CurrentDraggedWorkArea."));
+		UE_LOG(LogTemp, Verbose, TEXT("DropWorkAreaForUnit: Aborted because Unit has no CurrentDraggedWorkArea."));
 		return false;
 	}
 

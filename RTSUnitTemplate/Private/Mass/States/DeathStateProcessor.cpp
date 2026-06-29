@@ -148,7 +148,7 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
                 {
                     if (AUnitBase* Unit = Cast<AUnitBase>(Actor))
                     {
-                        UE_LOG(LogTemp, Warning,
+                        UE_LOG(LogTemp, Verbose,
                             TEXT("[DeathProc/HideUnit] %s NetMode=%d -> SetDeathVisualState(true) (Mesh wird versteckt)"),
                             *Unit->GetName(), (int)Unit->GetNetMode());
                         Unit->SetDeathVisualState(true);

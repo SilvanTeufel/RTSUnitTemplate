@@ -123,7 +123,7 @@ FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)
 {
     if (!ActionSpace.IsValidIndex(ActionIndex))
     {
-        UE_LOG(LogTemp, Error, TEXT("InferenceComponent: Invalid ActionIndex %d provided."), ActionIndex);
+        UE_LOG(LogTemp, Verbose, TEXT("InferenceComponent: Invalid ActionIndex %d provided."), ActionIndex);
         return TEXT("{}"); // Return an empty JSON object on error
     }
 

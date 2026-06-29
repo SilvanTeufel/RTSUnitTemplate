@@ -76,7 +76,7 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 
 		//DrawDebugCircle(GetWorld(), ValidatedLocation, 40.f, 16, FColor::Green, false, 0.5f);
 		const float Speed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
-		
+
 		CorrectSetUnitMoveTarget(GetWorld(), CameraUnitWithTag, ValidatedLocation, Speed, CameraUnitWithTag->MovementAcceptanceRadius);
 	}
 }
@@ -636,7 +636,7 @@ void ACameraControllerBase::StopAllCameraMovement()
 void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 {
 	if(!CameraBase) return;
-	
+
 	if (CameraBase && SelectedUnits.Num() && LockCameraToUnit)
 	{
 		CameraBase->LockOnUnit(SelectedUnits[0]);
@@ -1472,7 +1472,15 @@ void ACameraControllerBase::ToggleLockCamToCharacter()
 	if(IsCtrlPressed)
 	{
 		LockCameraToCharacter = !LockCameraToCharacter;
-	
+
+		// With an active CameraUnit the camera is already in LockOnCharacterWithTag (the mouse-follow state).
+		// Do NOT switch the camera state out of it here: nothing ever re-enters LockOnCharacterWithTag (it is
+		// only set at login), so leaving it would permanently kill the mouse-follow. Instead we keep that state
+		// and let LockCamToCharacterWithTag read LockCameraToCharacter to center the camera over the unit while
+		// it keeps following the mouse.
+		if (CameraUnitWithTag)
+			return;
+
 		if(LockCameraToCharacter)
 			CameraBase->SetCameraState(CameraData::LockOnCharacter);
 		else
@@ -1765,8 +1773,29 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 	        	}
         	}
 
+        	// When locked over the CameraUnit (Ctrl+G toggles LockCameraToCharacter), keep the camera centered
+        	// on the unit instead of WASD-panning, so the unit can keep following the mouse while the camera stays
+        	// above it. We deliberately stay in CameraData::LockOnCharacterWithTag (see ToggleLockCamToCharacter).
+        	if (LockCameraToCharacter)
+        	{
+        		if (IsLocalController() && CameraBase)
+        		{
+        			const FVector UnitLoc = CameraUnitWithTag->GetActorLocation();
+        			const FVector DesiredCamLoc = FVector(UnitLoc.X, UnitLoc.Y, CameraBase->GetActorLocation().Z);
+        			const FVector NewCamLoc = FMath::VInterpTo(CameraBase->GetActorLocation(), DesiredCamLoc, DeltaTime, 5.0f);
+        			CameraBase->SetActorLocation(NewCamLoc);
+
+        			// Keep the server in sync (client-only); mirrors the WASD-pan sync below.
+        			if (!HasAuthority() && CameraSyncTimer <= 0.f && !CameraBase->GetActorLocation().Equals(LastSyncedCameraLocation, 25.0f))
+        			{
+        				Server_SyncCameraPosition(NewCamLoc);
+        				LastSyncedCameraLocation = NewCamLoc;
+        				CameraSyncTimer = CameraSyncInterval;
+        			}
+        		}
+        	}
         	// Execute movement locally for immediate response (Client-Side Prediction)
-        	if (!MoveDirection.IsNearlyZero())
+        	else if (!MoveDirection.IsNearlyZero())
         	{
         		// Execute locally for all local controllers (Client and Server)
         		if (IsLocalController() && CameraBase)

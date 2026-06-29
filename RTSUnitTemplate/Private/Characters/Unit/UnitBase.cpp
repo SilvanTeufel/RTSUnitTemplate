@@ -414,7 +414,7 @@ void AUnitBase::OnRep_MeshAssetPath()
 	{
 		// Attempt to load the mesh from the given asset path
 		USkeletalMesh* NewMesh = LoadObject<USkeletalMesh>(nullptr, *MeshAssetPath);
-			
+
 		// Check if the mesh is valid
 		if (NewMesh)
 		{
@@ -2327,6 +2327,15 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 	Extent.X = FMath::Max(0.0f, Extent.X);
 	Extent.Y = FMath::Max(0.0f, Extent.Y);
 	Extent.Z = FMath::Max(0.0f, Extent.Z);
+
+	// Skip degenerate (empty-bounds) obstacles. When the source bounds were invalid the box
+	// collapses to ~zero extent; spawning the proxy + NavModifier then only emits the
+	// "Empty bounds, ignoring NavModifierComponent" warning and triggers a wasted navoctree
+	// dirty/rebuild on every placement (a contributor to the placement hitch). Nothing to register.
+	if (Extent.X < 1.0f && Extent.Y < 1.0f)
+	{
+		return;
+	}
 
 	// 3. Spawn a dedicated, lightweight actor to hold the nav modifier
 	NavObstacleProxy = World->SpawnActor<AActor>();
