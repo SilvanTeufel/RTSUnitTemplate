@@ -394,10 +394,28 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 			}
 		}
 
-		if (!ProjectileFragment.bHasLandscapeImpact && bIsArc)
+		// (2) Robust fallback: vertical down-trace at the target location to find the actual ground.
+		//     Reliable in cooked/packaged builds where a horizontal forward trace can miss the terrain,
+		//     or where the ground is a static-mesh floor rather than an ALandscape (the forward trace
+		//     above only accepts ALandscape/ALandscapeProxy hits, so it silently fails on such ground).
+		if (!ProjectileFragment.bHasLandscapeImpact)
 		{
-			// Fallback for arc projectiles: use AdjustedTargetLocation as it's likely the intended hit point
-			ProjectileFragment.bHasLandscapeImpact = true;
+			const FVector Base      = AdjustedTargetLocation;
+			const FVector DownStart = Base + FVector(0.f, 0.f, 5000.f);
+			const FVector DownEnd   = Base - FVector(0.f, 0.f, 100000.f);
+			FHitResult GroundResult;
+			if (GetWorld()->LineTraceSingleByChannel(GroundResult, DownStart, DownEnd, ECC_WorldStatic, Params))
+			{
+				ProjectileFragment.bHasLandscapeImpact   = true;
+				ProjectileFragment.LandscapeImpactLocation = GroundResult.ImpactPoint;
+			}
+		}
+
+		// (3) Last-resort fallback for ALL projectiles (previously bIsArc-only):
+		//     guarantees GroundHit fires when bEnableLandscapeHit is set, even if every trace missed.
+		if (!ProjectileFragment.bHasLandscapeImpact)
+		{
+			ProjectileFragment.bHasLandscapeImpact   = true;
 			ProjectileFragment.LandscapeImpactLocation = AdjustedTargetLocation;
 		}
 	}

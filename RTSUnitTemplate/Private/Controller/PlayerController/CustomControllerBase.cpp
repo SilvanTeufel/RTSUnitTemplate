@@ -1737,7 +1737,13 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 		for (AUnitBase* Unit : Units)
 		{
 			if (!Unit || Unit == FollowTarget) continue;
-			const bool bWantsRepair = (Unit->IsWorker && Unit->CanRepair && FollowTarget && FollowTarget->CanBeRepaired);
+			// FIX: nur aus dem Batch-Move ausschliessen, wenn der Worker tatsaechlich reparieren WIRD.
+			// Muss dieselbe vollstaendige Bedingung wie der GoToRepair-Trigger in
+			// AMassUnitBase::ApplyFollowTargetForUnit (Health < MaxHealth) verwenden. Sonst wurde der Worker
+			// auch bei VOLLER HP uebersprungen (kein MoveTarget) waehrend der State auf Run/GoToBase ging ->
+			// er blieb stehen statt zu folgen/spaeter eingeladen zu werden.
+			const bool bWantsRepair = (Unit->IsWorker && Unit->CanRepair && FollowTarget && FollowTarget->CanBeRepaired
+				&& FollowTarget->Attributes && FollowTarget->Attributes->GetHealth() < FollowTarget->Attributes->GetMaxHealth());
 			if (bWantsRepair)
 			{
 				continue;
@@ -1802,8 +1808,13 @@ void ACustomControllerBase::ApplyTransportTags(const TArray<AUnitBase*>& Units, 
 			}
 		}
 
-		// Repair-specific logic: only allow loading if target is full health OR unit is already in repair state
-		if (Unit->CanRepair && FollowTarget)
+		// Repair-specific logic: only allow loading if target is full health OR unit is already in repair state.
+		// FIX: nur unterdruecken, wenn das Ziel auch WIRKLICH reparierbar ist (CanBeRepaired). Ohne diese
+		// Bedingung wurde der Transport-Tag bei einem NICHT reparierbaren, aber beschaedigten Gebaeude
+		// faelschlich entfernt -> der Worker folgte, wurde aber nie eingeladen. Der bIsAlreadyRepairing-Zweig
+		// bleibt unveraendert -> Zwei-Klick-Flow (erst reparieren, beim Klick waehrend des Reparierens einladen)
+		// funktioniert weiter.
+		if (Unit->CanRepair && FollowTarget && FollowTarget->CanBeRepaired)
 		{
 			const bool bFollowTargetHasMaxHealth = FollowTarget->Attributes && FollowTarget->Attributes->GetHealth() >= FollowTarget->Attributes->GetMaxHealth();
 			const bool bIsAlreadyRepairing = DoesEntityHaveTag(*EntityManager, UnitHandle, FMassStateRepairTag::StaticStruct());
