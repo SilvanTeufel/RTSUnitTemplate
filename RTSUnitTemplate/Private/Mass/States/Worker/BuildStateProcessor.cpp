@@ -152,9 +152,10 @@ void UBuildStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         }
     }
 
-    // Face the build area center (NOT WorkerStats.BuildAreaPosition, which is the worker's own
-    // stand-point on the area edge -> LookDir was ~0, so facing never really worked).
-    FaceBuildArea(Context, EntityIdx);
+    // Facing is owned by UActorTransformSyncProcessor (RotateYawTowardsWorkTarget): it turns the
+    // worker toward BuildArea->GetActorLocation() every frame on server AND client. Snapping the
+    // rotation here as well made the two writers fight (visible flips between the interval snap
+    // and the per-frame turn).
 }
 
 void UBuildStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
@@ -164,9 +165,8 @@ void UBuildStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     AIState.StateTimer += ExecutionInterval;
     AIState.DeltaTime = ExecutionInterval;
 
-    // Face the build area locally on the client too. BuildArea is replicated, so the client can aim at
-    // the same center the server does (rotation/yaw replication alone was not reliably orienting it).
-    FaceBuildArea(Context, EntityIdx);
+    // Facing is owned by UActorTransformSyncProcessor (RotateYawTowardsWorkTarget) on the client too;
+    // BuildArea is replicated, so the client aims at the same center the server does.
 
     if (SignalSubsystem)
     {

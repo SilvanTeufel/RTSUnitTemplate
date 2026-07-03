@@ -30,7 +30,14 @@ void UUnitRotateToTargetProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
 	EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddTagRequirement<FMassUnitYawFollowTag>(EMassFragmentPresence::All);
-	
+
+	// While working, facing is owned by UActorTransformSyncProcessor (RotateYawTowardsWorkTarget).
+	// This processor only reads the ENEMY target slot and would turn a working unit away from its
+	// build/repair/extraction target (or fight the work-facing writer every frame).
+	EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateRepairTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStateResourceExtractionTag>(EMassFragmentPresence::None);
+
 	EntityQuery.RegisterWithProcessor(*this);
 }
 

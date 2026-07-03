@@ -9,6 +9,7 @@
 #include "MassRepresentationTypes.h"      // For FMassRepresentationLODParams, EMassLOD
 #include "MassActorSubsystem.h"           // Potentially useful, good to know about
 #include "Characters/Unit/UnitBase.h"
+#include "Actors/WorkArea.h"
 #include "GameFramework/Actor.h"
 #include "Async/Async.h"
 #include "NavigationSystem.h"
@@ -38,7 +39,10 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     : RepresentationSubsystem(nullptr) // Initialize pointer here
 {
     //ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
-    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
+    // Standalone MUST be included: in NM_Standalone this processor is otherwise dropped entirely,
+    // and it is the only writer of PositionedTransform/bTransformDirty for non-yaw-follow units —
+    // ISM units would then never rotate (or work-face) in a packaged standalone game.
+    ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client | EProcessorExecutionFlags::Standalone);
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
     bRequiresGameThreadExecution = true;
@@ -568,6 +572,89 @@ bool UActorTransformSyncProcessor::RotateTowardsAbility(AUnitBase* UnitBase, con
     return FinalYawDelta <= ReachedToleranceDeg;
 }
 
+// Yaw-only facing for WORKING workers (Build / Repair / ResourceExtraction): turn toward the
+// actual work target. Must NOT aim at WorkerStats.BuildAreaPosition — that is the worker's own
+// stand-point on the area edge, so (BuildAreaPosition - WorkerLocation) is a near-zero vector
+// whose direction is noise (sideways/away, depending on where the worker stopped inside the
+// arrival radius). BuildArea/ResourcePlace are replicated, so this works on server AND client.
+// Returns true when the working state was handled (target found, or intentionally holding yaw).
+static bool RotateYawTowardsWorkTarget(AUnitBase* UnitBase, FMassEntityManager& EntityManager,
+    const FMassAITargetFragment& TargetFrag, const FMassCombatStatsFragment& Stats,
+    const FMassAgentCharacteristicsFragment& Char, const FVector& CurrentLocation,
+    float DeltaTime, bool bIsBuilding, bool bIsRepairing, bool bIsExtracting,
+    FTransform& InOutMassTransform)
+{
+    FVector WorkLocation = FVector::ZeroVector;
+    bool bHasWorkLocation = false;
+
+    if (bIsBuilding && IsValid(UnitBase->BuildArea))
+    {
+        WorkLocation = UnitBase->BuildArea->GetActorLocation();
+        bHasWorkLocation = true;
+    }
+    else if (bIsExtracting && IsValid(UnitBase->ResourcePlace))
+    {
+        WorkLocation = UnitBase->ResourcePlace->GetActorLocation();
+        bHasWorkLocation = true;
+    }
+    else if (bIsRepairing)
+    {
+        if (EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity))
+        {
+            if (const FTransformFragment* TargetXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+            {
+                WorkLocation = TargetXform->GetTransform().GetLocation();
+                bHasWorkLocation = true;
+            }
+        }
+        // Client fallback: FriendlyTargetEntity is mirrored from the replicated FollowUnit and can
+        // lag behind (unlinked client Mass handle). The replicated actor pointer needs no Mass link.
+        if (!bHasWorkLocation && IsValid(UnitBase->FollowUnit))
+        {
+            WorkLocation = UnitBase->FollowUnit->GetActorLocation();
+            bHasWorkLocation = true;
+        }
+        if (!bHasWorkLocation && !TargetFrag.LastKnownFriendlyLocation.IsNearlyZero())
+        {
+            WorkLocation = TargetFrag.LastKnownFriendlyLocation;
+            bHasWorkLocation = true;
+        }
+    }
+
+    if (!bHasWorkLocation)
+    {
+        return false; // caller decides on a fallback
+    }
+
+    FVector Dir = WorkLocation - CurrentLocation;
+    Dir.Z = 0.f;
+    if (Dir.SizeSquared() < 25.f || !Dir.Normalize())
+    {
+        return true; // standing on top of the target: hold current yaw instead of feeding noise in
+    }
+
+    const float TargetYaw = Dir.ToOrientationQuat().Rotator().Yaw;
+    FRotator CurrentRot = InOutMassTransform.GetRotation().Rotator();
+
+    // Deadzone against micro-jitter once we face the target
+    if (FMath::Abs(FMath::FindDeltaAngleDegrees(CurrentRot.Yaw, TargetYaw)) < 2.0f)
+    {
+        return true;
+    }
+
+    const float RotationSpeedDeg = Stats.RotationSpeed * Char.RotationSpeed;
+    if (RotationSpeedDeg > KINDA_SMALL_NUMBER)
+    {
+        CurrentRot.Yaw = FMath::FixedTurn(CurrentRot.Yaw, TargetYaw, RotationSpeedDeg * DeltaTime);
+    }
+    else
+    {
+        CurrentRot.Yaw = TargetYaw;
+    }
+    InOutMassTransform.SetRotation(CurrentRot.Quaternion());
+    return true;
+}
+
 void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransformUpdatePayload>&& PendingUpdates)
 {
     if (PendingUpdates.IsEmpty())
@@ -624,7 +711,6 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
-        const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
         const TConstArrayView<FMassRepresentationLODFragment> LODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
@@ -655,11 +741,13 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                 FinalLocation.Y = CurrentActorLocation.Y;
             }
 
-            // 1. Adjust rotation based on state (moving vs. attacking)
+            // 1. Adjust rotation based on state (moving vs. attacking vs. working)
+            const bool bIsBuilding = DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct());
+            const bool bIsRepairing = DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
+            const bool bIsExtracting = DoesEntityHaveTag(EntityManager, Entity, FMassStateResourceExtractionTag::StaticStruct());
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
+                                              bIsBuilding || bIsRepairing || bIsExtracting;
 
             const bool bIsIdleHold = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) && StateList[i].HoldPosition;
             const bool bHasValidTarget = TargetList[i].bHasValidTarget && EntityManager.IsEntityActive(TargetList[i].TargetEntity);
@@ -670,10 +758,13 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
             
-            if (bIsDead || bIsYawFollowing)
+            const bool bIsWorking = bIsBuilding || bIsRepairing || bIsExtracting;
+            if (bIsDead || (bIsYawFollowing && !bIsWorking))
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)
-                // Or if UUnitYawFollowProcessor is handling it.
+                // or while UUnitRotateToTargetProcessor owns the yaw (FMassUnitYawFollowTag).
+                // Exception: WORKING units — that processor only reads the enemy target slot and its
+                // query excludes the work states, so work-target facing below must run here.
             }
             else if (TargetList[i].bRotateTowardsAbility)
             {
@@ -689,28 +780,17 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             }
             else
             {
-                // Extension: If we are building and have a WorkerStatsFragment, prioritize the build area position
-                bool bRotatedToBuildArea = false;
-                if (WorkerStatsList.IsValidIndex(i) && DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()))
+                // Working workers face their actual work target (BuildArea / ResourcePlace / repaired unit)
+                bool bRotatedToWorkTarget = false;
+                if (bIsBuilding || bIsRepairing || bIsExtracting)
                 {
-                    const FMassWorkerStatsFragment& WS = WorkerStatsList[i];
-                    if (!WS.BuildAreaPosition.IsNearlyZero())
-                    {
-                        FVector LookDir = (WS.BuildAreaPosition - FinalLocation);
-                        LookDir.Z = 0.f;
-                        if (!LookDir.IsNearlyZero())
-                        {
-                            const FRotator TargetRot = LookDir.Rotation();
-                            const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed;
-                            const float InterpSpeed = (RotationSpeedDeg > 0.f) ? RotationSpeedDeg : CharList[i].RotationSpeed;
-                            const FRotator NewRot = FMath::RInterpTo(Actor->GetActorRotation(), TargetRot, ActualDeltaTime, InterpSpeed);
-                            MassTransform.SetRotation(NewRot.Quaternion());
-                            bRotatedToBuildArea = true;
-                        }
-                    }
+                    bRotatedToWorkTarget = RotateYawTowardsWorkTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i],
+                        FinalLocation, ActualDeltaTime, bIsBuilding, bIsRepairing, bIsExtracting, MassTransform);
                 }
 
-                if (!bRotatedToBuildArea)
+                // No fallback for extraction: without a ResourcePlace pointer, holding the current yaw
+                // beats turning toward an unrelated friendly target.
+                if (!bRotatedToWorkTarget && !bIsExtracting)
                 {
                     const bool bPreferEnemy = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
@@ -859,7 +939,6 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
         const TConstArrayView<FMassVelocityFragment> VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
-        const TConstArrayView<FMassWorkerStatsFragment> WorkerStatsList = ChunkContext.GetFragmentView<FMassWorkerStatsFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -886,11 +965,13 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                 FinalLocation.Y = CurrentActorLocation.Y;
             }
 
-            // 1. Adjust rotation based on state (moving vs. attacking)
+            // 1. Adjust rotation based on state (moving vs. attacking vs. working)
+            const bool bIsBuilding = DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct());
+            const bool bIsRepairing = DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
+            const bool bIsExtracting = DoesEntityHaveTag(EntityManager, Entity, FMassStateResourceExtractionTag::StaticStruct());
             const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
+                                              bIsBuilding || bIsRepairing || bIsExtracting;
 
             const bool bIsIdleHold = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) && StateList[i].HoldPosition;
             const bool bHasValidTarget = TargetList[i].bHasValidTarget && EntityManager.IsEntityActive(TargetList[i].TargetEntity);
@@ -901,10 +982,13 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
 
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
             
-            if (bIsDead || bIsYawFollowing)
+            const bool bIsWorking = bIsBuilding || bIsRepairing || bIsExtracting;
+            if (bIsDead || (bIsYawFollowing && !bIsWorking))
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)
-                // Or if UUnitYawFollowProcessor is handling it.
+                // or while UUnitRotateToTargetProcessor owns the yaw (FMassUnitYawFollowTag).
+                // Exception: WORKING units — that processor only reads the enemy target slot and its
+                // query excludes the work states, so work-target facing below must run here.
             }
             else if (TargetList[i].bRotateTowardsAbility)
             {
@@ -921,28 +1005,17 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             }
             else
             {
-                // Extension: If we are building and have a WorkerStatsFragment, prioritize the build area position
-                bool bRotatedToBuildArea = false;
-                if (WorkerStatsList.IsValidIndex(i) && DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct()))
+                // Working workers face their actual work target (BuildArea / ResourcePlace / repaired unit)
+                bool bRotatedToWorkTarget = false;
+                if (bIsBuilding || bIsRepairing || bIsExtracting)
                 {
-                    const FMassWorkerStatsFragment& WS = WorkerStatsList[i];
-                    if (!WS.BuildAreaPosition.IsNearlyZero())
-                    {
-                        FVector LookDir = (WS.BuildAreaPosition - CurrentActorLocation);
-                        LookDir.Z = 0.f;
-                        if (!LookDir.IsNearlyZero())
-                        {
-                            const FRotator TargetRot = LookDir.Rotation();
-                            const float RotationSpeedDeg = StatsList[i].RotationSpeed * CharList[i].RotationSpeed;
-                            const float InterpSpeed = (RotationSpeedDeg > 0.f) ? RotationSpeedDeg : CharList[i].RotationSpeed;
-                            const FRotator NewRot = FMath::RInterpTo(Actor->GetActorRotation(), TargetRot, ActualDeltaTime, InterpSpeed);
-                            MassTransform.SetRotation(NewRot.Quaternion());
-                            bRotatedToBuildArea = true;
-                        }
-                    }
+                    bRotatedToWorkTarget = RotateYawTowardsWorkTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i],
+                        CurrentActorLocation, ActualDeltaTime, bIsBuilding, bIsRepairing, bIsExtracting, MassTransform);
                 }
 
-                if (!bRotatedToBuildArea)
+                // No fallback for extraction: without a ResourcePlace pointer, holding the current yaw
+                // beats turning toward an unrelated friendly target.
+                if (!bRotatedToWorkTarget && !bIsExtracting)
                 {
                     const bool bPreferEnemy = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
                                               DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());

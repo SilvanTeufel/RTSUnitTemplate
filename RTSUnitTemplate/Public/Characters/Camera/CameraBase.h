@@ -121,10 +121,10 @@ public:
 		float ForceRespawnZLocation = -100.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		float AccelerationRate = 7500.0f;
+		float AccelerationRate = 10000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-		float DecelerationRate = 15000.0f;
+		float DecelerationRate = 25000.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float CamSpeed = 5000.f;

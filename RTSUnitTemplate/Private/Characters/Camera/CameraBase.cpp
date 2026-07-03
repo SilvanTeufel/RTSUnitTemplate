@@ -564,27 +564,51 @@ void ACameraBase::JumpCamera(FHitResult Hit)
 
 void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 {
-	
-	if (Direction.IsNearlyZero())
+	const bool bHasInput = !Direction.IsNearlyZero();
+
+	// CurrentCamSpeed.X/Y carries the world-space pan velocity between frames (Z belongs to the zoom).
+	FVector PanVelocity(CurrentCamSpeed.X, CurrentCamSpeed.Y, 0.f);
+
+	if (!bHasInput && PanVelocity.IsNearlyZero())
+	{
+		CurrentCamSpeed.X = 0.f;
+		CurrentCamSpeed.Y = 0.f;
+		return;
+	}
+
+	FVector DesiredVelocity = FVector::ZeroVector;
+	if (bHasInput)
+	{
+		// Normalize the direction
+		Direction.Normalize();
+
+		// Calculate the movement direction relative to the SpringArm rotation
+		const float CosYaw = FMath::Cos(SpringArmRotator.Yaw * PI / 180.f);
+		const float SinYaw = FMath::Sin(SpringArmRotator.Yaw * PI / 180.f);
+
+		// Transform the input direction based on camera rotation
+		// Forward/Backward uses Cos/Sin, Left/Right uses Sin/Cos with appropriate signs
+		FVector WorldDirection;
+		WorldDirection.X = Direction.X * CosYaw - Direction.Y * SinYaw;
+		WorldDirection.Y = Direction.X * SinYaw + Direction.Y * CosYaw;
+		WorldDirection.Z = 0.f;
+
+		DesiredVelocity = WorldDirection * CamSpeed;
+	}
+
+	// Ramp towards the desired velocity (units/s^2): AccelerationRate while a key is held,
+	// DecelerationRate once the input is released and the camera coasts to a stop.
+	const float RampRate = bHasInput ? AccelerationRate : DecelerationRate;
+	PanVelocity = FMath::VInterpConstantTo(PanVelocity, DesiredVelocity, DeltaTime, RampRate);
+	CurrentCamSpeed.X = PanVelocity.X;
+	CurrentCamSpeed.Y = PanVelocity.Y;
+
+	if (PanVelocity.IsNearlyZero())
 	{
 		return;
 	}
 
-	// Normalize the direction
-	Direction.Normalize();
-
-	// Calculate the movement direction relative to the SpringArm rotation
-	const float CosYaw = FMath::Cos(SpringArmRotator.Yaw * PI / 180.f);
-	const float SinYaw = FMath::Sin(SpringArmRotator.Yaw * PI / 180.f);
-	
-	// Transform the input direction based on camera rotation
-	// Forward/Backward uses Cos/Sin, Left/Right uses Sin/Cos with appropriate signs
-	FVector WorldDirection;
-	WorldDirection.X = Direction.X * CosYaw - Direction.Y * SinYaw;
-	WorldDirection.Y = Direction.X * SinYaw + Direction.Y * CosYaw;
-	WorldDirection.Z = 0.f;
-
-	FVector ProposedLocation = GetActorLocation() + (WorldDirection * CamSpeed * DeltaTime);
+	FVector ProposedLocation = GetActorLocation() + (PanVelocity * DeltaTime);
 
 	// Perform line trace for Z adjustment
 	const float TraceVerticalRange = 3000.f;

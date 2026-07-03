@@ -782,18 +782,17 @@ void ACameraControllerBase::CameraState_MoveWASD(float DeltaTime)
 		MoveDirection.Y += 1.0f;
 	}
 
-	if (!MoveDirection.IsNearlyZero())
+	if (IsLocalController() && CameraBase)
 	{
-		if (IsLocalController() && CameraBase)
-		{
-			CameraBase->MoveInDirection(MoveDirection, DeltaTime);
+		// Also called with zero input so the pan velocity can decelerate to a stop (AccelerationRate/DecelerationRate on CameraBase).
+		CameraBase->MoveInDirection(MoveDirection, DeltaTime);
 
-			// Sende die neue Position zum Server (nicht die Bewegung!)
-			// Der Server speichert sie nur, überschreibt aber nicht die Client-Position
-			if (!HasAuthority())
-			{
-				Server_SyncCameraPosition(CameraBase->GetActorLocation());
-			}
+		const bool bIsPanning = !FMath::IsNearlyZero(CameraBase->CurrentCamSpeed.X) || !FMath::IsNearlyZero(CameraBase->CurrentCamSpeed.Y);
+		// Sende die neue Position zum Server (nicht die Bewegung!)
+		// Der Server speichert sie nur, überschreibt aber nicht die Client-Position
+		if (!HasAuthority() && bIsPanning)
+		{
+			Server_SyncCameraPosition(CameraBase->GetActorLocation());
 		}
 	}
 
@@ -813,7 +812,9 @@ void ACameraControllerBase::CameraState_MoveWASD(float DeltaTime)
 		}
 	}
 
-	if(MoveDirection.IsNearlyZero() && CameraBase->CurrentRotationValue == 0.0f)
+	// Stay in the WASD state while the camera is still coasting so the deceleration keeps ticking.
+	const bool bPanVelocityZero = FMath::IsNearlyZero(CameraBase->CurrentCamSpeed.X) && FMath::IsNearlyZero(CameraBase->CurrentCamSpeed.Y);
+	if(MoveDirection.IsNearlyZero() && bPanVelocityZero && CameraBase->CurrentRotationValue == 0.0f)
 	{
 		CameraBase->SetCameraState(CameraData::UseScreenEdges);
 	}
@@ -1795,9 +1796,10 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         		}
         	}
         	// Execute movement locally for immediate response (Client-Side Prediction)
-        	else if (!MoveDirection.IsNearlyZero())
+        	else
         	{
         		// Execute locally for all local controllers (Client and Server)
+        		// Also runs with zero input so the pan velocity can decelerate to a stop.
         		if (IsLocalController() && CameraBase)
         		{
         			CameraBase->MoveInDirection(MoveDirection, DeltaTime);
