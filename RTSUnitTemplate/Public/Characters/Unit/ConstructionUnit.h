@@ -34,6 +34,47 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	AWorkArea* WorkArea = nullptr;
 
+	// --- Selection-indicator footprint override (HUD-ONLY) ---
+	// Seeded on the server at spawn (SeedIndicatorFootprint) from the finished building's
+	// (WorkArea->BuildingClass) collision, so this construction site's HUD selection indicator
+	// matches the building it will become. At Mass binding these feed ONLY the fragment's
+	// IndicatorFootprintOverride (drawn by DrawAllSelectedUnitsIndicators) — gameplay
+	// reach/hover keep using the site's own capsule/box. Replicated because the client's Mass
+	// binding builds its fragment from the client-side actor. Box extents are X/Y half extents
+	// in THIS site's local frame (already yaw-compensated against the building rotation).
+	// Zero extent AND zero radius mean "no override".
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Indicator")
+	bool bIndicatorFootprintUseBox = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Indicator")
+	FVector IndicatorFootprintBoxExtent = FVector::ZeroVector;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Indicator")
+	float IndicatorFootprintCapsuleRadius = 0.f;
+
+	// Fill the footprint override from the WorkArea's BuildingClass: the tagged "BoxCollision"
+	// template (native CDO component or Blueprint SCS template, child-BP overrides resolved) or,
+	// failing that, the building CDO's capsule radius + AdditionalCapsuleRadius — i.e. the same
+	// values the finished building's own Mass binding will capture. Falls back to the WorkArea
+	// mesh footprint when no BuildingClass collision is readable. Call on the server BEFORE
+	// FinishSpawning (after the spawn transform is known) so the values ride in the initial
+	// spawn bunch to clients.
+	UFUNCTION(BlueprintCallable, Category = "Construction|Indicator")
+	void SeedIndicatorFootprint(const AWorkArea* InWorkArea);
+
+	// Visual-only world bounds of a construction unit: mesh components (static / ISM with
+	// instances / skeletal when the unit runs in skeletal mode). Excludes widgets, Niagara and
+	// other non-mesh primitives whose asymmetric bounds used to skew the
+	// GetComponentsBoundingBox-based centering. Returns an invalid box when no mesh bounds exist.
+	static FBox ComputeVisualBounds(const AUnitBase* Unit);
+
+	// Center a construction unit's visual bounds on AnchorXY — pass the WorkArea ACTOR location,
+	// the same reference SpawnSingleUnit later uses for the finished building — and rest the
+	// bounds bottom on GroundZ for non-flying units. Syncs the Mass transform afterwards.
+	// Shared by the worker-build path (UnitStateProcessor) and the extension path
+	// (ExtendedControllerBase) so both spawn flows center identically.
+	static void AlignConstructionToArea(AUnitBase* NewConstruction, const FVector& AnchorXY, float GroundZ);
+
 	UPROPERTY(Replicated)
 	FVector Rep_VE_OscillationOffsetA = FVector::ZeroVector;
 	UPROPERTY(Replicated)

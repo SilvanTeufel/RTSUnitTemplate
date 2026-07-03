@@ -19,6 +19,15 @@ public:
     static UBoxComponent* FindTaggedBoxComponent(const AActor* Actor);
 
     /**
+     * Finds a "BoxCollision"-tagged UBoxComponent template on a CLASS, without needing an
+     * instance: checks the CDO's native components first, then walks the Blueprint SCS
+     * templates up the class hierarchy (SCS components never exist on a CDO). Use this to
+     * read a footprint off a TSubclassOf property (e.g. a WorkArea's BuildingClass) before
+     * any actor of that class has been spawned.
+     */
+    static UBoxComponent* FindTaggedBoxTemplateOnClass(UClass* ActorClass);
+
+    /**
      * Computes the impact surface point on the XY plane for a target.
      * Handles both Capsule and Box components.
      * @param Attacker The actor initiating the impact (can be null if OverrideIncomingLocation is provided).

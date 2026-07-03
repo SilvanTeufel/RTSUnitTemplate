@@ -4025,11 +4025,12 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 		NewConstruction->SetCharacterVisibility(false);
 		// Ground trace at the area center to find floor Z
 		FBox AreaBox = WA->Mesh ? WA->Mesh->Bounds.GetBox() : WA->GetComponentsBoundingBox(true);
-		const FVector AreaCenter = AreaBox.GetCenter();
 		const FVector AreaSize = AreaBox.GetSize();
 		FHitResult Hit;
-		FVector Start = AreaCenter + FVector(0, 0, 10000.f);
-		FVector End = AreaCenter - FVector(0, 0, 10000.f);
+		// Ground trace at the WA actor pivot — the same reference the finished building
+		// spawns at — so site and building derive one GroundZ (mirrors the worker path).
+		FVector Start = CASpawnLoc + FVector(0, 0, 10000.f);
+		FVector End = CASpawnLoc - FVector(0, 0, 10000.f);
 		FCollisionQueryParams Params;
 		Params.AddIgnoredActor(WA);
 		Params.AddIgnoredActor(NewConstruction);
@@ -4070,6 +4071,10 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			CU->Worker = Unit;
 			CU->WorkArea = WA;
 			CU->CastTime = WA->BuildTime;
+
+			// Seed the HUD-indicator footprint from the finished building BEFORE
+			// FinishSpawning, so the values ride in the initial spawn bunch to clients.
+			CU->SeedIndicatorFootprint(WA);
 
 			if (CU->SetOffsetsDueToWorkAreaBounds && WA->Mesh)
 			{
@@ -4120,17 +4125,18 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 					}
 					NewConstruction->SetActorScale3D(NewScale * 2.f * WA->ScaleConstructionUnit);
 				}
-				
-			/*
-				FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
-				const FVector UnitCenter = ScaledBox.GetCenter();
-				const float BottomZ = ScaledBox.Min.Z;
-				FVector FinalLoc = NewConstruction->GetActorLocation();
-				FinalLoc.X += (AreaCenter.X - UnitCenter.X);
-				FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
-				if (!NewConstruction->IsFlying) FinalLoc.Z += (GroundZ - BottomZ);
-				NewConstruction->SetActorLocation(FinalLoc);
-			*/
+
+				// Recenter (was disabled here, making extension sites the one path that never
+				// centered): anchor the VISUAL bounds on the WA actor pivot — the same reference
+				// the finished building spawns at — mirroring the worker-build path
+				// (UnitStateProcessor). Runs in the spawn frame, so the corrected location still
+				// rides in the initial replication bunch. Drones stay exempt like the fit-scale
+				// above: they never moved in this path before, and post-FinishSpawning transform
+				// changes race the client-side drone-param capture.
+				if (!Cast<AConstructionUnit>(NewConstruction) || !Cast<AConstructionUnit>(NewConstruction)->DroneBehavior)
+				{
+					AConstructionUnit::AlignConstructionToArea(NewConstruction, CASpawnLoc, GroundZ);
+				}
 			}
 			if (AConstructionUnit* CU_Anim = Cast<AConstructionUnit>(NewConstruction))
 			{

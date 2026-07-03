@@ -860,6 +860,15 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	FVector Scale = FVector::OneVector;
 
+	// HUD-ONLY selection-indicator footprint override (X/Y half extents in the unit's local
+	// frame). When both components are > 0, DrawAllSelectedUnitsIndicators draws these instead
+	// of CapsuleRadius/BoxExtent. Seeded for construction sites from the finished building's
+	// footprint (AConstructionUnit::SeedIndicatorFootprint) at Mass binding. Deliberately NOT
+	// used by gameplay reach/hover (GetRadiusInDirection, hover picking, healthbars) — those
+	// keep the unit's own collision so approach/repair distances stay unchanged.
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	FVector2D IndicatorFootprintOverride = FVector2D::ZeroVector;
+
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float VerticalDeathRotationMultiplier = 0.f;
 

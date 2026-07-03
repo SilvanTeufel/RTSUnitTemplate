@@ -2,12 +2,18 @@
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Net/UnrealNetwork.h"
 #include "Actors/WorkArea.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "NiagaraComponent.h"
+#include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Core/CollisionUtils.h"
 #include "GameFramework/Actor.h"
 #include "Core/UnitData.h"
+#include "Mass/MassActorBindingComponent.h"
 #include "Mass/MassUnitVisualFragments.h"
 
 AConstructionUnit::AConstructionUnit(const FObjectInitializer& ObjectInitializer)
@@ -25,6 +31,9 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AConstructionUnit, Worker);
 	DOREPLIFETIME(AConstructionUnit, WorkArea);
+	DOREPLIFETIME(AConstructionUnit, bIndicatorFootprintUseBox);
+	DOREPLIFETIME(AConstructionUnit, IndicatorFootprintBoxExtent);
+	DOREPLIFETIME(AConstructionUnit, IndicatorFootprintCapsuleRadius);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetA);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetB);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationCyclesPerSecond);
@@ -50,6 +59,169 @@ void AConstructionUnit::SetCharacterVisibility(bool desiredVisibility)
 void AConstructionUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
+}
+
+namespace
+{
+	// AABB half-extents of a yaw-rotated rectangle: exact for cardinal (90-degree) deltas,
+	// mildly conservative in between.
+	FVector2D RotatedAABBExtents2D(const FVector2D& Extents, float YawDeg)
+	{
+		const float Rad = FMath::DegreesToRadians(YawDeg);
+		const float C = FMath::Abs(FMath::Cos(Rad));
+		const float S = FMath::Abs(FMath::Sin(Rad));
+		return FVector2D(C * Extents.X + S * Extents.Y, S * Extents.X + C * Extents.Y);
+	}
+}
+
+void AConstructionUnit::SeedIndicatorFootprint(const AWorkArea* InWorkArea)
+{
+	bIndicatorFootprintUseBox = false;
+	IndicatorFootprintBoxExtent = FVector::ZeroVector;
+	IndicatorFootprintCapsuleRadius = 0.f;
+
+	if (!InWorkArea)
+	{
+		return;
+	}
+
+	// The HUD rotates the indicator by THIS unit's actor rotation, so all extents are stored
+	// in this site's local frame. The site may spawn at a different yaw than the finished
+	// building (worker path spawns at yaw 0, the building at ServerMeshRotationBuilding).
+	const float OwnYaw = GetActorRotation().Yaw;
+
+	if (InWorkArea->BuildingClass)
+	{
+		// Same box the finished building's Mass binding captures for the HUD
+		// (InitializeMassEntityStatsFromOwner uses GetUnscaledBoxExtent on the tagged box),
+		// rotated by the building-vs-site yaw delta so the drawn world rect matches.
+		if (const UBoxComponent* BuildingBox = FCollisionUtils::FindTaggedBoxTemplateOnClass(InWorkArea->BuildingClass))
+		{
+			const FVector Extent = BuildingBox->GetUnscaledBoxExtent();
+			const FVector2D LocalXY = RotatedAABBExtents2D(
+				FVector2D(Extent.X, Extent.Y),
+				InWorkArea->ServerMeshRotationBuilding.Yaw - OwnYaw);
+			bIndicatorFootprintUseBox = true;
+			IndicatorFootprintBoxExtent = FVector(LocalXY.X, LocalXY.Y, Extent.Z);
+			return;
+		}
+
+		// No tagged box: mirror the building's capsule capture (scaled radius + the binding
+		// component's AdditionalCapsuleRadius).
+		if (const ABuildingBase* BuildingCDO = InWorkArea->BuildingClass->GetDefaultObject<ABuildingBase>())
+		{
+			float Radius = 0.f;
+			if (const UCapsuleComponent* Capsule = BuildingCDO->GetCapsuleComponent())
+			{
+				Radius = Capsule->GetScaledCapsuleRadius();
+			}
+			if (const UMassActorBindingComponent* Binding = BuildingCDO->FindComponentByClass<UMassActorBindingComponent>())
+			{
+				Radius += Binding->AdditionalCapsuleRadius;
+			}
+			if (Radius > KINDA_SMALL_NUMBER)
+			{
+				IndicatorFootprintCapsuleRadius = Radius;
+				return;
+			}
+		}
+	}
+
+	// Fallback: the WorkArea mesh's world footprint is by definition the building's ground
+	// plot. The world AABB is axis-aligned, so un-rotate it into this site's local frame.
+	if (InWorkArea->Mesh)
+	{
+		const FVector AreaExtent = InWorkArea->Mesh->Bounds.GetBox().GetExtent();
+		if (AreaExtent.X > KINDA_SMALL_NUMBER && AreaExtent.Y > KINDA_SMALL_NUMBER)
+		{
+			const FVector2D LocalXY = RotatedAABBExtents2D(FVector2D(AreaExtent.X, AreaExtent.Y), -OwnYaw);
+			bIndicatorFootprintUseBox = true;
+			IndicatorFootprintBoxExtent = FVector(LocalXY.X, LocalXY.Y, AreaExtent.Z);
+		}
+	}
+}
+
+FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit)
+{
+	FBox VisualBox(ForceInit);
+	if (!Unit)
+	{
+		return VisualBox;
+	}
+
+	const bool bSkeletal = Unit->bUseSkeletalMovement;
+
+	Unit->ForEachComponent<UMeshComponent>(false, [&VisualBox, bSkeletal](const UMeshComponent* MeshComp)
+	{
+		if (!IsValid(MeshComp) || !MeshComp->IsRegistered())
+		{
+			return;
+		}
+
+		// Include-only filter: anything not matched below is skipped — in particular
+		// UWidgetComponent, which DERIVES from UMeshComponent and must not skew the box.
+		// Order matters: ISM derives from UStaticMeshComponent.
+		if (const UInstancedStaticMeshComponent* ISM = Cast<UInstancedStaticMeshComponent>(MeshComp))
+		{
+			if (!ISM->GetStaticMesh() || ISM->GetInstanceCount() == 0)
+			{
+				return;
+			}
+		}
+		else if (const UStaticMeshComponent* StaticComp = Cast<UStaticMeshComponent>(MeshComp))
+		{
+			if (!StaticComp->GetStaticMesh())
+			{
+				return;
+			}
+		}
+		else if (const USkeletalMeshComponent* SkeletalComp = Cast<USkeletalMeshComponent>(MeshComp))
+		{
+			// ISM-mode units keep a hidden skeletal mesh at the capsule — leave it out.
+			if (!bSkeletal || !SkeletalComp->GetSkeletalMeshAsset())
+			{
+				return;
+			}
+		}
+		else
+		{
+			// Widgets and any other UMeshComponent subclass.
+			return;
+		}
+
+		// CalcBounds instead of the cached Bounds: the ISM instance added during
+		// FinishSpawning (InitializeUnitMode) only invalidates the bounds cache, so right
+		// after spawn the cached value is still the pre-instance zero-extent point.
+		VisualBox += MeshComp->CalcBounds(MeshComp->GetComponentTransform()).GetBox();
+	});
+
+	return VisualBox;
+}
+
+void AConstructionUnit::AlignConstructionToArea(AUnitBase* NewConstruction, const FVector& AnchorXY, float GroundZ)
+{
+	if (!NewConstruction)
+	{
+		return;
+	}
+
+	FBox VisualBox = ComputeVisualBounds(NewConstruction);
+	if (!VisualBox.IsValid)
+	{
+		// No mesh bounds (e.g. plain capsule-only unit): keep the old whole-actor behavior.
+		VisualBox = NewConstruction->GetComponentsBoundingBox(true);
+	}
+
+	const FVector VisualCenter = VisualBox.GetCenter();
+	FVector FinalLoc = NewConstruction->GetActorLocation();
+	FinalLoc.X += AnchorXY.X - VisualCenter.X;
+	FinalLoc.Y += AnchorXY.Y - VisualCenter.Y;
+	if (!NewConstruction->IsFlying)
+	{
+		FinalLoc.Z += GroundZ - VisualBox.Min.Z;
+	}
+	NewConstruction->SetActorLocation(FinalLoc);
+	NewConstruction->SyncTranslation();
 }
 
 void AConstructionUnit::SetDronePlaneISM(UInstancedStaticMeshComponent* InISM)

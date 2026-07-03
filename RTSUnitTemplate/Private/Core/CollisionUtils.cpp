@@ -3,6 +3,9 @@
 #include "Core/CollisionUtils.h"
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Engine/BlueprintGeneratedClass.h"
+#include "Engine/SimpleConstructionScript.h"
+#include "Engine/SCS_Node.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Character.h"
 #include "Characters/Unit/UnitBase.h"
@@ -20,6 +23,62 @@ UBoxComponent* FCollisionUtils::FindTaggedBoxComponent(const AActor* Actor)
         if (Box->ComponentHasTag(AUnitBase::BoxCollisionTag))
         {
             return Box;
+        }
+    }
+    return nullptr;
+}
+
+UBoxComponent* FCollisionUtils::FindTaggedBoxTemplateOnClass(UClass* ActorClass)
+{
+    if (!ActorClass || !ActorClass->IsChildOf(AActor::StaticClass()))
+    {
+        return nullptr;
+    }
+
+    // Native components live on the CDO and are found by the regular instance search.
+    if (const AActor* CDO = ActorClass->GetDefaultObject<AActor>())
+    {
+        if (UBoxComponent* NativeBox = FindTaggedBoxComponent(CDO))
+        {
+            return NativeBox;
+        }
+    }
+
+    // Blueprint-added components only exist as SCS templates on the generated class. A child
+    // Blueprint's edits to an inherited component (changed extent, added/removed tag) live in
+    // its InheritableComponentHandler, so resolve every node against the most-derived BPGC
+    // (GetActualComponentTemplate) instead of reading the declaring class's template directly.
+    UBlueprintGeneratedClass* MostDerivedBPGC = nullptr;
+    for (UClass* Cls = ActorClass; Cls; Cls = Cls->GetSuperClass())
+    {
+        if (UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Cls))
+        {
+            MostDerivedBPGC = BPGC;
+            break;
+        }
+    }
+
+    for (UClass* Cls = ActorClass; Cls; Cls = Cls->GetSuperClass())
+    {
+        const UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(Cls);
+        if (!BPGC || !BPGC->SimpleConstructionScript)
+        {
+            continue;
+        }
+        for (const USCS_Node* Node : BPGC->SimpleConstructionScript->GetAllNodes())
+        {
+            if (!Node)
+            {
+                continue;
+            }
+            UActorComponent* Template = MostDerivedBPGC
+                ? Node->GetActualComponentTemplate(MostDerivedBPGC)
+                : static_cast<UActorComponent*>(Node->ComponentTemplate);
+            UBoxComponent* Box = Cast<UBoxComponent>(Template);
+            if (Box && Box->ComponentHasTag(AUnitBase::BoxCollisionTag))
+            {
+                return Box;
+            }
         }
     }
     return nullptr;

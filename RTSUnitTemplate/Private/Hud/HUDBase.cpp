@@ -621,8 +621,17 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 						// Auf Boden projizieren
 						DrawLocation.Z = Frag->LastGroundLocation;
 
+						// Construction sites: draw the FINISHED building's footprint (HUD-only
+						// override seeded at spawn). Gameplay reach/hover keep using the unit's
+						// own capsule/box below.
+						if (Frag->IndicatorFootprintOverride.X > KINDA_SMALL_NUMBER &&
+							Frag->IndicatorFootprintOverride.Y > KINDA_SMALL_NUMBER)
+						{
+							FinalRadiusX = Frag->IndicatorFootprintOverride.X;
+							FinalRadiusY = Frag->IndicatorFootprintOverride.Y;
+						}
 						// Unterscheidung Box vs. Capsule
-						if (Frag->bUseBoxComponent)
+						else if (Frag->bUseBoxComponent)
 						{
 							FinalRadiusX = Frag->BoxExtent.X;
 							FinalRadiusY = Frag->BoxExtent.Y;

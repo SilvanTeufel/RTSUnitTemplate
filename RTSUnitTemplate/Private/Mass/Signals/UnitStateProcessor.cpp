@@ -3933,13 +3933,16 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 			if (NewConstruction)
 			{
 				NewConstruction->SetCharacterVisibility(false);
-				// Ground trace at the area center to find floor Z
+				// Ground trace at the WorkArea ACTOR pivot — the same XY reference
+				// SpawnSingleUnit later uses for the finished building. (The channels still
+				// differ: this traces ECC_Visibility, the building trace is WorldStatic-only —
+				// left as-is to not change existing grounding behavior.) AreaBox still provides
+				// the footprint size for the fit scale below.
 				FHitResult Hit;
 				const FBox AreaBox = UnitBase->BuildArea->Mesh ? UnitBase->BuildArea->Mesh->Bounds.GetBox() : UnitBase->BuildArea->GetComponentsBoundingBox(true);
-				const FVector AreaCenter = AreaBox.GetCenter();
 				const FVector AreaSize = AreaBox.GetSize();
-				FVector Start = AreaCenter + FVector(0, 0, 10000.f);
-				FVector End   = AreaCenter - FVector(0, 0, 10000.f);
+				FVector Start = BaseLoc + FVector(0, 0, 10000.f);
+				FVector End   = BaseLoc - FVector(0, 0, 10000.f);
 				FCollisionQueryParams Params;
 				Params.AddIgnoredActor(UnitBase->BuildArea);
 				Params.AddIgnoredActor(NewConstruction);
@@ -3981,6 +3984,10 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					CU->Worker = UnitBase;
 					CU->WorkArea = UnitBase->BuildArea;
 					CU->CastTime = UnitBase->CastTime;
+
+					// Seed the HUD-indicator footprint from the finished building BEFORE
+					// FinishSpawning, so the values ride in the initial spawn bunch to clients.
+					CU->SeedIndicatorFootprint(UnitBase->BuildArea);
 
 					if (UnitBase->BuildArea->IsExtensionArea)
 					{
@@ -4064,18 +4071,13 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					NewConstruction->InitializeAttributes();
 				}
 
-				// Step 3: Position/center and ground-align (scale is already applied)
-				{
-					FBox ScaledBox = NewConstruction->GetComponentsBoundingBox(true);
-					const FVector UnitCenter = ScaledBox.GetCenter();
-					const float BottomZ = ScaledBox.Min.Z;
-					FVector FinalLoc = NewConstruction->GetActorLocation();
-					FinalLoc.X += (AreaCenter.X - UnitCenter.X);
-					FinalLoc.Y += (AreaCenter.Y - UnitCenter.Y);
-					if (!NewConstruction->IsFlying) FinalLoc.Z += (GroundZ - BottomZ);
-					NewConstruction->SetActorLocation(FinalLoc);
-					NewConstruction->SyncTranslation();
-				}
+				// Step 3: Position/center and ground-align (scale is already applied).
+				// Anchor the VISUAL bounds on the WorkArea actor pivot — the finished building
+				// spawns at exactly that pivot (SpawnSingleUnit), so site and building share one
+				// reference point. The previous whole-actor box (widgets/Niagara/BP ISM
+				// instances) pulled the mesh off-center whenever a component was asymmetric,
+				// and the old mesh-bounds-center anchor diverged from the building's pivot.
+				AConstructionUnit::AlignConstructionToArea(NewConstruction, BaseLoc, GroundZ);
 
 				// Step 4: Safety net — re-sync VisualISM BaseOffset after final transform
 				if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(NewConstruction))

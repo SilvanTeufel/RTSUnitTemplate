@@ -1172,7 +1172,29 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				CharFrag->bUseBoxComponent = false;
 				CharFrag->BoxExtent = FVector::ZeroVector;
 			}
-			
+
+			// Construction sites: seed the HUD-ONLY indicator footprint from the replicated
+			// values set before FinishSpawning, so the selection indicator matches the building
+			// this site will become — identical on server and client, because both run this
+			// capture against the same replicated actor properties. Deliberately does NOT touch
+			// bUseBoxComponent/BoxExtent/CapsuleRadius: those also drive attack/repair reach
+			// (GetCombinedRadii) and hover picking, which must keep the site's own collision.
+			if (const AConstructionUnit* ConstructionSite = Cast<AConstructionUnit>(UnitOwner))
+			{
+				if (ConstructionSite->bIndicatorFootprintUseBox && !ConstructionSite->IndicatorFootprintBoxExtent.IsNearlyZero())
+				{
+					CharFrag->IndicatorFootprintOverride = FVector2D(
+						ConstructionSite->IndicatorFootprintBoxExtent.X,
+						ConstructionSite->IndicatorFootprintBoxExtent.Y);
+				}
+				else if (ConstructionSite->IndicatorFootprintCapsuleRadius > KINDA_SMALL_NUMBER)
+				{
+					CharFrag->IndicatorFootprintOverride = FVector2D(
+						ConstructionSite->IndicatorFootprintCapsuleRadius,
+						ConstructionSite->IndicatorFootprintCapsuleRadius);
+				}
+			}
+
             // Only for buildings! (units handle this in the movement processor)
             if (!UnitOwner->CanMove)
             {
