@@ -72,7 +72,10 @@ public:
 	// the same reference SpawnSingleUnit later uses for the finished building — and rest the
 	// bounds bottom on GroundZ for non-flying units. Syncs the Mass transform afterwards.
 	// Shared by the worker-build path (UnitStateProcessor) and the extension path
-	// (ExtendedControllerBase) so both spawn flows center identically.
+	// (ExtendedControllerBase) so both spawn flows center identically. NO-OP for DroneBehavior
+	// sites: their unscaled, sim-driven visuals must not steer the pivot — they stay exactly
+	// at the spawn location (the WA pivot). Centering a drone by its authored component
+	// offsets displaced the pivot (and the HUD selection ring) sideways, worst on small areas.
 	static void AlignConstructionToArea(AUnitBase* NewConstruction, const FVector& AnchorXY, float GroundZ);
 
 	UPROPERTY(Replicated)

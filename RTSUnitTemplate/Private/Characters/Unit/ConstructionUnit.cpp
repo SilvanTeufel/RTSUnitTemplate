@@ -205,6 +205,21 @@ void AConstructionUnit::AlignConstructionToArea(AUnitBase* NewConstruction, cons
 		return;
 	}
 
+	// Drone construction sites are exempt: they keep ActorScale = 1 while their capsule is
+	// resized to the WorkArea, and their visuals (drone body, DronePlane, authored ISM
+	// instances) sit at authored offsets driven later by the Mass drone simulation. Bounds-
+	// centering on those offsets pushes the PIVOT — and the HUD selection ring, which draws
+	// at the pivot — off the WorkArea (worst on small areas, where the area-sized capsule no
+	// longer swallows the constant-size drone parts). The spawn location already IS the WA
+	// pivot, which is exactly where the site, its ring, and the finished building belong.
+	if (const AConstructionUnit* Site = Cast<AConstructionUnit>(NewConstruction))
+	{
+		if (Site->DroneBehavior)
+		{
+			return;
+		}
+	}
+
 	FBox VisualBox = ComputeVisualBounds(NewConstruction);
 	if (!VisualBox.IsValid)
 	{
