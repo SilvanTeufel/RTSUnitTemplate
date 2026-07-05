@@ -68,7 +68,9 @@ void UUnitAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FUnitAnimationFragment>(EMassFragmentAccess::ReadWrite);
 
-    EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
+    // Gate on the dedicated StopAnimation tag (mirrors StopMovement except for CanAnimate opt-ins),
+    // NOT StopMovement itself — this is what lets a stationary building with CanAnimate=true animate.
+    EntityQuery.AddTagRequirement<FMassStateStopAnimationTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
 

@@ -338,6 +338,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, DelayDeadSound);
 	
 	DOREPLIFETIME(AUnitBase, CanMove);
+	DOREPLIFETIME(AUnitBase, CanAnimate);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackGround);
 	DOREPLIFETIME(AUnitBase, CanOnlyAttackFlying);
 	DOREPLIFETIME(AUnitBase, CanDetectInvisible);

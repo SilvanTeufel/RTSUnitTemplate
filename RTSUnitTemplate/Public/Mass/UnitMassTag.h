@@ -46,6 +46,10 @@ USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (fr Run/Patrol)
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
+// Animation gate: mirrors StopMovement, but skipped for actors that opt in via AUnitBase::CanAnimate.
+// UUnitAnimationProcessor excludes THIS tag (not StopMovement), so a stationary building (StopMovement)
+// with CanAnimate=true animates while movement/avoidance stay locked. Toggled in UnitActorToFragmentSyncProcessor.
+USTRUCT() struct FMassStateStopAnimationTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopSeparationTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateNeedsInitialKickTag : public FMassTag { GENERATED_BODY() };
 

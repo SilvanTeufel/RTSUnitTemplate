@@ -40,6 +40,12 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanMove = true;
 
+	// Opt-in (default OFF): run the Mass animation processor for this actor EVEN when it is stationary
+	// (CanMove=false / StopMovement, e.g. a building). Independent of CanMove — the building stays put but
+	// animates. Requires per-actor anim CONTENT to show motion (ISMAnimationDataTable etc.).
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool CanAnimate = false;
+
 	UPROPERTY()
 	TObjectPtr<AActor> NavObstacleProxy;
 

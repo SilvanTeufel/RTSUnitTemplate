@@ -99,6 +99,22 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				
 				// KORREKTUR: Zugriff Ã¼ber EntityManager fÃ¼r optionale Fragmente
 				FMassEntityHandle EntityHandle = ChunkContext.GetEntity(EntityIndex);
+
+				// Animation gate (runs on client AND server): mirror StopMovement into a dedicated
+				// StopAnimation tag, EXCEPT when the actor opts in via CanAnimate. The anim processor
+				// excludes StopAnimation, so a stationary building (StopMovement) with CanAnimate=true still
+				// animates while movement/avoidance stay locked (StopMovement itself is untouched). Guarded so
+				// a tag command is only queued on an actual change.
+				{
+					const bool bHasStopMove = DoesEntityHaveTag(EntityManager, EntityHandle, FMassStateStopMovementTag::StaticStruct());
+					const bool bWantStopAnim = bHasStopMove && !Unit->CanAnimate;
+					const bool bHasStopAnim = DoesEntityHaveTag(EntityManager, EntityHandle, FMassStateStopAnimationTag::StaticStruct());
+					if (bWantStopAnim && !bHasStopAnim)
+						Context.Defer().AddTag<FMassStateStopAnimationTag>(EntityHandle);
+					else if (!bWantStopAnim && bHasStopAnim)
+						Context.Defer().RemoveTag<FMassStateStopAnimationTag>(EntityHandle);
+				}
+
 				if (FMassPatrolFragment* PatrolFrag = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(EntityHandle))
 				{
 					SyncPatrol(*Unit, *PatrolFrag, EntityManager, EntityHandle);
