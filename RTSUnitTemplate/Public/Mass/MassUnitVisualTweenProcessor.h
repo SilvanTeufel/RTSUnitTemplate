@@ -38,21 +38,34 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Drone|Orbit", meta = (ClampMin = "0.0"))
     float DroneOrbitAngleMax = 180.f;
 
-    // Vertical move (Stage 3). SafeMin is the hard floor above the ground; the settle target is a
-    // random height in [TargetMin, MaxFraction * BuildingHeight].
+    // Vertical move (Stage 3). SafeMin is the hard floor above the ground; the drone scans the band
+    // [SafeMin, scan ceiling], where the ceiling is set per build-time third (see below).
     UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
     float DroneMinHeightAbs = 50.f;              // absolute lower clamp above ground
     UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
     float DroneMinHeightFraction = 0.15f;        // ... or this fraction of building height, whichever is larger
     UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
-    float DroneTargetHeightMin = 10.f;           // lowest random settle height (near ground)
-    UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
-    float DroneTargetHeightMaxFraction = 1.0f;   // highest settle height = this * building height
+    float DroneTargetHeightMin = 10.f;           // absolute floor for the scan ceiling
 
-    // Bounce shape (Stage 3): a random number of up/down cycles over a random duration, with an
-    // amplitude drawn as a fraction of the building height. The bounce is centered ON the settle
-    // target and its amplitude is clamped to the target-to-floor headroom so the lowest point never
-    // clips through the ground.
+    // The drone's top scan height FOLLOWS THE BUILD in three phases (thirds of the build TIME). In each
+    // third the drone scans from the ground (SafeMin) up to a fraction of the building height: first
+    // third up to Third1*H, second third up to Third2*H, last third up to Third3*H. (Defaults
+    // 0.35 / 0.65 / 1.0 = lower third, then up to two thirds, then the whole facade.) The Stage-3 bounce
+    // peak sits at the current third's ceiling and oscillates DOWNWARD toward SafeMin. Set bFollow=false
+    // for a constant Third3*H cap.
+    UPROPERTY(EditAnywhere, Category = "Drone|Vertical")
+    bool bDroneFollowBuildProgress = true;
+    UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
+    float DroneThird1HeightFraction = 0.5f;     // 0 .. 1/3 of build time: scan up to this * building height
+    UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
+    float DroneThird2HeightFraction = 1.0f;     // 1/3 .. 2/3 of build time: scan up to this * building height
+    UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
+    float DroneThird3HeightFraction = 1.0f;     // 2/3 .. 1 of build time: scan up to this * building height
+
+    // Bounce shape (Stage 3): a random number of up/down cycles over a random duration. The bounce PEAK
+    // sits at the current build-front height (see above) and it oscillates DOWNWARD from there; the
+    // amplitude fraction sets how deep below the front it scans (of the front-to-SafeMin span). The
+    // trough is clamped to SafeMin so it never clips the ground.
     UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
     float DroneBounceCyclesMin = 1.f;
     UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
@@ -65,12 +78,15 @@ protected:
     float DroneBounceAmplitudeMinFraction = 0.30f;
     UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
     float DroneBounceAmplitudeMaxFraction = 0.55f;
-    UPROPERTY(EditAnywhere, Category = "Drone|Vertical", meta = (ClampMin = "0.0"))
-    float DroneBounceReferenceHeightMin = 150.f; // amplitude uses Max(BuildingHeight, this) as reference
 
     // Despawn (Stage 5): the drone rises up and out of sight once the build is nearly done.
     UPROPERTY(EditAnywhere, Category = "Drone|Despawn", meta = (ClampMin = "0.0", ClampMax = "1.0"))
     float DroneDespawnBuildFraction = 0.95f;     // start the fly-up at this fraction of build completion (higher = later)
+    // Near the end of the build, stop looping through reorient/orbit (Stage 4 -> 1): once build progress
+    // reaches this fraction the drone stays in the vertical move (hovering) until the despawn fly-up
+    // triggers. Keep this < DroneDespawnBuildFraction so there is a "hold" window before it leaves.
+    UPROPERTY(EditAnywhere, Category = "Drone|Despawn", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+    float DroneSkipReorientBuildFraction = 0.85f;
     UPROPERTY(EditAnywhere, Category = "Drone|Despawn", meta = (ClampMin = "0.0"))
     float DroneDespawnAscentSpeed = 1.5f;        // FInterpTo speed of the upward exit (lower = slower / gentler)
     UPROPERTY(EditAnywhere, Category = "Drone|Despawn", meta = (ClampMin = "0.0"))

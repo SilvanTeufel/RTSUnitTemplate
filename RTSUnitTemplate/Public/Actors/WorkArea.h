@@ -50,6 +50,19 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	FVector ScaleConstructionUnit = FVector(1.f, 1.f, 1.f);
+
+	// --- Per-build-site vertical tuning for DroneBehavior construction sites ---
+	// Shifts the drone's whole vertical band up(+)/down(-) in world units, on top of the mesh-base
+	// anchor. Use a negative value when the drone hovers too high for a particular building. (Too
+	// large a negative value can push the band below ground, where SafeMin clamps it.)
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneVerticalOffset = 0.f;
+
+	// When > 0, overrides the drone's "building height" (otherwise BoxExtent.Z * 2 from the WorkArea
+	// mesh bounds). Set this to the real finished-building height when the WorkArea mesh bounds are
+	// taller than the building, so the drone scan range / SafeMin don't scale up and float too high.
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Construction|Drone")
+	float DroneBuildingHeightOverride = 0.f;
 	
 	UFUNCTION(Server, Reliable,BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveAreaFromGroup();

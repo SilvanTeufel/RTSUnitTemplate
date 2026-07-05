@@ -339,8 +339,13 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 			AWorkArea* WA = ConstructionUnit->WorkArea;
 			if (WA && WA->Mesh)
 			{
-				VisualEffect.DroneBuildingHeight = WA->Mesh->Bounds.BoxExtent.Z * 2.f;
-                
+				// Per-build-site override: when the WorkArea mesh bounds are taller than the finished
+				// building, DroneBuildingHeightOverride lets the designer pin the drone's scan height to
+				// the real building height so it doesn't float too high. 0 = use the mesh bounds.
+				VisualEffect.DroneBuildingHeight = (WA->DroneBuildingHeightOverride > 0.f)
+					? WA->DroneBuildingHeightOverride
+					: WA->Mesh->Bounds.BoxExtent.Z * 2.f;
+
 				FVector BoxExtent = WA->Mesh->Bounds.BoxExtent;
 				FVector ActorScale = Unit.GetActorScale3D();
                 
@@ -365,8 +370,9 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 				// DroneOffset.Z to the upper half and above. Using the bottom of the mesh bounds makes
 				// DroneOffset.Z == 0 correspond to the ground, so the [0, BuildingHeight] band spans the
 				// actual building. Pivot-independent (works whatever the authored mesh pivot).
+				// DroneVerticalOffset (per WorkArea) nudges the whole band up(+)/down(-) for fine-tuning.
 				FVector WALocation = WA->GetActorLocation();
-				const float BaseWorldZ = WA->Mesh->Bounds.Origin.Z - WA->Mesh->Bounds.BoxExtent.Z;
+				const float BaseWorldZ = WA->Mesh->Bounds.Origin.Z - WA->Mesh->Bounds.BoxExtent.Z + WA->DroneVerticalOffset;
 				const FVector AnchorWorld(WALocation.X, WALocation.Y, BaseWorldZ);
 				VisualEffect.DroneOrbitCenter = Unit.GetActorTransform().InverseTransformPosition(AnchorWorld);
 			}

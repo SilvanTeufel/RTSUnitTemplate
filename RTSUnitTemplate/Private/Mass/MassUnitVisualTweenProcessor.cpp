@@ -176,6 +176,25 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
             if (Effect.bDroneEnabled) {
                 float DroneDeltaTime = Context.GetDeltaTimeSeconds();
 
+                // Build progress (0..1) of this drone's construction site. Used to let the vertical scan
+                // band follow the build front (buildings rise bottom-up) and to trigger the despawn.
+                const AConstructionUnit* DroneCU = Cast<AConstructionUnit>(ActorList[i].Get());
+                float DroneBuildProgress = 1.f;
+                if (DroneCU && DroneCU->WorkArea && DroneCU->WorkArea->BuildTime > 0.f) {
+                    DroneBuildProgress = FMath::Clamp(DroneCU->WorkArea->CurrentBuildTime / DroneCU->WorkArea->BuildTime, 0.f, 1.f);
+                }
+                // Scan ceiling (max scan height) stepped by which THIRD of the build TIME we are in:
+                //   first third  (0 .. 1/3)  -> Third1 * H
+                //   second third (1/3 .. 2/3)-> Third2 * H
+                //   last third   (2/3 .. 1)  -> Third3 * H
+                // The Stage-3 bounce peak sits at this ceiling and oscillates downward toward SafeMin.
+                float DroneCeilFrac = DroneThird3HeightFraction;
+                if (bDroneFollowBuildProgress) {
+                    DroneCeilFrac = (DroneBuildProgress < (1.f / 3.f)) ? DroneThird1HeightFraction
+                                  : (DroneBuildProgress < (2.f / 3.f)) ? DroneThird2HeightFraction
+                                  :                                      DroneThird3HeightFraction;
+                }
+                const float DroneScanCeiling = FMath::Max(DroneTargetHeightMin, Effect.DroneBuildingHeight * DroneCeilFrac);
 
                 // Stage Transition Log
                 if (Effect.DroneStage != Effect.DroneLastStage) {
@@ -189,21 +208,19 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                         Effect.DroneCurrentAngle = 0.f;
                     }
                     else if (Effect.DroneStage == 3) {
-                        // Randomize the vertical bounce for this entry.
                         const float SafeMin = FMath::Max(DroneMinHeightAbs, Effect.DroneBuildingHeight * DroneMinHeightFraction);
                         Effect.DroneBounceCycles   = FMath::FRandRange(DroneBounceCyclesMin, DroneBounceCyclesMax);
                         Effect.DroneBounceDuration = FMath::FRandRange(DroneBounceDurationMin, DroneBounceDurationMax);
 
-                        // Center the bounce ON the intended settle target (ground-relative now that the drone
-                        // Z anchor is the building base). A LOW target therefore actually dips near the ground
-                        // instead of the bounce being pinned to the upper region. Clamp the amplitude to the
-                        // headroom between the target and the SafeMin floor so the lowest point
-                        // (center - amplitude) never clips through the ground.
-                        const float SettleTarget = FMath::Max(Effect.DroneTargetHeight, SafeMin);
-                        const float DesiredAmp = FMath::FRandRange(DroneBounceAmplitudeMinFraction, DroneBounceAmplitudeMaxFraction)
-                                               * FMath::Max(Effect.DroneBuildingHeight, DroneBounceReferenceHeightMin);
-                        Effect.DroneBounceAmplitude  = FMath::Min(DesiredAmp, FMath::Max(0.f, SettleTarget - SafeMin));
-                        Effect.DroneBounceBaseHeight = SettleTarget;
+                        // The bounce PEAK follows the build front (DroneScanCeiling, which rises with build
+                        // progress): up to the middle at mid-build, up to the top at the end. The drone
+                        // oscillates DOWNWARD from that peak toward SafeMin, scanning the just-built band.
+                        // Amplitude spans a fraction of [SafeMin, BuildFront]; base is set so peak == BuildFront.
+                        const float BuildFront = FMath::Max(SafeMin, DroneScanCeiling);
+                        const float Amp = FMath::FRandRange(DroneBounceAmplitudeMinFraction, DroneBounceAmplitudeMaxFraction) * (BuildFront - SafeMin);
+                        Effect.DroneBounceAmplitude  = Amp;
+                        Effect.DroneBounceBaseHeight = BuildFront - Amp;             // peak (base + Amp) == build front
+                        Effect.DroneTargetHeight     = Effect.DroneBounceBaseHeight; // settle at the bounce center
                     }
                 }
 
@@ -255,9 +272,7 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
 
                     if (Effect.DroneTimer >= DroneFocusDuration) {
                         Effect.DroneStage = 3;
-                        Effect.DroneTargetHeight = FMath::FRandRange(
-                            DroneTargetHeightMin,
-                            FMath::Max(DroneTargetHeightMin, Effect.DroneBuildingHeight * DroneTargetHeightMaxFraction));
+                        // The scan height (bounce peak + settle) is derived from the build front on Stage-3 entry.
                     }
                 }
                 break;
@@ -284,8 +299,13 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     FRotator TargetRot = Direction.Rotation();
                     Effect.DroneRotation = FMath::QInterpTo(Effect.DroneRotation, TargetRot.Quaternion(), DroneDeltaTime, Effect.DroneRotationSpeed);
 
-                    // Transition only after the bounces AND a short settle window.
-                    if (Effect.DroneTimer >= Effect.DroneBounceDuration + DroneSettleWindow) {
+                    // Transition only after the bounces AND a short settle window. Near the end of the
+                    // build, DON'T start another reorient/orbit loop (Stage 4 -> 1): stay in the vertical
+                    // move (keep hovering over the site, "weiterlaufen") so the drone doesn't fly off on a
+                    // fresh orbit right before finishing — the autonomous despawn check below then lifts it
+                    // straight into Stage 5 once DroneDespawnBuildFraction is reached.
+                    if (Effect.DroneTimer >= Effect.DroneBounceDuration + DroneSettleWindow &&
+                        DroneBuildProgress < DroneSkipReorientBuildFraction) {
                         Effect.DroneStage = 4;
                     }
                 }
@@ -326,13 +346,9 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 // (Effect.DroneStage is never synced from the actor's Rep_DroneStage; CurrentBuildTime is
                 // replicated so this runs on every machine). Raise DroneDespawnBuildFraction to make the
                 // drone leave later.
-                if (Effect.DroneStage < 5) {
-                    if (const AConstructionUnit* CU = Cast<AConstructionUnit>(ActorList[i].Get())) {
-                        if (CU->WorkArea && CU->WorkArea->BuildTime > 0.f &&
-                            CU->WorkArea->CurrentBuildTime > CU->WorkArea->BuildTime * DroneDespawnBuildFraction) {
-                            Effect.DroneStage = 5;
-                        }
-                    }
+                if (Effect.DroneStage < 5 && DroneCU && DroneCU->WorkArea && DroneCU->WorkArea->BuildTime > 0.f &&
+                    DroneBuildProgress > DroneDespawnBuildFraction) {
+                    Effect.DroneStage = 5;
                 }
 
                 // Interpolate visual representation to match the simulated authoritative state
