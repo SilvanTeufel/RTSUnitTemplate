@@ -272,6 +272,17 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 										}
 										
 										TargetUnit->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage, Projectile.ProjectileEffect, Projectile.ProjectileEffect2, Projectile.ProjectileEffect3);
+
+										// Fire the projectile CDO's ImpactEvent once per hit unit (server-only, mirrors GroundHit).
+										// This block only runs for a newly-hit unit (HitEntities dedup above), so it is one-shot per unit.
+										if (Projectile.ProjectileClass)
+										{
+											if (AProjectile* ProjCDO = Projectile.ProjectileClass->GetDefaultObject<AProjectile>())
+											{
+												UObject* ImpactWorldCtx = Projectile.WorldContext.IsValid() ? Projectile.WorldContext.Get() : (UObject*)World;
+												ProjCDO->ImpactEvent(PreciseImpactPos, ImpactWorldCtx, TargetActor, Projectile.TeamId);
+											}
+										}
 									}
 									else if (AEffectArea* EffectArea = Cast<AEffectArea>(TargetActor))
 									{

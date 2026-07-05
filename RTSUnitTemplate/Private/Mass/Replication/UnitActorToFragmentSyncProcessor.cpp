@@ -360,8 +360,15 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 				else
 					VisualEffect.DroneOrbitRadius.Y = WorldRadiusY;
 
+				// Anchor the drone's height reference to the building BASE, not the WorkArea pivot. A
+				// centered mesh pivot sits at mid-height, which confines every (strictly positive)
+				// DroneOffset.Z to the upper half and above. Using the bottom of the mesh bounds makes
+				// DroneOffset.Z == 0 correspond to the ground, so the [0, BuildingHeight] band spans the
+				// actual building. Pivot-independent (works whatever the authored mesh pivot).
 				FVector WALocation = WA->GetActorLocation();
-				VisualEffect.DroneOrbitCenter = Unit.GetActorTransform().InverseTransformPosition(WALocation);
+				const float BaseWorldZ = WA->Mesh->Bounds.Origin.Z - WA->Mesh->Bounds.BoxExtent.Z;
+				const FVector AnchorWorld(WALocation.X, WALocation.Y, BaseWorldZ);
+				VisualEffect.DroneOrbitCenter = Unit.GetActorTransform().InverseTransformPosition(AnchorWorld);
 			}
             
 			// Kopiere BP Defaults vom Actor

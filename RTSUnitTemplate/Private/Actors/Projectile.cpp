@@ -1053,7 +1053,7 @@ void AProjectile::FlyInArc(float DeltaTime)
             else
             {
                 // Play impact FX even if we didn't hit a unit (e.g., ground impact)
-                ImpactEvent();
+                ImpactEvent(TargetLocation, this, nullptr, TeamId);
                 DestroyProjectileWithDelay();
             }
         }
@@ -1075,7 +1075,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	PiercedActors.Add(ImpactTarget);
 
 	// Impact-Visuals erst nach dem Check auslösen
-	ImpactEvent();
+	ImpactEvent(GetActorLocation(), this, ImpactTarget, TeamId);
 
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
 
@@ -1235,7 +1235,7 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 	{
 		// Ziel registrieren und Impact-Visuals auslösen
 		PiercedActors.Add(ImpactTarget);
-		ImpactEvent();
+		ImpactEvent(GetActorLocation(), this, ImpactTarget, TeamId);
 		
 		float NewDamage = Damage;
 		
@@ -1364,7 +1364,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 			if (UnitToHit->TeamId == TeamId && !IsHealing && UnitToHit != Target) return;
 			if (PiercedActors.Contains(UnitToHit)) return;
 			PiercedActors.Add(UnitToHit);
-			ImpactEvent();
+			ImpactEvent(GetActorLocation(), this, UnitToHit, TeamId);
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{
 				FVector SurfaceLoc = ComputeImpactSurfaceXY(PreviousLocation, UnitToHit);
@@ -1398,7 +1398,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 		{
 			if (PiercedActors.Contains(UnitToHit)) return;
 			PiercedActors.Add(UnitToHit);
-			ImpactEvent();
+			ImpactEvent(GetActorLocation(), this, UnitToHit, TeamId);
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 			{
 				FVector SurfaceLoc = ComputeImpactSurfaceXY(PreviousLocation, UnitToHit);

@@ -304,7 +304,7 @@ public:
 	void BeginSpawn(FTransform Transform, UObject* WorldContext);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
-	void ImpactEvent();
+	void ImpactEvent(FVector ImpactLocation, UObject* WorldContext, AActor* HitActor, int32 InTeamId);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = "RTSUnitTemplate")
 	void GroundHit(FVector ImpactLocation, UObject* WorldContext, FEffectAreaInfo AreaInfo, int32 InTeamId);
