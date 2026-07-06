@@ -430,20 +430,29 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 }
 
                 // Yaw-to-Chase (Slerp towards target relative rotation)
-                if (Effect.bYawChaseEnabled && bHasYawChaseTarget) {
+                if (Effect.bYawChaseEnabled) {
                     bool bShouldApply = (!Effect.YawChaseTargetISM.IsValid() || Effect.YawChaseTargetISM == InstanceTemplate);
                     if (bShouldApply) {
-                        FQuat TargetQuat = TargetYawRot.Quaternion();
-                        if (Effect.bYawChaseTeleport || Effect.YawChaseDuration <= 0.f) {
-                            NewTransform.SetRotation(TargetQuat);
-                        } else {
-                            // Slerp from CURRENT rotation (previous frame) to TARGET rotation
-                            FQuat StartQuat = Instance.CurrentRelativeTransform.GetRotation();
-                            float Alpha = FMath::Clamp(DeltaTime / Effect.YawChaseDuration, 0.f, 1.f);
-                            if (!FMath::IsNearlyEqual(Effect.YawChaseEaseExp, 1.f)) {
-                                Alpha = FMath::Pow(Alpha, Effect.YawChaseEaseExp);
+                        if (bHasYawChaseTarget) {
+                            FQuat TargetQuat = TargetYawRot.Quaternion();
+                            if (Effect.bYawChaseTeleport || Effect.YawChaseDuration <= 0.f) {
+                                NewTransform.SetRotation(TargetQuat);
+                            } else {
+                                // Slerp from CURRENT rotation (previous frame) to TARGET rotation
+                                FQuat StartQuat = Instance.CurrentRelativeTransform.GetRotation();
+                                float Alpha = FMath::Clamp(DeltaTime / Effect.YawChaseDuration, 0.f, 1.f);
+                                if (!FMath::IsNearlyEqual(Effect.YawChaseEaseExp, 1.f)) {
+                                    Alpha = FMath::Pow(Alpha, Effect.YawChaseEaseExp);
+                                }
+                                NewTransform.SetRotation(FQuat::Slerp(StartQuat, TargetQuat, Alpha).GetNormalized());
                             }
-                            NewTransform.SetRotation(FQuat::Slerp(StartQuat, TargetQuat, Alpha).GetNormalized());
+                        } else {
+                            // Target lost (dead / inactive): HOLD the last chase facing instead of
+                            // letting NewTransform fall back to Instance.BaseOffset. CurrentRelativeTransform
+                            // is seeded to BaseOffset at instance creation, so before any target this keeps
+                            // the authored default; after chasing it keeps the last faced yaw — preventing the
+                            // silent revert that would otherwise SNAP the ISM to default on the next re-dirty.
+                            NewTransform.SetRotation(Instance.CurrentRelativeTransform.GetRotation());
                         }
                     }
                 }

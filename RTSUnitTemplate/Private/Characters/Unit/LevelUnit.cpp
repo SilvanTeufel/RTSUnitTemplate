@@ -49,6 +49,7 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 	DOREPLIFETIME(ALevelUnit, MagicResistanceInvestmentEffect);
 	DOREPLIFETIME(ALevelUnit, CustomEffects);
 	DOREPLIFETIME(ALevelUnit, UnitIndex);
+	DOREPLIFETIME(ALevelUnit, AttributeTreeNodes);
 }
 
 
@@ -214,6 +215,175 @@ void ALevelUnit::ResetTalents()
 
 	Attributes->SetHealthRegeneration(0);
 	Attributes->SetShieldRegeneration(0);
+}
+
+// ---------------------------------------------------------------------------
+//  Radial Attribute Tree
+// ---------------------------------------------------------------------------
+
+int32 ALevelUnit::GetAttributeTreeNodePoints(FName NodeId) const
+{
+	for (const FAttributeTreeNodeState& State : AttributeTreeNodes)
+	{
+		if (State.NodeId == NodeId)
+		{
+			return State.Points;
+		}
+	}
+	return 0;
+}
+
+const FAttributeTreeNodeRow* ALevelUnit::FindAttributeTreeRow(FName NodeId) const
+{
+	if (!AttributeTreeDataTable || NodeId.IsNone())
+	{
+		return nullptr;
+	}
+	return AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(NodeId, TEXT("AttributeTree"), /*bWarnIfMissing=*/false);
+}
+
+bool ALevelUnit::DoesAttributeTreeNodeMatchUnit(const FAttributeTreeNodeRow& Row) const
+{
+	if (!Row.UnitTag.IsValid())
+	{
+		return true; // untagged node -> applies to every unit
+	}
+	// TalentTag / UnitTags are inherited from ASpawnerUnit and identify the unit's type.
+	if (TalentTag == Row.UnitTag)
+	{
+		return true;
+	}
+	return UnitTags.HasTag(Row.UnitTag);
+}
+
+bool ALevelUnit::IsAttributeTreeNodeUnlocked(FName NodeId) const
+{
+	const FAttributeTreeNodeRow* Row = FindAttributeTreeRow(NodeId);
+	if (!Row)
+	{
+		return false;
+	}
+	if (Row->PrevId.IsNone())
+	{
+		return true; // root node
+	}
+	const FAttributeTreeNodeRow* Parent = FindAttributeTreeRow(Row->PrevId);
+	if (!Parent)
+	{
+		return true; // dangling parent reference -> don't hard-block the node
+	}
+	if (!DoesAttributeTreeNodeMatchUnit(*Parent))
+	{
+		return true; // parent belongs to a different unit type -> it can't gate this unit's node
+	}
+	return GetAttributeTreeNodePoints(Row->PrevId) >= FMath::Max(1, Parent->MaxPoints);
+}
+
+bool ALevelUnit::CanInvestInAttributeTreeNode(FName NodeId) const
+{
+	const FAttributeTreeNodeRow* Row = FindAttributeTreeRow(NodeId);
+	if (!Row)
+	{
+		return false;
+	}
+	if (!DoesAttributeTreeNodeMatchUnit(*Row))
+	{
+		return false; // node belongs to a different unit type
+	}
+	if (GetAttributeTreeNodePoints(NodeId) >= FMath::Max(1, Row->MaxPoints))
+	{
+		return false;
+	}
+	if (!IsAttributeTreeNodeUnlocked(NodeId))
+	{
+		return false;
+	}
+	return LevelData.TalentPoints > 0;
+}
+
+bool ALevelUnit::ApplyAttributeTreeStat(EAttributeTreeStat Stat)
+{
+	switch (Stat)
+	{
+	case EAttributeTreeStat::Stamina:         InvestPointIntoStamina();         break;
+	case EAttributeTreeStat::AttackPower:     InvestPointIntoAttackPower();     break;
+	case EAttributeTreeStat::Willpower:       InvestPointIntoWillPower();       break;
+	case EAttributeTreeStat::Haste:           InvestPointIntoHaste();           break;
+	case EAttributeTreeStat::Armor:           InvestPointIntoArmor();           break;
+	case EAttributeTreeStat::MagicResistance: InvestPointIntoMagicResistance(); break;
+	default: return false;
+	}
+	return true;
+}
+
+bool ALevelUnit::InvestInAttributeTreeNode(FName NodeId)
+{
+	const FAttributeTreeNodeRow* Row = FindAttributeTreeRow(NodeId);
+	if (!Row)
+	{
+		return false;
+	}
+	if (!DoesAttributeTreeNodeMatchUnit(*Row))
+	{
+		return false; // node belongs to a different unit type
+	}
+
+	const int32 MaxPts = FMath::Max(1, Row->MaxPoints);
+	if (GetAttributeTreeNodePoints(NodeId) >= MaxPts)
+	{
+		return false; // node already full
+	}
+	if (!IsAttributeTreeNodeUnlocked(NodeId))
+	{
+		return false; // prerequisite not satisfied
+	}
+	if (LevelData.TalentPoints <= 0)
+	{
+		return false; // no talent points to spend
+	}
+
+	// Raise the stat (self-capped at MaxTalentsPerStat). InvestPointInto* consumes one talent
+	// point only while the attribute is below its cap.
+	const int32 PointsBefore = LevelData.TalentPoints;
+	if (!ApplyAttributeTreeStat(Row->Attribute))
+	{
+		return false; // invalid stat enum
+	}
+	if (LevelData.TalentPoints >= PointsBefore)
+	{
+		// The attribute is already at MaxTalentsPerStat, so InvestPointInto* spent nothing. Still
+		// consume one talent point so the node (and the branches it gates) can progress - the stat
+		// simply stays at its maximum. This keeps deep trees, where several nodes share one capped
+		// stat, from dead-locking. Raise MaxTalentsPerStat if you never want a point spent this way.
+		LevelData.TalentPoints = FMath::Max(0, LevelData.TalentPoints - 1);
+		LevelData.UsedTalentPoints += 1;
+	}
+
+	// Book-keeping: bump the node's invested count.
+	bool bFound = false;
+	for (FAttributeTreeNodeState& State : AttributeTreeNodes)
+	{
+		if (State.NodeId == NodeId)
+		{
+			State.Points++;
+			bFound = true;
+			break;
+		}
+	}
+	if (!bFound)
+	{
+		FAttributeTreeNodeState NewState;
+		NewState.NodeId = NodeId;
+		NewState.Points = 1;
+		AttributeTreeNodes.Add(NewState);
+	}
+	return true;
+}
+
+void ALevelUnit::ResetAttributeTree()
+{
+	AttributeTreeNodes.Empty();
+	ResetTalents(); // refunds talent points + zeroes attributes (shared with the TalentChooser)
 }
 
 void ALevelUnit::ResetLevel()

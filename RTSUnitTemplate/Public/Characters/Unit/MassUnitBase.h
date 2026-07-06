@@ -61,6 +61,22 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category= ISM)
 	int32 InstanceIndex = INDEX_NONE;
 
+	// Entity-INDEPENDENT cache of the POOLED UUnitVisualManager instance(s) assigned to this actor
+	// (shared TargetISM + InstanceIndex). Recorded by UUnitVisualManager::AssignUnitVisual so EndPlay can
+	// release the pooled instance directly even when the Mass entity is already gone — the normal
+	// RemoveUnitVisual path is entity-gated and no-ops once the entity is inactive, which orphans the ISM
+	// (actor destroyed but pooled instance left frozen at its last transform). Non-UPROPERTY on purpose:
+	// plain weak ptrs, and it must survive MassEntityHandle.Reset().
+	struct FCachedPooledVisual
+	{
+		TWeakObjectPtr<UInstancedStaticMeshComponent> TargetISM;
+		int32 InstanceIndex = INDEX_NONE;
+	};
+	TArray<FCachedPooledVisual> CachedPooledVisuals;
+
+	// Record (or refresh) a pooled visual instance owned by this actor. Idempotent by (ISM, Index).
+	void CachePooledVisual(UInstancedStaticMeshComponent* InTargetISM, int32 InInstanceIndex);
+
 	UPROPERTY(Transient)
 	bool bMassVisualsRegistered = false;
 

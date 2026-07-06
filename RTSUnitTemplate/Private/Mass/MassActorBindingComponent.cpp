@@ -1920,6 +1920,16 @@ void UMassActorBindingComponent::RequestClientMassUnlink()
 		if (MassEntitySubsystemCache)
 		{
 			FMassEntityManager& EM = MassEntitySubsystemCache->GetMutableEntityManager();
+			// Release the pooled visual BEFORE destroying the entity (mirror CleanupMassEntity): the
+			// entity-gated RemoveUnitVisual can only run while the entity is still valid, and the Reset()
+			// below would otherwise strand the pooled ISM instance as a visible orphan.
+			if (EM.IsEntityValid(MassEntityHandle))
+			{
+				if (UUnitVisualManager* UV = World->GetSubsystem<UUnitVisualManager>())
+				{
+					UV->RemoveUnitVisual(MassEntityHandle);
+				}
+			}
 			EM.Defer().DestroyEntity(MassEntityHandle);
 		}
 		MassEntityHandle.Reset();

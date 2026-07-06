@@ -16,6 +16,8 @@
 #include "Widgets/TaggedUnitSelector.h"
 #include "Widgets/TalentChooser.h"
 #include "Widgets/UnitWidgetSelector.h"
+#include "Widgets/AttributeTreeWidget.h"
+#include "Characters/Unit/LevelUnit.h"
 #include "Widgets/SoundControlWidget.h"
 #include "Widgets/WinConditionWidget.h"
 #include "Blueprint/UserWidget.h"
@@ -228,6 +230,10 @@ void AExtendedCameraBase::UpdateTabModeUI()
 	{
 		MapMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	if (AttributeTreeWidget)
+	{
+		AttributeTreeWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
 	HideControlWidget();
 	SetUserWidget(nullptr);
 
@@ -268,6 +274,26 @@ void AExtendedCameraBase::UpdateTabModeUI()
 			{
 				AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
 				SetUserWidget(SelectedUnit);
+			}
+			TabToggled = true;
+		}
+		break;
+	case 4:
+		{
+			// AttributeTreeWidget (radial attribute tree)
+			if (AttributeTreeWidget)
+			{
+				ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+				if (CameraControllerBase && CameraControllerBase->HUDBase && CameraControllerBase->HUDBase->SelectedUnits.Num())
+				{
+					AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
+					AttributeTreeWidget->SetTargetUnit(SelectedUnit);
+				}
+				else
+				{
+					AttributeTreeWidget->SetTargetUnit(nullptr); // clear stale unit on empty selection
+				}
+				AttributeTreeWidget->SetVisibility(ESlateVisibility::Visible);
 			}
 			TabToggled = true;
 		}
@@ -534,9 +560,25 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 		if (AbilityChooserWidget) AbilityChooserWidget->StopTimer();
 		if (TalentChooserWidget) TalentChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
 		if (AbilityChooserWidget) AbilityChooserWidget->SetVisibility(ESlateVisibility::Collapsed);
-		
+
 	}
 
+}
+
+void AExtendedCameraBase::Server_InvestAttributeTreeNode_Implementation(ALevelUnit* Unit, FName NodeId)
+{
+	if (Unit)
+	{
+		Unit->InvestInAttributeTreeNode(NodeId);
+	}
+}
+
+void AExtendedCameraBase::Server_ResetAttributeTree_Implementation(ALevelUnit* Unit)
+{
+	if (Unit)
+	{
+		Unit->ResetAttributeTree();
+	}
 }
 
 void AExtendedCameraBase::SetSelectorWidget(int Id, AUnitBase* SelectedActor)
@@ -758,8 +800,8 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 	}
 
 	if(BlockControls) return;
-	
-	TabMode = (TabMode + 1) % 4;
+
+	TabMode = (TabMode + 1) % 5; // 0 = off, 1 = Resource, 2 = Control, 3 = WinCondition, 4 = AttributeTree
 
 	UpdateTabModeUI();
 }

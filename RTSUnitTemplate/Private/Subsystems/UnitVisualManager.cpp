@@ -7,9 +7,18 @@
 #include "Engine/StaticMesh.h"
 #include "UObject/UObjectIterator.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "MassActorSubsystem.h"
+#include "TimerManager.h"
 
 void UUnitVisualManager::Initialize(FSubsystemCollectionBase& Collection) {
 	Super::Initialize(Collection);
+}
+
+void UUnitVisualManager::OnWorldBeginPlay(UWorld& InWorld) {
+	Super::OnWorldBeginPlay(InWorld);
+	// Low-frequency safety net: reclaim any pooled instance whose owning actor died without freeing it
+	// (any teardown path). Complements the actor-cache release in AMassUnitBase::EndPlay.
+	InWorld.GetTimerManager().SetTimer(SweepTimerHandle, this, &UUnitVisualManager::SweepStaleInstances, 7.0f, true);
 }
 
 void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedStaticMeshComponent* TemplateISM, AMassUnitBase* Unit) {
@@ -68,7 +77,8 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 			if (UnitArray.IsValidIndex(Existing.InstanceIndex)) {
 				UnitArray[Existing.InstanceIndex] = Unit;
 			}
-			return; // Successfully reused/updated
+			if (Unit) Unit->CachePooledVisual(Existing.TargetISM.Get(), Existing.InstanceIndex);
+				return; // Successfully reused/updated
 		}
 	}
 
@@ -138,6 +148,9 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	}
 
 	VisualFrag->VisualInstances.Add(NewInstance);
+
+	// Cache on the actor for entity-independent release in EndPlay.
+	if (Unit) Unit->CachePooledVisual(ISM, NewIndex);
 }
 
 void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
@@ -148,30 +161,63 @@ void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
 	if (!EntityManager.IsEntityActive(Entity)) return;
 	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
 
+	// The actor that owns this entity, used as the reuse-guard identity in the shared free primitive.
+	AMassUnitBase* OwnerActor = nullptr;
+	if (FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity)) {
+		OwnerActor = Cast<AMassUnitBase>(ActorFrag->GetMutable());
+	}
+
 	if (VisualFrag) {
 		for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances) {
-			if (Instance.TargetISM.IsValid() && Instance.InstanceIndex != INDEX_NONE) {
-				// Move to origin and zero scale to "hide" it while staying in the pool
-				FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
-				Instance.TargetISM->UpdateInstanceTransform(Instance.InstanceIndex, HiddenTransform, true, true, true);
-				
-				// Return index to pool
-				FMeshMaterialKey Key;
-				Key.Mesh = Instance.TargetISM->GetStaticMesh();
-				Key.Material = Instance.TargetISM->GetMaterial(0);
-				Key.bCastShadow = Instance.TargetISM->CastShadow;
-				
-				FreeIndexPool.FindOrAdd(Key).Add(Instance.InstanceIndex);
-
-				// Clear map entry
-				if (TArray<TWeakObjectPtr<AMassUnitBase>>* UnitArray = ISMToUnitMap.Find(Instance.TargetISM.Get())) {
-					if (UnitArray->IsValidIndex(Instance.InstanceIndex)) {
-						(*UnitArray)[Instance.InstanceIndex] = nullptr;
-					}
-				}
-			}
+			ReleasePooledInstanceInternal(Instance.TargetISM.Get(), Instance.InstanceIndex, OwnerActor);
 		}
 		VisualFrag->VisualInstances.Empty();
+	}
+}
+
+void UUnitVisualManager::ReleasePooledInstanceInternal(UInstancedStaticMeshComponent* ISM, int32 InstanceIndex, AMassUnitBase* ExpectedOwner) {
+	if (!ISM || InstanceIndex == INDEX_NONE) return;
+
+	// Reuse guard: if the slot currently belongs to a DIFFERENT live unit, pooling already reassigned this
+	// index (indices are popped from FreeIndexPool and remapped on reuse). Freeing it would blank a live
+	// unit's instance AND double-hand the index. Only proceed when the slot is our own, stale, or null.
+	if (TArray<TWeakObjectPtr<AMassUnitBase>>* UnitArray = ISMToUnitMap.Find(ISM)) {
+		if (UnitArray->IsValidIndex(InstanceIndex)) {
+			AMassUnitBase* Cur = (*UnitArray)[InstanceIndex].Get();
+			if (Cur != nullptr && Cur != ExpectedOwner) return;
+			(*UnitArray)[InstanceIndex] = nullptr;
+		}
+	}
+
+	// Hide (origin + zero scale) and return the index to the pool. AddUnique = idempotent double-free guard.
+	const FTransform HiddenTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector);
+	ISM->UpdateInstanceTransform(InstanceIndex, HiddenTransform, true, true, true);
+
+	FMeshMaterialKey Key;
+	Key.Mesh = ISM->GetStaticMesh();
+	Key.Material = ISM->GetMaterial(0);
+	Key.bCastShadow = ISM->CastShadow;
+	FreeIndexPool.FindOrAdd(Key).AddUnique(InstanceIndex);
+}
+
+void UUnitVisualManager::ReleaseInstanceDirect(UInstancedStaticMeshComponent* ISM, int32 InstanceIndex, AMassUnitBase* Owner) {
+	ReleasePooledInstanceInternal(ISM, InstanceIndex, Owner);
+}
+
+void UUnitVisualManager::SweepStaleInstances() {
+	// Reclaim any pooled instance whose owning actor was destroyed without a prior successful free.
+	for (TPair<TWeakObjectPtr<UInstancedStaticMeshComponent>, TArray<TWeakObjectPtr<AMassUnitBase>>>& Pair : ISMToUnitMap) {
+		UInstancedStaticMeshComponent* ISM = Pair.Key.Get();
+		if (!ISM) continue;
+		TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = Pair.Value;
+		for (int32 Index = 0; Index < UnitArray.Num(); ++Index) {
+			// IsStale(true) is true ONLY for a slot that pointed at a now-destroyed actor — false for a
+			// live unit (IsValid) and false for an explicitly-nulled/freed slot (plain null). So this only
+			// ever reclaims genuine orphans and is fully idempotent.
+			if (UnitArray[Index].IsStale(true)) {
+				ReleasePooledInstanceInternal(ISM, Index, nullptr);
+			}
+		}
 	}
 }
 

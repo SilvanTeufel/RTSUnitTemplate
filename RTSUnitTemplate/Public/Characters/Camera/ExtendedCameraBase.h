@@ -13,8 +13,11 @@
 #include "Widgets/WinConditionWidget.h"
 #include "Widgets/MapMenuWidget.h"
 #include "Widgets/StoryWidgetBase.h"
+#include "Widgets/AttributeTreeWidget.h"
 #include "GameplayTagContainer.h"
 #include "ExtendedCameraBase.generated.h"
+
+class ALevelUnit;
 
 /**
  * ExtendedCameraBase is a child class of ACameraBase
@@ -110,7 +113,20 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UAbilityChooser* AbilityChooserWidget;
-	
+
+	// Radial attribute tree (alternative to the TalentChooser), shown on tab 4.
+	// Place a UAttributeTreeWidget in your MainHUD and assign it here (like TalentChooserWidget).
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UAttributeTreeWidget* AttributeTreeWidget;
+
+	/** Server-authoritative: invest one talent point through an attribute-tree node. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_InvestAttributeTreeNode(ALevelUnit* Unit, FName NodeId);
+
+	/** Server-authoritative: reset the unit's attribute tree (refunds talent points). */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_ResetAttributeTree(ALevelUnit* Unit);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUserWidget(AUnitBase* SelectedActor);
 	// Abilitys + Talents /////

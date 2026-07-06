@@ -1269,6 +1269,25 @@ void AMassUnitBase::Tick(float DeltaSeconds)
 }
 
 
+void AMassUnitBase::CachePooledVisual(UInstancedStaticMeshComponent* InTargetISM, int32 InInstanceIndex)
+{
+	if (!InTargetISM || InInstanceIndex == INDEX_NONE)
+	{
+		return;
+	}
+	for (const FCachedPooledVisual& C : CachedPooledVisuals)
+	{
+		if (C.TargetISM.Get() == InTargetISM && C.InstanceIndex == InInstanceIndex)
+		{
+			return; // already cached
+		}
+	}
+	FCachedPooledVisual New;
+	New.TargetISM = InTargetISM;
+	New.InstanceIndex = InInstanceIndex;
+	CachedPooledVisuals.Add(New);
+}
+
 void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	bMassVisualsRegistered = false;
@@ -1283,6 +1302,19 @@ void AMassUnitBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 				VisualManager->RemoveUnitVisual(EntityHandle);
 			}
 		}
+
+		// Entity-INDEPENDENT fallback: free any pooled instance recorded for this actor directly, so a
+		// destroyed actor never leaves a visible orphan even if its Mass entity was already gone / the
+		// handle was Reset() (the RemoveUnitVisual above no-ops once the entity is inactive). The Owner
+		// guard inside ReleaseInstanceDirect makes this harmless when the entity path already freed it.
+		for (const FCachedPooledVisual& Cached : CachedPooledVisuals)
+		{
+			if (Cached.TargetISM.IsValid() && Cached.InstanceIndex != INDEX_NONE)
+			{
+				VisualManager->ReleaseInstanceDirect(Cached.TargetISM.Get(), Cached.InstanceIndex, this);
+			}
+		}
+		CachedPooledVisuals.Empty();
 	}
 
 	// Stop any pending rotation/movement timers for static meshes/niagara
@@ -2381,7 +2413,12 @@ void AMassUnitBase::StaticMeshYawFollow_Step()
 		// Use UnitToChase from AUnitBase if available
 		AUnitBase* ThisUnit = Cast<AUnitBase>(this);
 		AActor* TargetUnit = ThisUnit ? ThisUnit->UnitToChase : nullptr;
-		float DesiredWorldYaw = FRotator::NormalizeAxis(GetActorRotation().Yaw + Data.OffsetDegrees);
+
+		// Did we resolve a facing toward a live, in-range target this step? If not (target null,
+		// dead, out of range, or degenerate direction) we HOLD the mesh's last facing below rather
+		// than snapping it back to the actor's forward direction.
+		bool bHasValidFacing = false;
+		float DesiredWorldYaw = 0.f;
 
 		if (IsValid(TargetUnit))
 		{
@@ -2411,8 +2448,17 @@ void AMassUnitBase::StaticMeshYawFollow_Step()
 				{
 					const FRotator FacingRot = FRotationMatrix::MakeFromX(ToTarget.GetSafeNormal()).Rotator();
 					DesiredWorldYaw = FRotator::NormalizeAxis(FacingRot.Yaw + Data.OffsetDegrees);
+					bHasValidFacing = true;
 				}
 			}
+		}
+
+		// Target lost this step: keep the last facing. Skip the tween rebuild so any in-flight
+		// turn finishes and the mesh then holds its current orientation (mirrors the whole-unit
+		// UUnitRotateToTargetProcessor, whose goal defaults to the current rotation on target loss).
+		if (!bHasValidFacing)
+		{
+			continue;
 		}
 
 		float ParentYaw = 0.f;
