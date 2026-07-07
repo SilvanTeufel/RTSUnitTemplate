@@ -161,16 +161,27 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 				}
 
 				bool bWasArc = (Projectile.ArcHeight > 0.f || Projectile.ArcHeightDistanceFactor > 0.f);
-				if (bWasArc)
+
+				// A continuing arc (bContinueAfterTarget) keeps its BALLISTIC parabola: the arc branch below
+				// stays active and carries it past the target, descending to the ground. It must NOT be
+				// converted to a flat start->target pass-through here (that is the "flies parallel to the
+				// landscape" bug). Only non-arc — or arcs without continue — get the flatten conversion.
+				const bool bContinuingArc = bWasArc && Projectile.bContinueAfterTarget;
+
+				if (bWasArc && !bContinuingArc)
 				{
 					// If it was an arc, set flight direction to the direction from start to target (linear pass-through)
 					Projectile.FlightDirection = (Projectile.TargetLocation - Projectile.ArcStartLocation).GetSafeNormal();
 				}
 
+				// Stop actively chasing the (now-hit) target in every case; a continuing arc flies ballistically.
 				Projectile.bFollowTarget = false;
 				Projectile.bIsHoming = false;
-				Projectile.ArcHeight = 0.f;
-				Projectile.ArcHeightDistanceFactor = 0.f;
+				if (!bContinuingArc)
+				{
+					Projectile.ArcHeight = 0.f;
+					Projectile.ArcHeightDistanceFactor = 0.f;
+				}
 
 				// Only flatten Z if NEITHER the target was flying NOR it was an arc projectile
 				if (!bTargetIsFlying && !bWasArc)
@@ -284,6 +295,53 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
                             
                             // Extrapolate linearly past target
                             NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
+                        }
+                        else if (Alpha >= 1.0f && Projectile.bContinueAfterTarget && bIsArc)
+                        {
+                            // Arc keeps its ballistic trajectory PAST the target instead of expiring there.
+                            // Not clamping Alpha lets the parabolic height term 4*H*Alpha*(1-Alpha) go NEGATIVE
+                            // for Alpha > 1, so the projectile descends beyond the target and falls toward the
+                            // ground (fixes arcs flying flat/parallel after an entity hit while continuing).
+                            NewLocation = FMath::Lerp(Projectile.ArcStartLocation, Projectile.TargetLocation, Alpha);
+                            float Height = 4.0f * EffectiveArcHeight * Alpha * (1.0f - Alpha);
+                            NewLocation.Z += Height;
+
+                            if (Projectile.bIsHoming)
+                            {
+                                NewLocation += Projectile.HomingOffset;
+                            }
+
+                            // The extended parabola overshoots the spawn-time LandscapeImpactLocation (which was
+                            // aimed at the target), so detect the REAL ground by tracing THIS frame's movement
+                            // segment. When the descending arc crosses terrain, snap to that point and (if the
+                            // projectile uses landscape hits) fire GroundHit there — server-only, mirroring the
+                            // impact processor. This works even when bEnableLandscapeHit is off or the target is
+                            // already gone; MaxLifeTime stays the backstop if the arc never meets ground
+                            // (e.g. it flies out over a void).
+                            if (UWorld* HitWorld = EntityManager.GetWorld())
+                            {
+                                FHitResult GroundResult;
+                                FCollisionQueryParams GroundParams;
+                                GroundParams.bTraceComplex = false;
+                                if (HitWorld->LineTraceSingleByChannel(GroundResult, CurrentLocation, NewLocation, ECC_WorldStatic, GroundParams))
+                                {
+                                    NewLocation = GroundResult.ImpactPoint;
+
+                                    if (Projectile.bEnableLandscapeHit && HitWorld->GetNetMode() != NM_Client && Projectile.ProjectileClass)
+                                    {
+                                        if (AProjectile* ProjCDO = Projectile.ProjectileClass->GetDefaultObject<AProjectile>())
+                                        {
+                                            UObject* GroundWorldCtx = Projectile.WorldContext.IsValid() ? Projectile.WorldContext.Get() : (UObject*)HitWorld;
+                                            ProjCDO->GroundHit(NewLocation, GroundWorldCtx, Projectile.AreaInfo, Projectile.TeamId);
+                                        }
+                                    }
+
+                                    // Stop the impact processor's landscape branch from firing GroundHit again for
+                                    // this now-landed arc (it is keyed to the target-precomputed LandscapeImpactLocation).
+                                    Projectile.bHasLandscapeImpact = false;
+                                    Projectile.LifeTime = Projectile.MaxLifeTime;
+                                }
+                            }
                         }
                         else if (Alpha >= 1.0f)
                         {

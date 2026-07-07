@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "UnitSignalingProcessor.generated.h"
 
 // Forward declarations

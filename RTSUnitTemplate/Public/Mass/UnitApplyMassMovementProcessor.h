@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "UnitApplyMassMovementProcessor.generated.h"
 
 // Forward declarations

@@ -10,7 +10,11 @@
 #include "Components/StaticMeshComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Engine/Engine.h"
+#include "Engine/GameInstance.h"
+#include "DrawDebugHelpers.h"
+#include "System/PlayerTeamSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/EffectArea.h"
 #include "Mass/Signals/MySignals.h"
@@ -1686,5 +1690,109 @@ void AProjectile::SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector
 		
 		UGameplayStatics::FinishSpawningActor(MyEffectArea, Transform);
 	}
+}
+
+int32 AProjectile::ApplyRadialGameplayEffects(
+	UObject* WorldContextObject,
+	FVector Center,
+	float Radius,
+	int32 InTeamId,
+	TSubclassOf<UGameplayEffect> EnemyEffect,
+	TSubclassOf<UGameplayEffect> FriendlyEffect,
+	bool bDrawDebug,
+	float DebugDuration,
+	float DebugThickness)
+{
+	// ImpactEvent/GroundHit fire on the CDO, so never trust 'self' for the world.
+	// Resolve a valid world from the passed context object (mirrors SpawnEffectArea).
+	UWorld* World = nullptr;
+	if (WorldContextObject &&
+		!WorldContextObject->HasAnyFlags(RF_ClassDefaultObject) &&
+		!WorldContextObject->IsA<UClass>())
+	{
+		World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+	}
+	if (!World)
+	{
+		World = GetWorld();
+	}
+	if (!World || Radius <= 0.f)
+	{
+		return 0;
+	}
+
+	// Whole affected volume (drawn on every netmode so clients can see it too).
+	if (bDrawDebug)
+	{
+		DrawDebugSphere(World, Center, Radius, 24, FColor::Yellow, false, DebugDuration, 0, DebugThickness);
+	}
+
+	// Authoritative state changes (applying gameplay effects) are server-only.
+	const bool bServer = (World->GetNetMode() != NM_Client);
+
+	// Allied-team mask lets alliances count as friendly, consistent with AEffectArea.
+	int64 AlliedMask = 0;
+	if (UGameInstance* GI = World->GetGameInstance())
+	{
+		if (UPlayerTeamSubsystem* TeamSub = GI->GetSubsystem<UPlayerTeamSubsystem>())
+		{
+			AlliedMask = TeamSub->GetAlliedTeamsMask(InTeamId);
+		}
+	}
+
+	// Explicit object types: unit capsules are Pawn; meshes may be WorldDynamic/PhysicsBody.
+	// (Don't rely on an empty array - its "match everything" behaviour is engine-version dependent.)
+	TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
+	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_Pawn));
+	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_WorldDynamic));
+	ObjectTypes.Add(UEngineTypes::ConvertToObjectType(ECC_PhysicsBody));
+
+	TArray<AActor*> OverlappedActors;
+	UKismetSystemLibrary::SphereOverlapActors(
+		World,
+		Center,
+		Radius,
+		ObjectTypes,
+		AUnitBase::StaticClass(),
+		TArray<AActor*>(),
+		OverlappedActors);
+
+	int32 AffectedCount = 0;
+	for (AActor* OverlappedActor : OverlappedActors)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(OverlappedActor);
+		if (!Unit)
+		{
+			continue;
+		}
+
+		// Dead units already have their actor collision disabled, so the overlap won't return
+		// them; this is a cheap defensive guard for the frame between death and collision-off.
+		if (Unit->GetUnitState() == UnitData::Dead)
+		{
+			continue;
+		}
+
+		// Friendly = same team, or allied to InTeamId per the team subsystem mask.
+		const int32 UnitTeam = Unit->TeamId;
+		const bool bMaskFriendly = (UnitTeam >= 0 && UnitTeam < 64) && ((AlliedMask & (1LL << UnitTeam)) != 0);
+		const bool bIsFriendly = (UnitTeam == InTeamId) || bMaskFriendly;
+
+		const TSubclassOf<UGameplayEffect> EffectToApply = bIsFriendly ? FriendlyEffect : EnemyEffect;
+
+		if (bServer && EffectToApply)
+		{
+			Unit->ApplyInvestmentEffect(EffectToApply);
+			++AffectedCount;
+		}
+
+		if (bDrawDebug)
+		{
+			const FColor MarkColor = bIsFriendly ? FColor::Green : FColor::Red;
+			DrawDebugSphere(World, Unit->GetActorLocation(), 40.f, 12, MarkColor, false, DebugDuration, 0, DebugThickness);
+		}
+	}
+
+	return AffectedCount;
 }
 

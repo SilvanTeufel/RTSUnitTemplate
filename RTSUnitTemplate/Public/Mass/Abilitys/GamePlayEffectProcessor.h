@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameplayEffect.h"
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "GamePlayEffectProcessor.generated.h"
 
 struct FCasterData

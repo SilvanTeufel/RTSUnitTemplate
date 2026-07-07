@@ -4,6 +4,7 @@
 #include "MassSignalProcessorBase.h"
 #include "MassEntityTypes.h"
 #include "Core/UnitData.h"
+#include "MassEntityQuery.h"
 #include "UnitClientTagSyncProcessor.generated.h"
 
 class AAbilityUnit;

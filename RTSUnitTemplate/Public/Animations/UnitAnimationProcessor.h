@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "MassEntityTypes.h"
 #include "Core/UnitData.h"
 #include "Engine/DataTable.h"

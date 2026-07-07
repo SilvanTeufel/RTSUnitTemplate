@@ -9,6 +9,7 @@
 #include "MassSignalTypes.h" // Enthält FMassSignalPayloadBase
 // ================================
 #include "Core/UnitData.h" // Dein Enum etc.
+#include "MassEntityQuery.h"
 #include "AttackStateProcessor.generated.h"
 
 // Forward Decls für Fragmente, Tags und Systeme

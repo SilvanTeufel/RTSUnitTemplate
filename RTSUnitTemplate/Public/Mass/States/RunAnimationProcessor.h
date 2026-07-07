@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "RunAnimationProcessor.generated.h"
 
 /**

@@ -8,6 +8,7 @@
 #include "MassSignalTypes.h"
 #include "UnitMassTag.h"
 #include "Signals/UnitSignalingProcessor.h"
+#include "MassEntityQuery.h"
 #include "DetectionProcessor.generated.h"
 
 struct FMassExecutionContext;

@@ -8,6 +8,7 @@
 #include "MassMovementFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "MassNavigationFragments.h"
+#include "MassEntityQuery.h"
 #include "UnitSeparationProcessor.generated.h"
 
 struct FMassExecutionContext;

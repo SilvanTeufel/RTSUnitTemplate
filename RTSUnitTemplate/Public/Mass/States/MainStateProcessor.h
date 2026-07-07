@@ -7,6 +7,7 @@
 #include "MassEntityManager.h"
 #include "MassExecutionContext.h"
 #include "Mass/UnitMassTag.h"
+#include "MassEntityQuery.h"
 #include "MainStateProcessor.generated.h"
 
 /**

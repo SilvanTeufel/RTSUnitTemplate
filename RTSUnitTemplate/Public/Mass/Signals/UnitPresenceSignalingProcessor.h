@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
+#include "MassEntityQuery.h"
 #include "UnitPresenceSignalingProcessor.generated.h"
 
 UCLASS()

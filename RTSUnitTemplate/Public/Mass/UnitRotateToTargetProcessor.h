@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "UnitRotateToTargetProcessor.generated.h"
 
 UCLASS()

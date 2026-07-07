@@ -7,6 +7,7 @@
 #include "MassEntitySubsystem.h"
 #include "MassSignalSubsystem.h"
 #include "MassEntityTypes.h"
+#include "MassEntityQuery.h"
 #include "UnitVisibilityProcessor.generated.h"
 
 class ACustomControllerBase;

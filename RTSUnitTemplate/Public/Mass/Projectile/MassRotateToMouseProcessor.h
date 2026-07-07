@@ -2,6 +2,7 @@
 #pragma once
 
 #include "MassProcessor.h"
+#include "MassEntityQuery.h"
 #include "MassRotateToMouseProcessor.generated.h"
 
 UCLASS()

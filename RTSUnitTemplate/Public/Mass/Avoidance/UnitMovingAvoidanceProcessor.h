@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Avoidance/MassAvoidanceProcessors.h"
+#include "MassEntityQuery.h"
 #include "UnitMovingAvoidanceProcessor.generated.h"
 
 /**

@@ -6,6 +6,7 @@
 #include "MassCommonFragments.h" // For FTransformFragment
 #include "Characters/Unit/UnitBase.h"
 // Include your hypothetical FMassActorFragment or MassRepresentationFragments if using that system
+#include "MassEntityQuery.h"
 #include "ActorTransformSyncProcessor.generated.h"
 
 // Forward declaration if needed

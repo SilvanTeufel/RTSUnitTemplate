@@ -8,6 +8,7 @@
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "MassEntityQuery.h"
 #include "UnitSoftAvoidanceProcessor.generated.h"
 
 UCLASS()

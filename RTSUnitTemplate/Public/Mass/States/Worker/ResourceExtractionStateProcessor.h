@@ -6,6 +6,7 @@
 #include "MassEntityTypes.h"             // Required for FMassEntityQuery
 #include "MassSignalSubsystem.h"
 #include "MassEntitySubsystem.h"
+#include "MassEntityQuery.h"
 #include "ResourceExtractionStateProcessor.generated.h"
 
 // Forward declaration

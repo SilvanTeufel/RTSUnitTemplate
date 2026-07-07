@@ -33,7 +33,7 @@ public:
 	float NodeRadius = 26.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Style", meta = (ClampMin = "0.0"))
-	float TooltipDelaySeconds = 1.0f;
+	float TooltipDelaySeconds = 0.0f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Style")
 	FLinearColor LockedColor = FLinearColor(0.10f, 0.10f, 0.12f, 1.f);

@@ -347,4 +347,35 @@ public:
 	/** Spawns an EffectArea actor and optionally attaches it to a unit */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile")
 	void SpawnEffectArea(UObject* WorldContext, int32 InTeamId, FVector Location, FVector Scale, TSubclassOf<class AEffectArea> EAClass, FEffectAreaInfo AreaInfo, AUnitBase* ActorToLockOn = nullptr, bool UseAreaInfo = false);
+
+	/**
+	 * Instantaneous radial gameplay-effect apply around a point (AoE-on-impact helper).
+	 *
+	 * SAFE TO CALL FROM ImpactEvent / GroundHit / BeginSpawn: those BlueprintImplementableEvents
+	 * fire on the projectile CDO, which has NO world - so DrawDebug / SphereOverlap / SpawnActor
+	 * called with 'self' silently fail. This function takes an explicit WorldContextObject: wire
+	 * the event's "World Context" output pin into it (do NOT use Self), exactly like SpawnEffectArea.
+	 *
+	 * Every AUnitBase whose capsule overlaps the sphere is classified against InTeamId:
+	 *   - enemy  (different, non-allied team) -> receives EnemyEffect
+	 *   - friendly (same team OR allied via UPlayerTeamSubsystem) -> receives FriendlyEffect
+	 * Pass a null effect for a side you want to leave untouched. Dead units are skipped (their
+	 * actor collision is off, so the overlap can't return them anyway). Gameplay effects apply on
+	 * the server only; the optional debug spheres (yellow = area, green = friendly, red = enemy)
+	 * draw locally. NOTE: the Mass ImpactEvent fires server-only, so debug drawn from there is
+	 * visible on the host/listen-server/standalone but NOT on remote clients.
+	 *
+	 * @return number of units that actually received an effect (server); 0 on a pure client.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Projectile", meta = (AdvancedDisplay = "bDrawDebug,DebugDuration,DebugThickness"))
+	int32 ApplyRadialGameplayEffects(
+		UObject* WorldContextObject,
+		FVector Center,
+		float Radius,
+		int32 InTeamId,
+		TSubclassOf<UGameplayEffect> EnemyEffect,
+		TSubclassOf<UGameplayEffect> FriendlyEffect,
+		bool bDrawDebug = false,
+		float DebugDuration = 2.0f,
+		float DebugThickness = 1.5f);
 };

@@ -5,6 +5,7 @@
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
 #include "MassEntityTypes.h"
+#include "MassEntityQuery.h"
 #include "RepairStateProcessor.generated.h"
 
 struct FMassAIStateFragment;

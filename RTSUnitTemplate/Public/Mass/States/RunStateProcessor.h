@@ -5,6 +5,7 @@
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
 #include "Core/RTSUnitUtils.h"
+#include "MassEntityQuery.h"
 #include "RunStateProcessor.generated.h"
 
 struct FMassEntityManager;

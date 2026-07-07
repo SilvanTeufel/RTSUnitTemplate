@@ -13,6 +13,7 @@
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Delegates/Delegate.h" // <-- Explicitly include this header
 #include "GameModes/ResourceGameMode.h"
+#include "MassEntityQuery.h"
 #include "UnitStateProcessor.generated.h"
 
 // Forward declarations

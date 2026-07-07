@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 #include "MassSignalSubsystem.h"
+#include "MassEntityQuery.h"
 #include "PatrolRandomStateProcessor.generated.h"
 
 // Forward Decls...

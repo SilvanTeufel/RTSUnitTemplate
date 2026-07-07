@@ -48,7 +48,7 @@ public:
 	SLATE_BEGIN_ARGS(SAttributeTreeWidget)
 		: _RingSpacing(90.f)
 		, _NodeRadius(26.f)
-		, _TooltipDelaySeconds(1.0f)
+		, _TooltipDelaySeconds(0.0f)
 		, _LockedColor(FLinearColor(0.10f, 0.10f, 0.12f, 1.f))
 		, _AvailableColor(FLinearColor(0.20f, 0.65f, 1.00f, 1.f))
 		, _PartialColor(FLinearColor(0.95f, 0.75f, 0.15f, 1.f))
@@ -125,7 +125,7 @@ private:
 	// Style
 	float RingSpacing = 90.f;
 	float NodeRadius = 26.f;
-	float TooltipDelaySeconds = 1.f;
+	float TooltipDelaySeconds = 0.f;
 	FLinearColor LockedColor;
 	FLinearColor AvailableColor;
 	FLinearColor PartialColor;

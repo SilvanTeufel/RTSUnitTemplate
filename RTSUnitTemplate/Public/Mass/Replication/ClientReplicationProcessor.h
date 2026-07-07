@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "MassProcessor.h"
 class UObject;
+#include "MassEntityQuery.h"
 #include "ClientReplicationProcessor.generated.h"
 
 /**

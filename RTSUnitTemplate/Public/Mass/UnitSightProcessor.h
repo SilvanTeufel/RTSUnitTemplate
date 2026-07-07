@@ -9,6 +9,7 @@
 #include "MassSignalSubsystem.h"
 #include "MassEntityTypes.h" // for FMassEntityHandle
 #include "Delegates/Delegate.h" // for FDelegateHandle
+#include "MassEntityQuery.h"
 #include "UnitSightProcessor.generated.h"
 
 UCLASS()

@@ -10,6 +10,7 @@
 #include "MassNavigationFragments.h" // FUnitNavigationPathFragment (Assumes this exists from previous step)
 #include "UnitNavigationFragments.h"
 #include "NavFilters/NavigationQueryFilter.h"
+#include "MassEntityQuery.h"
 #include "UnitMovementProcessor.generated.h"
 
 // Forward Declarations

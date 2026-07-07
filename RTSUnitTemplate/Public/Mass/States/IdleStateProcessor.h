@@ -6,6 +6,7 @@
 #include "MassCommonTypes.h"
 #include "MassSignalSubsystem.h"
 #include "Core/RTSUnitUtils.h"
+#include "MassEntityQuery.h"
 #include "IdleStateProcessor.generated.h"
 
 // Forward declare Fragments and Tags used
