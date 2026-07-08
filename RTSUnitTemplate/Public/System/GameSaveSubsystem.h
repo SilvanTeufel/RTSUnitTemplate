@@ -19,6 +19,8 @@ class RTSUNITTEMPLATE_API UGameSaveSubsystem : public UGameInstanceSubsystem
     GENERATED_BODY()
 
 public:
+    virtual void Deinitialize() override;
+
     FOnUnitSaveLoad OnUnitSave;
     FOnUnitSaveLoad OnUnitLoad;
 

@@ -1141,6 +1141,19 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     	// Initialize with component values first (shared between Units and EffectAreas)
     	CharFrag->HideActorTime = HideActorTime;
     	CharFrag->DespawnTime = DespawnTime;
+    	// Ruin-swap time. Only meaningful when enabled + configured. Force it into a valid window strictly
+    	// AFTER HideActorTime (so the unit hides first AND HideUnit can never share a processor tick with
+    	// SwitchToRuin and re-hide the ruin) and strictly BEFORE DespawnTime (so EndDead at DespawnTime+1
+    	// never despawns the entity before the ruin is seen). 0 disables the stage — also when there is no
+    	// valid window. Runs on both client and server (each builds its own entity), so both fire the signal.
+    	{
+    		const float RuinMin = HideActorTime + 0.25f;   // >= 2 death-processor ticks (0.1s) after the hide
+    		const float RuinMax = DespawnTime - 0.25f;
+    		CharFrag->SwitchToRuinMeshTime = (bSpawnRuinOnDeath && RuinMeshArray.Num() > 0 && RuinMax > RuinMin)
+    			? FMath::Clamp(SwitchToRuinMeshTime, RuinMin, RuinMax)
+    			: 0.f;
+    	}
+    	CharFrag->bRuinApplied = false;
     	CharFrag->CanManipulateNavMesh = CanManipulateNavMesh;
     	CharFrag->RotatesToMovement = RotatesToMovement;
     	CharFrag->RotatesToEnemy = RotatesToEnemy;

@@ -54,11 +54,20 @@ void UWinLoseWidget::OnOkClicked()
 		OkButton->SetIsEnabled(false);
 	}
 
+	ACameraControllerBase* PC = Cast<ACameraControllerBase>(OwningPC);
+	const bool bWillTravel = (PC != nullptr) && !TargetMapName.IsEmpty();
+
 	if (UGameInstance* GI = OwningPC->GetGameInstance())
 	{
-		if (UGameSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UGameSaveSubsystem>())
+		// Only arm the quick-save when we will actually travel AND only on the authority. Otherwise the
+		// PostLoadMapWithWorld binding would leak (no map load to consume it) and a client would write its
+		// own incomplete save during the transition. (P3/P5)
+		if (bWillTravel && OwningPC->HasAuthority())
 		{
-			SaveSubsystem->SetPendingQuickSave(true);
+			if (UGameSaveSubsystem* SaveSubsystem = GI->GetSubsystem<UGameSaveSubsystem>())
+			{
+				SaveSubsystem->SetPendingQuickSave(true);
+			}
 		}
 
 		if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
@@ -70,9 +79,19 @@ void UWinLoseWidget::OnOkClicked()
 		}
 	}
 
-	ACameraControllerBase* PC = Cast<ACameraControllerBase>(OwningPC);
-	if (PC && !TargetMapName.IsEmpty())
+	if (bWillTravel)
 	{
 		PC->Server_TravelToMap(TargetMapName, DestinationSwitchTagToEnable);
+		// The pending ServerTravel will tear down this world (and this widget); nothing more to do.
+		return;
 	}
+
+	// No travel target (e.g. a lose screen with no destination map): don't leave the player trapped in
+	// FInputModeUIOnly behind a dead, disabled OK button. Restore normal RTS input and dismiss the widget. (P6)
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	OwningPC->SetInputMode(InputMode);
+	OwningPC->SetShowMouseCursor(true);
+	RemoveFromParent();
 }

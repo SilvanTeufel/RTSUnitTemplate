@@ -49,10 +49,15 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
 {
 	SetAttributeMaxHealth(SourceData.MaxHealth);
-	SetAttributeHealth(SourceData.MaxHealth);
+	// Restore the ACTUAL saved current Health/Shield, not the maximum. Using MaxHealth here silently
+	// full-healed every unit on load (a damaged army came back at full HP). All save paths store the
+	// real current value (GameSaveSubsystem + UTalentSaveGame::PopulateAttributeSaveData). Guard the
+	// degenerate/legacy case where no valid current health was stored (<=0) by falling back to full,
+	// and clamp so a stale save can never exceed the restored maximum. (Mana below already did this.)
+	SetAttributeHealth(SourceData.Health > 0.f ? FMath::Min(SourceData.Health, SourceData.MaxHealth) : SourceData.MaxHealth);
 	SetAttributeHealthRegeneration(SourceData.HealthRegeneration);
 	SetAttributeMaxShield(SourceData.MaxShield);
-	SetAttributeShield(SourceData.MaxShield);
+	SetAttributeShield(FMath::Clamp(SourceData.Shield, 0.f, SourceData.MaxShield));
 	SetAttributeShieldRegeneration(SourceData.ShieldRegeneration);
 	SetAttributeAttackDamage(SourceData.AttackDamage);
 	SetAttributeRange(SourceData.Range);

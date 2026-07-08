@@ -84,44 +84,61 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 
 #include "Engine/GameInstance.h"
 #include "System/MapSwitchSubsystem.h"
+#include "Misc/PackageName.h"
 
-bool ACameraControllerBase::bServerTravelInProgress = false;
+bool ACameraControllerBase::Server_TravelToMap_Validate(const FString& MapName, FName TagToEnable)
+{
+	// Reject only structurally malicious input; a false return disconnects the client, so keep this lenient —
+	// legitimate races always carry a valid, server-authored map name. Content validation happens (softly) in
+	// the implementation so a bad-but-plausible name is ignored rather than kicking the player.
+	return MapName.Len() <= 512;
+}
 
 void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& MapName, FName TagToEnable)
 {
-	if (bServerTravelInProgress)
+	// Runs on the SERVER only.
+	if (!HasAuthority())
 	{
-		UE_LOG(LogTemp, Warning, TEXT("Server_TravelToMap: ServerTravel already in progress, ignoring duplicate request."));
 		return;
 	}
-	
-	// This code now runs on the SERVER
-	if (HasAuthority())
-	{
-		UWorld* World = GetWorld();
-		if (!World)
-		{
-			return;
-		}
 
-		if (UGameInstance* GI = GetGameInstance())
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	// Guard against a duplicate travel request (e.g. host and client both press "OK" at nearly the same time).
+	// We derive the "already travelling" state directly from the engine instead of a process-global static flag:
+	//  - World->NextURL is set by ServerTravel and consumed by TickWorldTravel — it self-clears on success AND failure,
+	//  - IsInSeamlessTravel() covers the seamless-transition window after NextURL has already been consumed.
+	// This is per-world (correct scope) and can never get permanently stuck, unlike the old static bServerTravelInProgress.
+	if (!World->NextURL.IsEmpty() || World->IsInSeamlessTravel())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Server_TravelToMap: a travel is already pending/in progress, ignoring duplicate request."));
+		return;
+	}
+
+	// Validate the destination up front so an invalid/garbage name can't kick off a doomed travel (which historically
+	// could also latch the old guard). IsValidLongPackageName is a cheap format check (no filesystem hit).
+	if (MapName.IsEmpty() || !FPackageName::IsValidLongPackageName(MapName))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Server_TravelToMap: invalid map name '%s', ignoring request."), *MapName);
+		return;
+	}
+
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
 		{
-			if (UMapSwitchSubsystem* MapSwitchSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+			if (TagToEnable != NAME_None)
 			{
-				if (TagToEnable != NAME_None && !MapName.IsEmpty())
-				{
-					MapSwitchSub->MarkSwitchEnabledForMap(MapName, TagToEnable);
-				}
+				MapSwitchSub->MarkSwitchEnabledForMap(MapName, TagToEnable);
 			}
 		}
-
-		if (!MapName.IsEmpty() && !bServerTravelInProgress)
-		{
-			// Set the guard before initiating travel
-			bServerTravelInProgress = true;
-			World->ServerTravel(MapName);
-		}
 	}
+
+	World->ServerTravel(MapName);
 }
 #include "AIController.h"
 #include "GameFramework/CharacterMovementComponent.h"
@@ -274,10 +291,8 @@ void ACameraControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (HasAuthority())
-	{
-		bServerTravelInProgress = false;
-	}
+	// (The old static ServerTravel guard reset used to live here; the guard is now derived per-world from
+	//  World->NextURL / IsInSeamlessTravel in Server_TravelToMap_Implementation, so no manual reset is needed.)
 
 	// Check GameState for any active loading widget (useful if we join late)
 	if (IsLocalPlayerController())

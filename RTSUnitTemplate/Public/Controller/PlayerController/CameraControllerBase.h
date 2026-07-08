@@ -39,7 +39,7 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	public:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, Reliable, WithValidation)
 	void Server_TravelToMap(const FString& MapName, FName TagToEnable = NAME_None);
 
 
@@ -354,8 +354,6 @@ public:
 	float ScrollZoomCount = 0.f;
 	
 private:
-	static bool bServerTravelInProgress;
-
 	// Helper functions for scroll zoom logic
 	void HandleScrollZoomIn();
 	void HandleScrollZoomOut();

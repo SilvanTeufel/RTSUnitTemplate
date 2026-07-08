@@ -29,6 +29,15 @@ public:
 
 	void SetUnitVisualVisible(FMassEntityHandle Entity, bool bVisible);
 
+	// Swap this entity's pooled ISM visual(s) to a single "ruin" instance: releases the current visual
+	// instances back to the pool, allocates one pooled instance for RuinMesh, and places it fitted to the
+	// original building mesh's world bounds (auto-fit, then per-mesh StretchFactor), ground-seated, with
+	// the caller-supplied world yaw. Runs per-machine (client + server); the caller supplies a
+	// deterministic (mesh, yaw) — seeded by the replicated UnitIndex — so every machine renders the same
+	// ruin. The instance is cached on the actor so it is freed when the actor despawns.
+	void SwapUnitVisualToRuin(FMassEntityHandle Entity, AMassUnitBase* Unit, UStaticMesh* RuinMesh,
+		UMaterialInterface* RuinMaterial, bool bCastShadow, const FVector& StretchFactor, float YawDegrees);
+
 	// Entity-INDEPENDENT release of a single pooled instance (hide + return index to the pool + clear the
 	// map slot), guarded so it never touches an index that pooling has already reassigned to a different
 	// LIVE unit. Called from AMassUnitBase::EndPlay so a dead actor's pooled instance is always freed even

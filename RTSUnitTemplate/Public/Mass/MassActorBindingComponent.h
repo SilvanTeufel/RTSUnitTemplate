@@ -24,6 +24,29 @@ enum class EMassBindingType : uint8
 	EffectArea
 };
 
+class UStaticMesh;
+class UMaterialInterface;
+
+// One selectable ruin variant. On death a dead ISM unit/building picks one of these at random (seeded
+// by the replicated UnitIndex so client & server agree) and swaps its pooled ISM visual to Mesh. The
+// ruin is FIRST auto-fitted to roughly match the original building mesh's world bounds, THEN
+// StretchFactor is applied on top (per-axis) for mesh-dependent manual size correction.
+USTRUCT(BlueprintType)
+struct FRuinMeshEntry
+{
+	GENERATED_BODY()
+
+	// The ruin static mesh to display. Required for the entry to be usable.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ruin")
+	TObjectPtr<UStaticMesh> Mesh = nullptr;
+
+	// Extra squash/stretch applied AFTER the automatic building-size fit (multiplied per-axis onto the
+	// auto-fit scale). (1,1,1) = pure auto-fit. Use to correct meshes whose natural proportions differ
+	// from the building footprint. This is the "obendrauf / danach" adjustment.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Ruin")
+	FVector StretchFactor = FVector::OneVector;
+};
+
 // Delegate-Definition
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMassArchetypeBuilding, AActor* /*Owner*/, TArray<const UScriptStruct*>& /*FragmentsAndTags*/);
 
@@ -153,6 +176,30 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float HideActorTime = 5.0f;
+
+	// --- Ruin-on-death (ISM buildings/units only; skeletal-driven visuals are not supported) ---
+	// Master toggle. When true and RuinMeshArray is non-empty, the dead unit swaps its pooled ISM visual
+	// to a random ruin mesh at SwitchToRuinMeshTime.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Ruin")
+	bool bSpawnRuinOnDeath = false;
+
+	// Seconds since death at which the ruin appears. Clamped to >= HideActorTime at bind (building hides
+	// first, then the ruin). Keep < DespawnTime so the ruin is visible before the entity despawns.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Ruin", meta = (EditCondition = "bSpawnRuinOnDeath"))
+	float SwitchToRuinMeshTime = 6.0f;
+
+	// Candidate ruin meshes; one is chosen at random (seeded by the replicated UnitIndex so all machines
+	// pick the same one) and auto-fitted to the original building mesh, then its StretchFactor applied.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Ruin", meta = (EditCondition = "bSpawnRuinOnDeath"))
+	TArray<FRuinMeshEntry> RuinMeshArray;
+
+	// Optional material override for the ruin ISM. If null, the ruin mesh's own default material is used.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Ruin", meta = (EditCondition = "bSpawnRuinOnDeath"))
+	TObjectPtr<UMaterialInterface> RuinMaterialOverride = nullptr;
+
+	// Whether the ruin ISM casts a shadow.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Ruin", meta = (EditCondition = "bSpawnRuinOnDeath"))
+	bool bRuinCastShadow = true;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	float IsAttackedDuration = 0.3f;

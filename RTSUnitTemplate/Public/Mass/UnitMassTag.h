@@ -829,6 +829,20 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float HideActorTime = 3.f;
 
+	// Time (seconds since death) at which a dead ISM unit/building swaps its pooled visual to a random
+	// ruin mesh. Clamped into (HideActorTime, DespawnTime) at bind (hide first, reveal before despawn).
+	// 0 = disabled. Copied from UMassActorBindingComponent (non-zero only when bSpawnRuinOnDeath + a valid
+	// window + RuinMeshArray set).
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	float SwitchToRuinMeshTime = 0.f;
+
+	// Set true once the ruin swap has been applied (or permanently skipped) for this entity. Gates the
+	// LEVEL-triggered SwitchToRuin signal so it keeps re-firing until the swap succeeds — this lets a
+	// client that hasn't yet received the replicated UnitIndex (the deterministic seed) retry instead of
+	// missing the ruin forever — then stops. Also the single idempotency guard for the swap handler.
+	UPROPERTY(Transient)
+	bool bRuinApplied = false;
+
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	bool RotatesToMovement = true;
 

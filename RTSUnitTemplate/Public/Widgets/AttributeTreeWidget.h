@@ -53,6 +53,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Style")
 	FLinearColor RingColor = FLinearColor(1.f, 1.f, 1.f, 0.06f);
 
+	// --- Background ---
+	/** Solid dimmed backdrop drawn behind the tree. Also absorbs clicks so they never reach the game
+	 *  world (prevents unit-deselect / HUD-close when clicking empty space). Set Alpha = 0 to disable. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Background")
+	FLinearColor BackgroundColor = FLinearColor(0.02f, 0.02f, 0.04f, 0.75f);
+
+	/** Expand the widget to at least the viewport size so the backdrop fills the screen and the ring
+	 *  stays centred. Requires the hosting container to auto-size / fill (not a fixed-size Canvas slot). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Background")
+	bool bFillViewport = true;
+
 	// --- Text sizes ---
 	/** Font size of the per-node "invested/max" count. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Text", meta = (ClampMin = "4"))

@@ -393,7 +393,10 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		if (AbilityClass && !UnitBase->IsAbilityOnCooldownByClass(AbilityClass))
 		{
 			const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass)
+			// Don't spawn the mouse-follow indicator for abilities that can't be activated.
+			// bDisabled is checked in CanActivateAbility() but the indicator spawns before that,
+			// so mirror the flag here. It's a CDO/asset value → identical on client and server.
+			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass && !AbilityCDO->bDisabled)
 			{
 				HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
 			}
@@ -514,7 +517,8 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 		{
 			if (UGameplayAbilityBase* AbilityCDO = Cast<UGameplayAbilityBase>(AbilityToActivate->GetDefaultObject()))
 			{
-				if (AbilityCDO->AbilityIndicatorClass)
+				// Skip the mouse-follow indicator for disabled abilities (see ActivateAbilitiesByIndex).
+				if (AbilityCDO->AbilityIndicatorClass && !AbilityCDO->bDisabled)
 				{
 					HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
 					

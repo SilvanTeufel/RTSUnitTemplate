@@ -18,7 +18,10 @@
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "Math/RandomStream.h"
 #include "Subsystems/UnitVisualManager.h"
+#include "Characters/Unit/MassUnitBase.h"
+#include "Mass/MassActorBindingComponent.h"
 #include "Hud/HUDBase.h"
 
 UDeathStateProcessor::UDeathStateProcessor(): EntityQuery()
@@ -54,6 +57,9 @@ void UDeathStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<F
 
         HideUnitSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::HideUnit)
             .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UDeathStateProcessor, HandleHideUnit));
+
+        SwitchToRuinSignalDelegateHandle = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SwitchToRuin)
+            .AddUFunction(this, GET_FUNCTION_NAME_CHECKED(UDeathStateProcessor, HandleSwitchToRuin));
     }
 }
 
@@ -73,6 +79,13 @@ void UDeathStateProcessor::BeginDestroy()
             auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::HideUnit);
             Delegate.Remove(HideUnitSignalDelegateHandle);
             HideUnitSignalDelegateHandle.Reset();
+        }
+
+        if (SwitchToRuinSignalDelegateHandle.IsValid())
+        {
+            auto& Delegate = SignalSubsystem->GetSignalDelegateByName(UnitSignals::SwitchToRuin);
+            Delegate.Remove(SwitchToRuinSignalDelegateHandle);
+            SwitchToRuinSignalDelegateHandle.Reset();
         }
     }
     Super::BeginDestroy();
@@ -184,6 +197,73 @@ void UDeathStateProcessor::HandleHideUnit(FName SignalName, TArray<FMassEntityHa
     });
 }
 
+void UDeathStateProcessor::HandleSwitchToRuin(FName SignalName, TArray<FMassEntityHandle>& Entities)
+{
+    if (!EntitySubsystem) return;
+
+    TArray<FMassEntityHandle> EntitiesCopy = Entities;
+
+    AsyncTask(ENamedThreads::GameThread, [this, EntitiesCopy]()
+    {
+        if (!EntitySubsystem || !GetWorld()) return;
+
+        UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>();
+        if (!VisualManager) return;
+
+        FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+        for (const FMassEntityHandle& Entity : EntitiesCopy)
+        {
+            if (!EntityManager.IsEntityActive(Entity)) continue;
+
+            // The fragment flag is the single idempotency guard AND the level-trigger stop condition.
+            FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+            if (!CharFrag || CharFrag->bRuinApplied) continue;
+
+            FMassActorFragment* ActorFragPtr = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity);
+            AMassUnitBase* Unit = ActorFragPtr ? Cast<AMassUnitBase>(ActorFragPtr->GetMutable()) : nullptr;
+
+            // Ruin uses the pooled ISM path — skeletal-driven visuals are force-hidden by the placement
+            // processor, so they can't host a ruin instance (buildings are ISM: bUseSkeletalMovement=false).
+            // PERMANENT skips: mark applied so the level-triggered signal stops re-firing.
+            if (!Unit || Unit->bUseSkeletalMovement)
+            {
+                CharFrag->bRuinApplied = true;
+                continue;
+            }
+
+            UMassActorBindingComponent* Binding = Unit->MassActorBindingComponent;
+            if (!Binding || !Binding->bSpawnRuinOnDeath || Binding->RuinMeshArray.Num() == 0)
+            {
+                CharFrag->bRuinApplied = true;
+                continue;
+            }
+
+            // Deterministic pick seeded by the replicated UnitIndex so every machine agrees. If the index
+            // hasn't replicated yet (INDEX_NONE), leave bRuinApplied false so the signal retries next tick
+            // instead of the client missing the ruin forever.
+            const int32 Seed = Unit->UnitIndex;
+            if (Seed < 0) continue;
+
+            FRandomStream Stream(Seed);
+            const int32 PickIdx = Stream.RandRange(0, Binding->RuinMeshArray.Num() - 1);
+            const float YawDegrees = Stream.FRandRange(0.f, 360.f);
+
+            const FRuinMeshEntry& Entry = Binding->RuinMeshArray[PickIdx];
+            if (!Entry.Mesh)
+            {
+                CharFrag->bRuinApplied = true; // configured but unusable — don't spin forever
+                continue;
+            }
+
+            VisualManager->SwapUnitVisualToRuin(
+                Entity, Unit, Entry.Mesh, Binding->RuinMaterialOverride,
+                Binding->bRuinCastShadow, Entry.StretchFactor, YawDegrees);
+
+            CharFrag->bRuinApplied = true;
+        }
+    });
+}
+
 void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
@@ -242,6 +322,17 @@ void UDeathStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::HideUnit, Entity);
             }
+
+            // Ruin swap (after the hide). LEVEL-triggered while past SwitchToRuinMeshTime and not yet
+            // applied, so a client that hasn't received the replicated UnitIndex (seed) yet retries until
+            // it can; the fragment flag bRuinApplied stops it once done. Fired on the client too so the
+            // ruin appears on every machine (handler runs on both).
+            if (CharacteristicsFragment.SwitchToRuinMeshTime > KINDA_SMALL_NUMBER &&
+                !CharacteristicsFragment.bRuinApplied &&
+                StateFrag.StateTimer >= CharacteristicsFragment.SwitchToRuinMeshTime)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SwitchToRuin, Entity);
+            }
         }
     });
 }
@@ -285,7 +376,16 @@ void UDeathStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::HideUnit, Entity);
             }
-            
+
+            // Ruin swap (after the hide, before despawn). LEVEL-triggered while past SwitchToRuinMeshTime
+            // and not yet applied (see client path). Fired on the server (+ standalone/listen host).
+            if (CharacteristicsFragment.SwitchToRuinMeshTime > KINDA_SMALL_NUMBER &&
+                !CharacteristicsFragment.bRuinApplied &&
+                StateFrag.StateTimer >= CharacteristicsFragment.SwitchToRuinMeshTime)
+            {
+                SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::SwitchToRuin, Entity);
+            }
+
             if (StateFrag.StateTimer >= CharacteristicsFragment.DespawnTime+1.f)
             {
                 SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::EndDead, Entity);

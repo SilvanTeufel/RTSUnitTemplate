@@ -28,11 +28,29 @@
 #include "GAS/GameplayAbilityBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/GASUnit.h"
+#include "GameModes/RTSGameModeBase.h"
+#include "GameModes/ResourceGameMode.h"
+#include "GameStates/ResourceGameState.h"
+
+void UGameSaveSubsystem::Deinitialize()
+{
+    // Never leave a dangling PostLoadMapWithWorld binding across GameInstance / PIE teardown.
+    FCoreUObjectDelegates::PostLoadMapWithWorld.RemoveAll(this);
+    bPendingQuickSave = false;
+    PendingLoadedSave = nullptr;
+    PendingSlotName.Reset();
+
+    Super::Deinitialize();
+}
 
 void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
 {
     UWorld* World = GetWorld();
     if (!World) return;
+
+    // Clients must never write an authoritative save: on a networked client most state (GAS, Mass, resources)
+    // is only partially replicated, so the resulting slot would be incomplete. Saving is server/standalone-only.
+    if (World->GetNetMode() == NM_Client) return;
 
     URTSSaveGame* Save = Cast<URTSSaveGame>(UGameplayStatics::CreateSaveGameObject(URTSSaveGame::StaticClass()));
     if (!Save) return;
@@ -130,6 +148,20 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
 
                 Data.AttributeSaveData = AttrData;
             }
+
+            // Radial attribute-tree investment (per-node point counts). The attribute values these
+            // produced are already stored in AttrData above; here we persist only the node bookkeeping.
+            // Without it, after load the tree UI shows every node at 0/Max, unlock gating re-locks every
+            // non-root branch (IsAttributeTreeNodeUnlocked reads the parent node's Points), and maxed
+            // nodes read as investable again -> phantom re-invest that double-raises attributes.
+            Data.AttributeTreeNodes.Reset(LevelUnit->AttributeTreeNodes.Num());
+            for (const FAttributeTreeNodeState& NodeState : LevelUnit->AttributeTreeNodes)
+            {
+                FAttributeTreeNodeSaveData NodeSave;
+                NodeSave.NodeId = NodeState.NodeId;
+                NodeSave.Points = NodeState.Points;
+                Data.AttributeTreeNodes.Add(NodeSave);
+            }
         }
 
         // Ability states (owner-level toggles) for this unit
@@ -208,20 +240,32 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
         Save->WorkAreas.Add(MoveTemp(W));
     }
 
+    // Team resource economy. Read from the server-authoritative GameMode (the GameState only holds a
+    // replicated copy). Skips silently if the active GameMode has no resource economy.
+    if (AResourceGameMode* ResourceGM = World->GetAuthGameMode<AResourceGameMode>())
+    {
+        Save->TeamResources = ResourceGM->TeamResources;
+    }
+
     UGameplayStatics::SaveGameToSlot(Save, SlotName, 0);
 }
 
 void UGameSaveSubsystem::LoadGameFromSlot(const FString& SlotName)
 {
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    // Symmetric with SaveCurrentGame: a networked client must not drive an authoritative load. Doing so
+    // would OpenLevel and locally spawn/destroy non-authoritative actors, desyncing from the server.
+    // Loading is server/standalone-only; a client requesting a load should route through the host.
+    if (World->GetNetMode() == NM_Client) return;
+
     URTSSaveGame* Save = Cast<URTSSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
     if (!Save) return;
 
     PendingLoadedSave = Save;
     PendingSlotName = SlotName;
     bPendingQuickSave = false;
-
-    UWorld* World = GetWorld();
-    if (!World) return;
 
     const FString CurrentLongName = World->GetOutermost()->GetName();
     if (!Save->SavedMapLongPackageName.IsEmpty() && Save->SavedMapLongPackageName != CurrentLongName)
@@ -242,6 +286,11 @@ void UGameSaveSubsystem::LoadGameFromSlot(const FString& SlotName)
 void UGameSaveSubsystem::SetPendingQuickSave(bool bPending)
 {
     bPendingQuickSave = bPending;
+
+    // Always drop any prior binding first so repeated arming (or arming that never leads to a map load) can't
+    // stack duplicate callbacks or leak a binding. The single callback also serves the LoadGame path.
+    FCoreUObjectDelegates::PostLoadMapWithWorld.RemoveAll(this);
+
     if (bPendingQuickSave)
     {
         FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UGameSaveSubsystem::OnPostLoadMapWithWorld);
@@ -297,6 +346,21 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
                 Imported.Add(Entry.MapKey, Entry.Tags);
             }
             MapSub->ImportStateFromSave(Imported);
+        }
+    }
+
+    // Team resource economy. Write back onto the authoritative GameMode, then mirror to the GameState
+    // (its replicated copy that drives the resource UI). Skip when the save carried no resources
+    // (older save) so we don't wipe the freshly-initialized economy.
+    if (SaveData->TeamResources.Num() > 0)
+    {
+        if (AResourceGameMode* ResourceGM = LoadedWorld->GetAuthGameMode<AResourceGameMode>())
+        {
+            ResourceGM->TeamResources = SaveData->TeamResources;
+            if (AResourceGameState* ResourceGS = LoadedWorld->GetGameState<AResourceGameState>())
+            {
+                ResourceGS->SetTeamResources(ResourceGM->TeamResources);
+            }
         }
     }
 
@@ -453,6 +517,20 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         {
             LevelUnit->LevelData = SavedUnit.LevelData;
             LevelUnit->LevelUpData = SavedUnit.LevelUpData;
+
+            // Restore the radial attribute-tree bookkeeping as raw state. We deliberately do NOT
+            // call InvestInAttributeTreeNode here: the GAS attribute values are re-applied below via
+            // UpdateAttributes(AttributeSaveData) and the point pool comes from LevelData, so
+            // re-investing would double-spend points and re-raise (already-restored) attributes.
+            // AttributeTreeNodes is replicated, so setting it on the authority reaches all clients.
+            LevelUnit->AttributeTreeNodes.Reset(SavedUnit.AttributeTreeNodes.Num());
+            for (const FAttributeTreeNodeSaveData& NodeSave : SavedUnit.AttributeTreeNodes)
+            {
+                FAttributeTreeNodeState NodeState;
+                NodeState.NodeId = NodeSave.NodeId;
+                NodeState.Points = NodeSave.Points;
+                LevelUnit->AttributeTreeNodes.Add(NodeState);
+            }
         }
 
         // Mass-Entität auf die neue Actor-Position synchronisieren, Targets anpassen und Tags setzen
@@ -582,6 +660,29 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         {
             Existing->Destroy();
         }
+    }
+
+    // Restore the GameMode's unit-index allocator high-water mark. ApplyLoadedData re-applies each
+    // saved unit's UnitIndex via SetUnitIndex, but the allocator itself was reset by the freshly
+    // loaded level's BeginPlay. Without this, a post-load spawn (ARTSGameModeBase increments
+    // HighestUnitIndex then assigns it) can hand out an index that collides with a loaded unit,
+    // breaking the UnitIndex->registry matching the hybrid-Mass replication link depends on.
+    // GetAuthGameMode is null off the authority, so clients simply skip this.
+    if (ARTSGameModeBase* RTSGM = LoadedWorld->GetAuthGameMode<ARTSGameModeBase>())
+    {
+        int32 MaxUnitIndex = RTSGM->HighestUnitIndex;
+        for (const FUnitSaveData& SU : SaveData->Units)
+        {
+            MaxUnitIndex = FMath::Max(MaxUnitIndex, SU.UnitIndex);
+        }
+        for (TActorIterator<ALevelUnit> ItIdx(LoadedWorld); ItIdx; ++ItIdx)
+        {
+            if (ALevelUnit* LU = *ItIdx)
+            {
+                MaxUnitIndex = FMath::Max(MaxUnitIndex, LU->UnitIndex);
+            }
+        }
+        RTSGM->HighestUnitIndex = MaxUnitIndex;
     }
 
     // WorkAreas abgleichen

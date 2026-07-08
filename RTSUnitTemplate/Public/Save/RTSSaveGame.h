@@ -4,6 +4,7 @@
 #include "GameFramework/SaveGame.h"
 #include "Core/UnitData.h"
 #include "Core/Talents.h"
+#include "Core/WorkerData.h"
 #include "UObject/SoftObjectPath.h"
 #include "Actors/WorkArea.h"
 #include "RTSSaveGame.generated.h"
@@ -39,6 +40,20 @@ struct FAbilitySaveData
 
     UPROPERTY()
     bool bOwnerForceEnabled = false;
+};
+
+// Persisted per-node investment of the radial attribute tree (mirrors ALevelUnit::FAttributeTreeNodeState).
+// Kept as a bespoke save struct so the save format stays decoupled from the gameplay class header.
+USTRUCT(BlueprintType)
+struct FAttributeTreeNodeSaveData
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    FName NodeId = NAME_None;
+
+    UPROPERTY()
+    int32 Points = 0;
 };
 
 USTRUCT(BlueprintType)
@@ -87,6 +102,12 @@ struct FUnitSaveData
 
     UPROPERTY()
     FAttributeSaveData AttributeSaveData;
+
+    // Per-node investment of the radial attribute talent tree (AttributeTreeWidget).
+    // Restored as raw state: the resulting GAS attribute values are already captured in
+    // AttributeSaveData and the point pool in LevelData, so this must NOT be re-invested on load.
+    UPROPERTY()
+    TArray<FAttributeTreeNodeSaveData> AttributeTreeNodes;
 
     // Saved abilities states for this unit
     UPROPERTY()
@@ -220,4 +241,10 @@ public:
     // Aktivierte MapSwitch-Tags pro Map (MapKey normalisiert: Assetname)
     UPROPERTY()
     TArray<FMapSwitchTagsForMap> MapEnabledSwitchTags;
+
+    // Team resource economy (banked resources, capacities and worker distribution per team).
+    // Server-authoritative copy taken from AResourceGameMode::TeamResources. Empty on saves made
+    // before this field existed, so the loader must skip restore when empty.
+    UPROPERTY()
+    TArray<FResourceArray> TeamResources;
 };

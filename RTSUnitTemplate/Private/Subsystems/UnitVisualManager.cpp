@@ -8,6 +8,7 @@
 #include "UObject/UObjectIterator.h"
 #include "Characters/Unit/MassUnitBase.h"
 #include "MassActorSubsystem.h"
+#include "Mass/UnitMassTag.h"
 #include "TimerManager.h"
 
 void UUnitVisualManager::Initialize(FSubsystemCollectionBase& Collection) {
@@ -245,6 +246,143 @@ void UUnitVisualManager::SetUnitVisualVisible(FMassEntityHandle Entity, bool bVi
 			}
 		}
 	} 
+}
+
+void UUnitVisualManager::SwapUnitVisualToRuin(FMassEntityHandle Entity, AMassUnitBase* Unit, UStaticMesh* RuinMesh,
+	UMaterialInterface* RuinMaterial, bool bCastShadow, const FVector& StretchFactor, float YawDegrees)
+{
+	if (!RuinMesh || !Unit) return;
+
+	UMassEntitySubsystem* EntitySubsystem = GetWorld() ? GetWorld()->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+	if (!EntitySubsystem) return;
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	if (!EntityManager.IsEntityActive(Entity)) return;
+
+	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
+	FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+	if (!VisualFrag || !CharFrag) return;
+
+	// --- 1. Size the ruin to the building's ACTUAL on-screen footprint, then StretchFactor on top. ---
+	// Measure from the visual instance(s) the building is CURRENTLY using (the "previous ISM including
+	// scaling"): mesh bounds * the instance's relative scale * the actor scale. Buildings scale via
+	// SetActorScale3D, so the actor scale (PositionedTransform scale) carries the runtime size. This is
+	// robust when the template ISMComponent is empty and honours multi-part buildings.
+	const FVector ActorScale = CharFrag->PositionedTransform.GetScale3D();
+	FVector BuildingWorldSize(0.f);
+	for (const FMassUnitVisualInstance& Inst : VisualFrag->VisualInstances)
+	{
+		const UInstancedStaticMeshComponent* SrcISM = Inst.TargetISM.Get();
+		if (!SrcISM || !SrcISM->GetStaticMesh()) continue;
+		const FVector InstWorldSize = SrcISM->GetStaticMesh()->GetBoundingBox().GetSize()
+			* (Inst.BaseOffset.GetScale3D() * ActorScale).GetAbs();
+		BuildingWorldSize = BuildingWorldSize.ComponentMax(InstWorldSize);
+	}
+	if (BuildingWorldSize.IsNearlyZero())
+	{
+		BuildingWorldSize = (Unit->ISMComponent && Unit->ISMComponent->GetStaticMesh())
+			? Unit->ISMComponent->GetStaticMesh()->GetBoundingBox().GetSize() * Unit->ISMComponent->GetRelativeScale3D().GetAbs() * ActorScale.GetAbs()
+			: FVector(100.f);
+	}
+
+	const FBox RuinBox = RuinMesh->GetBoundingBox();
+	const FVector RuinLocalSize = RuinBox.GetSize();
+
+	auto SafeDiv = [](float A, float B) { return (FMath::Abs(B) > KINDA_SMALL_NUMBER) ? (A / B) : 1.f; };
+	// UNIFORM fit from the X/Y footprint so the ruin keeps its natural proportions and Z scales ALONG WITH
+	// X/Y (no pancaking). Per-axis Z-fitting made ruins flat whenever the ruin mesh was taller in local
+	// bounds than the building (and the 0.01 clamp could floor it). StretchFactor is applied per-axis on
+	// top for mesh-specific tuning (incl. deliberate Z squash/stretch).
+	const float FitXY = 0.5f * (SafeDiv(BuildingWorldSize.X, RuinLocalSize.X) + SafeDiv(BuildingWorldSize.Y, RuinLocalSize.Y));
+	FVector FinalScale = FVector(FitXY) * StretchFactor;
+	FinalScale.X = FMath::Clamp(FinalScale.X, 0.01f, 100.f);
+	FinalScale.Y = FMath::Clamp(FinalScale.Y, 0.01f, 100.f);
+	FinalScale.Z = FMath::Clamp(FinalScale.Z, 0.01f, 100.f);
+
+	// --- 2. Desired WORLD transform: building footprint X/Y, base seated on the ground, world yaw. ---
+	const FTransform& BaseTransform = CharFrag->PositionedTransform;
+	const FVector RuinCenter = RuinBox.GetCenter();
+	const FVector RuinExtent = RuinBox.GetExtent();
+	const float GroundZ = CharFrag->LastGroundLocation;
+	// Seat the ruin's scaled mesh bottom (Center.Z - Extent.Z) exactly on GroundZ.
+	const float SeatZ = GroundZ + (RuinExtent.Z - RuinCenter.Z) * FinalScale.Z;
+
+	const FVector RuinWorldLoc(BaseTransform.GetLocation().X, BaseTransform.GetLocation().Y, SeatZ);
+	const FQuat RuinWorldRot = FRotator(0.f, YawDegrees, 0.f).Quaternion();
+	const FTransform RuinWorld(RuinWorldRot, RuinWorldLoc, FinalScale);
+
+	// The placement processor renders each instance as CurrentRelativeTransform * BaseTransform, but for a
+	// dead non-flying unit it first flattens BaseTransform's rotation to yaw-only. Convert the desired world
+	// transform against the SAME yaw-only base, otherwise a ground-aligned (slope-pitched) building would
+	// tilt the ruin and lift its base off the ground.
+	FTransform SeatBase = BaseTransform;
+	SeatBase.SetRotation(FRotator(0.f, BaseTransform.GetRotation().Rotator().Yaw, 0.f).Quaternion());
+	const FTransform RuinRelative = RuinWorld.GetRelativeTransform(SeatBase);
+
+	// --- 3. Release the current (building) visual instances and drop the ruin in their place. ---
+	for (const FMassUnitVisualInstance& Instance : VisualFrag->VisualInstances)
+	{
+		ReleasePooledInstanceInternal(Instance.TargetISM.Get(), Instance.InstanceIndex, Unit);
+	}
+	VisualFrag->VisualInstances.Empty();
+
+	UInstancedStaticMeshComponent* RuinISM = GetOrCreateISM(RuinMesh, RuinMaterial, bCastShadow);
+	if (!RuinISM) return;
+
+	// Key off the ACTUAL pooled ISM (not the requested material), so the pop bucket here matches the push
+	// bucket in ReleasePooledInstanceInternal — otherwise a null RuinMaterial (ISM keeps the mesh's default
+	// material, so GetMaterial(0) != null) would leak indices into a different bucket than we pop from.
+	FMeshMaterialKey Key;
+	Key.Mesh = RuinISM->GetStaticMesh();
+	Key.Material = RuinISM->GetMaterial(0);
+	Key.bCastShadow = RuinISM->CastShadow;
+
+	int32 NewIndex = INDEX_NONE;
+	if (FreeIndexPool.Contains(Key) && FreeIndexPool[Key].Num() > 0)
+	{
+		NewIndex = FreeIndexPool[Key].Pop();
+	}
+	else
+	{
+		NewIndex = RuinISM->AddInstance(FTransform::Identity);
+	}
+	// Start hidden (zero scale); the placement processor reveals it next tick from RuinRelative.
+	RuinISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+
+	// Ruins are pure decoration — never collide or affect navigation.
+	RuinISM->SetCanEverAffectNavigation(false);
+	RuinISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(RuinISM);
+	if (UnitArray.Num() <= NewIndex) { UnitArray.SetNum(NewIndex + 1); }
+	UnitArray[NewIndex] = Unit;
+
+	FMassUnitVisualInstance RuinInstance;
+	RuinInstance.TemplateISM = RuinISM; // must be valid or the tween/placement loops skip the instance
+	RuinInstance.TargetISM = RuinISM;
+	RuinInstance.InstanceIndex = NewIndex;
+	RuinInstance.BaseOffset = RuinRelative;
+	RuinInstance.CurrentRelativeTransform = RuinRelative;
+	RuinInstance.bWasVisible = false;
+	VisualFrag->VisualInstances.Add(RuinInstance);
+
+	// Free the ruin instance on actor teardown (ruin despawns with the unit).
+	Unit->CachePooledVisual(RuinISM, NewIndex);
+
+	// --- 4. Un-hide (HideActorTime set bForceHidden) and force one placement pass to reveal the ruin. ---
+	if (FMassVisualEffectFragment* EffectFrag = EntityManager.GetFragmentDataPtr<FMassVisualEffectFragment>(Entity))
+	{
+		EffectFrag->bForceHidden = false;
+	}
+	// The visibility processor excludes dead entities, so FMassVisibilityFragment.bIsOnViewport is frozen at
+	// whatever it was at death — a building that died while off-screen would keep the ruin hidden even after
+	// the camera pans back. Force it on; the placement gate also needs bIsVisibleEnemy (already true for own
+	// buildings / enemies seen at death) and the ISM renderer still frustum-culls the instance per frame.
+	if (FMassVisibilityFragment* VisFrag = EntityManager.GetFragmentDataPtr<FMassVisibilityFragment>(Entity))
+	{
+		VisFrag->bIsOnViewport = true;
+	}
+	CharFrag->bTransformDirty = true;
 }
 
 UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow) {

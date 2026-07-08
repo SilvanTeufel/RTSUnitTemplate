@@ -4,8 +4,10 @@
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
+#include "Brushes/SlateColorBrush.h"
 #include "Fonts/FontMeasure.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Widgets/SViewport.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Layout/SBox.h"
@@ -30,6 +32,11 @@ void SAttributeTreeWidget::Construct(const FArguments& InArgs)
 	TooltipPadding      = InArgs._TooltipPadding;
 	TooltipIconSize     = InArgs._TooltipIconSize;
 	TooltipIconGap      = InArgs._TooltipIconGap;
+	BackgroundColor     = InArgs._BackgroundColor;
+	bFillViewport       = InArgs._bFillViewport;
+
+	// Plain fillable white box; tinted with BackgroundColor to dim the whole widget rect.
+	BackgroundBrush = FSlateColorBrush(FLinearColor::White);
 
 	OnGetNodePointsDelegate     = InArgs._OnGetNodePoints;
 	OnGetAvailablePointsDelegate= InArgs._OnGetAvailablePoints;
@@ -168,7 +175,22 @@ bool SAttributeTreeWidget::IsUnlocked(FName Id) const
 FVector2D SAttributeTreeWidget::ComputeDesiredSize(float) const
 {
 	const float R = (float)FMath::Max(MaxRing, 1) * RingSpacing + NodeRadius + 12.f;
-	return FVector2D(R * 2.f, R * 2.f);
+	FVector2D Desired(R * 2.f, R * 2.f);
+
+	// Grow to at least the game-viewport size so the dimmed backdrop fills the screen and the ring
+	// stays centred, no matter how the hosting container is sized. Only helps auto-sizing containers;
+	// a fixed-size Canvas slot still wins, so set the container to fill for full coverage.
+	if (bFillViewport && FSlateApplication::IsInitialized())
+	{
+		const TSharedPtr<SViewport> GameViewport = FSlateApplication::Get().GetGameViewport();
+		if (GameViewport.IsValid())
+		{
+			const FVector2D VP = GameViewport->GetTickSpaceGeometry().GetLocalSize();
+			Desired.X = FMath::Max(Desired.X, VP.X);
+			Desired.Y = FMath::Max(Desired.Y, VP.Y);
+		}
+	}
+	return Desired;
 }
 
 int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
@@ -179,7 +201,16 @@ int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	const FVector2D Center = LocalSize * 0.5f + PanOffset;
 	const FPaintGeometry WholeGeom = AllottedGeometry.ToPaintGeometry();
 
-	int32 Layer = LayerId;
+	// --- Full-rect dimmed backdrop ---
+	// Covers the whole widget so the tree has a solid background AND every click inside the widget
+	// is absorbed by Slate (never reaching the game -> no unit deselect / HUD close on click-away).
+	if (BackgroundColor.A > 0.f)
+	{
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId, WholeGeom,
+			&BackgroundBrush, ESlateDrawEffect::None, BackgroundColor);
+	}
+
+	int32 Layer = LayerId + 1;
 
 	// --- 0. Empty-state placeholder ---
 	if (Nodes.Num() == 0)
