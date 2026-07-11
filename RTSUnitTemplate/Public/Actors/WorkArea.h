@@ -138,7 +138,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ExtractionSoundVolume = 1.0f;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	// Replicated so the owning client can read the finished building's HasWaypoint flag
+	// (used to gate the construction-site rally-waypoint feature) before the server RPC.
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class ABuildingBase> BuildingClass;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

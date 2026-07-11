@@ -117,6 +117,13 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "ShiftReleased", Keywords = "RTSUnitTemplate ShiftReleased"), Category = RTSUnitTemplate)
 	void ShiftReleased();
 
+	// Client->server sync of the Shift state. IsShiftPressed replicates only server->client, so
+	// input set on a remote client never reaches the server; this RPC mirrors it up so
+	// server-authoritative reads of IsShiftPressed (waypoint queueing, shift-chained WorkArea
+	// placement, keep-selection) work for remote clients too, not just the listen-server host.
+	UFUNCTION(Server, Reliable)
+	void Server_SetShiftPressed(bool bPressed);
+
 	UFUNCTION(BlueprintCallable, Category = TopDownRTSTemplate)
 	void SelectUnit(int Index);
 	
@@ -180,8 +187,12 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void RightClickRunDijkstraPF(AUnitBase* Unit, FVector Location, int Counter);
 
+	// Generalized to AUnitBase so it serves both finished buildings and construction sites
+	// (AConstructionUnit). TeamId + NextWaypoint live on AUnitBase; assignment goes through
+	// SetWaypoint() which registers AddAssignedUnit only for buildings (construction sites get a
+	// raw assign, so they don't linger in the waypoint's AssignedUnits across the build handoff).
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	AWaypoint* CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase);
+	AWaypoint* CreateAWaypoint(FVector NewWPLocation, AUnitBase* OwnerUnit);
 	void UnregisterWaypointFromBuilding(ABuildingBase* Building);
 	
 	UFUNCTION(NetMulticast, Reliable)

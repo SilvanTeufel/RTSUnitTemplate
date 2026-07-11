@@ -31,6 +31,8 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/ConstructionUnit.h"
+#include "Actors/WorkArea.h"
 #include "Actors/Waypoint.h"
 
 
@@ -297,19 +299,38 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 		FVector2D Dummy;
 		if (!PC->ProjectWorldLocationToScreen(Unit->GetActorLocation(), Dummy)) continue;
 
-		ABuildingBase* Building = Cast<ABuildingBase>(Unit);
-		if (!Building || !Building->HasWaypoint)
+		// Draw the rally line for finished buildings (HasWaypoint) and for construction sites
+		// whose finished building has HasWaypoint (the rally the site carries until handoff).
+		bool bDrawWaypoint = false;
+		if (const ABuildingBase* Building = Cast<ABuildingBase>(Unit))
 		{
-			continue; 
+			bDrawWaypoint = Building->HasWaypoint;
+		}
+		else if (Unit->bIsConstructionUnit)
+		{
+			if (const AConstructionUnit* Site = Cast<AConstructionUnit>(Unit))
+			{
+				if (Site->WorkArea && Site->WorkArea->BuildingClass)
+				{
+					if (const ABuildingBase* BuildingCDO = Site->WorkArea->BuildingClass->GetDefaultObject<ABuildingBase>())
+					{
+						bDrawWaypoint = BuildingCDO->HasWaypoint;
+					}
+				}
+			}
+		}
+		if (!bDrawWaypoint)
+		{
+			continue;
 		}
 
-		AWaypoint* WP = Building->NextWaypoint;
+		AWaypoint* WP = Unit->NextWaypoint;
 		if (!IsValid(WP) || WP->IsHidden())
 		{
 			continue;
 		}
 
-		const FVector Start = Building->GetActorLocation();
+		const FVector Start = Unit->GetActorLocation();
 		const FVector End = WP->GetActorLocation();
 
 		// Trace to see if the line clips through the landscape
@@ -317,7 +338,7 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 		const FVector TraceEnd = End + FVector(0.f, 0.f, WPLineZOffset);
 
 		FCollisionQueryParams Params;
-		Params.AddIgnoredActor(Building);
+		Params.AddIgnoredActor(Unit);
 		Params.AddIgnoredActor(WP);
 
 		TArray<FVector> Points;

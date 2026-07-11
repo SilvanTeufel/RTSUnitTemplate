@@ -14,6 +14,8 @@
 #include "Actors/UnitSpawnPlatform.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/ConstructionUnit.h"
+#include "Actors/WorkArea.h"
 #include "Actors/Waypoint.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -201,11 +203,26 @@ void AControllerBase::Tick(float DeltaSeconds)
 void AControllerBase::ShiftPressed()
 {
 	IsShiftPressed = true;
+	// Mirror the local input up to the server so server-authoritative reads of IsShiftPressed
+	// (e.g. shift-chained WorkArea placement) are correct for remote clients, not only the host.
+	if (!HasAuthority())
+	{
+		Server_SetShiftPressed(true);
+	}
 }
 
 void AControllerBase::ShiftReleased()
 {
 	IsShiftPressed = false;
+	if (!HasAuthority())
+	{
+		Server_SetShiftPressed(false);
+	}
+}
+
+void AControllerBase::Server_SetShiftPressed_Implementation(bool bPressed)
+{
+	IsShiftPressed = bPressed;
 }
 
 void AControllerBase::SelectUnit(int Index)
@@ -701,11 +718,11 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 		SetRunLocationUseDijkstra(Location, UnitLocation, SelectedUnits, PathPoints, Counter);
 }
 
-AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase* BuildingBase)
+AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, AUnitBase* OwnerUnit)
 {
 	UWorld* World = GetWorld();
 
-	if (World && WaypointClass)
+	if (World && WaypointClass && OwnerUnit)
 	{
 		// Define the spawn parameters
 		FActorSpawnParameters SpawnParams;
@@ -723,15 +740,17 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, ABuildingBase
 
 		if (NewWaypoint)
 		{
-			// Assign the team ID from the building
-			NewWaypoint->TeamId = BuildingBase->TeamId;
-			
+			// Assign the team ID from the owning unit (building or construction site)
+			NewWaypoint->TeamId = OwnerUnit->TeamId;
+
 			// Finish spawning
 			NewWaypoint->FinishSpawning(FTransform(FRotator::ZeroRotator, NewWPLocation));
 
-			// Assign the new waypoint to the building
-			BuildingBase->NextWaypoint = NewWaypoint;
-			NewWaypoint->AddAssignedUnit(BuildingBase);
+			// Assign the new waypoint to the unit. SetWaypoint registers AddAssignedUnit for
+			// buildings (preserving the old behavior) and does a raw assign for construction
+			// sites, so a transient site never lingers in the waypoint's AssignedUnits set
+			// across the build handoff.
+			OwnerUnit->SetWaypoint(NewWaypoint);
 			return NewWaypoint;
 		}
 	}
@@ -757,8 +776,54 @@ void AControllerBase::UnregisterWaypointFromBuilding(ABuildingBase* Building)
 void AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit, AWaypoint*& BuildingWaypoint, bool& PlayWaypointSound, bool& Success)
 {
 	Success = false;
+
+	if (!Unit) return;
+
+	// --- Construction sites (AConstructionUnit): a rally waypoint gated on the finished
+	// building's HasWaypoint, mirrored onto the WorkArea so the build-complete handoff
+	// (HandleSpawnBuildingRequest) passes it to the finished building. ---
+	if (Unit->bIsConstructionUnit)
+	{
+		PlayWaypointSound = false;
+		AConstructionUnit* Site = Cast<AConstructionUnit>(Unit);
+		if (!Site || !Site->WorkArea || !Site->WorkArea->BuildingClass) return;
+
+		const ABuildingBase* BuildingCDO = Site->WorkArea->BuildingClass->GetDefaultObject<ABuildingBase>();
+		if (!BuildingCDO || !BuildingCDO->HasWaypoint)
+		{
+			// Consume the click like the building !HasWaypoint case (no waypoint created).
+			Success = true;
+			return;
+		}
+
+		PlayWaypointSound = true;
+		Success = true;
+
+		if (HasAuthority())
+		{
+			NewWPLocation.Z += RelocateWaypointZOffset;
+
+			// One independent rally waypoint per site (no cross-site sharing, no AddAssignedUnit),
+			// so the transient site never keeps the waypoint alive after the build handoff.
+			if (IsValid(Site->NextWaypoint))
+			{
+				Site->NextWaypoint->SetActorLocation(NewWPLocation);
+			}
+			else
+			{
+				CreateAWaypoint(NewWPLocation, Site);
+			}
+
+			// Mirror onto the WorkArea so the finished building inherits this waypoint.
+			Site->WorkArea->NextWaypoint = Site->NextWaypoint;
+
+			Multi_SetBuildingWaypoint(NewWPLocation, Unit, Site->NextWaypoint, PlayWaypointSound);
+		}
+		return;
+	}
+
 	// OPTIMIZATION: Use flag instead of Cast
-	if (!Unit || !Unit->bIsBuilding) return;
+	if (!Unit->bIsBuilding) return;
 
 	ABuildingBase* BuildingBase = static_cast<ABuildingBase*>(Unit);
 	
@@ -805,13 +870,14 @@ void AControllerBase::Multi_SetBuildingWaypoint_Implementation(FVector NewWPLoca
 {
 	if (!HasAuthority())
 	{
-		if (Unit && Unit->bIsBuilding)
+		// Applies to finished buildings and construction sites alike. SetWaypoint registers
+		// AddAssignedUnit only for buildings; construction sites get a raw assign.
+		if (Unit && (Unit->bIsBuilding || Unit->bIsConstructionUnit))
 		{
-			ABuildingBase* BuildingBase = static_cast<ABuildingBase*>(Unit);
-			BuildingBase->SetWaypoint(BuildingWaypoint);
-			if (BuildingBase->NextWaypoint)
+			Unit->SetWaypoint(BuildingWaypoint);
+			if (IsValid(Unit->NextWaypoint))
 			{
-				BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
+				Unit->NextWaypoint->SetActorLocation(NewWPLocation);
 			}
 		}
 	}

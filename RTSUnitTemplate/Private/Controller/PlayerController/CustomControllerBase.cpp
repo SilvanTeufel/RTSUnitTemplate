@@ -2103,7 +2103,8 @@ void ACustomControllerBase::LeftClickPressedMassMinimapAttack(const FVector& Gro
 
 		// OPTIMIZATION: Cast once per iteration using the flag
 		ABuildingBase* B = U->bIsBuilding ? static_cast<ABuildingBase*>(U) : nullptr;
-		FVector RunLocation = B ? GroundLocation : AdjustedLocation + Offsets[i];
+		// Buildings and construction sites (rally-waypoint owners) use the exact click location.
+		FVector RunLocation = (U->bIsBuilding || U->bIsConstructionUnit) ? GroundLocation : AdjustedLocation + Offsets[i];
 
 		bool bNavMod;
 		RunLocation = TraceRunLocation(RunLocation, bNavMod);
@@ -2708,8 +2709,9 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	if (UnitIsValid)
     	{
     		FVector FinalLoc;
-    		if (U->bIsBuilding)
+    		if (U->bIsBuilding || U->bIsConstructionUnit)
     		{
+    			// Buildings and construction sites (rally-waypoint owners) use the exact click.
     			FinalLoc = Hit.Location;
     		}
     		else
@@ -3657,7 +3659,8 @@ void ACustomControllerBase::HandleAttackMovePressed()
         // OPTIMIZATION: Cast once per iteration using the flag
         ABuildingBase* B = U->bIsBuilding ? static_cast<ABuildingBase*>(U) : nullptr;
 
-        FVector RunLocation = B ? (FVector)Hit.Location : AdjustedLocation + Offsets[i];
+        // Buildings and construction sites (rally-waypoint owners) use the exact click location.
+        FVector RunLocation = (U->bIsBuilding || U->bIsConstructionUnit) ? (FVector)Hit.Location : AdjustedLocation + Offsets[i];
 
         bool bNavMod;
         RunLocation = TraceRunLocation(RunLocation, bNavMod);

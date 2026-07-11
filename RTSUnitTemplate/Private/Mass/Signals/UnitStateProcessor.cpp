@@ -24,6 +24,7 @@
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Components/StaticMeshComponent.h"
 #include "Actors/WorkArea.h"
+#include "Actors/Waypoint.h"
 #include "Actors/EnergyWall.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "GameModes/ResourceGameMode.h"
@@ -535,6 +536,16 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                             {
                             	if (World && !World->IsNetMode(NM_Client))
                             	{
+                         					// Destroy an orphaned rally waypoint the site carried but never handed off:
+                         					// the site died before a building was spawned, so the waypoint was never
+                         					// registered on a building and its AssignedUnitCount stays 0. The <=0 guard
+                         					// protects a waypoint already handed to a finished building (count 1). The
+                         					// success handoff destroys the CU via CU->Destroy, not this Dead signal.
+                         					if (IsValid(CU->NextWaypoint) && CU->NextWaypoint->GetAssignedUnitCount() <= 0)
+                         					{
+                         						CU->NextWaypoint->Destroy(true, true);
+                         					}
+                         					CU->NextWaypoint = nullptr;
                          					if (CU->WorkArea)
                          					{
                          						// Clear back-reference and destroy the area
@@ -2454,7 +2465,10 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								{
 						
 									if (SpawnedBuilding && UnitBase->BuildArea && UnitBase->BuildArea->NextWaypoint)
-										SpawnedBuilding->NextWaypoint = UnitBase->BuildArea->NextWaypoint;
+										// SetWaypoint (not a raw assign) so the finished building registers in
+										// the waypoint's AssignedUnits set — keeps the waypoint's lifetime
+										// correct after the construction site that carried it is destroyed.
+										SpawnedBuilding->SetWaypoint(UnitBase->BuildArea->NextWaypoint);
 
 									if (SpawnedBuilding && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
 										UnitBase->BuildArea->Building = SpawnedBuilding;

@@ -215,6 +215,7 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, IsNoBuildZone);
 	DOREPLIFETIME(AWorkArea, ConstructionUnitClass);
 	DOREPLIFETIME(AWorkArea, ConstructionUnit);
+	DOREPLIFETIME(AWorkArea, BuildingClass);
 	DOREPLIFETIME(AWorkArea, ScaleConstructionUnit);
 	DOREPLIFETIME(AWorkArea, DroneVerticalOffset);
 	DOREPLIFETIME(AWorkArea, DroneBuildingHeightOverride);

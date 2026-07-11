@@ -34,6 +34,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include "GameFramework/PlayerState.h"
 #include "Mass/UnitMassTag.h"
 #include "MassEntitySubsystem.h"
@@ -4620,12 +4621,46 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				Client_PlaySound2D(DropWorkAreaSound);
 			}
 
+			// Capture the placement parameters BEFORE the worker is committed, so a Shift-chain
+			// can re-arm an identical WorkArea (SpawnWorkAreaReplicated needs the same 7 params).
+			TSubclassOf<AWorkArea> ChainWorkAreaClass         = DraggedWorkArea->GetClass();
+			AWaypoint*             ChainWaypoint              = DraggedWorkArea->NextWaypoint;
+			const FVector          ChainSpawnLocation         = DraggedWorkArea->GetActorLocation();
+			const FBuildingCost    ChainConstructionCost      = DraggedWorkArea->ConstructionCost;
+			const bool             ChainIsPaid                = DraggedWorkArea->IsPaid;
+			TSubclassOf<AUnitBase> ChainConstructionUnitClass = DraggedWorkArea->ConstructionUnitClass;
+
 			if (UnitBase->CurrentDraggedWorkArea)
 			{
 				Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
 					UnitBase->CurrentDraggedWorkArea->GetActorTransform(), UnitBase);
 			}
-			SendWorkerToWork(UnitBase);
+			SendWorkerToWork(UnitBase); // pays the cost (if IsPaid) and nulls CurrentDraggedWorkArea
+
+			// Shift-chain: immediately re-arm another WorkArea of the same type so the player can
+			// keep placing. Stops when Shift is released or the team can no longer afford the next.
+			// CurrentDraggedWorkArea is null here (SendWorkerToWork cleared it), so
+			// SpawnWorkAreaReplicated spawns a fresh ghost without destroying the placed area.
+			if (IsShiftPressed && !bIsExtensionArea)
+			{
+				bool bCanAfford = true;
+				if (ChainIsPaid)
+				{
+					if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode))
+					{
+						bCanAfford = ResourceGameMode->CanAffordConstruction(ChainConstructionCost, UnitBase->TeamId);
+					}
+				}
+
+				if (bCanAfford)
+				{
+					if (AWorkingUnitBase* WorkerUnit = Cast<AWorkingUnitBase>(UnitBase))
+					{
+						WorkerUnit->SpawnWorkAreaReplicated(ChainWorkAreaClass, ChainWaypoint, ChainSpawnLocation,
+							ChainConstructionCost, ChainIsPaid, ChainConstructionUnitClass, /*IsExtensionArea=*/false);
+					}
+				}
+			}
 			return true;
 		}
 
