@@ -344,6 +344,13 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AreaDropped = false;
 
+	// Server-only marker: set on WorkArea ghosts re-armed by the Shift-chain placement. When such
+	// a ghost is dropped, DropWorkAreaForUnit does NOT dispatch the placing worker; it enqueues the
+	// area into the build group (PlannedBuilding=false) so the normal ReachedBase auto-assignment
+	// (SwitchBuildArea) services it. Only the FIRST area of a chain dispatches the worker directly.
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bSkipWorkerDispatchOnDrop = false;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool GetAreaDropped() const { return AreaDropped; }
 };

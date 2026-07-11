@@ -4629,18 +4629,51 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			const FBuildingCost    ChainConstructionCost      = DraggedWorkArea->ConstructionCost;
 			const bool             ChainIsPaid                = DraggedWorkArea->IsPaid;
 			TSubclassOf<AUnitBase> ChainConstructionUnitClass = DraggedWorkArea->ConstructionUnitClass;
+			// Ghosts re-armed by a previous Shift-chain step do NOT dispatch the placing worker:
+			// only the FIRST area of the chain sends the worker; the rest are auto-assigned.
+			const bool             bChainedNoDispatch         = DraggedWorkArea->bSkipWorkerDispatchOnDrop;
 
 			if (UnitBase->CurrentDraggedWorkArea)
 			{
 				Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
 					UnitBase->CurrentDraggedWorkArea->GetActorTransform(), UnitBase);
 			}
-			SendWorkerToWork(UnitBase); // pays the cost (if IsPaid) and nulls CurrentDraggedWorkArea
+
+			if (bChainedNoDispatch)
+			{
+				// Shift-chain continuation: don't send THIS worker (it stays on the first area).
+				// Enqueue the area into the build group with PlannedBuilding=false so the normal
+				// ReachedBase -> HandleBaseArea -> SwitchBuildArea auto-assignment services it.
+				// Mirror SendWorkerToWork's area commit + upfront pay (IsPaid areas charge at
+				// placement; deferred !IsPaid areas charge at build start in HandleBuildArea).
+				DraggedWorkArea->TeamId          = UnitBase->TeamId;
+				DraggedWorkArea->PlannedBuilding = false; // keep claimable by SwitchBuildArea
+				DraggedWorkArea->ControlTimer    = 0.f;
+				DraggedWorkArea->AddAreaToGroup();
+				if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode))
+				{
+					if (DraggedWorkArea->IsPaid)
+					{
+						ResourceGameMode->ModifyResource(EResourceType::Primary,   UnitBase->TeamId, -DraggedWorkArea->ConstructionCost.PrimaryCost);
+						ResourceGameMode->ModifyResource(EResourceType::Secondary, UnitBase->TeamId, -DraggedWorkArea->ConstructionCost.SecondaryCost);
+						ResourceGameMode->ModifyResource(EResourceType::Tertiary,  UnitBase->TeamId, -DraggedWorkArea->ConstructionCost.TertiaryCost);
+						ResourceGameMode->ModifyResource(EResourceType::Rare,      UnitBase->TeamId, -DraggedWorkArea->ConstructionCost.RareCost);
+						ResourceGameMode->ModifyResource(EResourceType::Epic,      UnitBase->TeamId, -DraggedWorkArea->ConstructionCost.EpicCost);
+						ResourceGameMode->ModifyResource(EResourceType::Legendary, UnitBase->TeamId, -DraggedWorkArea->ConstructionCost.LegendaryCost);
+					}
+				}
+				UnitBase->CurrentDraggedWorkArea = nullptr;
+			}
+			else
+			{
+				SendWorkerToWork(UnitBase); // first area: dispatch worker, pay (if IsPaid), null CurrentDraggedWorkArea
+			}
 
 			// Shift-chain: immediately re-arm another WorkArea of the same type so the player can
 			// keep placing. Stops when Shift is released or the team can no longer afford the next.
-			// CurrentDraggedWorkArea is null here (SendWorkerToWork cleared it), so
-			// SpawnWorkAreaReplicated spawns a fresh ghost without destroying the placed area.
+			// CurrentDraggedWorkArea is null here (cleared above), so SpawnWorkAreaReplicated spawns
+			// a fresh ghost without destroying the placed area. The new ghost is flagged so its own
+			// drop is treated as a chain continuation (worker not re-dispatched).
 			if (IsShiftPressed && !bIsExtensionArea)
 			{
 				bool bCanAfford = true;
@@ -4656,8 +4689,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				{
 					if (AWorkingUnitBase* WorkerUnit = Cast<AWorkingUnitBase>(UnitBase))
 					{
-						WorkerUnit->SpawnWorkAreaReplicated(ChainWorkAreaClass, ChainWaypoint, ChainSpawnLocation,
+						AWorkArea* NewGhost = WorkerUnit->SpawnWorkAreaReplicated(ChainWorkAreaClass, ChainWaypoint, ChainSpawnLocation,
 							ChainConstructionCost, ChainIsPaid, ChainConstructionUnitClass, /*IsExtensionArea=*/false);
+						if (NewGhost)
+						{
+							NewGhost->bSkipWorkerDispatchOnDrop = true;
+						}
 					}
 				}
 			}
