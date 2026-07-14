@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Abilitys/EffectAreaVisualProcessor.h"
 #include "Mass/Abilitys/EffectAreaVisualManager.h"
 #include "MassReplicationFragments.h"

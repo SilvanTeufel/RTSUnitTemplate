@@ -1,4 +1,5 @@
-﻿#include "System/MapSwitchSubsystem.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "System/MapSwitchSubsystem.h"
 #include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 

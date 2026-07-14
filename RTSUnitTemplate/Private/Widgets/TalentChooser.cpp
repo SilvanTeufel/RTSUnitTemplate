@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Widgets/TalentChooser.h"
 #include <Components/ProgressBar.h>
 #include <Components/TextBlock.h>

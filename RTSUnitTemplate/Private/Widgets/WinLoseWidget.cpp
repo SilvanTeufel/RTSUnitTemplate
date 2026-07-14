@@ -1,4 +1,5 @@
-﻿#include "Widgets/WinLoseWidget.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/WinLoseWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "Controller/PlayerController/CameraControllerBase.h"

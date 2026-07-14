@@ -1,4 +1,5 @@
-﻿#include "Widgets/SaveGameWidget.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/SaveGameWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "Components/EditableTextBox.h"

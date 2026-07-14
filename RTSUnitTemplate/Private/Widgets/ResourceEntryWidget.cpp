@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 // ResourceEntryWidget.cpp
 #include "Widgets/ResourceEntryWidget.h"
 #include "Components/TextBlock.h"

@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Characters/Camera/BehaviorTree/RTSBTController.h"
 
 #include "BehaviorTree/BehaviorTree.h"

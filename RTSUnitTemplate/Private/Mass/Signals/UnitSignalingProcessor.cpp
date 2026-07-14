@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Signals/UnitSignalingProcessor.h"
 #include "MassSimulationSubsystem.h" // IMPORTANT: Include for the delegate system
 #include "Mass/Signals/MassUnitSpawnerSubsystem.h"

@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Widgets/MapMenuWidget.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"

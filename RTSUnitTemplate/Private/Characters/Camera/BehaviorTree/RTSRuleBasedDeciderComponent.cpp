@@ -1,4 +1,5 @@
-﻿#include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
 
 #include "GameFramework/Pawn.h"
 #include "AIController.h"

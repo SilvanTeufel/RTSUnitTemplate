@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 // Simple forward declarations for Behavior Tree types as requested.

@@ -1,4 +1,5 @@
-﻿#include "Widgets/MapSwitchWidget.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/MapSwitchWidget.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "Kismet/GameplayStatics.h"

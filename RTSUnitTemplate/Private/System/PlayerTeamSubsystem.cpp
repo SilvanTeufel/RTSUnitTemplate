@@ -1,4 +1,5 @@
-﻿#include "System/PlayerTeamSubsystem.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "System/PlayerTeamSubsystem.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Engine/Engine.h"

@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 // ResourceWidget.cpp
 #include "Widgets/ResourceWidget.h"
 #include "Widgets/ResourceEntryWidget.h" // Include our new widget

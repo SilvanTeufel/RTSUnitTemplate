@@ -1,4 +1,5 @@
-﻿#include "Mass/Abilitys/CastingFallBackProcessor.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Mass/Abilitys/CastingFallBackProcessor.h"
 #include "MassExecutionContext.h"
 #include "MassSignalSubsystem.h"
 #include "Mass/UnitMassTag.h"

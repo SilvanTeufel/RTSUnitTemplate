@@ -1,4 +1,5 @@
-﻿#include "Actors/WinLoseConfigActor.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Actors/WinLoseConfigActor.h"
 #include "Net/UnrealNetwork.h"
 #include "EngineUtils.h"
 #include "Engine/Engine.h"

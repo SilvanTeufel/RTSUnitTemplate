@@ -1,4 +1,5 @@
-﻿#include "Characters/Camera/BehaviorTree/BTT_ChooseAction_RuleBased.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Characters/Camera/BehaviorTree/BTT_ChooseAction_RuleBased.h"
 
 #include "AIController.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"

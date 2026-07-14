@@ -1,4 +1,5 @@
-﻿
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+
 /*
 #if RTSUNITTEMPLATE_NO_LOGS
 #undef UE_LOG

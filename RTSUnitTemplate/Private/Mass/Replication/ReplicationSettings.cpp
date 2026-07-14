@@ -1,4 +1,5 @@
-﻿#include "Mass/Replication/ReplicationSettings.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Mass/Replication/ReplicationSettings.h"
 #include "HAL/IConsoleManager.h"
 
 // Master CVAR to select the replication mode

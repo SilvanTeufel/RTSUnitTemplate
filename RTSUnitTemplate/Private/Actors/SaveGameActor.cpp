@@ -1,4 +1,5 @@
-﻿#include "Actors/SaveGameActor.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Actors/SaveGameActor.h"
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"

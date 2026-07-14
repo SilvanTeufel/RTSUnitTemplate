@@ -1,4 +1,5 @@
-﻿#include "Actors/StoryTriggerActor.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Actors/StoryTriggerActor.h"
 #include "Components/BoxComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Characters/Unit/UnitBase.h"

@@ -1,4 +1,5 @@
-﻿#include "Widgets/GameTimerWidget.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/GameTimerWidget.h"
 #include "Kismet/GameplayStatics.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 

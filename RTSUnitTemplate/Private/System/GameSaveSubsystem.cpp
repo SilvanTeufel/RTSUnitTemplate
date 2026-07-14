@@ -1,4 +1,5 @@
-﻿#include "System/GameSaveSubsystem.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "System/GameSaveSubsystem.h"
 #include "HAL/FileManager.h"
 #include "Save/RTSSaveGame.h"
 #include "Kismet/GameplayStatics.h"

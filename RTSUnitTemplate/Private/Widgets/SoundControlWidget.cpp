@@ -1,4 +1,5 @@
-﻿#include "Widgets/SoundControlWidget.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/SoundControlWidget.h"
 #include "System/StoryTriggerQueueSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Kismet/GameplayStatics.h"

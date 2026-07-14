@@ -1,4 +1,5 @@
-﻿#include "Widgets/StoryWidgetBase.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/StoryWidgetBase.h"
 #include "TimerManager.h"
 #include "Engine/Texture2D.h"
 #include "Materials/MaterialInterface.h"

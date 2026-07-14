@@ -1,4 +1,5 @@
-﻿#include "System/RTSBeaconSubsystem.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "System/RTSBeaconSubsystem.h"
 
 void URTSBeaconSubsystem::UpdateBeacons(TArray<FRTSBeaconInfo>&& InBeacons)
 {

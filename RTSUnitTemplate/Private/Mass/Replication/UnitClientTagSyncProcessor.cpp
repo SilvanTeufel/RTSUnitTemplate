@@ -1,4 +1,5 @@
-﻿#include "Mass/Replication/UnitClientTagSyncProcessor.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Mass/Replication/UnitClientTagSyncProcessor.h"
 #include "MassEntityManager.h"
 #include "MassExecutionContext.h"
 #include "GameFramework/Actor.h"

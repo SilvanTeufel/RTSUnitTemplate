@@ -1,4 +1,5 @@
-﻿#include "Mass/MassBeaconProcessor.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Mass/MassBeaconProcessor.h"
 #include "MassCommonFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "System/RTSBeaconSubsystem.h"

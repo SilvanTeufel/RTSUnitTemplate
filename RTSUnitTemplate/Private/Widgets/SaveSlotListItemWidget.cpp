@@ -1,4 +1,5 @@
-﻿#include "Widgets/SaveSlotListItemWidget.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/SaveSlotListItemWidget.h"
 #include "Components/Button.h"
 #include "Components/TextBlock.h"
 #include "Widgets/SaveGameWidget.h"

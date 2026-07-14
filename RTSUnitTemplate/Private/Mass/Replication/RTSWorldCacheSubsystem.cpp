@@ -1,4 +1,5 @@
-﻿#include "Mass/Replication/RTSWorldCacheSubsystem.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Mass/Replication/RTSWorldCacheSubsystem.h"
 
 #include "Engine/World.h"
 #include "EngineUtils.h"

@@ -1,4 +1,5 @@
-﻿#include "Mass/Projectile/ProjectileVisualManager.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Mass/Projectile/ProjectileVisualManager.h"
 #include "System/PlayerTeamSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "MassCommandBuffer.h"

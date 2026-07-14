@@ -1,4 +1,5 @@
-﻿// SharedMemoryManager.h
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// SharedMemoryManager.h
 #pragma once
 
 #include "CoreMinimal.h"

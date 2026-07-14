@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "GameModes/UpgradeGameMode.h"
 #include "GameStates/UpgradeGameState.h"
 #include "Net/UnrealNetwork.h"

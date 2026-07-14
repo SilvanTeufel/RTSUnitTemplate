@@ -1,4 +1,5 @@
-﻿#include "System/StoryTriggerQueueSubsystem.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "System/StoryTriggerQueueSubsystem.h"
 #include "Widgets/StoryWidgetBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"

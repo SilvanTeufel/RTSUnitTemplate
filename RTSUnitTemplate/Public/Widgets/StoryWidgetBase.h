@@ -1,4 +1,5 @@
-﻿// Copyright 2025
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// Copyright 2025
 #pragma once
 
 #include "CoreMinimal.h"

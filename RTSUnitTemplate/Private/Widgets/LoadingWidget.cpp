@@ -1,4 +1,5 @@
-﻿#include "Widgets/LoadingWidget.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Widgets/LoadingWidget.h"
 #include "Components/ProgressBar.h"
 #include "Kismet/GameplayStatics.h"
 

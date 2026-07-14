@@ -1,4 +1,5 @@
-﻿#include "Characters/Camera/BehaviorTree/BTService_PushGameStateToBB.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Characters/Camera/BehaviorTree/BTService_PushGameStateToBB.h"
 
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"

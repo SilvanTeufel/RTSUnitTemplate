@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Abilitys/EffectAreaImpactProcessor.h"
 #include "MassReplicationFragments.h"
 #include "MassCommonFragments.h"

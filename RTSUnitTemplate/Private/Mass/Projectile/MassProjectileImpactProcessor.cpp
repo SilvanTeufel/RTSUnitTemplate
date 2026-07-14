@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Projectile/MassProjectileImpactProcessor.h"
 #include "MassCommonFragments.h"
 #include "Mass/UnitMassTag.h"

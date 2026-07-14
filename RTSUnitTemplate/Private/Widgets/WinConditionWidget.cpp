@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Widgets/WinConditionWidget.h"
 #include "Actors/WinLoseConfigActor.h"
 #include "Controller/PlayerController/CameraControllerBase.h"

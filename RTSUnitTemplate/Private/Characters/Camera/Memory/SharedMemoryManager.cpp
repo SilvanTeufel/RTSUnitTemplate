@@ -1,4 +1,5 @@
-﻿// SharedMemoryManager.cpp
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// SharedMemoryManager.cpp
 #include "Characters/Camera/Memory/SharedMemoryManager.h"
 #include "HAL/Platform.h"
 #include "HAL/PlatformMemory.h"

@@ -1,4 +1,5 @@
-﻿#include "ReplicationStressTest.h"
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "ReplicationStressTest.h"
 #include "Mass/Replication/UnitRegistryReplicator.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Engine/World.h"

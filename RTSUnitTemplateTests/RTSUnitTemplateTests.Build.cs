@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 using UnrealBuildTool;
 
 public class RTSUnitTemplateTests : ModuleRules

@@ -1,3 +1,4 @@
+// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Components/StoryTriggerComponent.h"
 
 #include "Engine/DataTable.h"

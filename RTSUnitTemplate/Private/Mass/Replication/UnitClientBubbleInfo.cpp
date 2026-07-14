@@ -1,4 +1,5 @@
-﻿
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Engine/World.h"
 #include "Net/UnrealNetwork.h"
