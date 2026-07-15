@@ -637,6 +637,8 @@ void ACameraControllerBase::StopAllCameraMovement()
 	ZoomInToPosition = false;
 	ScrollZoomCount = 0.f;
 	MiddleMouseIsPressed = false;
+	// Held ability keys are input state too: blocking controls stops their release from arriving.
+	ClearHeldAbilityInputs();
 
 	if (CameraBase)
 	{

@@ -17,6 +17,10 @@
 #include "Landscape.h"
 #include "DrawDebugHelpers.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
+#include "Kismet/GameplayStatics.h"
+#include "Components/AudioComponent.h"
+#include "TimerManager.h"
 
 void UProjectileVisualManager::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -172,6 +176,77 @@ const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProje
 	}
     
 	return Cast<AProjectile>(ProjectileClass->GetDefaultObject());
+}
+
+void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible)
+{
+	if (!CDO || !bVisible) return;
+	if (!CDO->SpawnVFX && !CDO->SpawnSound) return;
+
+	// Never CDO->GetWorld() - the CDO is worldless (see Projectile.h). Use the subsystem's world.
+	UWorld* World = GetWorld();
+	if (!World || World->GetNetMode() == NM_DedicatedServer) return;
+
+	const FVector Loc = SpawnTransform.GetLocation();
+	// Quaternion composition, not FRotator addition: adding components is not composing rotations
+	// and diverges once pitch and yaw combine - which aimed projectiles always do.
+	const FRotator Rot = (SpawnTransform.GetRotation() * CDO->RotateSpawnVFX.Quaternion()).Rotator();
+	const float KillDelay = CDO->SpawnEffectKillDelay;
+
+	if (CDO->SpawnVFX)
+	{
+		// bAutoDestroy (default true) already covers one-shot systems; the kill delay is the backstop
+		// for a looping one. Deliberately not registered in APerformanceUnit::ActiveNiagara - that
+		// array is only ever emptied by StopAllEffects, so a per-shot effect would accumulate there.
+		if (UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, CDO->SpawnVFX, Loc, Rot, CDO->ScaleSpawnVFX))
+		{
+			if (KillDelay > 0.f)
+			{
+				TWeakObjectPtr<UNiagaraComponent> WeakNC = NC;
+				FTimerHandle TimerHandle;
+				World->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([WeakNC]()
+				{
+					if (UNiagaraComponent* Comp = WeakNC.Get())
+					{
+						Comp->Deactivate();
+						Comp->DestroyComponent();
+					}
+				}), KillDelay, false);
+			}
+		}
+	}
+
+	if (CDO->SpawnSound)
+	{
+		float Multiplier = CDO->ScaleSpawnSound;
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (APlayerController* PC = GI->GetFirstLocalPlayerController())
+			{
+				if (AControllerBase* ControllerBase = Cast<AControllerBase>(PC))
+				{
+					Multiplier *= ControllerBase->GetSoundMultiplier();
+				}
+			}
+		}
+
+		if (UAudioComponent* AC = UGameplayStatics::SpawnSoundAtLocation(World, CDO->SpawnSound, Loc, Rot, Multiplier))
+		{
+			if (KillDelay > 0.f)
+			{
+				TWeakObjectPtr<UAudioComponent> WeakAC = AC;
+				FTimerHandle TimerHandle;
+				World->GetTimerManager().SetTimer(TimerHandle, FTimerDelegate::CreateLambda([WeakAC]()
+				{
+					if (UAudioComponent* Comp = WeakAC.Get())
+					{
+						Comp->Stop();
+						Comp->DestroyComponent();
+					}
+				}), KillDelay, false);
+			}
+		}
+	}
 }
 
 FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale, float Damage, int32 MaxPiercedTargets, bool bIsPredicted, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3, FEffectAreaInfo AreaInfo)
@@ -519,6 +594,38 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 				VisualFragment.Niagara_B = NC;
 			}
 		}
+	}
+
+	// One-shot spawn burst. Unlike the Niagara_A/B trails above - persistent components whose
+	// visibility the movement processor re-toggles every tick - this fires once and self-destroys,
+	// so when fog hides it we skip it entirely rather than spawn-then-hide. There is no later frame
+	// in which it could be un-hidden, and an invisible one-shot is pure cost.
+	{
+		// bIsVisibleEnemy is the one term the projectile cannot supply at t=0: its own value is
+		// seeded false below and its sight fragment is left empty. Take it from the SHOOTER's
+		// visibility FRAGMENT rather than the shooter actor's mirror fields - the fragment exists
+		// for actor-less ISM-only units (the client often has no shooter actor at all) and it does
+		// not vanish when the shooter dies the same frame it fires. At t=0 the projectile is still
+		// at the muzzle, so "can the local player see the shooter" is "can they see this flash".
+		// IsEntityActive, not IsEntityValid: GetFragmentDataPtr check()s the archetype, so a
+		// valid-but-reserved handle would assert.
+		bool bShooterVisibleEnemy = false;
+		if (EntityManager->IsEntityActive(ResolvedShooterEntity))
+		{
+			if (const FMassVisibilityFragment* ShooterVis = EntityManager->GetFragmentDataPtr<FMassVisibilityFragment>(ResolvedShooterEntity))
+			{
+				bShooterVisibleEnemy = ShooterVis->bIsVisibleEnemy;
+			}
+		}
+
+		// The fog switch is the projectile's own CDO flag, never the shooter's fragment flag -
+		// MassActorBindingComponent hardcodes that one to true for every unit, so reading it would
+		// make bAffectedByFogOfWar dead. bIsMyTeamInit is reused in place from above.
+		// bIsOnViewport is deliberately left out: off-screen is not fogged, so a burst for an
+		// allied off-screen shot leaks nothing, and Niagara culling plus attenuation absorb it.
+		// With no resolvable shooter this degrades to the gate the ISM and trails already use.
+		const bool bSpawnFXVisible = !CDO->bAffectedByFogOfWar || bIsMyTeamInit || bShooterVisibleEnemy;
+		FireSpawnEffects(CDO, ScaledTransform, bSpawnFXVisible);
 	}
 
     // Apply fragments

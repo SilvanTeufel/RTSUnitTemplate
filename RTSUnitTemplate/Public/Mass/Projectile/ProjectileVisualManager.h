@@ -55,6 +55,19 @@ public:
     UInstancedStaticMeshComponent* GetVisualISM(UInstancedStaticMeshComponent* TemplateISM);
 
 private:
+	/**
+	 * Fires the CDO's one-shot SpawnVFX/SpawnSound at the projectile's spawn transform.
+	 * LOCAL ONLY - deliberately not an RPC and not a UFUNCTION: SpawnMassProjectile already runs
+	 * independently on the server (AUnitBase::SpawnProjectile*) and on every client
+	 * (FUnitReplicationItem::PostReplicatedChange), so a NetMulticast here would fire twice on
+	 * remote clients and pay per-shot bandwidth for something both sides already know. Every other
+	 * effect call site in the plugin is a server-only origin that needs a multicast to reach
+	 * clients; this one is not. Do not "promote" it to an RPC.
+	 * @param bVisible  Result of the fog formula; false skips the spawn entirely - a one-shot burst
+	 *                  has no later frame in which it could be un-hidden.
+	 */
+	void FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible);
+
 	UPROPERTY()
 	TMap<TSubclassOf<AProjectile>, FProjectileClassData> ProjectileDataMap;
 

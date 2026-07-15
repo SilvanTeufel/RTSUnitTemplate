@@ -211,6 +211,38 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ScaleImpactSound = 1.f;
 
+	/**
+	 * Spawn (creation-time) effects, fired once at the projectile's spawn transform the moment the
+	 * Mass entity is created - on the host and on every remote client, with no RPC.
+	 * In Mass mode no AProjectile actor exists, so BeginPlay never runs; UProjectileVisualManager
+	 * reads these straight off the CDO. Gated by bAffectedByFogOfWar, evaluated per viewer.
+	 * Fires once per PROJECTILE: a twin/salvo weapon plays it once per projectile, not per shot.
+	 * Not Replicated on purpose - both sides read the CDO locally, like VisibilityOffset above.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	UNiagaraSystem* SpawnVFX;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	USoundBase* SpawnSound;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	FVector ScaleSpawnVFX = FVector(1.f,1.f,1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float ScaleSpawnSound = 1.f;
+
+	/** Additive rotation applied to SpawnVFX on top of the projectile's spawn rotation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	FRotator RotateSpawnVFX = FRotator::ZeroRotator;
+
+	/**
+	 * Seconds after which the spawned SpawnVFX/SpawnSound components are force-destroyed.
+	 * One-shot systems already self-destroy; this is the backstop that stops a LOOPING system
+	 * dropped into SpawnVFX from leaking for the whole session. Set 0 to rely on bAutoDestroy only.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float SpawnEffectKillDelay = 2.f;
+
 	UPROPERTY(Replicated, EditAnywhere,BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float Damage;
 

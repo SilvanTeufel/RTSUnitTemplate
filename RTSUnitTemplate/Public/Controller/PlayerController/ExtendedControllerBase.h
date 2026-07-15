@@ -71,6 +71,10 @@ public:
 
 	virtual void GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const override;
 
+	// Called by the engine when the viewport loses focus; key Released events are never delivered
+	// in that case, so held ability inputs have to be released here or they stay stuck forever.
+	virtual void FlushPressedKeys() override;
+
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	//AWorkArea* CurrentDraggedWorkArea;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
@@ -318,6 +322,12 @@ public:
 	void ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID);
 
 	void SetAbilityInputHeld(EGASAbilityInputID InputID, bool bIsHeld);
+
+	// Releases every held ability input. Must be called whenever input can stop being delivered
+	// (menu opens, focus loss), otherwise a stale entry blocks all deselection in
+	// Client_ContinueSelectionAfterAbility.
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ClearHeldAbilityInputs();
 
 	UFUNCTION(Server, Reliable)
 	void Server_StopContinuousAbility(EGASAbilityInputID InputID, const TArray<AUnitBase*>& Units);

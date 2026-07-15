@@ -1017,6 +1017,25 @@ void AExtendedControllerBase::SetAbilityInputHeld(EGASAbilityInputID InputID, bo
 	}
 }
 
+void AExtendedControllerBase::ClearHeldAbilityInputs()
+{
+	if (HeldAbilityInputs.IsEmpty()) return;
+
+	// Copy first: SetAbilityInputHeld mutates the set while we iterate.
+	TArray<EGASAbilityInputID> StillHeld = HeldAbilityInputs.Array();
+	for (EGASAbilityInputID InputID : StillHeld)
+	{
+		SetAbilityInputHeld(InputID, false);
+	}
+	HeldAbilityInputs.Empty();
+}
+
+void AExtendedControllerBase::FlushPressedKeys()
+{
+	ClearHeldAbilityInputs();
+	Super::FlushPressedKeys();
+}
+
 void AExtendedControllerBase::Server_StopContinuousAbility_Implementation(EGASAbilityInputID InputID, const TArray<AUnitBase*>& Units)
 {
 	for (AUnitBase* Unit : Units)

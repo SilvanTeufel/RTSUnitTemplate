@@ -913,6 +913,10 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 			}
 
 			MapMenuWidget->SetVisibility(ESlateVisibility::Visible);
+			if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(CameraControllerBase))
+			{
+				ExtPC->ClearHeldAbilityInputs();
+			}
 			BlockControls = true;
 			UpdateViewportBlur(true);
 		}
@@ -921,11 +925,12 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 
 void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState)
 {
-    if (BlockControls) return;
-
     ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
     if (!CameraControllerBase) return;
 
+    // Ability key releases must run even while controls are blocked: if a menu opens while the key
+    // is down, this release is the only thing that clears HeldAbilityInputs, and a stale entry
+    // permanently blocks deselection in Client_ContinueSelectionAfterAbility.
     if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(CameraControllerBase))
     {
         switch (NewCameraState)
@@ -938,6 +943,9 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
         case 2626: ExtPC->SetAbilityInputHeld(EGASAbilityInputID::AbilitySix, false); return;
         }
     }
+
+    // Everything below is a real control action and stays blocked while a menu is open.
+    if (BlockControls) return;
 
     if (CameraControllerBase->AltIsPressed)
     	{  switch (NewCameraState)
