@@ -5,9 +5,6 @@
 #include "Actors/RSVirtualTextureActor.h"
 #include "Components/RuntimeVirtualTextureComponent.h"
 #include "VT/RuntimeVirtualTexture.h"
-#include "Kismet/GameplayStatics.h"
-#include "NavMesh/NavMeshBoundsVolume.h"
-#include "Engine/World.h"
 
 ARSVirtualTextureActor::ARSVirtualTextureActor()
 {
@@ -15,52 +12,30 @@ ARSVirtualTextureActor::ARSVirtualTextureActor()
 
 	VirtualTextureComponent = CreateDefaultSubobject<URuntimeVirtualTextureComponent>(TEXT("VirtualTextureComponent"));
 	SetRootComponent(VirtualTextureComponent);
-
-	bAutoSetBoundsFromNavMesh = true;
 }
 
-void ARSVirtualTextureActor::BeginPlay()
+// Deliberately no BeginPlay override.
+//
+// The volume's bounds MUST be baked at edit time via the component's "Set Bounds" button
+// (BoundsAlignActor + ExpandBounds), never set at runtime. Two reasons:
+//
+// 1. Any transform change on a URuntimeVirtualTextureComponent forces a full recreate of the
+//    virtual texture -- see URuntimeVirtualTextureComponent::SendRenderTransform_Concurrent()
+//    ("We do a full recreate of the URuntimeVirtualTexture here which can cause a visual glitch...
+//    there is no way to only modify the transform and maintain the VT contents"). Doing it in
+//    BeginPlay drops every resident page, so play always starts from a cold pool and the texture
+//    has to re-render from scratch -- at 2 page uploads/frame in a cooked build (r.VT.MaxUploadsPerFrame).
+//
+// 2. Runtime code cannot reproduce what "Set Bounds" computes: RuntimeVirtualTexture::SetBounds
+//    lives in the editor-only VirtualTexturingEditor module, and its inputs (GetBoundsAlignActor /
+//    GetExpandBounds / GetSnapBoundsToLandscape) are all WITH_EDITOR-only. It also unions in every
+//    primitive that writes to this RVT, not just the navmesh volume.
+//
+// Note the component's local box is (0,0,0)..(1,1,1) -- the actor location is the volume's MIN
+// CORNER, not its center (URuntimeVirtualTextureComponent::CalcBounds). The previous BeginPlay
+// used GetCenter(), which offset the volume by half its size and left ~3/4 of the map uncovered.
+
+URuntimeVirtualTexture* ARSVirtualTextureActor::GetVirtualTexture() const
 {
-	Super::BeginPlay();
-
-	if (VirtualTextureComponent && VirtualTexture)
-	{
-		VirtualTextureComponent->SetVirtualTexture(VirtualTexture);
-	}
-
-	if (bAutoSetBoundsFromNavMesh)
-	{
-		TArray<AActor*> NavBounds;
-		UGameplayStatics::GetAllActorsOfClass(GetWorld(), ANavMeshBoundsVolume::StaticClass(), NavBounds);
-		if (NavBounds.Num() > 0)
-		{
-			FBox CombinedBounds(ForceInit);
-			for (AActor* NavActor : NavBounds)
-			{
-				if (NavActor)
-				{
-					CombinedBounds += NavActor->GetComponentsBoundingBox();
-				}
-			}
-
-			if (CombinedBounds.IsValid)
-			{
-				FVector Center = CombinedBounds.GetCenter();
-				FVector Extents = CombinedBounds.GetExtent();
-
-				SetActorLocation(Center);
-				SetActorRotation(FRotator::ZeroRotator);
-				
-				// URuntimeVirtualTextureComponent covers the area defined by its transform.
-				// A unit scale typically results in a volume of 200x200x200 if it was a standard volume brush,
-				// but for SceneComponents, the scale usually corresponds directly to the size if the base mesh is 1.0.
-				// UE's RVT component volume is usually treated as a normalized projection space.
-				// To cover the bounds, we set the scale to the full size (Diameter).
-				SetActorScale3D(Extents * 2.0f);
-
-				UE_LOG(LogTemp, Log, TEXT("ARSVirtualTextureActor: Auto-set bounds from %d NavMeshBoundsVolumes. Center: %s, Size: %s"),
-					NavBounds.Num(), *Center.ToString(), *(Extents * 2.0f).ToString());
-			}
-		}
-	}
+	return VirtualTextureComponent ? VirtualTextureComponent->GetVirtualTexture() : nullptr;
 }

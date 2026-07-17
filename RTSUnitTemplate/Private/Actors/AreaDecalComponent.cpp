@@ -128,7 +128,10 @@ void UAreaDecalComponent::BeginPlay()
 			{
 				if (ARSVirtualTextureActor* RVTActor = Cast<ARSVirtualTextureActor>(FoundActors[0]))
 				{
-					TargetVirtualTexture = RVTActor->VirtualTexture;
+					// Read the RVT off the actor's component, not off the actor: the actor's own
+					// VirtualTexture property was always unset on placed instances, so this
+					// auto-find used to resolve to null and RVT mode silently did nothing.
+					TargetVirtualTexture = RVTActor->GetVirtualTexture();
 					/*UE_LOG(LogTemp, Log, TEXT("UAreaDecalComponent::BeginPlay - Auto-found RVT Actor: %s (Texture: %s)"), 
 						*RVTActor->GetName(), 
 						TargetVirtualTexture ? *TargetVirtualTexture->GetName() : TEXT("NULL"));*/

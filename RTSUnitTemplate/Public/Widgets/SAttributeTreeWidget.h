@@ -24,6 +24,10 @@ struct FAttributeTreeSlateNode
 	FText ToolTipTitle;
 	FText ToolTipText;
 	FLinearColor BaseColor = FLinearColor(0.15f, 0.55f, 0.95f, 1.f);
+	// FSlateBrush by value inside a non-UObject SWidget -> its ResourceObject is NOT GC-rooted by us.
+	// Safe only because the source DataTable row keeps the icon texture referenced while the tree is
+	// shown. Not a precedent for a material brush: a material picked in the Details panel has no such
+	// independent owner, which is why UAttributeTreeWidget owns those as UPROPERTYs instead.
 	FSlateBrush IconBrush;
 	bool bHasIcon = false;
 };
@@ -65,6 +69,9 @@ public:
 		, _TooltipIconGap(8.f)
 		, _BackgroundColor(FLinearColor(0.02f, 0.02f, 0.04f, 0.75f))
 		, _bFillViewport(true)
+		, _BackgroundBrush(nullptr)
+		, _BorderBrush(nullptr)
+		, _BorderPadding(FMargin(0.f))
 	{}
 		SLATE_ARGUMENT(float, RingSpacing)
 		SLATE_ARGUMENT(float, NodeRadius)
@@ -85,6 +92,12 @@ public:
 		SLATE_ARGUMENT(float, TooltipIconGap)
 		SLATE_ARGUMENT(FLinearColor, BackgroundColor)
 		SLATE_ARGUMENT(bool, bFillViewport)
+		/** Pointers INTO the owning UMG wrapper's UPROPERTY brushes - that UPROPERTY is the GC anchor for
+		 *  any assigned material/texture. Null = built-in solid fallback / no border.
+		 *  Never pass the address of a temporary; the pointee must outlive this widget. */
+		SLATE_ARGUMENT(const FSlateBrush*, BackgroundBrush)
+		SLATE_ARGUMENT(const FSlateBrush*, BorderBrush)
+		SLATE_ARGUMENT(FMargin, BorderPadding)
 		SLATE_EVENT(FAttrTreeGetNodePoints, OnGetNodePoints)
 		SLATE_EVENT(FAttrTreeGetAvailablePoints, OnGetAvailablePoints)
 		SLATE_EVENT(FAttrTreeIsUnlocked, OnIsUnlocked)
@@ -96,6 +109,11 @@ public:
 
 	/** Replace the node model (called whenever the target unit / data table changes). */
 	void SetNodes(TArray<FAttributeTreeSlateNode> InNodes);
+
+	/** Re-push panel style from the UMG wrapper (drives Details-panel + runtime live-update).
+	 *  Pass null brushes to detach from wrapper-owned memory before the wrapper dies. */
+	void SetPanelStyle(const FSlateBrush* InBackgroundBrush, const FSlateBrush* InBorderBrush,
+		const FLinearColor& InBackgroundColor, const FMargin& InBorderPadding);
 
 	// --- SWidget interface ---
 	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
@@ -121,6 +139,12 @@ private:
 	/** Draws the hover tooltip directly (no child widget) so it renders reliably. */
 	void PaintNodeTooltip(const FGeometry& AllottedGeometry, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
 
+	/** Draws BorderBrushPtr over the widget rect (inset by BorderPadding). Returns the next free layer,
+	 *  unchanged when nothing is drawn. Called from BOTH OnPaint exit paths - the empty-state branch
+	 *  early-returns, and that is exactly the state you sit in while authoring the material. */
+	int32 PaintPanelBorder(const FGeometry& AllottedGeometry, FSlateWindowElementList& OutDrawElements,
+		int32 LayerId, const FWidgetStyle& InWidgetStyle) const;
+
 	// Model
 	TArray<FAttributeTreeSlateNode> Nodes;
 	TMap<FName, int32> IdToIndex;
@@ -143,7 +167,9 @@ private:
 	float TooltipIconSize = 40.f;
 	float TooltipIconGap = 8.f;
 
-	// Full-rect dimmed backdrop (also absorbs clicks so they never reach the game world).
+	// Full-rect dimmed backdrop. PURELY VISUAL: clicks are absorbed by this widget's Visibility (the
+	// hit-test grid entry is added in the non-virtual SWidget::Paint, before OnPaint runs) plus
+	// OnMouseButtonDown returning Handled - not by this box. Alpha 0 = invisible but still click-eating.
 	FLinearColor BackgroundColor = FLinearColor(0.02f, 0.02f, 0.04f, 0.75f);
 	bool bFillViewport = true;
 
@@ -156,7 +182,14 @@ private:
 
 	// Render resources
 	FSlateBrush NodeBackgroundBrush;
+	// Owned fallback. Procedural white FSlateColorBrush - its ResourceObject is always null, so it is
+	// GC-inert. Used whenever BackgroundBrushPtr is null (raw SNew, or after the wrapper detached us).
 	FSlateBrush BackgroundBrush;
+	// Non-owning views into the UMG wrapper's UPROPERTY brushes (that UPROPERTY is the GC anchor for any
+	// assigned material/texture). Nulled by the wrapper in ReleaseSlateResources so they cannot dangle.
+	const FSlateBrush* BackgroundBrushPtr = nullptr;
+	const FSlateBrush* BorderBrushPtr = nullptr;
+	FMargin BorderPadding = FMargin(0.f);
 	FSlateFontInfo NodeFont;
 	FSlateFontInfo CountFont;
 

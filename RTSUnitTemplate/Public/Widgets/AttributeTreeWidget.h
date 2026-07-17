@@ -4,10 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Components/Widget.h"
+#include "Styling/SlateBrush.h"
 #include "AttributeTreeWidget.generated.h"
 
 class ALevelUnit;
 class SAttributeTreeWidget;
+class UMaterialInterface;
+class UMaterialInstanceDynamic;
 
 /**
  * UMG wrapper that hosts the radial SAttributeTreeWidget (Slate) and bridges it to the
@@ -19,6 +22,8 @@ class RTSUNITTEMPLATE_API UAttributeTreeWidget : public UWidget
 	GENERATED_BODY()
 
 public:
+	UAttributeTreeWidget();
+
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SetTargetUnit(ALevelUnit* InUnit);
 
@@ -54,13 +59,72 @@ public:
 	FLinearColor RingColor = FLinearColor(1.f, 1.f, 1.f, 0.06f);
 
 	// --- Background ---
-	/** Solid dimmed backdrop drawn behind the tree. Also absorbs clicks so they never reach the game
-	 *  world (prevents unit-deselect / HUD-close when clicking empty space). Set Alpha = 0 to disable. */
+	/** Tint of the backdrop drawn behind the tree. Multiplied into BackgroundBrush's own Tint.
+	 *  IGNORED when BackgroundBrush holds a MATERIAL - Slate never multiplies a tint into a material
+	 *  (it only reaches the graph as VertexColor); use GetBackgroundDynamicMaterial() parameters instead.
+	 *  Alpha 0 hides the backdrop VISUAL only - the panel still absorbs every left click (that comes from
+	 *  Visibility + the mouse handlers, not from the drawn box). Use Visibility to make it click-through.
+	 *  At runtime call SetBackgroundColor(); writing this property from Blueprint does not re-push. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Background")
 	FLinearColor BackgroundColor = FLinearColor(0.02f, 0.02f, 0.04f, 0.75f);
 
+	/** Backdrop brush. Leave "Image" empty for the classic solid dim (default - identical to previous
+	 *  versions). Assign a Texture, or a Material whose Material Domain is "User Interface".
+	 *  A Surface-domain material compiles no Slate shader and draws NOTHING, silently and
+	 *  indistinguishably from "no material set" - a Warning is logged to help you spot it.
+	 *  Draw As = Image ignores Margin (right for a stretched full-rect material). For a 9-sliced backdrop
+	 *  use Box + Margin (UV space 0..1, NOT pixels) + a non-zero Image Size.
+	 *  Assign at runtime with SetBackgroundBrushFromMaterial(). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute Tree|Background")
+	FSlateBrush BackgroundBrush;
+
+	/** Optional frame drawn ON TOP of the tree and UNDER the tooltip, around the whole widget rect.
+	 *  Disabled by default (Draw As = None) - after picking a Material/Texture you must also set
+	 *  Draw As = Border (hollow middle, tiled sides - what a frame wants) or Box (filled).
+	 *  9-slice corner size is Image Size * Margin. For a MATERIAL there is no texture to measure, so
+	 *  Image Size is the ONLY size source - defaulted to 256x256 with Margin 0.25 (= 64px corners) so it
+	 *  works the instant you flip Draw As. For a plain outline, Draw As = RoundedBox needs no material. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute Tree|Background")
+	FSlateBrush BorderBrush;
+
+	/** Inset of the border frame from the widget edges, in local (pre-DPI) Slate units.
+	 *  At runtime call SetBorderPadding(). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attribute Tree|Background")
+	FMargin BorderPadding = FMargin(0.f);
+
+	// --- Background / Border setters. These are the SUPPORTED runtime path: nothing calls
+	// SynchronizeProperties outside the editor, so writing the UPROPERTYs directly from Blueprint does
+	// not re-push and skips the Material-Domain check. ---
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetBackgroundBrush(const FSlateBrush& InBrush);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetBackgroundBrushFromMaterial(UMaterialInterface* Material);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetBorderBrush(const FSlateBrush& InBrush);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetBorderBrushFromMaterial(UMaterialInterface* Material);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetBackgroundColor(FLinearColor InColor);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	void SetBorderPadding(FMargin InPadding);
+
+	/** Wraps the assigned background material in a MID (Outer = this, which is the keep-alive) so its
+	 *  parameters can be driven at runtime. Returns null if BackgroundBrush holds no material. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UMaterialInstanceDynamic* GetBackgroundDynamicMaterial();
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
+	UMaterialInstanceDynamic* GetBorderDynamicMaterial();
+
 	/** Expand the widget to at least the viewport size so the backdrop fills the screen and the ring
-	 *  stays centred. Requires the hosting container to auto-size / fill (not a fixed-size Canvas slot). */
+	 *  stays centred. Requires the hosting container to auto-size / fill (not a fixed-size Canvas slot).
+	 *  This is also what decides "screen-edge frame" (true + filling container) vs "panel frame"
+	 *  (false + a fixed Canvas slot) for BorderBrush. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Background")
 	bool bFillViewport = true;
 
@@ -95,6 +159,9 @@ public:
 	// --- UWidget interface ---
 	virtual void SynchronizeProperties() override;
 	virtual void ReleaseSlateResources(bool bReleaseChildren) override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
