@@ -395,9 +395,12 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		{
 			const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 			// Don't spawn the mouse-follow indicator for abilities that can't be activated.
-			// bDisabled is checked in CanActivateAbility() but the indicator spawns before that,
-			// so mirror the flag here. It's a CDO/asset value → identical on client and server.
-			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass && !AbilityCDO->bDisabled)
+			// Ask the same key gate CanActivateAbility uses -- NOT bDisabled directly: an ability that is
+			// force-enabled for the team/owner (i.e. unlocked by research) still has bDisabled=true on its
+			// asset, and reading the raw flag here hid the indicator for every such ability.
+			// Safe on clients: the force/disable registries are replicated via
+			// Client_ApplyTeamAbilityKeyToggle / Client_ApplyOwnerAbilityKeyToggle.
+			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass && UGameplayAbilityBase::IsAbilityKeyGateOpenForUnit(AbilityCDO, UnitBase))
 			{
 				HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
 			}
@@ -518,8 +521,8 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 		{
 			if (UGameplayAbilityBase* AbilityCDO = Cast<UGameplayAbilityBase>(AbilityToActivate->GetDefaultObject()))
 			{
-				// Skip the mouse-follow indicator for disabled abilities (see ActivateAbilitiesByIndex).
-				if (AbilityCDO->AbilityIndicatorClass && !AbilityCDO->bDisabled)
+				// Skip the mouse-follow indicator for unusable abilities (see ActivateAbilitiesByIndex).
+				if (AbilityCDO->AbilityIndicatorClass && UGameplayAbilityBase::IsAbilityKeyGateOpenForUnit(AbilityCDO, UnitBase))
 				{
 					HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
 					

@@ -995,6 +995,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					ImpactFrag->bScaleMesh = EffectArea->ScaleMesh;
 					ImpactFrag->bIsRadiusScaling = EffectArea->bIsRadiusScaling;
 					ImpactFrag->BaseRadius = EffectArea->BaseRadius;
+					ImpactFrag->VerticalTolerance = EffectArea->ImpactVerticalTolerance;
 					ImpactFrag->CurrentRadius = EffectArea->bIsRadiusScaling ? EffectArea->StartRadius : EffectArea->BaseRadius;
 					ImpactFrag->ElapsedTime = ImpactFrag->ElapsedTime = (EffectArea->GetWorld()->GetNetMode() == NM_Client) 
 											  ? EffectArea->GetGameTimeSinceCreation() 

@@ -7,6 +7,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "Actors/WorkArea.h"
 class AUnitBase;
+class AGASUnit;
 class USoundBase;
 #include "GameplayAbilityBase.generated.h"
 
@@ -166,6 +167,24 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	static bool IsAbilityKeyForceEnabledForTeam(const FString& Key, int32 TeamId);
+
+	/**
+	 * Resolves whether the enable/disable key gate is open for an ability, with the precedence:
+	 *   1) owner force-enable  2) owner disable  3) team force-enable  4) asset bDisabled  5) team disable
+	 *
+	 * This is the ONLY place that precedence is expressed. CanActivateAbility() delegates to it, and any
+	 * code that needs to know "can this ability be used?" outside of GAS activation (the mouse-follow
+	 * ability indicator, ability buttons) must use it too. Reading bDisabled directly is a bug: an
+	 * ability may be force-enabled for the team/owner at runtime (that is how research unlocks work),
+	 * in which case the asset flag is still true but the ability is perfectly usable.
+	 *
+	 * Does NOT check cost/cooldown/tags -- that is Super::CanActivateAbility's job.
+	 */
+	static bool IsAbilityKeyGateOpen(const UGameplayAbilityBase* AbilityCDO, int32 TeamId, const class UAbilitySystemComponent* OwnerASC);
+
+	/** IsAbilityKeyGateOpen for callers that have a unit rather than resolved ActorInfo. */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
+	static bool IsAbilityKeyGateOpenForUnit(const UGameplayAbilityBase* AbilityCDO, const AGASUnit* Unit);
 
 	// Owner-level queries (per AbilitySystemComponent)
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

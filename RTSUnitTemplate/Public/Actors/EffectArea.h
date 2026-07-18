@@ -98,6 +98,17 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
 	float BaseRadius = 100.f;
 
+	/**
+	 * How far above/below the area a unit may be and still be hit. The radius test itself is horizontal,
+	 * so this is the only thing separating ground units from flyers -- keep it well below FlyHeight (500).
+	 *
+	 * Units sit at LastGroundLocation + CapsuleHeight (88 by default) and areas at + their own
+	 * CapsuleHeight (50), so a unit standing directly on an area is already ~38cm away vertically. The
+	 * default leaves room for that plus terrain slope, while still rejecting flyers by ~3x.
+	 */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
+	float ImpactVerticalTolerance = 150.f;
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
 	float BaseDamage = 0.f;
 

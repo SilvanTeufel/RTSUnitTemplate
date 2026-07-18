@@ -324,7 +324,17 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					if (bAlreadyHit) continue;
 
 					FVector UnitLocation = UnitLocations[j];
-					if (FVector::DistSquared(AreaLocation, UnitLocation) <= RadiusSq)
+
+					// Cylinder, not sphere: horizontal distance against the radius, height against an
+					// explicit tolerance. A sphere test conflates the two and silently eats the radius --
+					// a unit standing ON an area is already ~38cm above it (unit Z = ground + CapsuleHeight
+					// 88, area Z = ground + its CapsuleHeight 50), so a 50cm area only ever had ~32cm of
+					// horizontal reach, and none at all until it had scaled past 38. Flying units are still
+					// excluded, by the tolerance rather than by the radius: they sit at ground + FlyHeight
+					// (500), i.e. ~450cm up, far beyond the 150 default.
+					const float DeltaZ = FMath::Abs(AreaLocation.Z - UnitLocation.Z);
+					if (FVector::DistSquared2D(AreaLocation, UnitLocation) <= RadiusSq
+						&& DeltaZ <= Impact.VerticalTolerance)
 					{
 						int32 UnitTeam = UnitTeams[j];
 						const bool bIsAllied = (AllianceList.Num() > 0 && (AllianceList[i].AlliedTeamsMask & (1LL << UnitTeam)) != 0);

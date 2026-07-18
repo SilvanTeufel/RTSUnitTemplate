@@ -163,6 +163,7 @@ void AEffectArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(AEffectArea, StartRadius);
 	DOREPLIFETIME(AEffectArea, EndRadius);
 	DOREPLIFETIME(AEffectArea, BaseRadius);
+	DOREPLIFETIME(AEffectArea, ImpactVerticalTolerance);
 	DOREPLIFETIME(AEffectArea, BaseDamage);
 
 	DOREPLIFETIME(AEffectArea, AlliedTeamsMask);

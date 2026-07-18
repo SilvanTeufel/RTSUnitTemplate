@@ -1504,6 +1504,12 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	bool bIsRadiusScaling = true;
 	float BaseRadius = 100.f;
 
+	// Max |deltaZ| between area and unit for an impact to count. The radius test is horizontal (2D), so
+	// this is what keeps flying units out: a ground unit sits at LastGroundLocation + CapsuleHeight (88)
+	// while an area sits at + its own CapsuleHeight (50), i.e. deltaZ ~38 even when standing on it; a flyer
+	// sits at + FlyHeight (500), i.e. deltaZ ~450. Copied from AEffectArea::ImpactVerticalTolerance.
+	float VerticalTolerance = 150.f;
+
 	float MaxLifeTime = 0.f;        // 0.f = Unendlich
 	bool bPulsate = false;          // Wechselt zwischen Start/EndRadius
 	bool bDestroyOnImpact = false;  // Zerstrung bei erstem Treffer

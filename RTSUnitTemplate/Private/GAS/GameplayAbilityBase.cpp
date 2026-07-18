@@ -408,21 +408,14 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
-bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+bool UGameplayAbilityBase::IsAbilityKeyGateOpen(const UGameplayAbilityBase* AbilityCDO, int32 TeamId, const UAbilitySystemComponent* OwnerASC)
 {
-	// Resolve team and normalized key first
-	int32 TeamId = INDEX_NONE;
-	if (ActorInfo && ActorInfo->OwnerActor.IsValid())
+	if (!AbilityCDO)
 	{
-		if (const AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
-		{
-			TeamId = Unit->TeamId;
-		}
+		return false;
 	}
-	const FString NormalizedKey = NormalizeAbilityKey(AbilityKey);
 
-	// Resolve owner ASC once
-	const UAbilitySystemComponent* OwnerASC = (ActorInfo && ActorInfo->AbilitySystemComponent.IsValid()) ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+	const FString NormalizedKey = NormalizeAbilityKey(AbilityCDO->AbilityKey);
 
 	// 1) Owner-level FORCE enable overrides everything
 	if (OwnerASC && !NormalizedKey.IsEmpty())
@@ -431,7 +424,7 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 		{
 			if (ForceSet->Contains(NormalizedKey))
 			{
-				return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+				return true;
 			}
 		}
 	}
@@ -453,12 +446,12 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 	{
 		if (UGameplayAbilityBase::IsAbilityKeyForceEnabledForTeam(NormalizedKey, TeamId))
 		{
-			return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+			return true;
 		}
 	}
 
 	// 4) Disallow if the ability asset is flagged disabled
-	if (bDisabled)
+	if (AbilityCDO->bDisabled)
 	{
 		return false;
 	}
@@ -466,12 +459,51 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 	// 5) Check team-based disable by key
 	if (TeamId != INDEX_NONE && !NormalizedKey.IsEmpty())
 	{
-		const bool bIsDisabled = UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(NormalizedKey, TeamId);
-		if (bIsDisabled)
+		if (UGameplayAbilityBase::IsAbilityKeyDisabledForTeam(NormalizedKey, TeamId))
 		{
 			return false;
 		}
+	}
 
+	return true;
+}
+
+bool UGameplayAbilityBase::IsAbilityKeyGateOpenForUnit(const UGameplayAbilityBase* AbilityCDO, const AGASUnit* Unit)
+{
+	int32 TeamId = INDEX_NONE;
+	const UAbilitySystemComponent* OwnerASC = nullptr;
+
+	// Resolved the same way CanActivateAbility does, so both answer identically.
+	if (const AUnitBase* UnitBase = Cast<AUnitBase>(Unit))
+	{
+		TeamId = UnitBase->TeamId;
+	}
+	if (Unit)
+	{
+		OwnerASC = Unit->GetAbilitySystemComponent();
+	}
+
+	return IsAbilityKeyGateOpen(AbilityCDO, TeamId, OwnerASC);
+}
+
+bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
+{
+	// Resolve team and owner ASC, then defer the whole enable/disable precedence to the shared helper so
+	// this and the ability-indicator gate can never disagree again.
+	int32 TeamId = INDEX_NONE;
+	if (ActorInfo && ActorInfo->OwnerActor.IsValid())
+	{
+		if (const AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			TeamId = Unit->TeamId;
+		}
+	}
+
+	const UAbilitySystemComponent* OwnerASC = (ActorInfo && ActorInfo->AbilitySystemComponent.IsValid()) ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
+
+	if (!IsAbilityKeyGateOpen(this, TeamId, OwnerASC))
+	{
+		return false;
 	}
 
 	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
