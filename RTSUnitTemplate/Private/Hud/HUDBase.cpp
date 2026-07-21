@@ -1200,8 +1200,11 @@ void AHUDBase::DrawAllHealthBars()
 			const float CurrentTime = GetWorld()->GetTimeSeconds();
 			const bool bVisible = Unit->IsMyTeam || Unit->IsVisibleEnemy || (CurrentTime - Unit->LastVisibleTime < 0.2f);
 
-			// Allow selected or permanent units to bypass the visibility gate
-			if (!bVisible && !bIsSelected && !bShowAllHealthBarsPermanent) continue;
+			// Allow selected units, or OWN-TEAM units under "show all", to bypass the visibility gate.
+			// The permanent show-all must NOT reveal fogged/hidden ENEMY bars, so it is restricted to
+			// this player's own team (Unit->IsMyTeam is computed local-player-relative by the Mass
+			// visibility processor); enemies still require bVisible (revealed) or bIsSelected.
+			if (!bVisible && !bIsSelected && !(bShowAllHealthBarsPermanent && Unit->IsMyTeam)) continue;
 
 			// Einstellungs-Auswahl (Vorläufige Bestimmung)
 			bool bIsBuilding = !Unit->CanMove;
@@ -1263,7 +1266,11 @@ void AHUDBase::DrawAllHealthBars()
 			else if (bIsFlying) EffectiveSettings = FlyingHealthBarSettings;
 			else EffectiveSettings = GroundHealthBarSettings;
 
-			if (!bShowAllHealthBarsPermanent && !Unit->OpenHealthWidget && !Unit->bShowLevelOnly && !(EffectiveSettings.bShowHealthbarOnSelected && bIsSelected)) continue;
+			// Under permanent "show all", draw own-team units always AND currently-revealed enemies
+			// (Unit->IsVisibleEnemy is a client-local, per-frame FOW signal). Gate 1 above already culled
+			// fogged enemies, so adding IsVisibleEnemy here makes an out-of-FOW enemy show a permanent bar
+			// and re-hide when it re-enters the fog — without needing a damage/level popup.
+			if (!(bShowAllHealthBarsPermanent && (Unit->IsMyTeam || Unit->IsVisibleEnemy)) && !Unit->OpenHealthWidget && !Unit->bShowLevelOnly && !(EffectiveSettings.bShowHealthbarOnSelected && bIsSelected)) continue;
 
 			// 3. Einzige Projektion für diesen Frame
 			FVector2D ScreenPos;
