@@ -570,12 +570,19 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	VisualFragment.Niagara_A_RelativeTransform = (CDO->Niagara_A) ? CDO->Niagara_A->GetRelativeTransform() : CDO->Niagara_A_Start_Transform;
 	VisualFragment.Niagara_B_RelativeTransform = (CDO->Niagara_B) ? CDO->Niagara_B->GetRelativeTransform() : CDO->Niagara_B_Start_Transform;
 
-	// Niagara initialization
+	// Niagara initialization.
+	// Compose against ScaledTransform, NOT the raw Transform: ScaledTransform is what went into the
+	// TransformFragment above, so it is the entity transform the movement processor composes these
+	// same relative transforms against on every subsequent tick
+	// (MassProjectileMovementProcessor: Niagara_X_RelativeTransform * Transform). Seeding from the
+	// raw Transform instead diverges whenever the caller's transform scale is not the projectile
+	// scale - UPauseStateProcessor::ExecuteProjectileSpawn passes the entity transform (unit scale)
+	// with Scale = UnitActor->ProjectileScale - which made the trail pop between frame 0 and frame 1.
 	if (ManagerActor)
 	{
 		if (CDO->Niagara_A && CDO->Niagara_A->GetAsset())
 		{
-			FTransform InitialTransform = VisualFragment.Niagara_A_RelativeTransform * Transform;
+			FTransform InitialTransform = VisualFragment.Niagara_A_RelativeTransform * ScaledTransform;
 			UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAttached(CDO->Niagara_A->GetAsset(), ManagerActor->GetRootComponent(), NAME_None, InitialTransform.GetLocation(), InitialTransform.Rotator(), EAttachLocation::KeepWorldPosition, false);
 			if (NC)
 			{
@@ -586,7 +593,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		}
 		if (CDO->Niagara_B && CDO->Niagara_B->GetAsset())
 		{
-			FTransform InitialTransform = VisualFragment.Niagara_B_RelativeTransform * Transform;
+			FTransform InitialTransform = VisualFragment.Niagara_B_RelativeTransform * ScaledTransform;
 			UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAttached(CDO->Niagara_B->GetAsset(), ManagerActor->GetRootComponent(), NAME_None, InitialTransform.GetLocation(), InitialTransform.Rotator(), EAttachLocation::KeepWorldPosition, false);
 			if (NC)
 			{
@@ -639,24 +646,30 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		// projectile into frame, and a spawn offset, a fly height or a twin-projectile lateral spread
 		// can push the muzzle out while the unit is plainly visible. Either one on screen fires it.
 		//
-		// "The projectile" is where the MESH is, and the mesh is NOT on the entity transform:
-		// the ISM instance is added at VisualRelativeTransform * ScaledTransform above (and the
-		// movement processor re-applies exactly that product every tick). VisualRelativeTransform is
-		// the projectile Blueprint's ISMComponent relative transform, which is routinely a non-zero
-		// offset. Anchoring the burst on ScaledTransform alone therefore drew the muzzle flash next
-		// to the projectile it belongs to. Compose the same product the ISM uses.
+		// ANCHOR = the entity transform, i.e. EXACTLY the muzzle the projectile is spawned at, which
+		// is AUnitBase::GetProjectileSpawnLocation() (the "ProjectileSpawn"-tagged scene component,
+		// else ProjectileSpawnOffset, plus fly height / capsule half height), with the twin-projectile
+		// lateral offset and the multi-shot spread already folded in by the caller.
 		//
-		// Both sides agree on this: the incoming Transform is the muzzle on the server
-		// (AUnitBase::GetProjectileSpawnLocation, honouring the "ProjectileSpawn"-tagged scene
-		// component / ProjectileSpawnOffset / fly height) and on the client the replication path
-		// feeds the very same function (UnitClientBubbleInfo.cpp: BaseSpawnXf.SetLocation(
-		// MyActor->GetProjectileSpawnLocation(...))), so this stays a purely local derivation.
+		// Deliberately NOT VisualRelativeTransform * ScaledTransform (what the ISM instance uses).
+		// VisualRelativeTransform is the projectile Blueprint's ISMComponent relative transform and is
+		// a MESH-PIVOT correction, not a position: BP_Projectile_Rifle for instance carries
+		// (-40, 0, 0) / yaw -90 / scale 15. Composing it displaces the burst by
+		// ScaledTransform.Rotation.RotateVector(ScaledTransform.Scale3D * (-40,0,0)) - tens of units
+		// along the flight axis, scaled by the unit's ProjectileScale. On a mesh that is already
+		// flying that offset is invisible; on a one-shot muzzle flash that is meant to sit ON the
+		// barrel it is glaring, and it grows with ProjectileScale. The barrel is the anchor.
 		//
-		// Position from the visual, ROTATION from the entity: the entity rotation is the aim/flight
-		// direction, which is what a muzzle flash wants to point along, while an ISM relative
-		// rotation is usually just a mesh-axis correction. RotateSpawnVFX remains the per-class tweak.
+		// Both sides agree on this without any extra replication - ZERO added network cost: the
+		// incoming Transform is the muzzle on the server (UnitBase.cpp SpawnProjectileFromClass /
+		// ...WithAim / ...WithEntities) and on the client the replication path feeds the very same
+		// function (UnitClientBubbleInfo.cpp: BaseSpawnXf.SetLocation(
+		// MyActor->GetProjectileSpawnLocation(...))). Every term below is derived locally from the
+		// CDO and from fragments that already replicate.
+		//
+		// ROTATION stays the entity rotation: that is the aim/flight direction, which is what a muzzle
+		// flash wants to point along. RotateSpawnVFX remains the per-class tweak.
 		FTransform SpawnFXTransform = ScaledTransform;
-		SpawnFXTransform.SetLocation((VisualFragment.VisualRelativeTransform * ScaledTransform).GetLocation());
 
 		bool bSpawnFXOnScreen = RTSViewportUtils::IsLocationOnLocalViewport(this, SpawnFXTransform.GetLocation(), CDO->VisibilityOffset);
 
