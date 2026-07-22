@@ -63,8 +63,9 @@ private:
 	 * remote clients and pay per-shot bandwidth for something both sides already know. Every other
 	 * effect call site in the plugin is a server-only origin that needs a multicast to reach
 	 * clients; this one is not. Do not "promote" it to an RPC.
-	 * @param bVisible  Result of the fog formula; false skips the spawn entirely - a one-shot burst
-	 *                  has no later frame in which it could be un-hidden.
+	 * @param bVisible  Result of the fog formula AND the local viewport test; false skips the spawn
+	 *                  entirely - a one-shot burst has no later frame in which it could be un-hidden,
+	 *                  so there is nothing to gain from spawning it hidden.
 	 */
 	void FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible);
 

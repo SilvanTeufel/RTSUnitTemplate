@@ -34,6 +34,7 @@
 #include "System/StoryTriggerQueueSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Core/ViewportUtils.h"
 
 // Debug category for squad healthbar visibility
 DEFINE_LOG_CATEGORY_STATIC(LogSquadHB, Log, All);
@@ -520,7 +521,19 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
 
 void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, const FVector Location, float KillDelay, FRotator Rotation, float EffectDelay, float SoundDelay, int32 ID)
 {
-    if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
+    // Unlike FireEffects, this spawns AT Location, not on this unit - and the two can be a full
+    // screen apart (artillery, a Mass projectile that flew off-camera, a melee hit at arm's reach
+    // from a shooter standing just past the edge). For an IMPACT only the impact point counts:
+    // that is where the burst is drawn and where the bang belongs. This unit is merely the RPC
+    // carrier and the fog authority, NOT the anchor - so its IsOnViewport is deliberately NOT part
+    // of this term. The old gate used it alone and was wrong in both directions: it dropped impacts
+    // the player was looking straight at whenever the shooter stood off-screen, and it played
+    // impacts a screen away whenever the shooter happened to be visible.
+    // The fog half of the gate DOES stay anchored to the unit: fog asks "can the local player see
+    // who fired", which is a property of the shooter, not of the point that got hit.
+    const bool bImpactOnViewport = RTSViewportUtils::IsLocationOnLocalViewport(this, Location, VisibilityOffset);
+
+    if (bImpactOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
     {
         UWorld* World = GetWorld();
         if (!World)

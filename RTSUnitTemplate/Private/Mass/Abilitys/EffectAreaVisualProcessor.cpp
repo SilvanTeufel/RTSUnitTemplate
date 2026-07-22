@@ -12,6 +12,7 @@
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Core/ViewportUtils.h"
 
 UMassEffectAreaVisualProcessor::UMassEffectAreaVisualProcessor()
 {
@@ -142,7 +143,8 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
             if (bTriggerVFX && bIsVisibleByFog && EffectArea && EffectArea->ImpactVFX)
             {
                 UWorld* World = VisualContext.GetWorld();
-                if (World && World->GetNetMode() != NM_DedicatedServer)
+                if (World && World->GetNetMode() != NM_DedicatedServer
+                    && RTSViewportUtils::IsLocationOnLocalViewport(World, BaseTransform.GetLocation(), Visibility.VisibilityOffset))
                 {
                     UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->ImpactVFX, BaseTransform.GetLocation());
                 }
@@ -153,7 +155,14 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 			if (!Impact.bSpawnEffectsTriggered && bIsVisibleByFog && EffectArea)
 			{
                 UWorld* World = VisualContext.GetWorld();
-                if (World && World->GetNetMode() != NM_DedicatedServer)
+                // Same viewport cull the ISM and Niagara_A above already get through bShouldShow, but
+                // projected live instead of read from the fragment: these are ONE-SHOTS. bShouldShow's
+                // Visibility.bIsOnViewport is seeded true at bind (MassActorBindingComponent) and first
+                // corrected by UUnitVisibilityProcessor up to a 20 Hz tick later - which for a persistent
+                // component only costs one frame of being wrong, but for a fire-once burst is the whole
+                // decision. The trigger flags below latch, so this runs once per area, never per frame.
+                if (World && World->GetNetMode() != NM_DedicatedServer
+                    && RTSViewportUtils::IsLocationOnLocalViewport(World, BaseTransform.GetLocation(), Visibility.VisibilityOffset))
                 {
 				    if (EffectArea->SpawnVFX)
 				    {

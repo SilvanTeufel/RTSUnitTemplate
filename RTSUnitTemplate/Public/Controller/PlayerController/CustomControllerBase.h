@@ -193,7 +193,7 @@ public:
 	void LoadUnitsMass(const TArray<AUnitBase*>& UnitsToLoad, AUnitBase* Transporter);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void RightClickPressedMass();
+	virtual void RightClickPressedMass();
 
 
 	/** Returns the world location of a unit, handling Actor vs. ISM-instance. */

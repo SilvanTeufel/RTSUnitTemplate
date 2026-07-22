@@ -21,6 +21,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/AudioComponent.h"
 #include "TimerManager.h"
+#include "Core/ViewportUtils.h"
 
 void UProjectileVisualManager::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -621,11 +622,63 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		// The fog switch is the projectile's own CDO flag, never the shooter's fragment flag -
 		// MassActorBindingComponent hardcodes that one to true for every unit, so reading it would
 		// make bAffectedByFogOfWar dead. bIsMyTeamInit is reused in place from above.
-		// bIsOnViewport is deliberately left out: off-screen is not fogged, so a burst for an
-		// allied off-screen shot leaks nothing, and Niagara culling plus attenuation absorb it.
 		// With no resolvable shooter this degrades to the gate the ISM and trails already use.
-		const bool bSpawnFXVisible = !CDO->bAffectedByFogOfWar || bIsMyTeamInit || bShooterVisibleEnemy;
-		FireSpawnEffects(CDO, ScaledTransform, bSpawnFXVisible);
+		const bool bSpawnFXUnfogged = !CDO->bAffectedByFogOfWar || bIsMyTeamInit || bShooterVisibleEnemy;
+
+		// Second, independent gate: is the muzzle actually on this machine's screen? The ISM and the
+		// Niagara_A/B trails have been viewport-culled all along (MassProjectileMovementProcessor
+		// combines bIsOnViewport with the fog terms every tick); the one-shot burst was the only
+		// projectile visual that fired regardless of where the camera looked, so an army skirmishing
+		// off-screen still paid for a Niagara system and an audible SpawnSound per shot.
+		// The entity's own FMassVisibilityFragment::bIsOnViewport cannot be used here: it is seeded
+		// true and first corrected by UUnitVisibilityProcessor up to a 20 Hz tick LATER, which is
+		// always after this one-shot has already fired. So project the spawn point directly.
+		// Two anchors, OR'ed: the projectile itself and the SHOOTER. Unlike an impact - which is only
+		// ever about the point that got hit - a spawn burst is a muzzle flash, i.e. it reads as an
+		// event of the unit. A tall/large shooter whose pivot sits just off the rect can still fire a
+		// projectile into frame, and a spawn offset, a fly height or a twin-projectile lateral spread
+		// can push the muzzle out while the unit is plainly visible. Either one on screen fires it.
+		//
+		// "The projectile" is where the MESH is, and the mesh is NOT on the entity transform:
+		// the ISM instance is added at VisualRelativeTransform * ScaledTransform above (and the
+		// movement processor re-applies exactly that product every tick). VisualRelativeTransform is
+		// the projectile Blueprint's ISMComponent relative transform, which is routinely a non-zero
+		// offset. Anchoring the burst on ScaledTransform alone therefore drew the muzzle flash next
+		// to the projectile it belongs to. Compose the same product the ISM uses.
+		//
+		// Both sides agree on this: the incoming Transform is the muzzle on the server
+		// (AUnitBase::GetProjectileSpawnLocation, honouring the "ProjectileSpawn"-tagged scene
+		// component / ProjectileSpawnOffset / fly height) and on the client the replication path
+		// feeds the very same function (UnitClientBubbleInfo.cpp: BaseSpawnXf.SetLocation(
+		// MyActor->GetProjectileSpawnLocation(...))), so this stays a purely local derivation.
+		//
+		// Position from the visual, ROTATION from the entity: the entity rotation is the aim/flight
+		// direction, which is what a muzzle flash wants to point along, while an ISM relative
+		// rotation is usually just a mesh-axis correction. RotateSpawnVFX remains the per-class tweak.
+		FTransform SpawnFXTransform = ScaledTransform;
+		SpawnFXTransform.SetLocation((VisualFragment.VisualRelativeTransform * ScaledTransform).GetLocation());
+
+		bool bSpawnFXOnScreen = RTSViewportUtils::IsLocationOnLocalViewport(this, SpawnFXTransform.GetLocation(), CDO->VisibilityOffset);
+
+		// Shooter fallback, only paid when the projectile itself missed the rect. Read the shooter's
+		// TRANSFORM FRAGMENT, not the Shooter actor: on a client there frequently is no shooter actor
+		// at all (UnitClientBubbleInfo handles the actor-less case explicitly), and the fragment also
+		// survives a shooter that dies in the same frame it fires. IsEntityActive, not IsEntityValid -
+		// GetFragmentDataPtr check()s the archetype, so a valid-but-reserved handle would assert.
+		if (!bSpawnFXOnScreen && EntityManager->IsEntityActive(ResolvedShooterEntity))
+		{
+			if (const FTransformFragment* ShooterXf = EntityManager->GetFragmentDataPtr<FTransformFragment>(ResolvedShooterEntity))
+			{
+				bSpawnFXOnScreen = RTSViewportUtils::IsLocationOnLocalViewport(this, ShooterXf->GetTransform().GetLocation(), CDO->VisibilityOffset);
+			}
+		}
+		// Last resort when the shooter has no entity (level-placed / not yet bound): the actor.
+		if (!bSpawnFXOnScreen && Shooter)
+		{
+			bSpawnFXOnScreen = RTSViewportUtils::IsLocationOnLocalViewport(this, Shooter->GetActorLocation(), CDO->VisibilityOffset);
+		}
+
+		FireSpawnEffects(CDO, SpawnFXTransform, bSpawnFXUnfogged && bSpawnFXOnScreen);
 	}
 
     // Apply fragments
