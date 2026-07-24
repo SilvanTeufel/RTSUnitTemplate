@@ -183,6 +183,18 @@ void ARTSGameModeBase::TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool b
 			StrongPC->Client_TriggerWinLoseUI(bWon, WidgetClass, TargetMapName, Tag);
 		}
 	}, bWon ? Config->WinDelay : Config->LoseDelay, false);
+
+	// On defeat, hand the player a read-only spectate camera. Base EnterSpectate is a no-op;
+	// the project's AExodusGameMode override performs the pawn swap + vision setup.
+	if (!bWon && PC)
+	{
+		EnterSpectate(PC, /*bRevealAll=*/false);
+	}
+}
+
+void ARTSGameModeBase::EnterSpectate(AController* Controller, bool bRevealAll)
+{
+	// Intentional no-op base implementation; project GameMode (AExodusGameMode) overrides this.
 }
 
 bool ARTSGameModeBase::IsAnyUnitWithTagAlive(const FGameplayTag& Tag, const TMap<FGameplayTag, int32>& AliveTagCounts) const

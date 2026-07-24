@@ -55,7 +55,12 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-	
+
+	virtual void PawnClientRestart() override;
+
+	/** (Re)adds MappingContext to the owning local player's Enhanced Input subsystem. Idempotent. */
+	virtual void ApplyInputMappingContext();
+
 public:
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputConfig* InputConfig;

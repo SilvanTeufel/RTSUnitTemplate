@@ -78,6 +78,13 @@ public:
 	FTimerHandle CheckSelectionTimerHandle;
 	UFUNCTION(BlueprintCallable, Category=RTSUnitTemplate)
 	void InitCameraHUDGameMode();
+
+	/** Client-callable request to enter read-only spectate. Routed to the authority GameMode's
+	 *  EnterSpectate (base is a no-op; AExodusGameMode performs the pawn swap). Works from any client
+	 *  (e.g. the WinLose widget's Spectator button) because the RPC executes server-side. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "RTSUnitTemplate|Spectator")
+	void Server_EnterSpectate(bool bRevealAll);
+
 	// Function called by timer to display FPS
 	void DisplayUnitCount();
 	

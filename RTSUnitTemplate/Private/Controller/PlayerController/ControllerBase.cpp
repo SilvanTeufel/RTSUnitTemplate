@@ -90,6 +90,15 @@ void AControllerBase::InitCameraHUDGameMode()
 	}
 }
 
+void AControllerBase::Server_EnterSpectate_Implementation(bool bRevealAll)
+{
+	// Runs on the authority: reach the real GameMode and hand off to its (virtual) EnterSpectate.
+	if (ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
+	{
+		GM->EnterSpectate(this, bRevealAll);
+	}
+}
+
 void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 {
 	if (bEnable)

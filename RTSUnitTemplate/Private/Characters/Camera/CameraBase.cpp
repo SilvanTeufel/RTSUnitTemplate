@@ -47,21 +47,35 @@ void ACameraBase::BeginPlay()
 		}
 	}
 	
-	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
-	{
-		
-		// Get the Enhanced Input Local Player Subsystem from the Local Player related to our Player Controller.
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			// PawnClientRestart can run more than once in an Actor's lifetime, so start by clearing out any leftover mappings.
-			Subsystem->ClearAllMappings();
+	ApplyInputMappingContext();
 
-			// Add each mapping context, along with their priority values. Higher values outprioritize lower values.
+}
+
+void ACameraBase::ApplyInputMappingContext()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	if (!PlayerController)
+	{
+		return;
+	}
+
+	// Get the Enhanced Input Local Player Subsystem from the Local Player related to our Player Controller.
+	if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
+	{
+		if (MappingContext)
+		{
+			// Safe re-add: remove first (idempotent, no-op if not present) then add so a mid-match
+			// (re)possession restores the mapping without clobbering any other contexts the project added.
+			Subsystem->RemoveMappingContext(MappingContext);
 			Subsystem->AddMappingContext(MappingContext, MappingPriority);
 		}
-		
 	}
-	
+}
+
+void ACameraBase::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+	ApplyInputMappingContext();
 }
 
 void ACameraBase::SetActorBasicLocation()

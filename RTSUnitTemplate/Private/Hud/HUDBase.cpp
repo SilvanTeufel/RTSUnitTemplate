@@ -17,6 +17,9 @@
 #include "Net/UnrealNetwork.h"
 #include "CanvasItem.h"
 #include "Engine/Canvas.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/MassUnitVisualFragments.h"
@@ -210,13 +213,31 @@ void AHUDBase::DrawDashDottedLine2D(const FVector2D& Start, const FVector2D& End
 	}
 }
 
-void AHUDBase::AddClickIndicator(FVector Location, FColor Color, float LifeTime, float Radius)
+void AHUDBase::AddClickIndicator(FVector Location, FColor Color, float LifeTime, float Radius, UMaterialInterface* MaterialOverride)
 {
 	FClickIndicator NewIndicator;
-	NewIndicator.Location = Location;
-	NewIndicator.Color = Color;
-	NewIndicator.ExpiryTime = GetWorld()->GetTimeSeconds() + (LifeTime < 0.f ? ClickIndicatorLifeTime : LifeTime);
-	NewIndicator.Radius = (Radius < 0.f ? ClickIndicatorRadius : Radius);
+	NewIndicator.Location   = Location;
+	NewIndicator.Color      = Color;
+
+	const float Now         = GetWorld()->GetTimeSeconds();
+	NewIndicator.StartTime  = Now;
+	NewIndicator.ExpiryTime = Now + (LifeTime < 0.f ? ClickIndicatorLifeTime : LifeTime);
+	NewIndicator.Radius     = (Radius   < 0.f ? ClickIndicatorRadius   : Radius);
+
+	// Per-call override wins, else the HUD-wide default. Null => solid-ring fallback.
+	UMaterialInterface* Mat = MaterialOverride ? MaterialOverride : ClickIndicatorMaterial.Get();
+	if (Mat)
+	{
+		// One MID per click — created here, reused every frame of this indicator's life (no per-frame churn).
+		NewIndicator.MID = UMaterialInstanceDynamic::Create(Mat, this);
+		if (NewIndicator.MID)
+		{
+			NewIndicator.MID->SetScalarParameterValue(ClickIndicatorProgressParamName, 0.f);
+			NewIndicator.MID->SetScalarParameterValue(ClickIndicatorRadiusParamName, NewIndicator.Radius);
+			NewIndicator.MID->SetVectorParameterValue(ClickIndicatorColorParamName, FLinearColor(Color));
+		}
+	}
+
 	ClickIndicators.Add(NewIndicator);
 }
 
@@ -277,6 +298,220 @@ void AHUDBase::DrawProjectedCircle(const FVector& Location, float Radius, FColor
 	}
 }
 
+void AHUDBase::DrawMaterialDisc(const FClickIndicator& Indicator)
+{
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !Canvas || !Indicator.MID) return;
+
+	const float R = Indicator.Radius;
+	const FVector Base = Indicator.Location + FVector(0, 0, 2.f); // tiny lift, mirrors DrawProjectedCircle's Z bias
+
+	// Four ground-plane corners (XY quad) -> screen. Ground projection gives true camera foreshortening.
+	FVector2D S00, S10, S11, S01;
+	if (!PC->ProjectWorldLocationToScreen(Base + FVector(-R, -R, 0), S00)) return;
+	if (!PC->ProjectWorldLocationToScreen(Base + FVector( R, -R, 0), S10)) return;
+	if (!PC->ProjectWorldLocationToScreen(Base + FVector( R,  R, 0), S11)) return;
+	if (!PC->ProjectWorldLocationToScreen(Base + FVector(-R,  R, 0), S01)) return;
+
+	FCanvasUVTri Tri0;
+	Tri0.V0_Pos = S00; Tri0.V0_UV = FVector2D(0, 0);
+	Tri0.V1_Pos = S10; Tri0.V1_UV = FVector2D(1, 0);
+	Tri0.V2_Pos = S11; Tri0.V2_UV = FVector2D(1, 1);
+	Tri0.V0_Color = Tri0.V1_Color = Tri0.V2_Color = FLinearColor::White;
+
+	FCanvasUVTri Tri1;
+	Tri1.V0_Pos = S00; Tri1.V0_UV = FVector2D(0, 0);
+	Tri1.V1_Pos = S11; Tri1.V1_UV = FVector2D(1, 1);
+	Tri1.V2_Pos = S01; Tri1.V2_UV = FVector2D(0, 1);
+	Tri1.V0_Color = Tri1.V1_Color = Tri1.V2_Color = FLinearColor::White;
+
+	TArray<FCanvasUVTri> Tris;
+	Tris.Reserve(2);
+	Tris.Add(Tri0);
+	Tris.Add(Tri1);
+
+	Canvas->K2_DrawMaterialTriangle(Indicator.MID, Tris);
+}
+
+void AHUDBase::EmitRibbonStrip(const TArray<FVector2D>& Pts, const TArray<float>& CumU,
+                               UMaterialInterface* Material, const FLinearColor& Color, float WidthPx)
+{
+	if (!Canvas || !Material || Pts.Num() < 2 || Pts.Num() != CumU.Num()) return;
+
+	const int32 N   = Pts.Num();
+	const float Half = FMath::Max(0.5f, WidthPx * 0.5f);
+
+	// Rotate a screen-space direction 90 deg -> normal.
+	auto Perp = [](const FVector2D& D) { return FVector2D(-D.Y, D.X); };
+
+	// Per-vertex miter offset (already scaled by Half).
+	TArray<FVector2D, TInlineAllocator<64>> Offset;
+	Offset.SetNumUninitialized(N);
+	for (int32 i = 0; i < N; ++i)
+	{
+		const FVector2D dPrev = (i > 0)     ? (Pts[i]   - Pts[i-1]).GetSafeNormal() : FVector2D::ZeroVector;
+		const FVector2D dNext = (i < N - 1) ? (Pts[i+1] - Pts[i]  ).GetSafeNormal() : FVector2D::ZeroVector;
+		const FVector2D nA = Perp(dPrev);
+		const FVector2D nB = Perp(dNext);
+
+		FVector2D M;
+		float MiterScale = 1.f;
+		if      (i == 0)     M = nB;                 // start cap
+		else if (i == N - 1) M = nA;                 // end cap
+		else
+		{
+			M = (nA + nB).GetSafeNormal();
+			if (M.IsNearlyZero()) { M = nB; }        // ~180 deg fold -> just use one side
+			else
+			{
+				const float Cos = FVector2D::DotProduct(M, nB);   // == cos(theta/2)
+				MiterScale = (FMath::Abs(Cos) > KINDA_SMALL_NUMBER) ? (1.f / Cos) : 1.f;
+				MiterScale = FMath::Clamp(MiterScale, 1.f, 4.f);  // clamp spikes at sharp corners
+			}
+		}
+		Offset[i] = M * (Half * MiterScale);
+	}
+
+	RibbonScratch.Reset();
+	RibbonScratch.Reserve((N - 1) * 2);
+	for (int32 i = 0; i < N - 1; ++i)
+	{
+		const FVector2D L0 = Pts[i]   + Offset[i];
+		const FVector2D R0 = Pts[i]   - Offset[i];
+		const FVector2D L1 = Pts[i+1] + Offset[i+1];
+		const FVector2D R1 = Pts[i+1] - Offset[i+1];
+		const float U0 = CumU[i];
+		const float U1 = CumU[i+1];
+
+		// Tri A: L0 -> R0 -> R1  (consistent CCW; Canvas tri raster uses CM_None, so not culled)
+		FCanvasUVTri A;
+		A.V0_Pos = L0; A.V0_UV = FVector2D(U0, 0.f); A.V0_Color = Color;
+		A.V1_Pos = R0; A.V1_UV = FVector2D(U0, 1.f); A.V1_Color = Color;
+		A.V2_Pos = R1; A.V2_UV = FVector2D(U1, 1.f); A.V2_Color = Color;
+		RibbonScratch.Add(A);
+
+		// Tri B: L0 -> R1 -> L1
+		FCanvasUVTri B;
+		B.V0_Pos = L0; B.V0_UV = FVector2D(U0, 0.f); B.V0_Color = Color;
+		B.V1_Pos = R1; B.V1_UV = FVector2D(U1, 1.f); B.V1_Color = Color;
+		B.V2_Pos = L1; B.V2_UV = FVector2D(U1, 0.f); B.V2_Color = Color;
+		RibbonScratch.Add(B);
+	}
+
+	if (RibbonScratch.Num() == 0) return;
+
+	FCanvasTriangleItem TriItem(RibbonScratch, (const FTexture*)nullptr);
+	TriItem.MaterialRenderProxy = Material->GetRenderProxy();  // FMaterialRenderProxy* -> const* OK
+	TriItem.BlendMode = SE_BLEND_Translucent;                  // ignored on material path; harmless
+	Canvas->DrawItem(TriItem);
+}
+
+void AHUDBase::DrawRibbonLine3D(const TArray<FVector>& WorldPoints, UMaterialInterface* Material,
+                                const FLinearColor& Color, float WidthPx, float ZOffset)
+{
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !Canvas || !Material || WorldPoints.Num() < 2) return;
+
+	const bool  bWorldTiling = (RibbonTilingMode == ERibbonTilingMode::WorldSpace);
+	const float SafeTiling   = (FMath::IsFinite(RibbonMaterialTiling) && RibbonMaterialTiling > 1.f)
+	                           ? RibbonMaterialTiling : 64.f;
+
+	TArray<FVector2D> Run;
+	TArray<float>     RunU;
+	Run.Reserve(WorldPoints.Num());
+	RunU.Reserve(WorldPoints.Num());
+
+	float     Accum   = 0.f;
+	FVector2D PrevS   = FVector2D::ZeroVector;
+	FVector   PrevW   = FVector::ZeroVector;
+	bool      bHavePrev = false;
+
+	auto FlushRun = [&]()
+	{
+		if (Run.Num() >= 2) EmitRibbonStrip(Run, RunU, Material, Color, WidthPx);
+		Run.Reset(); RunU.Reset(); Accum = 0.f; bHavePrev = false;
+	};
+
+	const int32 MaxPts = FMath::Min(WorldPoints.Num(), FMath::Max(2, RibbonMaxPoints));
+	for (int32 i = 0; i < MaxPts; ++i)
+	{
+		FVector W = WorldPoints[i]; W.Z += ZOffset;
+		FVector2D S;
+		// Break the run on any non-projectable (behind-camera) or non-finite point.
+		if (!PC->ProjectWorldLocationToScreen(W, S) || S.ContainsNaN())
+		{
+			FlushRun();
+			continue;
+		}
+
+		if (bHavePrev)
+		{
+			const float d = bWorldTiling ? FVector::Dist(PrevW, W)
+			                             : FVector2D::Distance(PrevS, S);
+			Accum += d / SafeTiling;
+		}
+		Run.Add(S);
+		RunU.Add(Accum);
+		PrevS = S; PrevW = W; bHavePrev = true;
+	}
+	FlushRun();
+}
+
+void AHUDBase::DrawRibbonLine2D(const TArray<FVector2D>& ScreenPoints, UMaterialInterface* Material,
+                                const FLinearColor& Color, float WidthPx)
+{
+	if (!Canvas || !Material || ScreenPoints.Num() < 2) return;
+	const float SafeTiling = (FMath::IsFinite(RibbonMaterialTiling) && RibbonMaterialTiling > 1.f)
+	                         ? RibbonMaterialTiling : 64.f;
+
+	const int32 N = FMath::Min(ScreenPoints.Num(), FMath::Max(2, RibbonMaxPoints));
+	TArray<float> CumU; CumU.SetNumUninitialized(N);
+	CumU[0] = 0.f;
+	for (int32 i = 1; i < N; ++i)
+		CumU[i] = CumU[i-1] + FVector2D::Distance(ScreenPoints[i-1], ScreenPoints[i]) / SafeTiling;
+
+	TArray<FVector2D> Pts(ScreenPoints.GetData(), N);
+	EmitRibbonStrip(Pts, CumU, Material, Color, WidthPx);
+}
+
+FVector AHUDBase::ResolveBuildingWaypointOrigin(const AUnitBase* Unit, const ABuildingBase* Config, bool bAllowSocket) const
+{
+	if (!IsValid(Unit))
+	{
+		return FVector::ZeroVector;
+	}
+
+	const FVector ActorLoc = Unit->GetActorLocation();
+	const FRotator ActorRot = Unit->GetActorRotation();
+
+	// No config source -> HUD global default in the unit's actor frame.
+	if (!Config)
+	{
+		return ActorLoc + ActorRot.RotateVector(WPLineDefaultOriginOffset);
+	}
+
+	// 1) Socket path (finished buildings only). GetMesh() is the unit's OWN mesh, so the socket
+	//    location comes back already in world space at the correct instance.
+	if (bAllowSocket && Config->WaypointLineOriginSocket != NAME_None)
+	{
+		if (const USkeletalMeshComponent* MeshComp = Unit->GetMesh())
+		{
+			if (MeshComp->DoesSocketExist(Config->WaypointLineOriginSocket))
+			{
+				return MeshComp->GetSocketLocation(Config->WaypointLineOriginSocket);
+			}
+		}
+		// Socket named but unresolved (e.g. ISM-only building) -> fall through to offset.
+	}
+
+	// 2) Offset path. Per-building offset wins when authored; otherwise HUD global default.
+	const FVector LocalOffset = Config->WaypointLineOriginOffset.IsNearlyZero()
+		? WPLineDefaultOriginOffset
+		: Config->WaypointLineOriginOffset;
+
+	return ActorLoc + ActorRot.RotateVector(LocalOffset);
+}
+
 void AHUDBase::DrawSelectedBuildingWaypointLinks()
 {
 	if (SelectedUnits.Num() == 0)
@@ -301,10 +536,17 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 
 		// Draw the rally line for finished buildings (HasWaypoint) and for construction sites
 		// whose finished building has HasWaypoint (the rally the site carries until handoff).
+		// WaypointConfig carries the origin/target offset + socket settings; for a construction
+		// site that config is the finished building's CDO (its own mesh is not the final mesh).
 		bool bDrawWaypoint = false;
+		const ABuildingBase* WaypointConfig = nullptr;
+		bool bAllowSocketOrigin = false;
+
 		if (const ABuildingBase* Building = Cast<ABuildingBase>(Unit))
 		{
-			bDrawWaypoint = Building->HasWaypoint;
+			bDrawWaypoint       = Building->HasWaypoint;
+			WaypointConfig      = Building;
+			bAllowSocketOrigin  = true;
 		}
 		else if (Unit->bIsConstructionUnit)
 		{
@@ -314,7 +556,9 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 				{
 					if (const ABuildingBase* BuildingCDO = Site->WorkArea->BuildingClass->GetDefaultObject<ABuildingBase>())
 					{
-						bDrawWaypoint = BuildingCDO->HasWaypoint;
+						bDrawWaypoint       = BuildingCDO->HasWaypoint;
+						WaypointConfig      = BuildingCDO;
+						bAllowSocketOrigin  = false; // CDO mesh is not in-world / not the site mesh
 					}
 				}
 			}
@@ -330,8 +574,15 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 			continue;
 		}
 
-		const FVector Start = Unit->GetActorLocation();
-		const FVector End = WP->GetActorLocation();
+		// Designer-controlled origin (socket or local offset) instead of the raw actor pivot.
+		const FVector Start = ResolveBuildingWaypointOrigin(Unit, WaypointConfig, bAllowSocketOrigin);
+
+		// Optional symmetric target offset on the waypoint end (default zero = legacy).
+		FVector End = WP->GetActorLocation();
+		if (WaypointConfig && !WaypointConfig->WaypointLineTargetOffset.IsNearlyZero())
+		{
+			End += WP->GetActorRotation().RotateVector(WaypointConfig->WaypointLineTargetOffset);
+		}
 
 		// Trace to see if the line clips through the landscape
 		// We use an offset to avoid hitting the ground immediately at the start/end points
@@ -367,9 +618,16 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 		Points.Add(End);
 
 		// Draw all segments
-		for (int32 i = 0; i < Points.Num() - 1; ++i)
+		if (WPLineMaterial)
 		{
-			DrawDashedLine3D(Points[i], Points[i + 1], WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+			DrawRibbonLine3D(Points, WPLineMaterial, FLinearColor(WPLineColor), WPLineRibbonWidth, WPLineZOffset);
+		}
+		else
+		{
+			for (int32 i = 0; i < Points.Num() - 1; ++i)
+			{
+				DrawDashedLine3D(Points[i], Points[i + 1], WPLineDashLen, WPLineGapLen, WPLineColor, WPLineThickness, WPLineZOffset);
+			}
 		}
 	}
 }
@@ -449,9 +707,16 @@ void AHUDBase::DrawSelectedUnitsMovementLines()
 
 	const FColor LineColor = FoundPath->bAttackMoveDuringPath ? UnitWPLineColorAttackMove : UnitWPLineColorMove;
 
-	for (int32 i = 0; i < Points.Num() - 1; ++i)
+	if (UnitWPLineMaterial)
 	{
-		DrawDashedLine3D(Points[i], Points[i + 1], UnitWPLineDashLen, UnitWPLineGapLen, LineColor, UnitWPLineThickness, UnitWPLineZOffset);
+		DrawRibbonLine3D(Points, UnitWPLineMaterial, FLinearColor(LineColor), UnitWPLineRibbonWidth, UnitWPLineZOffset);
+	}
+	else
+	{
+		for (int32 i = 0; i < Points.Num() - 1; ++i)
+		{
+			DrawDashedLine3D(Points[i], Points[i + 1], UnitWPLineDashLen, UnitWPLineGapLen, LineColor, UnitWPLineThickness, UnitWPLineZOffset);
+		}
 	}
 }
 
@@ -796,6 +1061,42 @@ void AHUDBase::HandleSelectionRectangle()
 	SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
 }
 
+void AHUDBase::DrawMaterialWall(const FVector& Start, const FVector& End, float Height, UMaterialInterface* Material, const FLinearColor& Color)
+{
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !Canvas || !Material) return;
+
+	const FVector Up(0.f, 0.f, FMath::Max(1.f, Height));
+
+	// 4 world corners: bottom Start/End, then up to the top. Project all; bail if any is behind camera.
+	FVector2D S0, S1, S2, S3;
+	if (!PC->ProjectWorldLocationToScreen(Start,      S0)) return; // bottom A
+	if (!PC->ProjectWorldLocationToScreen(End,        S1)) return; // bottom B
+	if (!PC->ProjectWorldLocationToScreen(End + Up,   S2)) return; // top B
+	if (!PC->ProjectWorldLocationToScreen(Start + Up, S3)) return; // top A
+	if (S0.ContainsNaN() || S1.ContainsNaN() || S2.ContainsNaN() || S3.ContainsNaN()) return;
+
+	FCanvasUVTri T0;
+	T0.V0_Pos = S0; T0.V0_UV = FVector2D(0.f, 1.f); T0.V0_Color = Color;
+	T0.V1_Pos = S1; T0.V1_UV = FVector2D(1.f, 1.f); T0.V1_Color = Color;
+	T0.V2_Pos = S2; T0.V2_UV = FVector2D(1.f, 0.f); T0.V2_Color = Color;
+
+	FCanvasUVTri T1;
+	T1.V0_Pos = S0; T1.V0_UV = FVector2D(0.f, 1.f); T1.V0_Color = Color;
+	T1.V1_Pos = S2; T1.V1_UV = FVector2D(1.f, 0.f); T1.V1_Color = Color;
+	T1.V2_Pos = S3; T1.V2_UV = FVector2D(0.f, 0.f); T1.V2_Color = Color;
+
+	TArray<FCanvasUVTri> Tris;
+	Tris.Reserve(2);
+	Tris.Add(T0);
+	Tris.Add(T1);
+
+	FCanvasTriangleItem TriItem(Tris, (const FTexture*)nullptr);
+	TriItem.MaterialRenderProxy = Material->GetRenderProxy();
+	TriItem.BlendMode = SE_BLEND_Translucent;
+	Canvas->DrawItem(TriItem);
+}
+
 void AHUDBase::DrawHUD()
 {
 	Super::DrawHUD();
@@ -805,20 +1106,51 @@ void AHUDBase::DrawHUD()
 
 	if (ExtensionPreviewLine.bIsActive)
 	{
-		DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, ExtensionLineDashLen, ExtensionLineGapLen, ExtensionPreviewLine.Color, ExtensionLineThickness, 0.f);
-		DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, ExtensionLineDashLen, ExtensionLineGapLen, ExtensionPreviewLine.Color, ExtensionLineThickness, ExtensionPreviewLine.HeightOffset * 2.f);
+		if (ExtensionWallMaterial)
+		{
+			// Translucent vertical "wall" between the two pillars, tinted by the validity color.
+			// Drop the base below the pivots so the wall starts at the ground, not mid-height.
+			const float WallH = (ExtensionWallHeight > 0.f) ? ExtensionWallHeight : (ExtensionPreviewLine.HeightOffset * 2.f);
+			const FVector BaseDrop(0.f, 0.f, ExtensionWallBaseDrop);
+			FLinearColor WallColor(ExtensionPreviewLine.Color);
+			WallColor.A = ExtensionWallOpacity;
+			DrawMaterialWall(ExtensionPreviewLine.Start - BaseDrop, ExtensionPreviewLine.End - BaseDrop, WallH, ExtensionWallMaterial, WallColor);
+		}
+		else if (ExtensionLineMaterial)
+		{
+			TArray<FVector> P = { ExtensionPreviewLine.Start, ExtensionPreviewLine.End };
+			DrawRibbonLine3D(P, ExtensionLineMaterial, FLinearColor(ExtensionPreviewLine.Color), ExtensionLineRibbonWidth, 0.f);
+		}
+		else
+		{
+			DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, ExtensionLineDashLen, ExtensionLineGapLen, ExtensionPreviewLine.Color, ExtensionLineThickness, 0.f);
+			DrawDashedLine3D(ExtensionPreviewLine.Start, ExtensionPreviewLine.End, ExtensionLineDashLen, ExtensionLineGapLen, ExtensionPreviewLine.Color, ExtensionLineThickness, ExtensionPreviewLine.HeightOffset * 2.f);
+		}
 		ExtensionPreviewLine.bIsActive = false;
 	}
 
 	float CurrentTime = GetWorld()->GetTimeSeconds();
 	for (int32 i = ClickIndicators.Num() - 1; i >= 0; --i)
 	{
-		if (CurrentTime >= ClickIndicators[i].ExpiryTime)
+		FClickIndicator& CI = ClickIndicators[i];
+		if (CurrentTime >= CI.ExpiryTime)
 		{
-			ClickIndicators.RemoveAtSwap(i);
+			ClickIndicators.RemoveAtSwap(i);   // element (and its MID ref) drops -> MID becomes GC-eligible
 			continue;
 		}
-		DrawProjectedCircle(ClickIndicators[i].Location, ClickIndicators[i].Radius, ClickIndicators[i].Color, -1.f, -1, true);
+
+		if (CI.MID)
+		{
+			// Feed a per-click 0..1 phase. SetScalarParameterValue is a no-op if the param is absent, so this is safe.
+			const float Total = FMath::Max(CI.ExpiryTime - CI.StartTime, KINDA_SMALL_NUMBER);
+			const float Age01 = FMath::Clamp((CurrentTime - CI.StartTime) / Total, 0.f, 1.f);
+			CI.MID->SetScalarParameterValue(ClickIndicatorProgressParamName, Age01);
+			DrawMaterialDisc(CI);
+		}
+		else
+		{
+			DrawProjectedCircle(CI.Location, CI.Radius, CI.Color, -1.f, -1, true);   // unchanged fallback
+		}
 	}
 
 	// Draw dashed links between selected buildings and their waypoints each frame

@@ -18,6 +18,72 @@
 #include "ExtendedCameraBase.generated.h"
 
 class ALevelUnit;
+class UEnhancedInputComponentBase;
+
+/**
+ * Designer-tunable depth-of-field / blur applied to the camera's post-process while a
+ * full-screen Tab menu (or the map / Esc menu) is open. Defaults are a gentle
+ * "frosted-glass" blur that keeps the scene readable. Consumed by AExtendedCameraBase::UpdateViewportBlur().
+ *
+ * To reproduce the legacy full-screen white-out set:
+ *   Fstop = 0.1, MinFstop = 0.1, FocalDistance = 1.0, SensorWidth = 1000.0,
+ *   DepthBlurAmount = 1.0, DepthBlurRadius = 100.0,
+ *   FocalRegion = 0, NearTransitionRegion = 0, FarTransitionRegion = 0.
+ */
+USTRUCT(BlueprintType)
+struct FRTSViewportBlurSettings
+{
+	GENERATED_BODY()
+
+	/** Master switch. When false, UpdateViewportBlur() never applies blur and always clears the DoF overrides. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur")
+	bool bBlurEnabled = true;
+
+	/** Cinematic-DoF aperture (f-number). LOWER = stronger blur. Real lenses ~f/1.4-f/22; legacy white-out used 0.1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur",
+		meta = (ClampMin = "0.1", UIMin = "1.0", UIMax = "22.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldFstop = 2.0f;
+
+	/** Smallest f-number the simulated diaphragm can reach. Keep <= Fstop. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur",
+		meta = (ClampMin = "0.1", UIMin = "1.0", UIMax = "22.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldMinFstop = 1.2f;
+
+	/** World-space distance (cm) to the in-focus plane. Small = whole distant scene out of focus; legacy used 1.0 cm. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur",
+		meta = (ClampMin = "1.0", UIMin = "10.0", UIMax = "100000.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldFocalDistance = 10.0f;
+
+	/** Sensor width (mm). Larger = shallower DoF (more blur). Full-frame ~36, Super-35 ~24.576; legacy used 1000. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur",
+		meta = (ClampMin = "0.1", UIMin = "1.0", UIMax = "1000.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldSensorWidth = 24.576f;
+
+	/** Distance ("depth") blur amount: engine reads this as the depth in km at which 50% of DepthBlurRadius is reached. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur",
+		meta = (ClampMin = "0.000001", UIMin = "0.0", UIMax = "4.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldDepthBlurAmount = 1.0f;
+
+	/** Max distance-blur radius (px @1920). Main "blur everything" knob. Legacy used 100 (full-frame smear). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur",
+		meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "100.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldDepthBlurRadius = 4.0f;
+
+	/** Mobile DoF fully-in-focus region width (cm). Inert under desktop cinematic DoF; drives mobile/ES31 blur. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur|Mobile DoF",
+		meta = (ClampMin = "0.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldFocalRegion = 0.0f;
+
+	/** Mobile DoF near transition region (cm). Inert under desktop cinematic DoF; drives mobile/ES31 blur. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur|Mobile DoF",
+		meta = (ClampMin = "0.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldNearTransitionRegion = 0.0f;
+
+	/** Mobile DoF far transition region (cm). Inert under desktop cinematic DoF; drives mobile/ES31 blur. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur|Mobile DoF",
+		meta = (ClampMin = "0.0", EditCondition = "bBlurEnabled"))
+	float DepthOfFieldFarTransitionRegion = 0.0f;
+};
 
 /**
  * ExtendedCameraBase is a child class of ACameraBase
@@ -44,6 +110,17 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+protected:
+	/** Binds ONLY camera-rig movement: WASD pan, Q/E rotate, X/Y + scroll zoom,
+	 *  middle-mouse orbit, Space zoom-toggle, P orbit-move. A read-only pawn keeps this. */
+	virtual void BindCameraInputActions(class UEnhancedInputComponentBase* EIC);
+
+	/** Binds selection / commands / abilities / control-groups / UI toggles / modifier keys.
+	 *  Override to an empty body in a spectator pawn to make the pawn read-only. */
+	virtual void BindGameplayInputActions(class UEnhancedInputComponentBase* EIC);
+
+public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState);
@@ -115,7 +192,8 @@ public:
 	UAbilityChooser* AbilityChooserWidget;
 
 	// Radial attribute tree (alternative to the TalentChooser), shown on tab 4.
-	// Place a UAttributeTreeWidget in your MainHUD and assign it here (like TalentChooserWidget).
+	// Wired from the MainHUD BP: place a UAttributeTreeWidget in your MainHUD and assign it here via
+	// SetAttributeTreeWidget in EventPreConstruct (as BP_MainHUD/BP_MainHUD_2 do), like TalentChooserWidget.
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UAttributeTreeWidget* AttributeTreeWidget;
 
@@ -180,6 +258,10 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateTabModeUI();
+
+	/** Designer-tunable blur applied by UpdateViewportBlur() while a Tab / map / Esc menu is open. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur")
+	FRTSViewportBlurSettings BlurSettings;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateViewportBlur(bool bEnable);

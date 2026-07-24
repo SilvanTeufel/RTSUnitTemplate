@@ -46,6 +46,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool HasWaypoint = true;
 
+	// --- Rally / waypoint line origin (HUD) ---------------------------------
+	// Local-space offset (rotated by the building's actor rotation) from which the rally/waypoint
+	// line is drawn in AHUDBase::DrawSelectedBuildingWaypointLinks. Lets designers lift the line off
+	// the pivot to a sensible spot (door, flag, roof). Zero = legacy pivot behavior. If this is left
+	// at zero AND WaypointLineOriginSocket does not resolve, the HUD's WPLineDefaultOriginOffset is
+	// used instead.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Waypoint")
+	FVector WaypointLineOriginOffset = FVector::ZeroVector;
+
+	// Optional socket/bone on this building's primary skeletal mesh (ACharacter::GetMesh()). When set
+	// and it resolves on a FINISHED building, its world location overrides WaypointLineOriginOffset.
+	// Ignored for construction sites and for ISM-only buildings whose skeletal mesh has no such socket
+	// — those fall back to the offset.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Waypoint")
+	FName WaypointLineOriginSocket = NAME_None;
+
+	// Optional local-space offset (rotated by the WAYPOINT's actor rotation) applied to the END of the
+	// rally line. Symmetric target control; zero keeps the historical waypoint-actor location.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Waypoint")
+	FVector WaypointLineTargetOffset = FVector::ZeroVector;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CancelsAbilityOnRightClick = false;
 	
