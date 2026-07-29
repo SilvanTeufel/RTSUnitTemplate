@@ -9,6 +9,7 @@
 #include "Actors/StoryTriggerActor.h"
 #include "Components/StoryTriggerComponent.h"
 #include "Sound/SoundClass.h"
+#include "Sound/SoundBase.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Blueprint/UserWidget.h"
 
@@ -196,9 +197,22 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 
 	ActiveWidget = Widget;
 
-	if (Item.LifetimeSeconds > 0.f)
+	// Close-timer: by default keep the widget open until the audio finishes (+ AudioEndExtraDelay).
+	// Fall back to the fixed LifetimeSeconds when bTillAudioEnds is off, there is no sound, or the
+	// sound loops indefinitely (GetDuration returns INDEFINITELY_LOOPING_DURATION).
+	float DisplayTime = Item.LifetimeSeconds;
+	if (Item.bTillAudioEnds && Item.Sound)
 	{
-		World->GetTimerManager().SetTimer(ActiveTimerHandle, this, &UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished, Item.LifetimeSeconds, false);
+		const float Dur = Item.Sound->GetDuration();
+		if (Dur > 0.f && Dur < INDEFINITELY_LOOPING_DURATION)
+		{
+			DisplayTime = Dur + FMath::Max(0.f, Item.AudioEndExtraDelay);
+		}
+	}
+
+	if (DisplayTime > 0.f)
+	{
+		World->GetTimerManager().SetTimer(ActiveTimerHandle, this, &UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished, DisplayTime, false);
 	}
 }
 

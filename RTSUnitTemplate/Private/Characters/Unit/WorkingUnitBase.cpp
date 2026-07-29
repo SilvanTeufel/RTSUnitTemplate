@@ -46,7 +46,13 @@ void AWorkingUnitBase::Destroyed()
 			BuildArea->PlannedBuilding = false;
 		}
 	}
-	
+
+	// Release the resource slot too, so CurrentWorkers (the HUD count) stays symmetric when a worker dies.
+	if (ResourcePlace)
+	{
+		ResourcePlace->RemoveWorkerFromArray(this);
+	}
+
 	if (WorkResource)
 	{
 		WorkResource->Destroy();

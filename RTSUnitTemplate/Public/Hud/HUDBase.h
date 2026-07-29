@@ -280,6 +280,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Health")
 	FHealthBarSettings ConstructionHealthBarSettings;
 
+	// --- Resource worker-count display -------------------------------------------------------------
+	// Draws "N/Max" (Canvas world-text, like the level text) over each resource WorkArea. Nothing is
+	// drawn when N == 0 or MaxWorkerCount <= 0. No per-node widgets -> cheap for an RTS.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Resources")
+	bool bShowResourceWorkerCounts = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Resources")
+	FColor ResourceCountColor = FColor(255, 235, 140, 255);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Resources")
+	float ResourceCountTextScale = 1.0f;
+
+	// World-space Z offset (above the node origin) at which the count is drawn.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Resources")
+	float ResourceCountHeightOffset = 120.f;
+
+	// Draws the N/Max worker count over all resource WorkAreas (called from DrawHUD).
+	void DrawAllResourceCounts();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorRadius = 15.f;
 

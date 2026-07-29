@@ -228,6 +228,8 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, DroneBuildingHeightOverride);
 	DOREPLIFETIME(AWorkArea, IsExtensionArea);
 	DOREPLIFETIME(AWorkArea, Workers);
+	DOREPLIFETIME(AWorkArea, MaxWorkerCount);
+	DOREPLIFETIME(AWorkArea, CurrentWorkers);
 	DOREPLIFETIME(AWorkArea, PlannedBuilding);
 	DOREPLIFETIME(AWorkArea, StartedBuilding);
 	DOREPLIFETIME(AWorkArea, bMIDEnabled);
@@ -285,7 +287,14 @@ void AWorkArea::HandleResourceExtractionArea(AUnitBase* UnitBase)
 {
 
 		if (this != UnitBase->ResourcePlace) return;
-		
+
+		// Enforce the per-resource worker cap: an overflow worker is reassigned/idled here (returns
+		// false) instead of starting extraction.
+		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+		{
+			if (!ReserveMiningSlotOrReassign(Worker)) return;
+		}
+
 		UnitBase->UnitControlTimer = 0;
 		UnitBase->ExtractingWorkResourceType = ConvertWorkAreaTypeToResourceType(Type);
 		UnitBase->SetUnitState(UnitData::ResourceExtraction);
@@ -714,13 +723,14 @@ void AWorkArea::AddWorkerToArray(AWorkingUnitBase* Worker)
 {
 	if (!Worker) return;
 
-	// Avoid duplicates only; capacity is handled by overflow control
+	// Avoid duplicates only; hard capacity is enforced at the mining slot (ReserveMiningSlotOrReassign).
 	if (Workers.Contains(Worker))
 	{
 		return; // already tracked
 	}
 
 	Workers.Add(Worker);
+	CurrentWorkers = Workers.Num(); // replicated -> drives the HUD N/Max display
 	// Timer runs independently (looping). No immediate action needed here.
 }
 
@@ -728,7 +738,64 @@ void AWorkArea::RemoveWorkerFromArray(AWorkingUnitBase* Worker)
 {
 	if (!Worker) return;
 	Workers.Remove(Worker);
+	CurrentWorkers = Workers.Num();
 	// Timer runs independently (looping). No immediate action needed here.
+}
+
+void AWorkArea::OnRep_WorkerCount()
+{
+	// Replicated count changed on a client; the HUD reads CurrentWorkers directly each frame, so
+	// nothing to do here. Hook kept for future per-node client-side reactions.
+}
+
+bool AWorkArea::ReserveMiningSlotOrReassign(AWorkingUnitBase* Worker)
+{
+	if (!Worker) return true;
+	if (!HasAuthority()) return true; // server owns the slot decision; clients just render
+
+	// Make sure this worker is tracked here, then decide by its position in the slot order.
+	if (!Workers.Contains(Worker))
+	{
+		AddWorkerToArray(Worker);
+	}
+
+	const int32 SlotIndex = Workers.IndexOfByKey(Worker);
+	// MaxWorkerCount <= 0 means "unlimited". Otherwise only the first MaxWorkerCount workers may mine.
+	if (MaxWorkerCount <= 0 || (SlotIndex >= 0 && SlotIndex < MaxWorkerCount))
+	{
+		return true; // within capacity -> mine here
+	}
+
+	// --- Overflow: this worker exceeds the cap on this node -> give up the slot and reassign. ---
+	RemoveWorkerFromArray(Worker);
+
+	AResourceGameMode* RGM = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr);
+	AWorkArea* Alt = RGM ? RGM->GetNearestAvailableResourceOfTypeWithin(Worker, Type, 3000.f) : nullptr;
+
+	// Release the per-type team slot we paid for on this node's type before moving on.
+	if (RGM && IsValid(Worker->ResourcePlace))
+	{
+		RGM->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
+	}
+
+	if (Alt && RGM)
+	{
+		Worker->ResourcePlace = Alt;
+		Alt->AddWorkerToArray(Worker);
+		RGM->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Alt->Type), +1.0f);
+		if (AUnitBase* WU = Cast<AUnitBase>(Worker)) WU->SetUEPathfinding = true;
+		Worker->SetUnitState(UnitData::GoToResourceExtraction);
+		Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);
+	}
+	else
+	{
+		// No same-type resource with room within ~3000 -> idle.
+		Worker->ResourcePlace = nullptr;
+		if (AUnitBase* WU = Cast<AUnitBase>(Worker)) WU->SetUEPathfinding = true;
+		Worker->SetUnitState(UnitData::Idle);
+		Worker->SwitchEntityTagByState(UnitData::Idle, Worker->UnitStatePlaceholder);
+	}
+	return false; // do NOT mine here
 }
 
 void AWorkArea::OnOverflowTimer()

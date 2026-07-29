@@ -48,6 +48,8 @@ bool UStoryTriggerComponent::BuildQueueItemFromRow(FName RowName, FStoryQueueIte
 		// OutItem.OffsetY = Row->ScreenOffsetY;
 		OutItem.LifetimeSeconds = Row->WidgetLifetimeSeconds;
 		OutItem.Sound = Row->TriggerSound;
+		OutItem.bTillAudioEnds = Row->bTillAudioEnds;
+		OutItem.AudioEndExtraDelay = Row->AudioEndExtraDelay;
 		return true;
 	}
 	return false;

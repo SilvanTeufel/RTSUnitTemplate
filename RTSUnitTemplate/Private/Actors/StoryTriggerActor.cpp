@@ -60,6 +60,8 @@ void AStoryTriggerActor::BeginPlay()
             // ScreenOffsetX = Row->ScreenOffsetX;
             // ScreenOffsetY = Row->ScreenOffsetY;
             WidgetLifetimeSeconds = Row->WidgetLifetimeSeconds;
+            bTillAudioEnds = Row->bTillAudioEnds;
+            AudioEndExtraDelay = Row->AudioEndExtraDelay;
         }
     }
 
@@ -124,6 +126,8 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
                 // Item.OffsetY = ScreenOffsetY;
                 Item.LifetimeSeconds = WidgetLifetimeSeconds;
                 Item.Sound = TriggerSound;
+                Item.bTillAudioEnds = bTillAudioEnds;
+                Item.AudioEndExtraDelay = AudioEndExtraDelay;
                 Item.TriggeringSource = this;
                 Queue->EnqueueStory(Item);
                 OnStoryTriggered.Broadcast();

@@ -60,6 +60,16 @@ struct FStoryWidgetTable : public FTableRowBase
 	// Auto-remove the widget after this many seconds (<=0 disables auto-remove)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story, meta=(ClampMin="0.0"))
 	float WidgetLifetimeSeconds = 10.f;
+
+	// If true, keep the widget open until TriggerSound finishes (+ AudioEndExtraDelay) instead of
+	// using WidgetLifetimeSeconds. Falls back to WidgetLifetimeSeconds if there is no sound (or a
+	// looping/indefinite one).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story)
+	bool bTillAudioEnds = true;
+
+	// Extra seconds the widget stays open after the audio finishes (only used when bTillAudioEnds).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Story, meta=(ClampMin="0.0"))
+	float AudioEndExtraDelay = 2.5f;
 };
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnStoryTriggered);
@@ -149,6 +159,13 @@ protected:
 	// Auto-remove the widget after this many seconds (<=0 disables auto-remove)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story, meta=(ClampMin="0.0"))
 	float WidgetLifetimeSeconds = 10.f;
+
+	// Keep the widget open until TriggerSound finishes (+ AudioEndExtraDelay) instead of the fixed time.
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
+	bool bTillAudioEnds = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story, meta=(ClampMin="0.0"))
+	float AudioEndExtraDelay = 2.5f;
 
 	// Internal flag to ensure single execution
 	UPROPERTY(VisibleInstanceOnly, Category = Story)

@@ -677,10 +677,23 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	UnitBase->UnitStatePlaceholder = UnitData::GoToResourceExtraction;
                         }else if (SignalName == UnitSignals::ResourceExtraction)
                         {
-                        	EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
-                        	TArray<FMassEntityHandle> CapturedEntitys;
-                        	CapturedEntitys.Emplace(Entity);
-                        	HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
+                        	// Per-resource worker cap: an overflow worker is reassigned to a nearby same-type
+                        	// resource (or idled) here instead of entering ResourceExtraction.
+                        	bool bMayMine = true;
+                        	if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
+                        	{
+                        		if (IsValid(Worker->ResourcePlace))
+                        		{
+                        			bMayMine = Worker->ResourcePlace->ReserveMiningSlotOrReassign(Worker);
+                        		}
+                        	}
+                        	if (bMayMine)
+                        	{
+                        		EntityManager.Defer().AddTag<FMassStateResourceExtractionTag>(Entity);
+                        		TArray<FMassEntityHandle> CapturedEntitys;
+                        		CapturedEntitys.Emplace(Entity);
+                        		HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
+                        	}
                         }
                     	
 						if (SignalName == UnitSignals::GoToBase)
@@ -2109,6 +2122,11 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 						
 						if (Remaining <= KINDA_SMALL_NUMBER)
 						{
+							// Release this worker's slot before the node dies so counts stay symmetric.
+							if (AWorkingUnitBase* DepletingWorker = Cast<AWorkingUnitBase>(UnitBase))
+							{
+								UnitBase->ResourcePlace->RemoveWorkerFromArray(DepletingWorker);
+							}
 							UnitBase->ResourcePlace->Destroy();
 							UnitBase->ResourcePlace = nullptr;
 						}

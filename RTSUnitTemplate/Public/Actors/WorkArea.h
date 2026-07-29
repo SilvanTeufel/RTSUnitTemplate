@@ -192,9 +192,18 @@ public:
  	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
  	TArray<AWorkingUnitBase*> Workers;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	int MaxWorkerCount = 1;
-	
+	// Max workers that may mine this resource at once (enforced at the mining slot). <= 0 = unlimited.
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int MaxWorkerCount = 3;
+
+	// Workers currently occupying this resource (kept = Workers.Num()). Replicated so the HUD can draw
+	// the "N/Max" count over resource nodes without a server round-trip. 0 => the HUD draws nothing.
+	UPROPERTY(ReplicatedUsing = OnRep_WorkerCount, BlueprintReadOnly, Category = RTSUnitTemplate)
+	int32 CurrentWorkers = 0;
+
+	UFUNCTION()
+	void OnRep_WorkerCount();
+
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void StartedBuild();
 
@@ -291,6 +300,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveWorkerFromArray(class AWorkingUnitBase* Worker);
+
+	// Server-only. Ensures the worker holds one of the MaxWorkerCount mining slots on this node: the
+	// first MaxWorkerCount workers (by Workers order) may mine; any overflow worker is reassigned to the
+	// nearest same-type resource within ~3000 units (else sent Idle). Returns true if the worker may
+	// mine here now, false if it was reassigned/idled (caller must NOT start extraction).
+	bool ReserveMiningSlotOrReassign(class AWorkingUnitBase* Worker);
 
 	/** Duration after which a worker added to this WorkArea should be sent back to base and removed (defaults to BuildTime if <= 0). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

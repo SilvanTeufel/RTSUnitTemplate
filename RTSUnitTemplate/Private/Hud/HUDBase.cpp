@@ -1212,6 +1212,7 @@ void AHUDBase::DrawHUD()
 
 	DrawAllSelectedUnitsIndicators();
 	DrawAllHealthBars();
+	DrawAllResourceCounts();
 
 	if (ExtensionPreviewLine.bIsActive)
 	{
@@ -2204,6 +2205,49 @@ void AHUDBase::DrawLevelText(AUnitBase* Unit, const FVector2D& ScreenPos, const 
 	TextItem.BlendMode = SE_BLEND_Translucent;
 
 	Canvas->DrawItem(TextItem);
+}
+
+void AHUDBase::DrawAllResourceCounts()
+{
+	if (!bShowResourceWorkerCounts || !Canvas || !LevelFont) return;
+
+	APlayerController* PC = GetOwningPlayerController();
+	UWorld* World = GetWorld();
+	if (!PC || !World) return;
+
+	const FLinearColor Color(ResourceCountColor);
+	const float FontScale = FMath::Max(0.1f, ResourceCountTextScale);
+
+	for (TActorIterator<AWorkArea> It(World); It; ++It)
+	{
+		AWorkArea* Area = *It;
+		if (!IsValid(Area)) continue;
+
+		// Only resource nodes (Primary..Legendary).
+		const WorkAreaData::WorkAreaType T = Area->Type;
+		const bool bIsResource = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary ||
+			T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic ||
+			T == WorkAreaData::Legendary);
+		if (!bIsResource) continue;
+
+		const int32 Max = Area->MaxWorkerCount;
+		if (Max <= 0) continue; // unlimited / disabled -> draw nothing
+		const int32 Shown = FMath::Clamp(Area->CurrentWorkers, 0, Max);
+		if (Shown <= 0) continue; // "0/Max" -> draw nothing
+
+		FVector2D ScreenPos;
+		const FVector WorldPos = Area->GetActorLocation() + FVector(0.f, 0.f, ResourceCountHeightOffset);
+		if (!PC->ProjectWorldLocationToScreen(WorldPos, ScreenPos)) continue;
+
+		const FString CountStr = FString::Printf(TEXT("%d/%d"), Shown, Max);
+		FCanvasTextItem TextItem(ScreenPos, FText::FromString(CountStr), LevelFont, Color);
+		TextItem.Scale = FVector2D(FontScale, FontScale);
+		TextItem.bOutlined = true;
+		TextItem.OutlineColor = FLinearColor::Black;
+		TextItem.BlendMode = SE_BLEND_Translucent;
+		TextItem.Position.X -= 10.f * FontScale; // rough horizontal centering over the node
+		Canvas->DrawItem(TextItem);
+	}
 }
 
 float AHUDBase::GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHealthBarSettings& Settings)

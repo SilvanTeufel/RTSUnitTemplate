@@ -56,6 +56,13 @@ struct FStoryQueueItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	TObjectPtr<USoundBase> Sound = nullptr;
 
+	// When true, the close timer waits for Sound to finish (+ AudioEndExtraDelay) instead of LifetimeSeconds.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	bool bTillAudioEnds = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	float AudioEndExtraDelay = 2.5f;
+
 	UPROPERTY(BlueprintReadWrite, Category = "StoryQueue")
 	TWeakObjectPtr<UObject> TriggeringSource = nullptr;
 };

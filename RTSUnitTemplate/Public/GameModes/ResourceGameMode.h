@@ -161,6 +161,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<AWorkArea*> GetAllResourcePlaces(AWorkingUnitBase* Worker);
 
+	// Nearest (to the worker) non-depleted resource of the given WorkArea type that still has a free
+	// worker slot and is within Radius, excluding the worker's current ResourcePlace. Returns null if
+	// none qualify -> the caller sends the worker Idle. Used for the "resource full -> switch / idle" rule.
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	AWorkArea* GetNearestAvailableResourceOfTypeWithin(AWorkingUnitBase* Worker, TEnumAsByte<WorkAreaData::WorkAreaType> Type, float Radius = 3000.f);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
 	

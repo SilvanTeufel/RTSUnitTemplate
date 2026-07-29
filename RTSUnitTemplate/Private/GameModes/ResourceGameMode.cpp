@@ -775,6 +775,32 @@ TArray<AWorkArea*> AResourceGameMode::GetAllResourcePlaces(AWorkingUnitBase* Wor
 	return AllAreas;
 }
 
+AWorkArea* AResourceGameMode::GetNearestAvailableResourceOfTypeWithin(AWorkingUnitBase* Worker, TEnumAsByte<WorkAreaData::WorkAreaType> Type, float Radius)
+{
+	if (!Worker) return nullptr;
+
+	const FVector WorkerLoc = Worker->GetActorLocation();
+	AWorkArea* Best = nullptr;
+	float BestDistSq = Radius * Radius; // only consider nodes within Radius
+
+	// GetAllResourcePlaces already removes invalid + depleted nodes (sorted, but we re-check distance).
+	for (AWorkArea* WA : GetAllResourcePlaces(Worker))
+	{
+		if (!IsValid(WA) || WA == Worker->ResourcePlace) continue;
+		if (WA->Type != Type) continue;
+		// Full node? (MaxWorkerCount <= 0 == unlimited)
+		if (WA->MaxWorkerCount > 0 && WA->Workers.Num() >= WA->MaxWorkerCount) continue;
+
+		const float DistSq = FVector::DistSquared(WorkerLoc, WA->GetActorLocation());
+		if (DistSq <= BestDistSq)
+		{
+			BestDistSq = DistSq;
+			Best = WA;
+		}
+	}
+	return Best;
+}
+
 AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas)
 {
 	AWorkArea* BestWorkArea = nullptr;
