@@ -328,6 +328,71 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	virtual void DrawHUD();
 
+	// ------------------------------------------------------------------------------------------
+	// Formation drag line preview.
+	//
+	// Stored in WORLD space, not screen space: the controller already has the ground point from
+	// its cursor trace, the release path needs those exact world points anyway, and projecting per
+	// frame gives correct terrain foreshortening for free.
+	//
+	// Unlike ExtensionPreviewLine this does NOT self-clear after drawing - the controller sets it
+	// on press, updates it per tick and clears it on release, so a frame where the controller does
+	// not push would otherwise make the line flicker.
+	// ------------------------------------------------------------------------------------------
+
+	/**
+	 * Sets/refreshes the preview. Path is the polyline to draw (2+ points; a straight drag gives
+	 * exactly 2), SlotPositions are the exact world positions the units will be sent to. Both come
+	 * from the controller's single BuildFormationLineOrder, so the preview cannot drift from the
+	 * order that gets issued.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Formation")
+	void UpdateFormationPath(const TArray<FVector>& Path, const TArray<FVector>& SlotPositions);
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Formation")
+	void ClearFormationLine();
+
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|Formation")
+	bool bFormationLineActive = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|Formation")
+	TArray<FVector> FormationPathPoints;
+
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|Formation")
+	TArray<FVector> FormationSlotPositions;
+
+	/** Bound on drawn polyline segments, mirroring the MaxSegments discipline elsewhere in this file. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation", meta = (ClampMin = "2", ClampMax = "1024"))
+	int32 FormationPathMaxSegments = 256;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation")
+	FColor FormationLineColor = FColor(60, 220, 90, 255);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation", meta = (ClampMin = "1.0"))
+	float FormationLineDashLen = 26.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation", meta = (ClampMin = "0.0"))
+	float FormationLineGapLen = 14.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation", meta = (ClampMin = "0.1"))
+	float FormationLineThickness = 2.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation", meta = (ClampMin = "1.0"))
+	float FormationMarkerRadius = 26.f;
+
+	/** Hard cap on drawn slot markers. SelectedUnits is Blueprint-writable, so this must be clamped. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation", meta = (ClampMin = "1", ClampMax = "256"))
+	int32 FormationMaxMarkers = 64;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation")
+	float FormationLineZOffset = 12.f;
+
+protected:
+	/** Draws the line plus evenly spaced slot markers. Guards its own Canvas/PC access. */
+	void DrawFormationLinePreview();
+
+public:
+
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax);
 	

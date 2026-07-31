@@ -14,6 +14,7 @@
 #include "Widgets/MapMenuWidget.h"
 #include "Widgets/StoryWidgetBase.h"
 #include "Widgets/AttributeTreeWidget.h"
+#include "Widgets/FormationSelectorWidget.h"
 #include "GameplayTagContainer.h"
 #include "ExtendedCameraBase.generated.h"
 
@@ -138,6 +139,10 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_G_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
+
+	// Cycles the group formation shape (rectangle -> circle -> half circle -> wedge).
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void Input_C_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_A_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
@@ -246,6 +251,13 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UStoryWidgetBase* StoryWidget;
+
+	// Formation picker (one icon button per EGridShape, same effect as the C hotkey).
+	// Wired from the MainHUD BP: place a UFormationSelectorWidget in your MainHUD and assign it
+	// here via SetFormationSelectorWidget in EventPreConstruct, as BP_MainHUD/BP_MainHUD_2 do.
+	// BlueprintReadWrite is what generates that setter node - do not drop it.
+	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	UFormationSelectorWidget* FormationSelectorWidget;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TagTime = 0.5f;

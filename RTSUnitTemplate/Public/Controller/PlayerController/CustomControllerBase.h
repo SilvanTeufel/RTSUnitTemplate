@@ -69,6 +69,9 @@ public:
 
 	virtual void BeginPlay() override;
 
+	/** Drives the formation drag line: samples the cursor and polls for the right-mouse release. */
+	virtual void Tick(float DeltaSeconds) override;
+
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_SetMyTeamUnits(const TArray<AActor*>& AllUnits);
 
@@ -200,20 +203,50 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector GetUnitWorldLocation(const AUnitBase* Unit) const;
 	
-	/** Computes offsets for an N-unit grid formation centered at (0,0). */
+	/** Computes offsets for an N-unit formation centered at (0,0), world-axis aligned. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<FVector> ComputeSlotOffsets(const TArray<AUnitBase*>& Units, float Spacing = -1.0f) const;
-	/** Builds an N×N cost matrix of squared distances from units to slots, with size-compatibility penalties. */
+
+	/**
+	 * Computes offsets for an N-unit formation centered at (0,0), for the currently selected
+	 * GridFormationShape. Forward is the direction the group is heading in and orients the
+	 * directional shapes (Circle/HalfCircle/Triangle); pass a zero vector or use a grid shape
+	 * to get the historical world-axis-aligned layout.
+	 *
+	 * The returned array is indexed by SLOT, not by unit - RecalculateFormation matches units to
+	 * slots afterwards. Units are expected to be sorted by descending capsule radius (as
+	 * RecalculateFormation does), because the ring/row capacity math sizes each ring from the
+	 * largest unit still unplaced.
+	 *
+	 * OutSlotCapacities, when supplied, receives the radius each slot was sized for, parallel to
+	 * the returned offsets. BuildCostMatrix needs this: without it the solver is free to drop a
+	 * large unit into a slot that was spaced for a small one, and they visually overlap.
+	 */
+	TArray<FVector> ComputeSlotOffsetsDirectional(const TArray<AUnitBase*>& Units, float Spacing, const FVector& Forward, TArray<float>* OutSlotCapacities = nullptr) const;
+
+	/** Average direction the group will travel in, from the selection's centroid towards TargetCenter. Falls back to +X. */
+	FVector ComputeApproachDirection(const TArray<AUnitBase*>& Units, const FVector& TargetCenter) const;
+
+	/**
+	 * Builds an N×N cost matrix of squared distances from units to slots, with size-compatibility penalties.
+	 * SlotCapacities is the per-slot radius allowance from ComputeSlotOffsetsDirectional. When it is
+	 * empty the capacities are re-derived from the row/column grid, which is only meaningful for the
+	 * grid-based shapes.
+	 */
 	TArray<TArray<float>> BuildCostMatrix(
 		const TArray<AUnitBase*>& Units,
 		const TArray<FVector>& SlotOffsets,
-		const FVector& TargetCenter) const;
+		const FVector& TargetCenter,
+		const TArray<float>& SlotCapacities = TArray<float>()) const;
 	
 	/** Solves the assignment problem (Hungarian) on the given cost matrix. */
 	TArray<int32> SolveHungarian(const TArray<TArray<float>>& Matrix) const;
 	/** Determines if the formation needs to be recalculated. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool ShouldRecalculateFormation() const;
+
+	/** Invalidates the cached slot offsets so the next move order re-solves them (e.g. after a shape change). */
+	virtual void ForceFormationRecalculation() override;
 	
 	/** Recalculates and stores unit formation offsets around TargetCenter. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
@@ -253,6 +286,147 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickReleasedMass();
+
+	// ------------------------------------------------------------------------------------------
+	// Formation drag line: hold right mouse (move) or left mouse while attack-move is armed,
+	// drag out a line, and on release the selection spreads evenly along it.
+	//
+	// All of this is client-local. Only the finished order crosses to the server, and it crosses
+	// as final world locations through the existing batch RPCs - the server never learns that a
+	// line was involved.
+	// ------------------------------------------------------------------------------------------
+
+	/** True while the player is holding the button down after a valid drag start. */
+	UPROPERTY(BlueprintReadOnly, Category = "Formation Settings")
+	bool bFormationLineDragActive = false;
+
+	/**
+	 * AttackToggled as captured at press time. HandleAttackMovePressed clears AttackToggled at the
+	 * end of the press, so by release time the original intent is gone unless we cache it here.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Formation Settings")
+	bool bFormationLineDragIsAttackMove = false;
+
+	/**
+	 * Which button started the gesture, so the matching release finishes it. This is NOT fixed per
+	 * feature: SwapAttackMove (toggled in the control widget) moves attack-move from the left
+	 * button to the right one, and then BOTH the move drag and the attack-move drag live on the
+	 * right button, told apart by AttackToggled.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Formation Settings")
+	bool bFormationLineDragFromRightMouse = false;
+
+	/**
+	 * The units captured when the drag started. The order is issued to THESE, not to the live
+	 * SelectedUnits: a box-select begun mid-gesture (perfectly possible while the other button is
+	 * held) rewrites SelectedUnits, and without the snapshot the line would be handed to whatever
+	 * the player happened to box afterwards.
+	 */
+	TArray<TWeakObjectPtr<AUnitBase>> FormationLineDragUnits;
+
+	/** Hard ceiling on the min-spacing widening, so a huge selection cannot fling units off the map. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "100.0"))
+	float FormationLineMaxLength = 20000.f;
+
+	/**
+	 * The raw cursor trail sampled during the drag. The formation follows this path, so the player
+	 * can lay units out along a curve, not just a straight line. A straight drag simplifies back
+	 * down to two points, so the straight case behaves exactly as before.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Formation Settings")
+	TArray<FVector> FormationLinePath;
+
+	/** Minimum cursor travel before another path sample is recorded. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "10.0"))
+	float FormationPathSampleDistance = 75.f;
+
+	/**
+	 * Douglas-Peucker tolerance. Deviations smaller than this are flattened away, so a hand that
+	 * wobbles while dragging "straight" still produces a straight line, while a deliberate curve
+	 * keeps its shape. Set to 0 to follow the raw trail exactly.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "0.0"))
+	float FormationPathSimplifyTolerance = 130.f;
+
+	/** Bound on stored samples, so a very long drag cannot grow without limit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "8", ClampMax = "2048"))
+	int32 FormationPathMaxSamples = 512;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Formation Settings")
+	FVector FormationLineStartWorld = FVector::ZeroVector;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Formation Settings")
+	FVector FormationLineEndWorld = FVector::ZeroVector;
+
+	/** Drag length in world units below which the gesture is treated as a plain click, not a line. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "1.0"))
+	float FormationLineDragThreshold = 150.f;
+
+	/**
+	 * When the drawn line is too short to hold the selection without the units interpenetrating,
+	 * widen it symmetrically about its midpoint. Turn this off to honour the drawn endpoints
+	 * exactly and let Mass avoidance sort out the crowding.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
+	bool bFormationLineEnforceMinSpacing = true;
+
+	/** True when a drag is running AND long enough to count as a line. Drives the HUD preview. */
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	bool IsFormationLineDragValid() const;
+
+	/**
+	 * Whether a formation drag may start right now: a real group is selected and no other
+	 * mouse-driven mode (work-area placement, ability targeting, unit dragging, waypoint queueing,
+	 * tab overlay) owns the gesture.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	bool CanStartFormationLineDrag() const;
+
+	/** Latches the drag origin. Call only after CanStartFormationLineDrag(). */
+	void BeginFormationLineDrag(const FVector& StartWorld, bool bAttackMove, bool bFromRightMouse);
+
+	/** Called every frame from Tick while the button is held. */
+	void UpdateFormationLineDrag(const FVector& CurrentWorld);
+
+	/** Drops the gesture without issuing anything (menu opened, selection lost, controls blocked). */
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	void CancelFormationLineDrag();
+
+	/** Can this unit actually be sent to a line slot? Buildings, dead and immobile units cannot. */
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	bool IsUnitEligibleForFormationLine(const AUnitBase* Unit) const;
+
+	/**
+	 * The polyline the order will ACTUALLY use for NumUnits: the sampled cursor trail, simplified,
+	 * and extended along its end tangents when it is too short to hold them all without overlap
+	 * (clamped to FormationLineMaxLength).
+	 */
+	void GetEffectiveFormationPath(int32 NumUnits, float MaxUnitRadius, TArray<FVector>& OutPath) const;
+
+	/** Evenly spaced world points BY ARC LENGTH along Path. Returns exactly NumPoints entries. */
+	static TArray<FVector> DistributeAlongPath(const TArray<FVector>& Path, int32 NumPoints);
+
+	/**
+	 * The single source of truth for both the HUD preview and the issued order: the eligible units
+	 * in slot order, the polyline to draw, and one world slot per unit. Computing both from one
+	 * place is what keeps the preview from promising something the release does not deliver.
+	 */
+	bool BuildFormationLineOrder(TArray<AUnitBase*>& OutUnits, TArray<FVector>& OutPath, TArray<FVector>& OutSlots) const;
+
+	/**
+	 * Evenly spaced world points along the current path, ordered start to end. Honours
+	 * bFormationLineEnforceMinSpacing. Returns exactly Units.Num() entries, or empty on failure.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	TArray<FVector> ComputeFormationLinePoints(const TArray<AUnitBase*>& Units) const;
+
+	/**
+	 * Ends the gesture on release of bFromRightMouse's button. No-ops when the released button is
+	 * not the one that started the drag. If the drag was long enough, distributes the selection
+	 * along the line and returns true; otherwise clears the state and returns false, leaving the
+	 * order that was already issued at press time in place.
+	 */
+	bool FinishFormationLineDrag(bool bFromRightMouse);
 
 	// Minimap-specific commands
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

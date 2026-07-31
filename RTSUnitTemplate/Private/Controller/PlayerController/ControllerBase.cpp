@@ -958,6 +958,63 @@ void AControllerBase::Server_Batch_SetBuildingWaypoints_Implementation(const TAr
 
 
 
+void AControllerBase::CycleGridFormationShape()
+{
+	if (FormationCycleShapes.Num() == 0)
+	{
+		return;
+	}
+
+	// Find where we currently are in the cycle. A shape that was picked in the details panel but
+	// left out of FormationCycleShapes reports INDEX_NONE, and we then start the cycle at entry 0
+	// rather than doing nothing.
+	const int32 CurrentIndex = FormationCycleShapes.IndexOfByKey(GridFormationShape);
+	const int32 NextIndex = (CurrentIndex == INDEX_NONE) ? 0 : (CurrentIndex + 1) % FormationCycleShapes.Num();
+
+	SetGridFormationShape(FormationCycleShapes[NextIndex]);
+}
+
+void AControllerBase::SetGridFormationShape(EGridShape NewShape)
+{
+	if (GridFormationShape == NewShape)
+	{
+		return;
+	}
+
+	GridFormationShape = NewShape;
+
+	// The slot offsets are cached per selection and only rebuilt when the selection changes,
+	// so without this the shape swap would not show up until the player re-selected.
+	ForceFormationRecalculation();
+
+	// Single notification point for every source of a shape change, so the picker widget's
+	// highlight can never drift from the hotkey.
+	OnGridFormationShapeChanged.Broadcast(NewShape);
+
+	// Keep the server's copy in step for its off-navmesh re-solve (see the header).
+	if (!HasAuthority())
+	{
+		Server_SetGridFormationShape(NewShape);
+	}
+}
+
+void AControllerBase::Server_SetGridFormationShape_Implementation(EGridShape NewShape)
+{
+	// Set directly rather than going through SetGridFormationShape, which would RPC back.
+	GridFormationShape = NewShape;
+	ForceFormationRecalculation();
+	OnGridFormationShapeChanged.Broadcast(NewShape);
+}
+
+FText AControllerBase::GetGridFormationShapeText() const
+{
+	if (const UEnum* EnumPtr = StaticEnum<EGridShape>())
+	{
+		return EnumPtr->GetDisplayNameTextByValue(static_cast<int64>(GridFormationShape));
+	}
+	return FText::GetEmpty();
+}
+
 int32 AControllerBase::ComputeGridSize(int32 NumUnits) const
 {
 	switch (GridFormationShape)
@@ -967,7 +1024,9 @@ int32 AControllerBase::ComputeGridSize(int32 NumUnits) const
 	case EGridShape::Square:
 	case EGridShape::Staggered:
 	default:
-		return FMath::CeilToInt(FMath::Sqrt(static_cast<float>(NumUnits)));
+		// Circle/HalfCircle/Triangle never route through the grid path (see ComputeSlotOffsets),
+		// but BuildCostMatrix still calls this, so keep returning a valid non-zero divisor.
+		return FMath::Max(1, FMath::CeilToInt(FMath::Sqrt(static_cast<float>(FMath::Max(NumUnits, 1)))));
 	}
 }
 

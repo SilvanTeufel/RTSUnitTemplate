@@ -533,6 +533,10 @@ void AExtendedCameraBase::BindGameplayInputActions(UEnhancedInputComponentBase* 
 
 	EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_G_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_G_Pressed, 0);
 	EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_A_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_A_Pressed, 0);
+	// Needs the CPressed InputAction in ControlAsset + a C key row in IMC_Controls. BindActionByTag
+	// returns silently when the tag has no entry in the InputConfig, so a missing asset row shows
+	// up as "the key does nothing" with no log at all.
+	EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_C_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_C_Pressed, 0);
 
 	EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Shift_Pressed, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Shift_Pressed, 0);
 	EnhancedInputComponentBase->BindActionByTag(InputConfig, GameplayTags.InputTag_Shift_Released, ETriggerEvent::Triggered, this, &AExtendedCameraBase::Input_Shift_Released, 0);
@@ -761,6 +765,17 @@ void AExtendedCameraBase::Input_RightClick_Pressed(const FInputActionValue& Inpu
 	if(CameraControllerBase)
 	{
 		CameraControllerBase->RightClickPressedMass();
+	}
+}
+
+void AExtendedCameraBase::Input_C_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
+{
+	if(BlockControls) return;
+
+	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+	if(CameraControllerBase)
+	{
+		CameraControllerBase->CycleGridFormationShape();
 	}
 }
 

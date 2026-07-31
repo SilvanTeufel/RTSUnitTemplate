@@ -486,61 +486,17 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
 
 void ARLAgent::RunUnitsAndSetWaypoints(FHitResult Hit, AExtendedControllerBase* ExtendedController)
 {
-	int32 NumUnits = ExtendedController->SelectedUnits.Num();
-	//int32 GridSize = FMath::CeilToInt(FMath::Sqrt((float)NumUnits));
-	const int32 GridSize = ExtendedController->ComputeGridSize(NumUnits);
-	AWaypoint* BWaypoint = nullptr;
-	TArray<AUnitBase*> BuildingUnits;
-	TArray<FVector>    BuildingLocs;
-	bool PlayWaypointSoundTotal = false;
-
-	for (int32 i = 0; i < ExtendedController->SelectedUnits.Num(); i++) {
-		if (ExtendedController->SelectedUnits[i] != ExtendedController->CameraUnitWithTag)
-		if (ExtendedController->SelectedUnits[i] && ExtendedController->SelectedUnits[i]->UnitState != UnitData::Dead
-		    && !ExtendedController->SelectedUnits[i]->IsWorker) {
-			
-			//FVector RunLocation = Hit.Location + FVector(i / 2 * 100, i % 2 * 100, 0.f);
-			int32 Row = i / GridSize;     // Row index
-			int32 Col = i % GridSize;     // Column index
-
-			//FVector RunLocation = Hit.Location + FVector(Col * 100, Row * 100, 0.f);  // Adjust x and y positions equally for a square grid
-			FVector RunLocation = Cast<ABuildingBase>(ExtendedController->SelectedUnits[i]) ? (FVector)Hit.Location : (FVector)Hit.Location + ExtendedController->CalculateGridOffset(Row, Col);
-		    bool HitNavModifier;
-            RunLocation = ExtendedController->TraceRunLocation(RunLocation, HitNavModifier);
-		    if (HitNavModifier) continue;
-
-		    bool PlayWaypointSound;
-		    
-			bool bSuccess = false;
-			ExtendedController->SetBuildingWaypoint(RunLocation, ExtendedController->SelectedUnits[i], BWaypoint, PlayWaypointSound, bSuccess);
-			if(bSuccess)
-			{
-				BuildingUnits.Add(ExtendedController->SelectedUnits[i]);
-				BuildingLocs.Add(RunLocation);
-				if (PlayWaypointSound) PlayWaypointSoundTotal = true;
-			}else if (ExtendedController->IsShiftPressed) {
-				ExtendedController->DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				ExtendedController->RightClickRunShift(ExtendedController->SelectedUnits[i], RunLocation); // _Implementation
-			}else if(ExtendedController->UseUnrealEnginePathFinding)
-			{
-				ExtendedController->DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				ExtendedController->RightClickRunUEPF(ExtendedController->SelectedUnits[i], RunLocation, true); // _Implementation
-			}
-			else {
-				ExtendedController->DrawCircleAtLocation(GetWorld(), RunLocation, FColor::Green);
-				ExtendedController->RightClickRunDijkstraPF(ExtendedController->SelectedUnits[i], RunLocation, i); // _Implementation
-			}
-		}
-	}
-
-	if (BuildingUnits.Num() > 0)
+	// DEAD PATH, kept only so an existing reference still links: the sole call site (see
+	// PerformMoveAction, where it sits commented out just below the live call) has been disabled -
+	// RL move orders go through ACustomControllerBase::RunUnitsAndSetWaypointsMass.
+	//
+	// It used to carry its own copy of the layout logic built on ComputeGridSize +
+	// CalculateGridOffset, which always produced a rectangle and silently ignored
+	// GridFormationShape. Forwarding instead of maintaining that duplicate means re-enabling this
+	// cannot resurrect the old mismatch between the RL path and the player path.
+	if (ACustomControllerBase* CustomController = Cast<ACustomControllerBase>(ExtendedController))
 	{
-		ExtendedController->Server_Batch_SetBuildingWaypoints(BuildingLocs, BuildingUnits);
-	}
-
-	if (ExtendedController->WaypointSound && PlayWaypointSoundTotal)
-	{
-		UGameplayStatics::PlaySound2D(ExtendedController, ExtendedController->WaypointSound, ExtendedController->GetSoundMultiplier());
+		CustomController->RunUnitsAndSetWaypointsMass(Hit);
 	}
 }
 
@@ -568,9 +524,43 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
     }
     else if (AttackToggled)
     {
-        int32 NumUnits = CustomControllerBase->SelectedUnits.Num();
-        const int32 GridSize = CustomControllerBase->ComputeGridSize(NumUnits);
         AWaypoint* BWaypoint = nullptr;
+
+        // Use the same formation solver the human paths use, so GridFormationShape means the same
+        // thing for an RL agent as for a player. The ring and wedge layouts size each ring from the
+        // largest unit still unplaced, so they REQUIRE descending-radius order - hence the sorted
+        // copy, mirroring HandleAttackMovePressed. Offsets are looked up per unit so the loop below
+        // (and which units get FireAbilityMouseHit) stays exactly as it was.
+        TMap<AUnitBase*, FVector> RLFormationOffsets;
+        {
+            TArray<AUnitBase*> SortedUnits;
+            for (AUnitBase* Candidate : CustomControllerBase->SelectedUnits)
+            {
+                if (Candidate && Candidate != CustomControllerBase->CameraUnitWithTag
+                    && !Candidate->IsWorker && !Cast<ABuildingBase>(Candidate))
+                {
+                    SortedUnits.Add(Candidate);
+                }
+            }
+            SortedUnits.Sort([](const AUnitBase& A, const AUnitBase& B)
+            {
+                float RA = 50.0f;
+                if (A.GetCapsuleComponent()) RA = A.GetCapsuleComponent()->GetScaledCapsuleRadius();
+                float RB = 50.0f;
+                if (B.GetCapsuleComponent()) RB = B.GetCapsuleComponent()->GetScaledCapsuleRadius();
+                if (FMath::IsNearlyEqual(RA, RB)) return A.GetName() > B.GetName();
+                return RA > RB;
+            });
+
+            const TArray<FVector> Offsets = CustomControllerBase->ComputeSlotOffsetsDirectional(
+                SortedUnits, -1.f,
+                CustomControllerBase->ComputeApproachDirection(SortedUnits, HitResult.Location));
+
+            for (int32 s = 0; s < SortedUnits.Num() && s < Offsets.Num(); ++s)
+            {
+                RLFormationOffsets.Add(SortedUnits[s], Offsets[s]);
+            }
+        }
 
         // Collect all mass units and their positions to issue one RPC
         TArray<AUnitBase*> MassUnits;
@@ -578,16 +568,15 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
         TArray<AUnitBase*> BuildingUnits;
         TArray<FVector>    BuildingLocs;
         bool PlayWaypointSoundTotal = false;
-        
+
         for (int32 i = 0; i < CustomControllerBase->SelectedUnits.Num(); i++)
         {
             AUnitBase* U = CustomControllerBase->SelectedUnits[i];
             if (U != CustomControllerBase->CameraUnitWithTag && !U->IsWorker)
             {
-                int32 Row = i / GridSize;     // Row index
-                int32 Col = i % GridSize;     // Column index
-
-                FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)HitResult.Location : (FVector)HitResult.Location + CustomControllerBase->CalculateGridOffset(Row, Col);
+                // FindRef yields a zero offset for buildings (never inserted), which is exactly the
+                // "use the raw hit location" case the ternary already handled.
+                FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)HitResult.Location : (FVector)HitResult.Location + RLFormationOffsets.FindRef(U);
                 bool HitNavModifier;
                 RunLocation = CustomControllerBase->TraceRunLocation(RunLocation, HitNavModifier);
                 if (HitNavModifier) continue;

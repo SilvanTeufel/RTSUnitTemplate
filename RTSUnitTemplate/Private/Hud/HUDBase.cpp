@@ -1267,7 +1267,96 @@ void AHUDBase::DrawHUD()
 	DrawSelectedBuildingWaypointLinks();
 	DrawSelectedUnitsMovementLines();
 
+	// Before HandleSelectionRectangle: that call can rebuild SelectedUnits (and empties it every
+	// frame while bSelectFriendly is true), so anything reading the selection must run first.
+	DrawFormationLinePreview();
+
 	HandleSelectionRectangle();
+}
+
+void AHUDBase::UpdateFormationPath(const TArray<FVector>& Path, const TArray<FVector>& SlotPositions)
+{
+	if (Path.Num() < 2)
+	{
+		ClearFormationLine();
+		return;
+	}
+
+	// A failed ground trace can produce a NaN point; one is enough to poison the whole polyline.
+	for (const FVector& P : Path)
+	{
+		if (P.ContainsNaN())
+		{
+			ClearFormationLine();
+			return;
+		}
+	}
+
+	bFormationLineActive = true;
+	FormationPathPoints = Path;
+
+	FormationSlotPositions.Reset();
+	FormationSlotPositions.Reserve(SlotPositions.Num());
+	for (const FVector& S : SlotPositions)
+	{
+		if (!S.ContainsNaN())
+		{
+			FormationSlotPositions.Add(S);
+		}
+	}
+}
+
+void AHUDBase::ClearFormationLine()
+{
+	bFormationLineActive = false;
+	FormationPathPoints.Reset();
+	FormationSlotPositions.Reset();
+}
+
+void AHUDBase::DrawFormationLinePreview()
+{
+	if (!bFormationLineActive) return;
+
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC || !Canvas) return;
+	if (FormationPathPoints.Num() < 2) return;
+
+	// Sanitize every value that reaches the dash math. These are BlueprintReadWrite, so the
+	// ClampMin metadata only guards the details panel, not a runtime write.
+	const float DashLen = FMath::IsFinite(FormationLineDashLen) ? FMath::Clamp(FormationLineDashLen, 1.f, 10000.f) : 26.f;
+	const float GapLen = FMath::IsFinite(FormationLineGapLen) ? FMath::Clamp(FormationLineGapLen, 0.f, 10000.f) : 14.f;
+	const float Thickness = FMath::IsFinite(FormationLineThickness) ? FMath::Clamp(FormationLineThickness, 0.1f, 100.f) : 2.f;
+	const float ZOffset = FMath::IsFinite(FormationLineZOffset) ? FMath::Clamp(FormationLineZOffset, -1000.f, 1000.f) : 12.f;
+
+	// Draw the stroke segment by segment, so a curved drag shows as a curve. Capped the same way
+	// every other loop in this file is - the point array comes from gameplay code and a runaway
+	// count here would mean thousands of Canvas draws per frame.
+	const int32 MaxSegments = FMath::Clamp(FormationPathMaxSegments, 2, 1024);
+	const int32 NumSegments = FMath::Min(FormationPathPoints.Num() - 1, MaxSegments);
+	for (int32 i = 0; i < NumSegments; ++i)
+	{
+		const FVector& A = FormationPathPoints[i];
+		const FVector& B = FormationPathPoints[i + 1];
+		// Skip degenerate segments rather than feeding a zero-length line to the dash math.
+		if (FVector::DistSquared2D(A, B) < 1.f) continue;
+		// DrawDashedLine3D already carries the MaxSegments cap and the degenerate-period fallback.
+		DrawDashedLine3D(A, B, DashLen, GapLen, FormationLineColor, Thickness, ZOffset);
+	}
+
+	// One marker per unit, at the exact position that unit will be sent to.
+	const int32 MaxMarkers = FMath::Clamp(FormationMaxMarkers, 1, 256);
+	const int32 NumMarkers = FMath::Clamp(FormationSlotPositions.Num(), 0, MaxMarkers);
+	if (NumMarkers <= 0) return;
+
+	const float MarkerRadius = FMath::IsFinite(FormationMarkerRadius) ? FMath::Clamp(FormationMarkerRadius, 1.f, 1000.f) : 26.f;
+
+	for (int32 i = 0; i < NumMarkers; ++i)
+	{
+		FVector MarkerLoc = FormationSlotPositions[i];
+		MarkerLoc.Z += ZOffset;
+		// Segment count is clamped inside DrawProjectedCircle (3..256).
+		DrawProjectedCircle(MarkerLoc, MarkerRadius, FormationLineColor, Thickness, 10, true);
+	}
 }
 
 void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)

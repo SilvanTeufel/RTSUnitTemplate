@@ -22,6 +22,8 @@
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "Engine/GameInstance.h"
+#include "Engine/GameViewportClient.h" // UGameViewportClient, for the drag-release focus check
+#include "UnrealClient.h"              // FViewport::HasFocus
 #include "Mass/Signals/MySignals.h"
 #include "Mass/UnitMassTag.h"
 #include "Actors/MinimapActor.h" 
@@ -2000,6 +2002,18 @@ void ACustomControllerBase::RightClickPressedMass()
 	
 	if (SwapAttackMove && AttackToggled)
 	{
+		// Swapped layout: attack-move lives on the RIGHT button. Arm the line drag here, before
+		// HandleAttackMovePressed clears AttackToggled, so the release knows this was attack-move.
+		if (CanStartFormationLineDrag())
+		{
+			FHitResult DragHit;
+			GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, DragHit);
+			if (DragHit.bBlockingHit)
+			{
+				BeginFormationLineDrag(DragHit.Location, /*bAttackMove=*/true, /*bFromRightMouse=*/true);
+			}
+		}
+
 		HandleAttackMovePressed();
 		AttackToggled = false;
 		return;
@@ -2023,6 +2037,13 @@ void ACustomControllerBase::RightClickPressedMass()
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 		if (!CheckClickOnWorkArea(Hit))
 		{
+			// Arm the move line drag. The press-time order below still runs, so a plain click is
+			// unchanged; a real drag simply re-targets the same units on release.
+			if (Hit.bBlockingHit && CanStartFormationLineDrag())
+			{
+				BeginFormationLineDrag(Hit.Location, /*bAttackMove=*/false, /*bFromRightMouse=*/true);
+			}
+
 			RunUnitsAndSetWaypointsMass(Hit);
 		}
 	}
@@ -2199,8 +2220,204 @@ FVector ACustomControllerBase::GetUnitWorldLocation(const AUnitBase* Unit) const
 	return Unit->GetMassActorLocation();
 }
 
+namespace
+{
+    // Formation-local space for the directional shapes: +X points the way the group is heading,
+    // +Y is to its right. A zero Forward means "leave it world-axis aligned".
+    FVector OrientFormationOffset(const FVector& Local, const FVector& Forward)
+    {
+        if (Forward.IsNearlyZero())
+        {
+            return Local;
+        }
+        const FRotator YawOnly(0.f, Forward.Rotation().Yaw, 0.f);
+        return YawOnly.RotateVector(Local);
+    }
+
+    // Concentric rings (bHalf = false) or concentric 180-degree arcs (bHalf = true), filled from
+    // the centre outwards. Radii must be sorted descending: each ring is sized from the largest
+    // unit still unplaced, which is the conservative choice against overlap.
+    TArray<FVector> BuildRingFormationOffsets(const TArray<float>& Radii, float Spacing, bool bHalf, TArray<float>& OutCapacities)
+    {
+        const int32 NumUnits = Radii.Num();
+        TArray<FVector> Local;
+        Local.Reserve(NumUnits);
+        OutCapacities.Reset();
+        OutCapacities.Reserve(NumUnits);
+
+        const float Sweep = bHalf ? PI : 2.f * PI;
+
+        int32 Index = 0;
+        float PrevRingRadius = 0.f;
+        float PrevUnitRadius = 0.f;
+        bool bFirstRing = true;
+
+        while (Index < NumUnits)
+        {
+            const float UnitRadius = FMath::Max(Radii[Index], 1.f);
+
+            // Ring N sits far enough out that its units clear ring N-1's units.
+            const float RingRadius = bFirstRing ? 0.f : (PrevRingRadius + PrevUnitRadius + UnitRadius + Spacing);
+            const float ArcStep = 2.f * UnitRadius + Spacing; // arc length one unit occupies
+
+            int32 Capacity;
+            if (RingRadius <= KINDA_SMALL_NUMBER)
+            {
+                Capacity = 1; // the centre point holds exactly one unit
+            }
+            else
+            {
+                // A closed ring wraps around, an open arc does not: K units on an arc only need
+                // K-1 gaps, so it fits one more than a full ring of the same length.
+                Capacity = FMath::FloorToInt((Sweep * RingRadius) / ArcStep) + (bHalf ? 1 : 0);
+            }
+            Capacity = FMath::Max(Capacity, 1);
+
+            // A partly filled outermost ring stays spread over the whole sweep. We cannot pull it
+            // inwards - RingRadius is the no-overlap constraint from the ring below it.
+            const int32 Count = FMath::Min(Capacity, NumUnits - Index);
+
+            for (int32 Slot = 0; Slot < Count; ++Slot)
+            {
+                float Angle;
+                if (Count == 1)
+                {
+                    Angle = 0.f;
+                }
+                else if (bHalf)
+                {
+                    // Inclusive sweep, so the two arc ends land on the flat side of the half disc.
+                    Angle = -Sweep * 0.5f + Sweep * (static_cast<float>(Slot) / static_cast<float>(Count - 1));
+                }
+                else
+                {
+                    // Exclusive, otherwise the first and last slot of a full ring would coincide.
+                    Angle = Sweep * (static_cast<float>(Slot) / static_cast<float>(Count));
+                }
+
+                Local.Add(FVector(RingRadius * FMath::Cos(Angle), RingRadius * FMath::Sin(Angle), 0.f));
+                // Every slot on this ring was spaced for UnitRadius. Radii arrives sorted
+                // descending, so UnitRadius >= the radius of any unit at index >= Index, which
+                // guarantees the identity assignment is always feasible for the solver.
+                OutCapacities.Add(UnitRadius);
+            }
+
+            PrevRingRadius = RingRadius;
+            PrevUnitRadius = UnitRadius;
+            bFirstRing = false;
+            Index += Count; // Count is always >= 1, so this terminates
+        }
+
+        return Local;
+    }
+
+    // Wedge with rows of 1, 2, 3, ... units, apex at local +X.
+    TArray<FVector> BuildWedgeFormationOffsets(const TArray<float>& Radii, float Spacing, TArray<float>& OutCapacities)
+    {
+        const int32 NumUnits = Radii.Num();
+        TArray<FVector> Local;
+        Local.Reserve(NumUnits);
+        OutCapacities.Reset();
+        OutCapacities.Reserve(NumUnits);
+
+        int32 Index = 0;
+        int32 Row = 0;
+        float Depth = 0.f; // distance behind the apex
+        float PrevRowRadius = 0.f;
+
+        while (Index < NumUnits)
+        {
+            const int32 Count = FMath::Min(Row + 1, NumUnits - Index);
+
+            float RowRadius = 0.f;
+            for (int32 Slot = 0; Slot < Count; ++Slot)
+            {
+                RowRadius = FMath::Max(RowRadius, Radii[Index + Slot]);
+            }
+            RowRadius = FMath::Max(RowRadius, 1.f);
+
+            if (Row > 0)
+            {
+                Depth += PrevRowRadius + RowRadius + Spacing;
+            }
+
+            const float LateralStep = 2.f * RowRadius + Spacing;
+            const float FirstLateral = -LateralStep * 0.5f * static_cast<float>(Count - 1);
+
+            for (int32 Slot = 0; Slot < Count; ++Slot)
+            {
+                Local.Add(FVector(-Depth, FirstLateral + LateralStep * static_cast<float>(Slot), 0.f));
+                OutCapacities.Add(RowRadius);
+            }
+
+            PrevRowRadius = RowRadius;
+            Index += Count; // Count is always >= 1, so this terminates
+            ++Row;
+        }
+
+        return Local;
+    }
+
+    // Shifts the layout so its centroid sits on the click point, matching how the grid path
+    // subtracts its TrueCenter.
+    void CenterFormationOffsets(TArray<FVector>& Local)
+    {
+        if (Local.Num() == 0)
+        {
+            return;
+        }
+
+        FVector Centroid = FVector::ZeroVector;
+        for (const FVector& Offset : Local)
+        {
+            Centroid += Offset;
+        }
+        Centroid /= static_cast<float>(Local.Num());
+
+        for (FVector& Offset : Local)
+        {
+            Offset -= Centroid;
+        }
+    }
+}
+
+FVector ACustomControllerBase::ComputeApproachDirection(const TArray<AUnitBase*>& Units, const FVector& TargetCenter) const
+{
+    FVector Centroid = FVector::ZeroVector;
+    int32 Count = 0;
+    for (const AUnitBase* Unit : Units)
+    {
+        if (!Unit) continue;
+        Centroid += GetUnitWorldLocation(Unit);
+        ++Count;
+    }
+
+    if (Count == 0)
+    {
+        return FVector::ForwardVector;
+    }
+    Centroid /= static_cast<float>(Count);
+
+    FVector Direction = TargetCenter - Centroid;
+    Direction.Z = 0.f;
+
+    // Clicking on top of the group gives no usable heading. The offsets are stateless, so there is
+    // no previous orientation to keep - fall back to world +X.
+    return Direction.IsNearlyZero(1.f) ? FVector::ForwardVector : Direction.GetSafeNormal();
+}
+
 TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase*>& Units, float Spacing) const
 {
+    return ComputeSlotOffsetsDirectional(Units, Spacing, FVector::ZeroVector);
+}
+
+TArray<FVector> ACustomControllerBase::ComputeSlotOffsetsDirectional(const TArray<AUnitBase*>& Units, float Spacing, const FVector& Forward, TArray<float>* OutSlotCapacities) const
+{
+    if (OutSlotCapacities)
+    {
+        OutSlotCapacities->Reset();
+    }
+
     int32 NumUnits = Units.Num();
     if (NumUnits == 0) return TArray<FVector>();
 
@@ -2217,6 +2434,45 @@ TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase
             R = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius()*GridCapsuleMultiplier;
         }
         Radii.Add(R);
+    }
+
+    // 1b. Ring- and wedge-based shapes do not use the row/column grid at all.
+    if (!IsGridBasedFormationShape(GridFormationShape))
+    {
+        TArray<FVector> Local;
+        TArray<float> Capacities;
+        switch (GridFormationShape)
+        {
+        case EGridShape::Circle:
+            Local = BuildRingFormationOffsets(Radii, ActualSpacing, /*bHalf=*/false, Capacities);
+            break;
+        case EGridShape::HalfCircle:
+            Local = BuildRingFormationOffsets(Radii, ActualSpacing, /*bHalf=*/true, Capacities);
+            break;
+        case EGridShape::Triangle:
+        default:
+            Local = BuildWedgeFormationOffsets(Radii, ActualSpacing, Capacities);
+            break;
+        }
+
+        CenterFormationOffsets(Local);
+        for (FVector& Offset : Local)
+        {
+            Offset = OrientFormationOffset(Offset, Forward);
+        }
+
+        if (OutSlotCapacities)
+        {
+            // Radii here carry GridCapsuleMultiplier, but BuildCostMatrix compares against raw
+            // capsule radii. Divide it back out so the two are on the same scale.
+            const float InvMultiplier = 1.f / FMath::Max(GridCapsuleMultiplier, KINDA_SMALL_NUMBER);
+            OutSlotCapacities->Reserve(Capacities.Num());
+            for (float Capacity : Capacities)
+            {
+                OutSlotCapacities->Add(Capacity * InvMultiplier);
+            }
+        }
+        return Local;
     }
 
     // 2. Determine grid dimensions
@@ -2256,16 +2512,25 @@ TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase
     float RightEdge = XPositions[GridSize - 1] + MaxR_Col[GridSize - 1];
     float TopEdge = YPositions[0] - MaxR_Row[0];
     float BottomEdge = YPositions[NumRows - 1] + MaxR_Row[NumRows - 1];
-    FVector TrueCenter((LeftEdge + RightEdge) * 0.5f, (TopEdge + BottomEdge) * 0.5f, 0.0f);
-
     // 6. Generate offsets
+    // Staggered shifts every odd row sideways by half a column pitch. The columns are
+    // non-uniform (they are sized from the widest unit in each), so use the average pitch.
+    const float StaggerShift = (GridFormationShape == EGridShape::Staggered && GridSize > 1)
+        ? ((XPositions[GridSize - 1] - XPositions[0]) / static_cast<float>(GridSize - 1)) * 0.5f
+        : 0.f;
+
+    // Fold half the shift into the centre. Only odd rows move right, so without this the whole
+    // group's centroid would sit right of the point the player clicked.
+    FVector TrueCenter((LeftEdge + RightEdge) * 0.5f + StaggerShift * 0.5f, (TopEdge + BottomEdge) * 0.5f, 0.0f);
+
     TArray<FVector> Offsets;
     Offsets.Reserve(NumUnits);
     for (int32 i = 0; i < NumUnits; ++i)
     {
         int32 Row = i / GridSize;
         int32 Col = i % GridSize;
-        Offsets.Add(FVector(XPositions[Col], YPositions[Row], 0.f) - TrueCenter);
+        const float RowShift = (Row % 2 == 1) ? StaggerShift : 0.f;
+        Offsets.Add(FVector(XPositions[Col] + RowShift, YPositions[Row], 0.f) - TrueCenter);
     }
 
     return Offsets;
@@ -2274,7 +2539,8 @@ TArray<FVector> ACustomControllerBase::ComputeSlotOffsets(const TArray<AUnitBase
 TArray<TArray<float>> ACustomControllerBase::BuildCostMatrix(
     const TArray<AUnitBase*>& Units,
     const TArray<FVector>& SlotOffsets,
-    const FVector& TargetCenter) const
+    const FVector& TargetCenter,
+    const TArray<float>& SlotCapacities) const
 {
     int32 N = Units.Num();
     if (N == 0) return TArray<TArray<float>>();
@@ -2306,6 +2572,12 @@ TArray<TArray<float>> ACustomControllerBase::BuildCostMatrix(
     }
 
     // 2. Build the matrix with penalties
+    // A slot's capacity is the unit radius it was spaced for. The ring and wedge layouts report
+    // that directly (SlotCapacities); the grid layout does not, so for it we re-derive the
+    // capacity from the slot's row/column, which is only meaningful because grid slots really do
+    // sit on a regular row/column lattice.
+    const bool bHaveExplicitCapacities = (SlotCapacities.Num() == N);
+
     TArray<TArray<float>> Cost;
     Cost.SetNum(N);
     for (int32 i = 0; i < N; ++i)
@@ -2316,18 +2588,26 @@ TArray<TArray<float>> ACustomControllerBase::BuildCostMatrix(
         Cost[i].SetNum(N);
         for (int32 j = 0; j < N; ++j)
         {
-            int32 Row = j / GridSize;
-            int32 Col = j % GridSize;
-            float Capacity = FMath::Min(MaxR_Col[Col], MaxR_Row[Row]);
-
-            FVector SlotWorld = TargetCenter + SlotOffsets[j];
+            FVector SlotWorld = TargetCenter + (SlotOffsets.IsValidIndex(j) ? SlotOffsets[j] : FVector::ZeroVector);
             float DistSq = FVector::DistSquared(UnitLoc, SlotWorld);
+
+            float Capacity;
+            if (bHaveExplicitCapacities)
+            {
+                Capacity = SlotCapacities[j];
+            }
+            else
+            {
+                int32 Row = j / GridSize;
+                int32 Col = j % GridSize;
+                Capacity = FMath::Min(MaxR_Col[Col], MaxR_Row[Row]);
+            }
 
             // If unit is too large for the slot's allocated space, add a massive penalty.
             // We use a small epsilon for float comparison.
             if (UnitR > Capacity + 0.1f)
             {
-                Cost[i][j] = DistSq + 1e10f; 
+                Cost[i][j] = DistSq + 1e10f;
             }
             else
             {
@@ -2392,9 +2672,21 @@ TArray<int32> ACustomControllerBase::SolveHungarian(const TArray<TArray<float>>&
     return Assignment;
 }
 
+void ACustomControllerBase::ForceFormationRecalculation()
+{
+    bForceFormationRecalculation = true;
+}
+
 bool ACustomControllerBase::ShouldRecalculateFormation() const
 {
     if (bForceFormationRecalculation) return true;
+
+    // The directional shapes bake the approach direction into their offsets. Caching them across
+    // orders was safe while every shape was world-axis aligned, but now a second order in another
+    // direction would reuse the FIRST order's orientation - a wedge sent north then south would
+    // arrive pointing backwards.
+    if (IsDirectionalFormationShape(GridFormationShape)) return true;
+
     if (SelectedUnits.Num() != LastFormationUnits.Num()) return true;
     TSet<TWeakObjectPtr<AUnitBase>> LastSet(LastFormationUnits);
     for (AUnitBase* U : SelectedUnits)
@@ -2419,11 +2711,14 @@ void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter, fl
         return RA > RB;
     });
 
-    // 2. Compute non-uniform offsets tailored for these units
-    auto Offsets = ComputeSlotOffsets(SortedUnits, Spacing);
-    
+    // 2. Compute non-uniform offsets tailored for these units. The directional shapes are
+    // oriented along the way the group is about to travel, so a wedge points at the destination
+    // and a half circle bulges towards it instead of always facing world +X.
+    TArray<float> SlotCapacities;
+    auto Offsets = ComputeSlotOffsetsDirectional(SortedUnits, Spacing, ComputeApproachDirection(SortedUnits, TargetCenter), &SlotCapacities);
+
     // 3. Match units to slots. By including radius info in BuildCostMatrix, we ensure big units get big slots.
-    auto Cost = BuildCostMatrix(SortedUnits, Offsets, TargetCenter);
+    auto Cost = BuildCostMatrix(SortedUnits, Offsets, TargetCenter, SlotCapacities);
     auto Assign = SolveHungarian(Cost);
 
     for (int32 i = 0; i < N; ++i)
@@ -2438,9 +2733,15 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
 {
     UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
     OutSpacing = GridSpacing;
-    if (!NavSys || Units.Num() == 0) 
+
+    // Orientation for the directional shapes. It is derived from the selection's centroid, so it
+    // does not depend on unit order and stays the same for the sorted copy built further down.
+    // Grid shapes ignore it entirely.
+    const FVector FormationForward = ComputeApproachDirection(Units, InOutLocation);
+
+    if (!NavSys || Units.Num() == 0)
     {
-        OutOffsets = ComputeSlotOffsets(Units, OutSpacing);
+        OutOffsets = ComputeSlotOffsetsDirectional(Units, OutSpacing, FormationForward);
         return true;
     }
 
@@ -2515,7 +2816,7 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
         // Try up to 5 times to shift the grid to a valid location at this spacing
         for (int32 Try = 0; Try < 5; ++Try)
         {
-            OutOffsets = ComputeSlotOffsets(LocalUnits, OutSpacing);
+            OutOffsets = ComputeSlotOffsetsDirectional(LocalUnits, OutSpacing, FormationForward);
             bool bAllValid = true;
             FVector FirstFailedPointShift = FVector::ZeroVector;
 
@@ -2576,7 +2877,7 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
     if (!bFinalSuccess)
     {
         // Final attempt: individually adjust each point that is still invalid
-        OutOffsets = ComputeSlotOffsets(LocalUnits, OutSpacing);
+        OutOffsets = ComputeSlotOffsetsDirectional(LocalUnits, OutSpacing, FormationForward);
         for (int32 i = 0; i < OutOffsets.Num(); ++i)
         {
             FVector TargetP = InOutLocation + OutOffsets[i];
@@ -2878,6 +3179,19 @@ void ACustomControllerBase::LeftClickPressedMass()
     }
     else if (AttackToggled && !SwapAttackMove)
     {
+        // Default layout: attack-move lives on the LEFT button. Arm the line drag before
+        // HandleAttackMovePressed clears AttackToggled. This branch never reaches the box-select
+        // code, so bSelectFriendly stays false and the selection is stable for the whole drag.
+        if (CanStartFormationLineDrag())
+        {
+            FHitResult DragHit;
+            GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, DragHit);
+            if (DragHit.bBlockingHit)
+            {
+                BeginFormationLineDrag(DragHit.Location, /*bAttackMove=*/true, /*bFromRightMouse=*/false);
+            }
+        }
+
         HandleAttackMovePressed();
     }
     else
@@ -3280,9 +3594,710 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 	}
 }
 
+// ==============================================================================================
+// Formation drag line
+// ==============================================================================================
+
+namespace
+{
+	/** Perpendicular distance from P to the segment AB, in the XY plane. */
+	float PointSegmentDistance2D(const FVector& P, const FVector& A, const FVector& B)
+	{
+		const FVector2D PP(P.X, P.Y);
+		const FVector2D AA(A.X, A.Y);
+		const FVector2D BB(B.X, B.Y);
+		const FVector2D AB = BB - AA;
+		const float LenSq = AB.SizeSquared();
+		if (LenSq <= KINDA_SMALL_NUMBER)
+		{
+			return FVector2D::Distance(PP, AA);
+		}
+		const float T = FMath::Clamp(FVector2D::DotProduct(PP - AA, AB) / LenSq, 0.f, 1.f);
+		return FVector2D::Distance(PP, AA + AB * T);
+	}
+
+	/**
+	 * Douglas-Peucker. Iterative with an explicit stack: the recursive form can nest once per input
+	 * point, and the sample buffer can hold hundreds.
+	 */
+	void SimplifyPath2D(const TArray<FVector>& In, float Tolerance, TArray<FVector>& Out)
+	{
+		Out.Reset();
+		const int32 Num = In.Num();
+		if (Num == 0) return;
+		if (Num <= 2 || Tolerance <= KINDA_SMALL_NUMBER)
+		{
+			Out = In;
+			return;
+		}
+
+		TArray<bool> Keep;
+		Keep.Init(false, Num);
+		Keep[0] = true;
+		Keep[Num - 1] = true;
+
+		TArray<TPair<int32, int32>> Stack;
+		Stack.Push(TPair<int32, int32>(0, Num - 1));
+
+		while (Stack.Num() > 0)
+		{
+			const TPair<int32, int32> Range = Stack.Pop();
+			const int32 First = Range.Key;
+			const int32 Last = Range.Value;
+			if (Last <= First + 1) continue;
+
+			float MaxDist = 0.f;
+			int32 MaxIndex = INDEX_NONE;
+			for (int32 i = First + 1; i < Last; ++i)
+			{
+				const float D = PointSegmentDistance2D(In[i], In[First], In[Last]);
+				if (D > MaxDist)
+				{
+					MaxDist = D;
+					MaxIndex = i;
+				}
+			}
+
+			if (MaxIndex != INDEX_NONE && MaxDist > Tolerance)
+			{
+				Keep[MaxIndex] = true;
+				Stack.Push(TPair<int32, int32>(First, MaxIndex));
+				Stack.Push(TPair<int32, int32>(MaxIndex, Last));
+			}
+		}
+
+		Out.Reserve(Num);
+		for (int32 i = 0; i < Num; ++i)
+		{
+			if (Keep[i]) Out.Add(In[i]);
+		}
+	}
+
+	/** Total 2D length of a polyline. */
+	float PathLength2D(const TArray<FVector>& Path)
+	{
+		float Total = 0.f;
+		for (int32 i = 1; i < Path.Num(); ++i)
+		{
+			Total += FVector::Dist2D(Path[i - 1], Path[i]);
+		}
+		return Total;
+	}
+}
+
+TArray<FVector> ACustomControllerBase::DistributeAlongPath(const TArray<FVector>& Path, int32 NumPoints)
+{
+	TArray<FVector> Points;
+	if (NumPoints <= 0 || Path.Num() == 0)
+	{
+		return Points;
+	}
+	if (Path.Num() == 1)
+	{
+		Points.Init(Path[0], NumPoints);
+		return Points;
+	}
+
+	// Cumulative arc length, so spacing is even along the CURVE rather than along the chord.
+	TArray<float> Cumulative;
+	Cumulative.Reserve(Path.Num());
+	Cumulative.Add(0.f);
+	for (int32 i = 1; i < Path.Num(); ++i)
+	{
+		Cumulative.Add(Cumulative[i - 1] + FVector::Dist2D(Path[i - 1], Path[i]));
+	}
+	const float Total = Cumulative.Last();
+
+	Points.Reserve(NumPoints);
+	if (Total <= KINDA_SMALL_NUMBER)
+	{
+		Points.Init(Path[0], NumPoints);
+		return Points;
+	}
+
+	int32 Segment = 0;
+	for (int32 i = 0; i < NumPoints; ++i)
+	{
+		// Endpoints inclusive: the first and last unit stand on the ends of the drawn stroke.
+		const float Target = (NumPoints == 1) ? (Total * 0.5f)
+		                                      : (Total * static_cast<float>(i) / static_cast<float>(NumPoints - 1));
+
+		while (Segment < Cumulative.Num() - 2 && Cumulative[Segment + 1] < Target)
+		{
+			++Segment;
+		}
+
+		const float SegLen = Cumulative[Segment + 1] - Cumulative[Segment];
+		const float Alpha = (SegLen <= KINDA_SMALL_NUMBER) ? 0.f
+		                                                   : FMath::Clamp((Target - Cumulative[Segment]) / SegLen, 0.f, 1.f);
+		Points.Add(FMath::Lerp(Path[Segment], Path[Segment + 1], Alpha));
+	}
+
+	return Points;
+}
+
+void ACustomControllerBase::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (!IsLocalController() || !bFormationLineDragActive)
+	{
+		return;
+	}
+
+	// A menu or the loading screen taking over mid-gesture must not leave a stuck line.
+	if (!CameraBase || CameraBase->BlockControls || CameraBase->TabToggled)
+	{
+		CancelFormationLineDrag();
+		return;
+	}
+
+	// A box-select started with the other button rewrites SelectedUnits and deselects the group
+	// the line was drawn for. Drop the gesture rather than issue it to whatever got boxed.
+	if (HUDBase && HUDBase->bSelectFriendly)
+	{
+		CancelFormationLineDrag();
+		return;
+	}
+
+	FVector MouseGround;
+	FHitResult MouseHit;
+	if (TraceMouseToGround(MouseGround, MouseHit))
+	{
+		UpdateFormationLineDrag(MouseGround);
+	}
+
+	// UpdateFormationLineDrag cancels the gesture if the selection collapsed.
+	if (!bFormationLineDragActive)
+	{
+		return;
+	}
+
+	if (HUDBase)
+	{
+		TArray<AUnitBase*> PreviewUnits;
+		TArray<FVector> PreviewPath;
+		TArray<FVector> PreviewSlots;
+		if (IsFormationLineDragValid() && BuildFormationLineOrder(PreviewUnits, PreviewPath, PreviewSlots))
+		{
+			// Exactly what FinishFormationLineDrag will issue - same helper, same inputs.
+			HUDBase->UpdateFormationPath(PreviewPath, PreviewSlots);
+		}
+		else
+		{
+			// Below the threshold the gesture is still just a click - show nothing yet.
+			HUDBase->ClearFormationLine();
+		}
+	}
+
+	// The right mouse button has no release event in this project: InputTag.RightClick_Released is
+	// declared but never registered in AddAllTags, so a BindActionByTag for it would silently never
+	// fire. Polling here is what makes the right-drag possible without authoring a new InputAction,
+	// an IMC_Controls row, a ControlAsset row and a native-tag registration.
+	//
+	// This tests the button's LEVEL, not a falling edge. Input is dispatched in PlayerTick, before
+	// AActor::Tick, so a press+release inside one frame (an ordinary fast click, or any long frame)
+	// would never be observed as "down" and an edge could therefore never fire - the drag would
+	// latch forever with a dashed line trailing the cursor. On the level test that case simply ends
+	// the gesture on the next tick with Start == End, which IsFormationLineDragValid rejects, so it
+	// degrades cleanly to a plain click.
+	//
+	// The left button is polled too. Its release does call LeftClickReleasedMass, but that path
+	// early-returns while BlockControls is set, which would otherwise leave the drag latched.
+	const bool bOwningButtonDown = IsInputKeyDown(bFormationLineDragFromRightMouse ? EKeys::RightMouseButton
+	                                                                              : EKeys::LeftMouseButton);
+	if (bOwningButtonDown)
+	{
+		return;
+	}
+
+	// Alt-Tab / clicking another window makes UGameViewportClient::LostFocus call FlushPressedKeys,
+	// which releases every held key. That looks identical to a real release, so without this check
+	// switching away mid-drag would COMMIT an order the player never confirmed. Focus is only
+	// consulted here, at the moment of release, so a normal drag is unaffected.
+	bool bViewportFocused = true;
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameViewportClient* ViewportClient = World->GetGameViewport())
+		{
+			if (FViewport* Viewport = ViewportClient->Viewport)
+			{
+				bViewportFocused = Viewport->HasFocus();
+			}
+		}
+	}
+
+	if (!bViewportFocused)
+	{
+		CancelFormationLineDrag();
+		return;
+	}
+
+	FinishFormationLineDrag(bFormationLineDragFromRightMouse);
+}
+
+bool ACustomControllerBase::IsUnitEligibleForFormationLine(const AUnitBase* Unit) const
+{
+	if (!Unit || Unit == CameraUnitWithTag) return false;
+	if (Unit->UnitState == UnitData::Dead) return false;
+	if (!Unit->IsInitialized || !Unit->CanMove) return false;
+	// Buildings and construction sites have no business being strung out on a line.
+	if (Unit->bIsBuilding || Unit->bIsConstructionUnit) return false;
+	if (!Unit->bIsMassUnit) return false;
+	return true;
+}
+
+bool ACustomControllerBase::IsFormationLineDragValid() const
+{
+	if (!bFormationLineDragActive || FormationLineDragUnits.Num() < 2)
+	{
+		return false;
+	}
+	if (FormationLinePath.Num() < 2)
+	{
+		return false;
+	}
+
+	// Arc length, not start-to-end distance: a tight curve or a hook can cover plenty of ground
+	// while its endpoints sit close together, and that is still a deliberate gesture.
+	return PathLength2D(FormationLinePath) >= FMath::Max(FormationLineDragThreshold, 1.f);
+}
+
+bool ACustomControllerBase::CanStartFormationLineDrag() const
+{
+	// A line through a single unit is just a move.
+	if (SelectedUnits.Num() < 2) return false;
+
+	// Shift queues waypoints and Alt cancels/destroys - both own the click already.
+	if (IsShiftPressed || AltIsPressed) return false;
+
+	// Tab overlay swallows the whole left-click path (LeftClickPressedMass early-outs on it).
+	if (!CameraBase || CameraBase->TabToggled) return false;
+
+	// Another mouse-driven mode is mid-gesture.
+	if (CurrentDraggedAbilityIndicator || CurrentDraggedUnitBase) return false;
+	if (SelectedUnits[0] && SelectedUnits[0]->CurrentDraggedWorkArea) return false;
+
+	// Box-select rebuilds SelectedUnits every frame while it is running, so the count we would
+	// distribute along the line is not stable.
+	if (HUDBase && HUDBase->bSelectFriendly) return false;
+
+	// Need at least two units that can actually be sent to a slot. A selection of buildings would
+	// otherwise arm a drag, draw a full preview and then command nobody.
+	int32 EligibleCount = 0;
+	for (const AUnitBase* Unit : SelectedUnits)
+	{
+		if (IsUnitEligibleForFormationLine(Unit) && ++EligibleCount >= 2)
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void ACustomControllerBase::BeginFormationLineDrag(const FVector& StartWorld, bool bAttackMove, bool bFromRightMouse)
+{
+	if (StartWorld.ContainsNaN())
+	{
+		return;
+	}
+
+	// Pressing the other button mid-gesture must not hijack a live drag: that would silently move
+	// its origin, flip move/attack-move and hand ownership to a button whose release the first
+	// button's release then cannot match.
+	if (bFormationLineDragActive)
+	{
+		return;
+	}
+
+	// Snapshot the group now. SelectedUnits can be rewritten before the release (box-select,
+	// units dying, HUD re-selection) and the order must still go to the units the line was drawn
+	// for. Weak pointers so a unit destroyed mid-drag simply drops out.
+	FormationLineDragUnits.Reset();
+	FormationLineDragUnits.Reserve(SelectedUnits.Num());
+	for (AUnitBase* Unit : SelectedUnits)
+	{
+		if (Unit)
+		{
+			FormationLineDragUnits.Add(Unit);
+		}
+	}
+
+	bFormationLineDragActive = true;
+	bFormationLineDragIsAttackMove = bAttackMove;
+	bFormationLineDragFromRightMouse = bFromRightMouse;
+	FormationLineStartWorld = StartWorld;
+	// Until the mouse actually moves the path holds one point, so IsFormationLineDragValid stays
+	// false and nothing is drawn or issued.
+	FormationLineEndWorld = StartWorld;
+	FormationLinePath.Reset();
+	FormationLinePath.Add(StartWorld);
+}
+
+void ACustomControllerBase::UpdateFormationLineDrag(const FVector& CurrentWorld)
+{
+	if (!bFormationLineDragActive || CurrentWorld.ContainsNaN())
+	{
+		return;
+	}
+
+	FormationLineEndWorld = CurrentWorld;
+
+	if (FormationLinePath.Num() == 0)
+	{
+		FormationLinePath.Add(CurrentWorld);
+		return;
+	}
+
+	// Record a new sample only once the cursor has actually travelled, so a still hand does not
+	// pack the buffer with duplicates.
+	if (FVector::Dist2D(FormationLinePath.Last(), CurrentWorld) < FMath::Max(FormationPathSampleDistance, 1.f))
+	{
+		return;
+	}
+
+	const int32 MaxSamples = FMath::Clamp(FormationPathMaxSamples, 8, 2048);
+	if (FormationLinePath.Num() >= MaxSamples)
+	{
+		// Drop every other interior sample instead of refusing to grow: the stroke keeps its full
+		// extent at half the resolution, rather than freezing partway through the drag.
+		TArray<FVector> Decimated;
+		Decimated.Reserve(FormationLinePath.Num() / 2 + 2);
+		Decimated.Add(FormationLinePath[0]);
+		for (int32 i = 1; i < FormationLinePath.Num() - 1; i += 2)
+		{
+			Decimated.Add(FormationLinePath[i]);
+		}
+		Decimated.Add(FormationLinePath.Last());
+		FormationLinePath = MoveTemp(Decimated);
+	}
+
+	FormationLinePath.Add(CurrentWorld);
+}
+
+void ACustomControllerBase::CancelFormationLineDrag()
+{
+	bFormationLineDragActive = false;
+	bFormationLineDragIsAttackMove = false;
+	bFormationLineDragFromRightMouse = false;
+	FormationLineDragUnits.Reset();
+	FormationLinePath.Reset();
+
+	if (HUDBase)
+	{
+		HUDBase->ClearFormationLine();
+	}
+}
+
+void ACustomControllerBase::GetEffectiveFormationPath(int32 NumUnits, float MaxUnitRadius, TArray<FVector>& OutPath) const
+{
+	// Flatten out the hand wobble so a roughly straight drag collapses to a clean two-point line,
+	// while a deliberate curve keeps its shape.
+	SimplifyPath2D(FormationLinePath, FMath::Max(FormationPathSimplifyTolerance, 0.f), OutPath);
+
+	for (FVector& P : OutPath)
+	{
+		P.Z = 0.f;
+	}
+
+	if (OutPath.Num() < 2 || !bFormationLineEnforceMinSpacing || NumUnits < 2)
+	{
+		return;
+	}
+
+	const float BaseLength = PathLength2D(OutPath);
+	if (BaseLength <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// Two neighbours need (r_a + r_b + GridSpacing) between them. Size from the widest unit so no
+	// pair can end up too tight regardless of who lands where.
+	const float MaxRadius = (MaxUnitRadius > 0.f) ? MaxUnitRadius : 50.f;
+	const float MinStep = 2.f * MaxRadius + GridSpacing;
+
+	// Clamped, otherwise a large selection on a short drag would fling the outer units off the map.
+	// Past the clamp units simply stand closer together and Mass avoidance copes.
+	const float MaxLength = FMath::Max(FormationLineMaxLength, BaseLength);
+
+	const TArray<FVector> BasePath = OutPath;
+	float Required = FMath::Min(MinStep * static_cast<float>(NumUnits - 1), MaxLength);
+
+	// Slots are spaced evenly along the ARC, but two neighbours overlap based on their straight-line
+	// distance, and on a curve the chord is shorter than the arc. So requiring arc == MinStep*(N-1)
+	// is not enough: measure the real chord gap and stretch until it clears, or until the clamp.
+	// Converges in one or two rounds for any reasonable stroke.
+	for (int32 Attempt = 0; Attempt < 4; ++Attempt)
+	{
+		OutPath = BasePath;
+
+		const float Extra = FMath::Max(Required - BaseLength, 0.f) * 0.5f;
+		if (Extra > KINDA_SMALL_NUMBER)
+		{
+			// Grow at BOTH ends along their terminal tangents. On a straight path this is exactly
+			// "widen about the midpoint"; on a curve it extends the curve instead of distorting it.
+			const FVector FrontDir = (BasePath[0] - BasePath[1]).GetSafeNormal2D();
+			const FVector BackDir = (BasePath.Last() - BasePath[BasePath.Num() - 2]).GetSafeNormal2D();
+			if (!FrontDir.IsNearlyZero())
+			{
+				OutPath.Insert(BasePath[0] + FrontDir * Extra, 0);
+			}
+			if (!BackDir.IsNearlyZero())
+			{
+				OutPath.Add(BasePath.Last() + BackDir * Extra);
+			}
+		}
+
+		if (Required >= MaxLength - KINDA_SMALL_NUMBER)
+		{
+			return; // at the clamp; accept whatever spacing we get
+		}
+
+		const TArray<FVector> Slots = DistributeAlongPath(OutPath, NumUnits);
+		if (Slots.Num() < 2)
+		{
+			return;
+		}
+
+		float MinChord = TNumericLimits<float>::Max();
+		for (int32 i = 1; i < Slots.Num(); ++i)
+		{
+			MinChord = FMath::Min(MinChord, FVector::Dist2D(Slots[i - 1], Slots[i]));
+		}
+
+		if (MinChord >= MinStep - 1.f || MinChord <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+
+		Required = FMath::Min(Required * (MinStep / MinChord), MaxLength);
+	}
+}
+
+bool ACustomControllerBase::BuildFormationLineOrder(TArray<AUnitBase*>& OutUnits, TArray<FVector>& OutPath, TArray<FVector>& OutSlots) const
+{
+	OutUnits.Reset();
+	OutPath.Reset();
+	OutSlots.Reset();
+
+	// Only units that can really be sent to a slot get one - otherwise buildings and dead units
+	// silently consume positions and leave gaps in a line advertised as evenly spaced.
+	float MaxRadius = 0.f;
+	for (const TWeakObjectPtr<AUnitBase>& WeakUnit : FormationLineDragUnits)
+	{
+		AUnitBase* Unit = WeakUnit.Get();
+		if (!IsUnitEligibleForFormationLine(Unit)) continue;
+		OutUnits.Add(Unit);
+		if (Unit->GetCapsuleComponent())
+		{
+			MaxRadius = FMath::Max(MaxRadius, Unit->GetCapsuleComponent()->GetScaledCapsuleRadius() * GridCapsuleMultiplier);
+		}
+	}
+
+	if (OutUnits.Num() < 2)
+	{
+		return false;
+	}
+
+	GetEffectiveFormationPath(OutUnits.Num(), MaxRadius, OutPath);
+	if (OutPath.Num() < 2)
+	{
+		return false;
+	}
+
+	// Order units along the path and hand out slots in the same order, so nobody crosses anybody
+	// else's route - which is the whole point of drawing a line by hand.
+	const FVector PathStart = OutPath[0];
+	const FVector PathDir = (OutPath.Last() - PathStart).GetSafeNormal2D();
+	OutUnits.Sort([this, PathDir, PathStart](const AUnitBase& A, const AUnitBase& B)
+	{
+		const float PA = FVector::DotProduct(GetUnitWorldLocation(&A) - PathStart, PathDir);
+		const float PB = FVector::DotProduct(GetUnitWorldLocation(&B) - PathStart, PathDir);
+		if (FMath::IsNearlyEqual(PA, PB))
+		{
+			// Ties would otherwise depend on selection order, which is not stable across frames.
+			return A.GetName() < B.GetName();
+		}
+		return PA < PB;
+	});
+
+	OutSlots = DistributeAlongPath(OutPath, OutUnits.Num());
+	return OutSlots.Num() == OutUnits.Num();
+}
+
+TArray<FVector> ACustomControllerBase::ComputeFormationLinePoints(const TArray<AUnitBase*>& Units) const
+{
+	const int32 NumUnits = Units.Num();
+	if (NumUnits == 0)
+	{
+		return TArray<FVector>();
+	}
+
+	float MaxRadius = 0.f;
+	for (const AUnitBase* Unit : Units)
+	{
+		if (Unit && Unit->GetCapsuleComponent())
+		{
+			MaxRadius = FMath::Max(MaxRadius, Unit->GetCapsuleComponent()->GetScaledCapsuleRadius() * GridCapsuleMultiplier);
+		}
+	}
+
+	TArray<FVector> Path;
+	GetEffectiveFormationPath(NumUnits, MaxRadius, Path);
+	if (Path.Num() < 2)
+	{
+		return TArray<FVector>();
+	}
+
+	return DistributeAlongPath(Path, NumUnits);
+}
+
+bool ACustomControllerBase::FinishFormationLineDrag(bool bFromRightMouse)
+{
+	if (!bFormationLineDragActive)
+	{
+		return false;
+	}
+
+	// Releasing the other button must not end this drag. It also must not cancel it: with
+	// SwapAttackMove on, both gestures live on the right button while the left button is still
+	// free to box-select, and a left release fires LeftClickReleasedMass every time.
+	if (bFormationLineDragFromRightMouse != bFromRightMouse)
+	{
+		return false;
+	}
+
+	const bool bWasValid = IsFormationLineDragValid();
+	const bool bAttackMove = bFormationLineDragIsAttackMove;
+
+	if (!bWasValid)
+	{
+		CancelFormationLineDrag();
+		return false;
+	}
+
+	// Exactly the same computation the HUD preview used this frame, so the units land on the
+	// markers the player was looking at.
+	TArray<AUnitBase*> OrderedUnits;
+	TArray<FVector> EffectivePath;
+	TArray<FVector> LinePoints;
+	if (!BuildFormationLineOrder(OrderedUnits, EffectivePath, LinePoints))
+	{
+		CancelFormationLineDrag();
+		return false;
+	}
+
+	// Ground-snap and drop anything that lands on a nav modifier, exactly like the normal paths do.
+	TArray<AUnitBase*> TargetUnits;
+	TArray<FVector> TargetLocs;
+	TArray<float> TargetSpeeds;
+	TargetUnits.Reserve(OrderedUnits.Num());
+	TargetLocs.Reserve(OrderedUnits.Num());
+	TargetSpeeds.Reserve(OrderedUnits.Num());
+
+	for (int32 i = 0; i < OrderedUnits.Num(); ++i)
+	{
+		AUnitBase* Unit = OrderedUnits[i];
+		// Re-check: a unit can die between the filter above and here is not possible in one frame,
+		// but the weak pointer resolve above is the only thing guaranteeing non-null.
+		if (!Unit) continue;
+
+		bool bNavMod = false;
+		const FVector Loc = TraceRunLocation(LinePoints[i], bNavMod);
+		if (bNavMod) continue;
+
+		TargetUnits.Add(Unit);
+		TargetLocs.Add(Loc);
+		TargetSpeeds.Add(Unit->Attributes ? Unit->Attributes->GetBaseRunSpeed() : 300.f);
+	}
+
+	bFormationLineDragActive = false;
+	bFormationLineDragIsAttackMove = false;
+	bFormationLineDragFromRightMouse = false;
+	FormationLineDragUnits.Reset();
+	FormationLinePath.Reset();
+	if (HUDBase)
+	{
+		HUDBase->ClearFormationLine();
+	}
+
+	if (TargetUnits.Num() == 0)
+	{
+		return false;
+	}
+
+	if (bAttackMove)
+	{
+		// Attack-move keeps its own server entry point (it also arms the units to engage en route).
+		LeftClickAttackMass(TargetUnits, TargetLocs, true, nullptr);
+		return true;
+	}
+
+	// Pre-validate on the commanding client so prediction and the server agree.
+	//
+	// Deliberately NOT AdjustBatchTargetsForNav: that helper is a whole-FORMATION re-solver. One
+	// off-navmesh target makes it discard every point and rebuild the current GridFormationShape
+	// around the centre, which would silently collapse the line into a blob whenever an endpoint
+	// clipped a cliff or a building footprint. Project each point on its own instead.
+	if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+	{
+		for (FVector& Loc : TargetLocs)
+		{
+			FNavLocation NavLoc;
+			if (NavSys->ProjectPointToNavigation(Loc, NavLoc, NavMeshProjectionExtent))
+			{
+				Loc = NavLoc.Location;
+			}
+		}
+	}
+
+	// Destination feedback for the order that actually executes. The press-time order already drew
+	// indicators at the click point; without these the player would see circles where the units are
+	// not going and none where they are.
+	for (const FVector& Loc : TargetLocs)
+	{
+		DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
+	}
+
+	TArray<float> TargetRadii;
+	TargetRadii.Reserve(TargetUnits.Num());
+	for (AUnitBase* Unit : TargetUnits)
+	{
+		TargetRadii.Add(Unit->MovementAcceptanceRadius);
+		SetUnitState_Replication(Unit, 1);
+	}
+
+	Server_Batch_CorrectSetUnitMoveTargets(GetWorld(), TargetUnits, TargetLocs, TargetSpeeds, TargetRadii, false, true, true, true);
+
+	if (!HasAuthority())
+	{
+		if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+		{
+			FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+			for (int32 i = 0; i < TargetUnits.Num(); ++i)
+			{
+				ApplyMovePredictionToUnit(EntityManager, GetWorld(), TargetUnits[i], TargetLocs[i], TargetSpeeds[i], TargetRadii[i], false, true, true);
+			}
+			EntityManager.FlushCommands();
+		}
+	}
+
+	if (RunSound && (GetWorld()->GetTimeSeconds() - LastRunSoundTime >= RunSoundDelayTime))
+	{
+		UGameplayStatics::PlaySound2D(this, RunSound, GetSoundMultiplier());
+		LastRunSoundTime = GetWorld()->GetTimeSeconds();
+	}
+
+	return true;
+}
+
 void ACustomControllerBase::LeftClickReleasedMass()
 {
-	
+	// Run before the bookkeeping below: FinishFormationLineDrag reads SelectedUnits, and the
+	// line below overwrites it from the HUD.
+	FinishFormationLineDrag(/*bFromRightMouse=*/false);
+
 	LeftClickIsPressed = false;
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
@@ -3645,7 +4660,7 @@ void ACustomControllerBase::HandleAttackMovePressed()
     else
     {
         UsedSpacing = GridSpacing;
-        Offsets = ComputeSlotOffsets(UnitsToProcess, UsedSpacing);
+        Offsets = ComputeSlotOffsetsDirectional(UnitsToProcess, UsedSpacing, ComputeApproachDirection(UnitsToProcess, AdjustedLocation));
     }
 
     AWaypoint* BWaypoint = nullptr;

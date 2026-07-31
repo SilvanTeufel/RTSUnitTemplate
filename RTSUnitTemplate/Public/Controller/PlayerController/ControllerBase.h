@@ -29,16 +29,48 @@ class UTexture2D;
  * 
  */
 
+// NOTE: append new shapes at the END only. The enumerator ORDER is what gets serialized into
+// Blueprint class-default overrides, so re-ordering silently rewrites every saved selection.
 UENUM(BlueprintType)
 enum class EGridShape : uint8
 {
-	Square,
-	Staggered,
-	VerticalLine
+	// Axis-aligned rectangular grid, ceil(sqrt(N)) columns. The historical default look.
+	Square			UMETA(DisplayName = "Rectangle"),
+	// Same grid, but odd rows are shifted half a column sideways (brick pattern).
+	Staggered		UMETA(DisplayName = "Rectangle (Staggered)"),
+	// One single column.
+	VerticalLine	UMETA(DisplayName = "Vertical Line"),
+	// Concentric rings filling a disc, ring capacity derived from unit radii.
+	Circle			UMETA(DisplayName = "Circle (multi-row)"),
+	// Concentric arcs spanning 180 degrees, the bulge facing the move direction.
+	HalfCircle		UMETA(DisplayName = "Half Circle (multi-row)"),
+	// Wedge with rows of 1, 2, 3, ... units, apex facing the move direction.
+	Triangle		UMETA(DisplayName = "Triangle / Wedge")
 };
+
+// Shapes whose slots are laid out on a regular row/column grid. Only for these does the
+// per-slot size-compatibility penalty in BuildCostMatrix (which derives a slot's capacity
+// from its grid row/column) describe anything real.
+FORCEINLINE bool IsGridBasedFormationShape(EGridShape Shape)
+{
+	return Shape == EGridShape::Square || Shape == EGridShape::Staggered || Shape == EGridShape::VerticalLine;
+}
+
+// Shapes that are oriented along the direction the group is moving in, rather than
+// being axis-aligned in world space.
+FORCEINLINE bool IsDirectionalFormationShape(EGridShape Shape)
+{
+	return Shape == EGridShape::Circle || Shape == EGridShape::HalfCircle || Shape == EGridShape::Triangle;
+}
 
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnTeamIdChanged, int32, NewTeamId);
+
+// Fires whenever the formation shape changes, from any source (C hotkey, picker widget, Blueprint).
+// The picker subscribes to this instead of polling: UUserWidget::TickFrequency defaults to Auto,
+// which switches ticking OFF for a widget with no Blueprint Tick event, so a NativeTick-based
+// refresh would silently never run.
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnGridFormationShapeChanged, EGridShape, NewShape);
 
 UCLASS()
 class RTSUNITTEMPLATE_API AControllerBase : public APlayerController
@@ -259,8 +291,48 @@ public:
 	float GridCapsuleMultiplier = 1.5;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
-	EGridShape GridFormationShape = EGridShape::Staggered;
-	
+	EGridShape GridFormationShape = EGridShape::Square;
+
+	// The shapes the C key rotates through, in order. Any shape left out of this list stays
+	// selectable in the dropdown but is skipped by the hotkey. Duplicates are allowed.
+	// Kept in EGridShape order so the hotkey and the dropdown read the same way round.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings")
+	TArray<EGridShape> FormationCycleShapes = {
+		EGridShape::Square,
+		EGridShape::Staggered,
+		EGridShape::VerticalLine,
+		EGridShape::Circle,
+		EGridShape::HalfCircle,
+		EGridShape::Triangle
+	};
+
+	// Advances GridFormationShape to the next entry of FormationCycleShapes and forces the next
+	// move order to rebuild its slots.
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	void CycleGridFormationShape();
+
+	// Jumps straight to a shape (same force-rebuild semantics as CycleGridFormationShape).
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	void SetGridFormationShape(EGridShape NewShape);
+
+	// Slots are solved on the commanding client and only final world locations reach the server,
+	// so the shape does not need to replicate for the normal case. The exception is
+	// AdjustBatchTargetsForNav: when a slot lands off-navmesh the SERVER re-solves the formation
+	// with its own copy of these settings. Without this mirror it would rebuild a rectangle and
+	// snap the unit out of whatever shape the player picked.
+	UFUNCTION(Server, Reliable)
+	void Server_SetGridFormationShape(EGridShape NewShape);
+
+	// Human-readable name of the active shape, for on-screen feedback.
+	UFUNCTION(BlueprintCallable, Category = "Formation Settings")
+	FText GetGridFormationShapeText() const;
+
+	UPROPERTY(BlueprintAssignable, Category = "Formation Settings")
+	FOnGridFormationShapeChanged OnGridFormationShapeChanged;
+
+	// Overridden by ACustomControllerBase to invalidate its cached per-unit slot offsets.
+	virtual void ForceFormationRecalculation() {}
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	int32 ComputeGridSize(int32 NumUnits) const;
 
