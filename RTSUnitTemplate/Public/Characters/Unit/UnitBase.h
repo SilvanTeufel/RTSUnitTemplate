@@ -199,7 +199,47 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetRunLocation(FVector Location);
-	
+
+	// ---- Flying-building helpers (server-authoritative building blocks; compose these in a BP ability) ----
+	// Take off: FlyHeight=InFlyHeight, IsFlying=true, CanMove=true, drop the navmesh obstacle + StopMovement
+	// freeze so the building rises (HandleGroundAndHeight interps Z up) and can move.
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Flight")
+	void StartBuildingFlight(float InFlyHeight = 500.f);
+
+	// Move this unit to a world location via the Mass mover (Run). Ideal for flyers (skips navmesh).
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Flight")
+	void MoveUnitToLocation(FVector WorldLocation, float MoveSpeed = 600.f, float AcceptanceRadius = 50.f);
+
+	// Begin a smooth landing: IsFlying=false so the unit interps down to the ground (keeps CanMove=true).
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Flight")
+	void BeginLanding();
+
+	// Finish landing: re-freeze (CanMove=false + StopMovement) and optionally re-carve the navmesh obstacle.
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Flight")
+	void FinishLanding(bool bReRegisterObstacle = true);
+
+	// One-call: take off, fly to WorldLocation, and auto-land there once the unit's X/Y arrives.
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Flight")
+	void FlyUnitToLocationAndLand(FVector WorldLocation, float InFlyHeight = 500.f, float MoveSpeed = 600.f, float AcceptanceRadius = 60.f, float DescendTime = 2.5f);
+
+	// True when this unit's X/Y is within AcceptanceRadius of WorldLocation (altitude-agnostic).
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RTSUnitTemplate|Flight")
+	bool IsUnitAtLocation2D(FVector WorldLocation, float AcceptanceRadius = 60.f) const;
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RTSUnitTemplate|Flight")
+	bool IsUnitFlying() const { return IsFlying; }
+
+private:
+	// Internal auto-land lifecycle state for FlyUnitToLocationAndLand.
+	FVector FlyLandTarget = FVector::ZeroVector;
+	float FlyLandAcceptance = 60.f;
+	float FlyLandDescendTime = 2.5f;
+	FTimerHandle FlyLandArrivalTimer;
+	FTimerHandle FlyLandDescendTimer;
+	void PollFlyArrival();
+	void FinishLandingDefault();
+public:
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetWalkSpeed(float Speed);
 	

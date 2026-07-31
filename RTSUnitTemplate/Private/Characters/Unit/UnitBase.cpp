@@ -504,6 +504,109 @@ void AUnitBase::SetRunLocation_Implementation(FVector Location)
 	RunLocation = Location;
 }
 
+// ---- Flying-building helpers -------------------------------------------------------------------
+void AUnitBase::StartBuildingFlight(float InFlyHeight)
+{
+	if (!HasAuthority()) return;
+
+	FlyHeight = InFlyHeight;   // replicated (AMassUnitBase) -> synced to the Mass fragment on all machines
+	IsFlying = true;           // replicated -> HandleGroundAndHeight interps Z up to LastGroundLocation+FlyHeight
+	CanMove = true;            // unlocks the movers + the Z-interp (StopMovement freeze excludes it otherwise)
+
+	// Drop the navmesh obstacle so ground units can path under the lifted-off building.
+	Multicast_UnregisterObstacle();
+
+	// Fire SyncUnitBase: its handler removes FMassStateStopMovementTag now that CanMove is true.
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (GetMassEntityData(EntityManager, EntityHandle))
+	{
+		if (UMassSignalSubsystem* SignalSubsystem = GetWorld() ? GetWorld()->GetSubsystem<UMassSignalSubsystem>() : nullptr)
+		{
+			SignalSubsystem->SignalEntity(UnitSignals::SyncUnitBase, EntityHandle);
+		}
+	}
+}
+
+void AUnitBase::MoveUnitToLocation(FVector WorldLocation, float MoveSpeed, float AcceptanceRadius)
+{
+	if (!HasAuthority()) return;
+
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (!GetMassEntityData(EntityManager, EntityHandle) || !EntityManager) return;
+
+	FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle);
+	if (!MoveTarget) return;
+
+	UpdateMoveTarget(*MoveTarget, WorldLocation, MoveSpeed, GetWorld());
+	MoveTarget->SlackRadius = AcceptanceRadius;
+
+	// Put the unit into Run (sets actor state + Run tag, strips the other state tags). Arrival is the
+	// 2D Dist check in the Run state processor -> it switches to Idle when X/Y reaches the target.
+	SwitchEntityTagByState(UnitData::Run, UnitStatePlaceholder);
+}
+
+void AUnitBase::BeginLanding()
+{
+	if (!HasAuthority()) return;
+	// Keep CanMove=true so HandleGroundAndHeight keeps running and smoothly interps Z down to the ground.
+	IsFlying = false;
+}
+
+void AUnitBase::FinishLanding(bool bReRegisterObstacle)
+{
+	if (!HasAuthority()) return;
+	IsFlying = false;
+	CanMove = false;               // re-freeze the building in place
+	AddStopMovementTagToEntity();  // stop the mover
+	if (bReRegisterObstacle)
+	{
+		Multicast_RegisterBuildingAsObstacle(); // re-carve the navmesh hole at the new position
+	}
+}
+
+bool AUnitBase::IsUnitAtLocation2D(FVector WorldLocation, float AcceptanceRadius) const
+{
+	return FVector::Dist2D(GetActorLocation(), WorldLocation) <= AcceptanceRadius;
+}
+
+void AUnitBase::FlyUnitToLocationAndLand(FVector WorldLocation, float InFlyHeight, float MoveSpeed, float AcceptanceRadius, float DescendTime)
+{
+	if (!HasAuthority()) return;
+
+	FlyLandTarget = WorldLocation;
+	FlyLandAcceptance = AcceptanceRadius;
+	FlyLandDescendTime = FMath::Max(0.1f, DescendTime);
+
+	StartBuildingFlight(InFlyHeight);
+	MoveUnitToLocation(WorldLocation, MoveSpeed, AcceptanceRadius);
+
+	// Poll for arrival, then start the descend timer.
+	GetWorldTimerManager().SetTimer(FlyLandArrivalTimer, this, &AUnitBase::PollFlyArrival, 0.2f, true);
+}
+
+void AUnitBase::PollFlyArrival()
+{
+	if (!HasAuthority() || !IsFlying)
+	{
+		GetWorldTimerManager().ClearTimer(FlyLandArrivalTimer);
+		return;
+	}
+
+	if (IsUnitAtLocation2D(FlyLandTarget, FlyLandAcceptance) || GetUnitState() == UnitData::Idle)
+	{
+		GetWorldTimerManager().ClearTimer(FlyLandArrivalTimer);
+		BeginLanding(); // start descending
+		GetWorldTimerManager().SetTimer(FlyLandDescendTimer, this, &AUnitBase::FinishLandingDefault, FlyLandDescendTime, false);
+	}
+}
+
+void AUnitBase::FinishLandingDefault()
+{
+	FinishLanding(true);
+}
+
 void AUnitBase::SetWalkSpeed_Implementation(float Speed)
 {
 	UCharacterMovementComponent* MovementPtr = GetCharacterMovement();

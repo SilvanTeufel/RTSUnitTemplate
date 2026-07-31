@@ -63,6 +63,11 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "UI")
     FText MarkerDisplayText;
+
+    // Optional display name for the target level, shown in the map-switch widget instead of the map's
+    // file name. Leave empty to fall back to the level file name (FPaths::GetBaseFilename).
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+    FText LevelDisplayName;
     
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (MakeEditWidget = true))
     FVector CenterPoint;

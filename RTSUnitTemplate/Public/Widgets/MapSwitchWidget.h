@@ -15,7 +15,7 @@ class RTSUNITTEMPLATE_API UMapSwitchWidget : public UUserWidget
     GENERATED_BODY()
 
 public:
-    void InitializeWidget(const FString& MapName, AMapSwitchActor* InOwningActor, bool Enabled);
+    void InitializeWidget(const FString& MapName, AMapSwitchActor* InOwningActor, bool Enabled, const FText& DisplayName = FText::GetEmpty());
 
 protected:
     virtual void NativeConstruct() override;

@@ -167,7 +167,7 @@ void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor
             if (ActiveWidget)
             {
                 FString MapToTravel = TargetMap.IsNull() ? "" : TargetMap.ToSoftObjectPath().GetLongPackageName();
-                ActiveWidget->InitializeWidget(MapToTravel, this, bIsEnabled);
+                ActiveWidget->InitializeWidget(MapToTravel, this, bIsEnabled, LevelDisplayName);
                 ActiveWidget->AddToViewport();
 
                 if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(LocalPC))

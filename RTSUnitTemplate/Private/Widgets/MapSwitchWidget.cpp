@@ -10,7 +10,7 @@
 #include "Controller/PlayerController/CameraControllerBase.h" // Include Player Controller
 #include "System/MapSwitchSubsystem.h"
 
-void UMapSwitchWidget::InitializeWidget(const FString& MapName, AMapSwitchActor* InOwningActor, bool Enabled)
+void UMapSwitchWidget::InitializeWidget(const FString& MapName, AMapSwitchActor* InOwningActor, bool Enabled, const FText& DisplayName)
 {
     TargetMapName = MapName;
     OwningActor = InOwningActor;
@@ -19,7 +19,8 @@ void UMapSwitchWidget::InitializeWidget(const FString& MapName, AMapSwitchActor*
     {
         if (DialogText)
         {
-            FString MapDisplayName = FPaths::GetBaseFilename(MapName);
+            // Use the actor's configured LevelDisplayName when set; otherwise fall back to the map file name.
+            const FString MapDisplayName = DisplayName.IsEmpty() ? FPaths::GetBaseFilename(MapName) : DisplayName.ToString();
             FString Question = FString::Printf(TEXT("Do you want to switch to map '%s'?"), *MapDisplayName);
             DialogText->SetText(FText::FromString(Question));
         }
