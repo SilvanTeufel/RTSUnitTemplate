@@ -288,6 +288,37 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
         return;
     }
 
+    // Server-Paritaet (siehe ServerExecute): ein Ziel mit Health <= 0 gilt als verloren. Auf dem Client
+    // bleibt die Leichen-Entity aktiv (TargetEntity wird auf dem Client bewusst nie zurueckgesetzt), also
+    // reicht IsEntityActive() hier nicht - sonst steht die Einheit eine volle PauseDuration vor der Leiche.
+    // Gleiches Muster wie UAttackStateProcessor::ClientExecute.
+    FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
+    const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
+
+    if (bIsTargetDead)
+    {
+        if (!StateFrag.SwitchingStateClient)
+        {
+            StateFrag.SwitchingStateClient = true;
+            StateFrag.StateTimerClient = 0.f;
+
+            StateFrag.PlaceholderSignal = UnitSignals::Idle;
+            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
+            {
+                UnitBase->UnitStatePlaceholder = UnitData::Idle;
+            }
+
+            auto& Defer = Context.Defer();
+            if (StateFrag.CanAttack && StateFrag.IsInitialized)
+            {
+                Defer.AddTag<FMassStateDetectTag>(Entity);
+            }
+            Defer.RemoveTag<FMassStatePauseTag>(Entity);
+            Defer.AddTag<FMassStateIdleTag>(Entity);
+        }
+        return;
+    }
+
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;

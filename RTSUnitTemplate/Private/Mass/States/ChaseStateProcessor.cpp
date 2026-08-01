@@ -434,12 +434,56 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassEntityManager& EntityMa
     {
         if (FMassClientPredictionFragment* Pred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
         {
-            if (const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+            // The prediction IS the client's local move target: UUnitMovementProcessor steers to Pred.Location
+            // and URunStateProcessor::ExecuteClient measures ARRIVAL against it while bHasData is set. Pinning it
+            // to the current transform means "stop here" - correct only for a placeholder that does NOT move.
+            // With PlaceholderSignal == Run we add FMassStateRunTag below, so the pin would make the unit measure
+            // its distance to ITSELF, "arrive" on the very next Run tick and fall back to Idle where it stands.
+            //
+            // Resume target for a Run placeholder = StateFrag.StoredLocation - exactly what ExecuteServer resumes
+            // to on this same lost-target branch, so client and server converge. Do NOT reuse the incoming
+            // Pred.Location: the chase loop above overwrites it with TargetFrag.LastKnownLocation every tick, so
+            // it points at the enemy we just lost, not at the commanded destination.
+            if (StateFrag.PlaceholderSignal == UnitSignals::Run)
             {
-                Pred->Location = TF->GetTransform().GetLocation();
+                FVector ResumeLocation = StateFrag.StoredLocation;
+                if (ResumeLocation.IsNearlyZero())
+                {
+                    // A Run placeholder mirrored from the replicated actor state never sets StoredLocation on the
+                    // client - fall back to the replicated server target, as UPauseStateProcessor::ClientExecute
+                    // does for its own Run placeholder.
+                    if (const FMassMoveTargetFragment* MoveTargetFrag = EntityManager.GetFragmentDataPtr<FMassMoveTargetFragment>(Entity))
+                    {
+                        ResumeLocation = MoveTargetFrag->Center;
+                    }
+                }
+
+                if (!ResumeLocation.IsNearlyZero())
+                {
+                    Pred->Location = ResumeLocation;
+                    if (const FMassCombatStatsFragment* StatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+                    {
+                        Pred->PredDesiredSpeed = StatsPtr->RunSpeed;
+                    }
+                    Pred->bHasData = true;
+                }
+                else if (const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+                {
+                    // Nothing sane to resume to - keep the stop-here behaviour rather than steer to world origin.
+                    Pred->Location = TF->GetTransform().GetLocation();
+                    Pred->PredDesiredSpeed = 0.f;
+                    Pred->bHasData = true;
+                }
             }
-            Pred->PredDesiredSpeed = 0.f;
-            Pred->bHasData = true;
+            else
+            {
+                if (const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+                {
+                    Pred->Location = TF->GetTransform().GetLocation();
+                }
+                Pred->PredDesiredSpeed = 0.f;
+                Pred->bHasData = true;
+            }
         }
 
         StateFrag.SwitchingStateClient = true;

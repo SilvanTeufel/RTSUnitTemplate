@@ -5,7 +5,8 @@
 #include "MassEntityManager.h"
 #include "MassCommonFragments.h"                    // FTransformFragment (not required, kept for parity)
 #include "MassMovementFragments.h"                  // FMassVelocityFragment
-#include "Mass/UnitMassTag.h"                       // FMassAIStateFragment + all FMassState* tags
+#include "MassNavigationFragments.h"                // FMassMoveTargetFragment (replicated move slot)
+#include "Mass/UnitMassTag.h"                       // FMassAIStateFragment + FMassClientPredictionFragment + all FMassState* tags
 #include "Mass/Replication/ReplicationSettings.h"   // RTSReplicationSettings
 
 UZeroStateTagRecoveryProcessor::UZeroStateTagRecoveryProcessor(): EntityQuery()
@@ -23,6 +24,10 @@ void UZeroStateTagRecoveryProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	// CLIENT decision inputs. Velocity is unusable on the client here (see Execute).
+	// Both Optional, so archetype matching is unchanged - nothing recovered before stops being recovered.
+	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 
 	// Not-yet-initialized / transient exclusions.
 	EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
@@ -83,13 +88,27 @@ void UZeroStateTagRecoveryProcessor::Execute(FMassEntityManager& EntityManager, 
 	const float MinAge = MinAgeSeconds;
 	const float MoveSq = MovingSpeedSq;
 
+	// CLIENT: FMassVelocityFragment cannot decide this. Every processor that WRITES it requires one of
+	// the very state tags this archetype is missing by definition, so the value is a frozen leftover that
+	// UClientReplicationProcessor then only ever damps down (*=0.8f, *=0.05f). It is an OUTPUT of the state
+	// we are trying to infer - the decision would be circular. Decide from the REPLICATED move slot
+	// instead: the same (DesiredSpeed > 10 || Pred.bHasData) test the reconciler itself uses. MoveTarget is
+	// safe to trust here because the bubble apply forces DesiredSpeed = 0 whenever the server reports no
+	// move slot.
+	// SERVER / STANDALONE keep the original velocity rule - there velocity IS authoritative.
+	const bool bIsNetClient = World->IsNetMode(NM_Client);
+
 	EntityQuery.ForEachEntityChunk(Context,
-		[Now, MinAge, MoveSq](FMassExecutionContext& ChunkContext)
+		[Now, MinAge, MoveSq, bIsNetClient](FMassExecutionContext& ChunkContext)
 	{
 		const int32 Num = ChunkContext.GetNumEntities();
 		const TConstArrayView<FMassAIStateFragment> States = ChunkContext.GetFragmentView<FMassAIStateFragment>();
 		const TConstArrayView<FMassVelocityFragment> Vels = ChunkContext.GetFragmentView<FMassVelocityFragment>();
 		const bool bHasVel = (Vels.Num() == Num);
+		const TConstArrayView<FMassMoveTargetFragment> Moves = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+		const bool bHasMove = (Moves.Num() == Num);
+		const TConstArrayView<FMassClientPredictionFragment> Preds = ChunkContext.GetFragmentView<FMassClientPredictionFragment>();
+		const bool bHasPred = (Preds.Num() == Num);
 
 		for (int32 i = 0; i < Num; ++i)
 		{
@@ -100,7 +119,23 @@ void UZeroStateTagRecoveryProcessor::Execute(FMassEntityManager& EntityManager, 
 			}
 
 			const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-			const bool bMoving = bHasVel && (Vels[i].Value.SizeSquared() > MoveSq);
+
+			bool bMoving;
+			if (bIsNetClient)
+			{
+				// Mirrors the reconciler's own bIsMoving test, so the tag we inject agrees with the pass
+				// that will immediately re-evaluate it. A live client prediction counts as moving:
+				// ApplyReplicatedTagBits refuses to stamp Idle while bPredicting for the same reason - a
+				// wrong Idle turns on bIsStationaryAttack and the hard velocity brake, killing the
+				// prediction and making the wrong state self-reinforcing.
+				bMoving = (bHasMove && Moves[i].DesiredSpeed.Get() > 10.f) ||
+				          (bHasPred && Preds[i].bHasData);
+			}
+			else
+			{
+				bMoving = bHasVel && (Vels[i].Value.SizeSquared() > MoveSq);
+			}
+
 			if (bMoving)
 			{
 				ChunkContext.Defer().AddTag<FMassStateRunTag>(Entity);

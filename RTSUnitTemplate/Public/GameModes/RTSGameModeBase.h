@@ -145,7 +145,7 @@ public:
 	void TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool bWon, AWinLoseConfigActor* Config);
 
 	// Enter read-only spectate for the given controller (called on the defeat branch of TriggerWinLoseForPlayer).
-	// Base implementation is an intentional no-op so all existing games are unaffected; the project's
+	// Base implementation is an intentional no-op so all existing games are unaffected;
 	// AExodusGameMode overrides this to swap the defeated player's pawn for a spectator camera.
 	UFUNCTION(BlueprintCallable, Category="RTSUnitTemplate|Spectator")
 	virtual void EnterSpectate(AController* Controller, bool bRevealAll);

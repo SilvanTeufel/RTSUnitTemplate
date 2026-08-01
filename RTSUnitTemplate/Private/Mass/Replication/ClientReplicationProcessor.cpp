@@ -289,8 +289,13 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						FinalXf = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(UseItem->Location), LocalScale);
 						bFromBubble = true;
 
-						// Apply TagBits
-						ApplyReplicatedTagBits(EntityManager, ChunkCtx.GetEntity(EntityIdx), UseItem->TagBits);
+						// Apply TagBits. The authoritative move speed (MoveData bits 8-19, same decode as
+						// the Move Target block below) is only valid when the move slot is present; it lets
+						// the zero-state-tag backstop pick Run vs Idle instead of always guessing Idle.
+						const float ReplDesiredSpeed = (UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove)
+							? (float)((UseItem->MoveData >> 8) & 0xFFF)
+							: 0.f;
+						ApplyReplicatedTagBits(EntityManager, ChunkCtx.GetEntity(EntityIdx), UseItem->TagBits, ReplDesiredSpeed);
 
 						// AI Target Slot 1
 						if (AITargetList.IsValidIndex(EntityIdx))

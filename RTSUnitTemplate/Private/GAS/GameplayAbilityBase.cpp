@@ -6,6 +6,7 @@
 #include "Engine/GameInstance.h"
 
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/MassUnitBase.h" // SwitchEntityTag
 #include "Containers/Map.h"
 #include "Containers/Set.h"
 #include "Engine/World.h"
@@ -223,24 +224,10 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		}
 	}
 
-	if (bUseCastingFallbackProcessor && ActorInfo && ActorInfo->IsNetAuthority())
-	{
-		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
-		{
-			if (Unit->MassActorBindingComponent)
-			{
-				FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
-				if (Entity.IsValid())
-				{
-					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
-					{
-						MassSubsystem->GetMutableEntityManager().Defer().AddTag<FMassStateCastingTag>(Entity);
-						MassSubsystem->GetMutableEntityManager().Defer().AddTag<FMassCastingFallbackTag>(Entity);
-					}
-				}
-			}
-		}
-	}
+	// NOTE: the bUseCastingFallbackProcessor block used to sit here. It now runs AFTER the
+	// bStopMovementOnActivation block below, because that block ends with SetUnitState(Idle) and would
+	// otherwise overwrite the Casting actor state we are about to set. See the block before
+	// Super::ActivateAbility().
 
 	if (bStopMovementOnActivation && ActorInfo && ActorInfo->IsNetAuthority())
 	{
@@ -276,6 +263,49 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		}
 	}
 	
+	// Enter the Casting state EXCLUSIVELY. This used to be a bare Defer().AddTag<FMassStateCastingTag>,
+	// which left the unit's previous state tag in place. A Casting+Run / Casting+Attack / Casting+Pause /
+	// Casting+<worker> entity matches NO query at all: UCastingStateProcessor excludes those tags
+	// (CastingStateProcessor.cpp:34-46) and every one of those processors excludes Casting. StateTimer
+	// then never advances, so EndCast never fires, OnAbilityCastComplete never runs, the Blueprint never
+	// ends the ability, and the Casting tag (and animation) stay forever. The watchdog cannot see it
+	// either - its condition needs the tag to be MISSING (CastingFallBackProcessor.cpp:69).
+	// SwitchEntityTag strips every other state tag, sets the actor UnitState to Casting and zeroes
+	// StateTimer, which is exactly the invariant this state machine relies on.
+	if (bUseCastingFallbackProcessor && ActorInfo && ActorInfo->IsNetAuthority())
+	{
+		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			if (Unit->MassActorBindingComponent)
+			{
+				FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
+				if (Entity.IsValid())
+				{
+					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
+					{
+						FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+						if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
+						{
+							MassUnit->SwitchEntityTag(FMassStateCastingTag::StaticStruct());
+						}
+						else
+						{
+							EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity);
+						}
+
+						// SwitchEntityTag's removal list (MassUnitBase.cpp:1043-1059) omits these two, so a
+						// worker casting mid-repair would still end up double-tagged.
+						EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(Entity);
+						EntityManager.Defer().RemoveTag<FMassStateRepairTag>(Entity);
+
+						EntityManager.Defer().AddTag<FMassCastingFallbackTag>(Entity);
+					}
+				}
+			}
+		}
+	}
+
 	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 }
 

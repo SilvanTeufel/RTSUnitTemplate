@@ -10,6 +10,7 @@
 #include "MassExecutionContext.h"
 #include "MassReplicationFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/Signals/MySignals.h"                 // UnitSignals::* used by the PlaceholderSignal refresh
 #include "Mass/MassUnitVisualFragments.h"
 #include "MassEntitySubsystem.h"
 #include "GAS/AttributeSetBase.h"
@@ -240,6 +241,42 @@ void UUnitActorToFragmentSyncProcessor::SyncAIState(const AUnitBase& Unit, FMass
 	AIState.CanAttack = Unit.CanAttack;
 	AIState.CanMove = Unit.CanMove;
 	AIState.HoldPosition = Unit.bHoldPosition;
+
+	// CLIENT: refresh the (non-replicated) PlaceholderSignal from the REPLICATED UnitStatePlaceholder.
+	// The fragment value is seeded exactly once (UnitClientTagSyncProcessor::HandleUnitSpawned ->
+	// AMassUnitBase::SwitchEntityTagByState), so a resume-state the SERVER assigned (patrol, worker job,
+	// repair) never reaches the client, and ChaseStateProcessor::SwitchToPlaceholderState,
+	// PauseStateProcessor::ClientExecute and CastingStateProcessor::HandleClientSetToPlaceholder then all
+	// fall through to Idle. Client-only guard, so server, listen-server host and standalone are untouched.
+	//
+	// A fragment that already says Run is NEVER overwritten: the server move paths write only the
+	// FRAGMENT and leave the replicated enum at the unit's OLD job for the whole move, so adopting it per
+	// tick would delete the predicted Run and the unit would stop instead of resuming. This mirrors the
+	// bSuppressWorkerStomp rule in ApplyReplicatedTagBits ("a fresh client move command beats a stale
+	// replicated job"). It needs no timer: URunStateProcessor::SwitchToIdleState clears the Run on
+	// arrival, releasing the guard.
+	if (!Unit.HasAuthority() && AIState.PlaceholderSignal != UnitSignals::Run)
+	{
+		FName Mapped = NAME_None;
+		switch (Unit.UnitStatePlaceholder)
+		{
+		case UnitData::Run:                    Mapped = UnitSignals::Run; break;
+		case UnitData::PatrolRandom:           Mapped = UnitSignals::PatrolRandom; break;
+		case UnitData::PatrolIdle:             Mapped = UnitSignals::PatrolIdle; break;
+		case UnitData::GoToBase:               Mapped = UnitSignals::GoToBase; break;
+		case UnitData::GoToBuild:              Mapped = UnitSignals::GoToBuild; break;
+		case UnitData::Build:                  Mapped = UnitSignals::Build; break;
+		case UnitData::GoToResourceExtraction: Mapped = UnitSignals::GoToResourceExtraction; break;
+		case UnitData::ResourceExtraction:     Mapped = UnitSignals::ResourceExtraction; break;
+		case UnitData::GoToRepair:             Mapped = UnitSignals::GoToRepair; break;
+		case UnitData::Repair:                 Mapped = UnitSignals::Repair; break;
+		default: break; // Idle / Patrol (the property default) / unmapped: keep the locally derived value
+		}
+		if (!Mapped.IsNone() && Mapped != AIState.PlaceholderSignal)
+		{
+			AIState.PlaceholderSignal = Mapped;
+		}
+	}
 
 	if (Unit.MassActorBindingComponent)
 	{

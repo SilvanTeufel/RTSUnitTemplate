@@ -806,6 +806,15 @@ void AExtendedControllerBase::ClearMassStateTagsLocally(FMassEntityHandle Entity
 	EntityManager.Defer().RemoveTag<FMassStateEvasionTag>(Entity);
 	EntityManager.Defer().RemoveTag<FMassStateChargingTag>(Entity);
 	EntityManager.Defer().RemoveTag<FMassStateCastingTag>(Entity);
+	// Pause MUST be stripped before parking the unit in Idle. Idle+Pause matches NEITHER
+	// UIdleStateProcessor (excludes Pause, IdleStateProcessor.cpp:59) NOR UPauseStateProcessor
+	// (excludes Idle, PauseStateProcessor.cpp:64), and UZeroStateTagRecoveryProcessor excludes both
+	// (:43-44) -> the entity matches no query at all, StateTimer never advances and the unit is frozen
+	// permanently, with UnitClientTagSyncProcessor pinning the actor state (and therefore the animation)
+	// to Pause every frame. See the same analysis at UnitMassTag.h:1917. That comment assumed every
+	// Idle+Pause producer was a Pause producer; this function is the mirror case - an Idle producer that
+	// did not strip Pause - and it runs on EVERY ability activation with bStopMovementOnActivation.
+	EntityManager.Defer().RemoveTag<FMassStatePauseTag>(Entity);
 
 	EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
 }

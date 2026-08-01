@@ -1735,7 +1735,10 @@ inline uint32 BuildReplicatedTagBits(const FMassEntityManager& EntityManager, FM
 	return Bits;
 }
 
-inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntityHandle Entity, uint32 Bits)
+// ReplicatedDesiredSpeed is the server's authoritative move speed for this entity (0 when the move
+// slot is absent). It is only consulted by the zero-state-tag backstop at the end of this function.
+// Defaulted so the signature stays source-compatible.
+inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntityHandle Entity, uint32 Bits, float ReplicatedDesiredSpeed = 0.f)
 {
 	// If client-side prediction is active, skip syncing certain tags (start with Idle)
 	bool bPredicting = false;
@@ -1912,16 +1915,33 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		if ((Bits & ReplicatedStateMask) == 0)
 		{
 			// Respect a client-injected, bit-less state (move-order Run at CustomControllerBase.cpp,
-			// local Chase/Attack) and any Idle we already parked; else add a neutral Idle so the entity
-			// re-enters the state-processor pipeline instead of being frozen with no tag.
+			// local Chase/Attack), a locally entered Pause, and any Idle we already parked; else add a
+			// neutral state so the entity re-enters the state-processor pipeline instead of being frozen.
+			// Pause MUST be listed: Idle+Pause matches NEITHER UIdleStateProcessor (excludes Pause) NOR
+			// UPauseStateProcessor (excludes Idle), and UZeroStateTagRecoveryProcessor excludes both ->
+			// permanent freeze. Every other Pause producer strips Idle first, so this was the only source.
 			const bool bAlreadyStable =
 				DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct())   ||
 				DoesEntityHaveTag(EntityManager, Entity, FMassStateChaseTag::StaticStruct())  ||
 				DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
+				DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct())  ||
 				DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
 			if (!bAlreadyStable && !bPredicting)
 			{
-				EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
+				// Idle is the wrong guess while the server is moving: it makes bIsStationaryAttack true
+				// in UClientReplicationProcessor (Velocity *= 0.05f, Force/Steering zeroed, Kp pinned),
+				// which pins velocity at 0 so the state sticks. Decide from the AUTHORITATIVE replicated
+				// speed - NOT from Slot_TargetIsMove (bit 28 marks slot occupancy, and is set on standing
+				// units too) and NOT from local velocity (the damping above has already zeroed it).
+				constexpr float ServerMovingSpeedThreshold = 10.f;
+				if (ReplicatedDesiredSpeed > ServerMovingSpeedThreshold)
+				{
+					EntityManager.Defer().AddTag<FMassStateRunTag>(Entity);
+				}
+				else
+				{
+					EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
+				}
 			}
 		}
 		else if (!bPredicting)
