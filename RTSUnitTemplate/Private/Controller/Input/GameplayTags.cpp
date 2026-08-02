@@ -5,14 +5,27 @@
 #include "Engine/EngineTypes.h"
 
 FGameplayTags FGameplayTags::GameplayTags;
+bool FGameplayTags::bNativeTagsRegistered = false;
+
+void FGameplayTags::RegisterNativeTags()
+{
+	if (bNativeTagsRegistered)
+	{
+		return;
+	}
+	bNativeTagsRegistered = true;
+
+	GameplayTags.AddAllTags(UGameplayTagsManager::Get());
+}
 
 void FGameplayTags::InitializeNativeTags()
 {
-	UGameplayTagsManager& GameplayTagsManager = UGameplayTagsManager::Get();
+	RegisterNativeTags();
 
-	GameplayTags.AddAllTags(GameplayTagsManager);
-
-	GameplayTagsManager.DoneAddingNativeTags();
+	// Safe to call more than once: DoneAddingNativeTags early-outs on bDoneAddingNativeTags
+	// (GameplayTagsManager.cpp:2710) and additionally requires GEngine, so it no-ops during
+	// module startup and the engine's own PostEngineInit binding takes care of the flush.
+	UGameplayTagsManager::Get().DoneAddingNativeTags();
 }
 
 void FGameplayTags::AddAllTags(UGameplayTagsManager& Manager)

@@ -80,6 +80,20 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void CheckForLoadingWidget();
 
+	/**
+	 * Shown the INSTANT a level travel is kicked off. ServerTravel only sets World->NextURL; the engine
+	 * finishes the frame and loads the new map on a later TickWorldTravel, so without this the player
+	 * keeps staring at the old level for the whole load. Covers that gap; the map change tears the
+	 * widget down on its own. This is separate from Client_ShowLoadingWidget, which runs AFTER arrival.
+	 */
+	UFUNCTION(Client, Reliable)
+	void Client_ShowTravelLoadingScreen();
+
+	/** Widget used by Client_ShowTravelLoadingScreen. Falls back to the GameState's
+	 *  LoadingWidgetConfig.WidgetClass when left unset, so existing levels need no extra setup. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	TSubclassOf<class ULoadingWidget> TravelLoadingWidgetClass = nullptr;
+
 	void Retry_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTotalDuration, float InServerWorldTimeStart, int32 InTriggerId, int32 RetryCount);
 
 	ACameraControllerBase();

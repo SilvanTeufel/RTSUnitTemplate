@@ -138,8 +138,52 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 		}
 	}
 
+	// Put every player behind a loading screen BEFORE the travel starts. ServerTravel only sets
+	// World->NextURL; the map is loaded on a later TickWorldTravel, and until then the old level keeps
+	// rendering. Without this the player sits in the old level for the whole load.
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
+		{
+			PC->Client_ShowTravelLoadingScreen();
+		}
+	}
+
 	World->ServerTravel(MapName);
 }
+
+void ACameraControllerBase::Client_ShowTravelLoadingScreen_Implementation()
+{
+	if (!IsLocalPlayerController())
+	{
+		return;
+	}
+
+	TSubclassOf<ULoadingWidget> ClassToUse = TravelLoadingWidgetClass;
+	if (!ClassToUse)
+	{
+		// Reuse whatever the level already configured for the post-arrival loading widget, so this
+		// works out of the box on every existing map.
+		if (AResourceGameState* GS = GetWorld() ? GetWorld()->GetGameState<AResourceGameState>() : nullptr)
+		{
+			ClassToUse = GS->LoadingWidgetConfig.WidgetClass;
+		}
+	}
+
+	if (!ClassToUse)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Client_ShowTravelLoadingScreen: no widget class set (TravelLoadingWidgetClass and GameState LoadingWidgetConfig.WidgetClass are both null)."));
+		return;
+	}
+
+	if (ULoadingWidget* TravelWidget = CreateWidget<ULoadingWidget>(this, ClassToUse))
+	{
+		// High ZOrder so it covers the HUD that is still up from the old level.
+		TravelWidget->AddToViewport(1000);
+		StopAllCameraMovement();
+	}
+}
+
 #include "AIController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Actors/AutoCamWaypoint.h"

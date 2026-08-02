@@ -402,9 +402,14 @@ void UDetectionProcessor::Execute(
                 const float DistSq = FVector::DistSquared2D(Det.Location, Tgt.Location);
 
                 // can I attack their type?
-                if ((Det.Char->bCanOnlyAttackGround && Tgt.Char->bIsFlying) ||
-                    (Det.Char->bCanOnlyAttackFlying && !Tgt.Char->bIsFlying) ||
-                    (Tgt.Char->bIsInvisible && !Det.Char->bCanDetectInvisible))
+                // Char is OPTIONAL on a target (it is fetched with GetFragmentDataPtr and the
+                // population sites let it stay null). A missing Char means "unknown" -> treat the
+                // target as a normal ground, visible unit, matching the !Tgt.Char handling below.
+                const bool bTgtIsFlying    = Tgt.Char && Tgt.Char->bIsFlying;
+                const bool bTgtIsInvisible = Tgt.Char && Tgt.Char->bIsInvisible;
+                if ((Det.Char && Det.Char->bCanOnlyAttackGround && bTgtIsFlying) ||
+                    (Det.Char && Det.Char->bCanOnlyAttackFlying && !bTgtIsFlying) ||
+                    (bTgtIsInvisible && !(Det.Char && Det.Char->bCanDetectInvisible)))
                 {
                     continue;
                 }
@@ -485,7 +490,10 @@ void UDetectionProcessor::Execute(
                 // Fallback: use attacker sight counts if present AND within target’s effective lose-sight
                 if (!bFoundNew && !bCurrentStillViable)
                 {
-                    const int32* AttackingSightCount = Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId);
+                    // Sight is an OPTIONAL fragment (see the two population sites above, and the guarded
+                    // reads further up) - a target entity without FMassSightFragment leaves it null.
+                    // Dereferencing it here crashed UDetectionProcessor::Execute.
+                    const int32* AttackingSightCount = Tgt.Sight ? Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId) : nullptr;
                     const float DetEffectiveLoseSight = Det.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
                     const float DetEffectiveLoseSightSq = FMath::Square(DetEffectiveLoseSight);
                     if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < DetEffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq)

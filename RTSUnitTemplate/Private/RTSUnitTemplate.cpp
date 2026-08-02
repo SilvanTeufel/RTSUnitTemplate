@@ -2,12 +2,24 @@
 #include "RTSUnitTemplate.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
+#include "GameplayTagsManager.h"
+#include "Controller/Input/GameplayTags.h"
 #include "Mass/Replication/ReplicationBootstrap.h"
 
 #define LOCTEXT_NAMESPACE "FRTSUnitTemplateModule"
 
 void FRTSUnitTemplateModule::StartupModule()
 {
+	// Register the native InputTag.* tags ourselves. They used to be registered only from
+	// UAssetManagerBase::StartInitialLoading, which just never runs unless the consuming project sets
+	// AssetManagerClassName=/Script/RTSUnitTemplate.AssetManagerBase in its DefaultEngine.ini. Without
+	// that line every InputTag is invalid, BindActionByTag binds nothing, and the whole keyboard/mouse
+	// setup silently does nothing. Config/Engine.ini ships the setting too; this is the belt to that
+	// suspenders, and keeps working if the project supplies its own AssetManager.
+	// CallOrRegister runs the delegate immediately when native tags were already flushed.
+	NativeTagsHandle = UGameplayTagsManager::CallOrRegister_OnAddNativeTagsDelegate(
+		FSimpleMulticastDelegate::FDelegate::CreateStatic(&FGameplayTags::RegisterNativeTags));
+
 	// Ensure the Mass replication bubble info class is registered for every world as early as possible
 	PreWorldInitHandle = FWorldDelegates::OnPreWorldInitialization.AddLambda([](UWorld* World, const UWorld::InitializationValues IVS)
 	{
@@ -38,6 +50,11 @@ void FRTSUnitTemplateModule::StartupModule()
 
 void FRTSUnitTemplateModule::ShutdownModule()
 {
+	if (NativeTagsHandle.IsValid())
+	{
+		UGameplayTagsManager::UnregisterNativeTagDelegate(NativeTagsHandle);
+		NativeTagsHandle = FDelegateHandle();
+	}
 	if (WorldInitHandle.IsValid())
 	{
 		FWorldDelegates::OnPostWorldInitialization.Remove(WorldInitHandle);

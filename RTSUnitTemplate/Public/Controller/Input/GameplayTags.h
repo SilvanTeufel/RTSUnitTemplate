@@ -13,7 +13,16 @@ public:
 
 	static const FGameplayTags& Get() { return GameplayTags; }
 
+	/** Registers every native tag AND flushes the native-tag list (DoneAddingNativeTags).
+	 *  Called from UAssetManagerBase::StartInitialLoading, i.e. only when the consuming project
+	 *  actually sets AssetManagerClassName=/Script/RTSUnitTemplate.AssetManagerBase. */
 	static void InitializeNativeTags();
+
+	/** Registration ONLY — never calls DoneAddingNativeTags. This is what the module startup path
+	 *  uses: UGameplayTagsManager broadcasts its add-native-tags delegate from INSIDE
+	 *  DoneAddingNativeTags (GameplayTagsManager.cpp:2717) and only sets bDoneAddingNativeTags
+	 *  afterwards (:2720), so a callback that flushed again would re-enter. Idempotent. */
+	static void RegisterNativeTags();
 
 	//Input Tags
 	FGameplayTag InputTag_LeftClick_Pressed;
@@ -106,4 +115,7 @@ protected:
 private:
 
 	static FGameplayTags GameplayTags;
+
+	// Guards RegisterNativeTags against doing the work twice (module startup + AssetManager).
+	static bool bNativeTagsRegistered;
 };
