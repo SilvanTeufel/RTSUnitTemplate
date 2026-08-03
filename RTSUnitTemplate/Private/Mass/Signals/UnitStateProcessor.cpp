@@ -823,7 +823,7 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
             const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
 
         	
-                    SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
+                    SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed, Entity);
                     SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, Entity);
                     StateFrag.StateTimer = 0.f;
         } // Ende for each entity
@@ -894,7 +894,7 @@ void UUnitStateProcessor::ForceSetPatrolRandomTarget(FMassEntityHandle& Entity)
             const FMassCombatStatsFragment& StatsFrag = *StatsFragPtr;
     	
             // Rufe die NavSys-abhängige Funktion sicher hier auf
-            SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
+            SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed, Entity);
 
             // Signalisiere den Zustandswechsel
             // SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, Entity);
@@ -3170,7 +3170,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 							// Fallback: Wenn kein Wegpunkt da ist, nutze die gerade gesetzte StoredLocation (Spawn-Punkt)
 							PatrolFrag.TargetWaypointLocation = StateFrag.StoredLocation;
 						}
-						SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed);
+						SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed, E);
 					}
 				}
 				

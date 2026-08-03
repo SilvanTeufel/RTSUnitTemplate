@@ -1125,7 +1125,33 @@ inline void PredictWorkerStop(
 	Pred.bHasData = true;
 }
 
-inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, FMassAIStateFragment* StateFragPtr, UNavigationSystemV1* NavSys, UWorld* World, float Speed)
+/**
+ * A unit's "home" while it belongs to a waypoint: a fixed point scattered inside
+ * Radius around the waypoint, unique per entity.
+ *
+ * Every return-to-post path in the state machine targets FMassAIStateFragment::StoredLocation.
+ * Storing the bare waypoint made all units pile up on the exact same spot, and computing a
+ * fresh random point each time made client and server disagree about where the unit belongs,
+ * which showed up as jitter. This is derived from the entity index only, so it is stable over
+ * time AND identical on both sides. Golden-angle distribution with a sqrt radius, so points
+ * spread evenly over the disc instead of bunching in the middle (same idea as
+ * CalculateChaseOffset in ChaseStateProcessor).
+ */
+inline FVector GetPatrolHomeLocation(const FMassEntityHandle& Entity, const FVector& WaypointLocation, float Radius)
+{
+	if (!Entity.IsSet() || Radius <= KINDA_SMALL_NUMBER)
+	{
+		return WaypointLocation;
+	}
+
+	const float Index = static_cast<float>(Entity.Index);
+	const float AngleRad = FMath::DegreesToRadians(FMath::Fmod(Index * 137.50776405f, 360.0f));
+	const float R = Radius * FMath::Sqrt(FMath::Frac(Index * 0.61803398875f));
+
+	return WaypointLocation + FVector(R * FMath::Cos(AngleRad), R * FMath::Sin(AngleRad), 0.0f);
+}
+
+inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, FMassAIStateFragment* StateFragPtr, UNavigationSystemV1* NavSys, UWorld* World, float Speed, const FMassEntityHandle& Entity = FMassEntityHandle())
 {
 	FVector BaseWaypointLocation = PatrolFrag.TargetWaypointLocation; // Muss korrekt gesetzt sein!
 	if (BaseWaypointLocation == FVector::ZeroVector)
@@ -1153,7 +1179,18 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 		StateFragPtr->StoredLocation = RandomPoint.Location;
 		UpdateMoveTarget(MoveTarget, RandomPoint.Location, Speed, World);
 	}
-	
+	else
+	{
+		// The navmesh query can fail for a perfectly good waypoint - a small
+		// RandomPatrolRadius, a waypoint sitting slightly off the navmesh, or a flying
+		// unit above it are enough. Doing nothing here left the unit with NO move target
+		// and StoredLocation still on its spawn point, so it never travelled and every
+		// return-to-post path dragged it back to where it started. Fall back to the unit's
+		// own home slot so a failing navmesh does not pile everyone onto the waypoint.
+		const FVector Fallback = GetPatrolHomeLocation(Entity, BaseWaypointLocation, PatrolFrag.RandomPatrolRadius);
+		StateFragPtr->StoredLocation = Fallback;
+		UpdateMoveTarget(MoveTarget, Fallback, Speed, World);
+	}
 }
 
 inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEntityHandle Entity, const UScriptStruct* TagType)

@@ -102,9 +102,15 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
                 }
             }
             
-            // --- Update StoredLocation to current position ---
+            // --- Update StoredLocation ---
+            // Keep it pointing at the waypoint while the unit belongs to one: StoredLocation
+            // is the target every return-to-post path uses (chase-abort, idle walk-back).
+            // Overwriting it with the current position each tick made a unit that idles
+            // somewhere en route treat that spot as its home and turn back to it later.
             const FVector CurrentLocation = TransformFrag.GetTransform().GetLocation();
-            StateFrag.StoredLocation = CurrentLocation;
+            StateFrag.StoredLocation = PatrolFrag.TargetWaypointLocation.IsNearlyZero()
+                ? CurrentLocation
+                : GetPatrolHomeLocation(Entity, PatrolFrag.TargetWaypointLocation, PatrolFrag.RandomPatrolRadius);
 
             // --- Stop Movement & Update Timer ---
             Velocity.Value = FVector::ZeroVector; // Modification stays here

@@ -106,6 +106,10 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
         const bool bHasCharFrag = CharacteristicsList.Num() > 0;
         const auto PathList = ChunkContext.GetFragmentView<FMassUnitPathFragment>();
         const bool bHasPathFrag = PathList.Num() > 0;
+        // Mirrors ExecuteServer: needed to keep StoredLocation on the waypoint for
+        // travelling units (see the StoredLocation write at the end of the loop).
+        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
+        const bool bHasPatrolFrag = PatrolList.Num() > 0;
         auto PredictionList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
         const bool bHasPredList = PredictionList.Num() > 0;
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>();
@@ -119,6 +123,16 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             const FTransform& Transform = TransformList[i].GetTransform();
             const FMassAgentCharacteristicsFragment* CharFrag = bHasCharFrag ? &CharacteristicsList[i] : nullptr;
             const FMassUnitPathFragment* PathFrag = bHasPathFrag ? &PathList[i] : nullptr;
+
+            const FMassPatrolFragment* PatrolFrag = bHasPatrolFrag ? &PatrolList[i] : nullptr;
+
+            // Same order as ExecuteServer: set the home first, so anything below that reads
+            // StoredLocation already sees the waypoint and not a stale spawn point.
+            if (PatrolFrag && !PatrolFrag->TargetWaypointLocation.IsNearlyZero())
+            {
+                StateFrag.StoredLocation = GetPatrolHomeLocation(
+                    Entity, PatrolFrag->TargetWaypointLocation, PatrolFrag->RandomPatrolRadius);
+            }
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
@@ -242,7 +256,11 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     Pred.bHasData = false;
                 }
             }
-            StateFrag.StoredLocation = Transform.GetLocation();
+            // Units with a waypoint already had their home set at the top of the loop.
+            if (!PatrolFrag || PatrolFrag->TargetWaypointLocation.IsNearlyZero())
+            {
+                StateFrag.StoredLocation = Transform.GetLocation();
+            }
         }
     });
 }
@@ -344,7 +362,17 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             
 
             StateFrag.StateTimer += ExecutionInterval;
-            
+
+            // Refresh the unit's home BEFORE the walk-back branch below reads StoredLocation.
+            // Doing it at the end of the loop meant the first idle tick after a fight still
+            // saw the stale value (the spawn point), sent the unit all the way back there,
+            // and only then corrected to the waypoint - a visible detour.
+            if (PatrolFrag && !PatrolFrag->TargetWaypointLocation.IsNearlyZero())
+            {
+                StateFrag.StoredLocation = GetPatrolHomeLocation(
+                    Entity, PatrolFrag->TargetWaypointLocation, PatrolFrag->RandomPatrolRadius);
+            }
+
             if (PatrolFrag)
             {
                 bool bHasPatrolRoute = PatrolFrag->CurrentWaypointIndex != INDEX_NONE;
@@ -376,8 +404,13 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 }
             }
 
-            // Ensure units stay where they are if target is lost later
-            StateFrag.StoredLocation = Transform.GetLocation();
+            // Ensure units stay where they are if target is lost later.
+            // Units with a waypoint already had their home set at the top of the loop and
+            // must not be re-pinned to wherever a fight happened to end.
+            if (!PatrolFrag || PatrolFrag->TargetWaypointLocation.IsNearlyZero())
+            {
+                StateFrag.StoredLocation = Transform.GetLocation();
+            }
         }
     });
 }

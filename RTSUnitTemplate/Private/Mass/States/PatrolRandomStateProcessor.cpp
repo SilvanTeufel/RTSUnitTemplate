@@ -84,6 +84,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for StopMovement
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto PatrolList = ChunkContext.GetFragmentView<FMassPatrolFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -121,9 +122,41 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 
                 if (Dist <= AcceptanceRadius && !StateFrag.SwitchingState && bIsOldEnough)
                 {
+                    const FMassPatrolFragment& PatrolFrag = PatrolList[i];
+                    const bool bHasWaypoint = !PatrolFrag.TargetWaypointLocation.IsNearlyZero();
+
+                    // StoredLocation is the unit's "home": every return-to-post path
+                    // (ChaseStateProcessor's chase-abort, IdleStateProcessor's walk-back)
+                    // moves the unit there. Storing the position it happened to reach made
+                    // a unit that is still TRAVELLING to its waypoint turn around after a
+                    // fight. Its home is the waypoint, so store that instead.
+                    StateFrag.StoredLocation = bHasWaypoint
+                        ? GetPatrolHomeLocation(Entity, PatrolFrag.TargetWaypointLocation, PatrolFrag.RandomPatrolRadius)
+                        : CurrentLocation;
+
+                    // Idling between patrol legs is only allowed near the waypoint
+                    // (RandomPatrolRadius == mean of AWaypoint::PatrolCloseOffset). Arriving
+                    // at some intermediate point - e.g. a stale move target left over from a
+                    // chase - must not burn the PatrolCloseIdlePercentage roll far from the
+                    // goal, so re-target and keep going instead.
+                    if (bHasWaypoint &&
+                        FVector::Dist2D(CurrentLocation, PatrolFrag.TargetWaypointLocation)
+                            > PatrolFrag.RandomPatrolRadius + AcceptanceRadius)
+                    {
+                        // PISwitcher -> UUnitStateProcessor::IdlePatrolSwitcher is what actually
+                        // picks a NEW patrol target. UnitSignals::PatrolRandom would only swap
+                        // the state tags and leave the unit sitting on the reached target.
+                        StateFrag.SwitchingState = true;
+                        if (SignalSubsystem)
+                        {
+                            SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::PISwitcher, Entity);
+                        }
+                        StateFrag.StateTimer = 0.f;
+                        continue;
+                    }
+
                     StateFrag.SwitchingState = true;
-                    StateFrag.StoredLocation = CurrentLocation; // Speichere den erreichten Punkt als Rückkehrziel
-          
+
                     if (SignalSubsystem)
                     {
                         SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::PatrolIdle, Entity);

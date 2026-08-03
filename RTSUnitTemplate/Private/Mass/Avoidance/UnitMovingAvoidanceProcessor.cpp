@@ -2,6 +2,7 @@
 
 
 #include "Mass/Avoidance/UnitMovingAvoidanceProcessor.h"
+#include "Mass/Avoidance/UnitObstacleSnapshotSubsystem.h"
 #include "Avoidance/MassAvoidanceProcessors.h"
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "DrawDebugHelpers.h"
@@ -60,7 +61,12 @@ static TAutoConsoleVariable<float> CVarRTS_ClientMovingAvoidanceForceScale(
 	constexpr int32 MinTouchingCellCount = 4;
 	constexpr int32 MaxObstacleResults = MaxExpectedAgentsPerCell * MinTouchingCellCount;
 
+		// AvoidanceObstacleGrid is used ONLY for its immutable configuration (NumLevels, cell
+		// sizes, query-bounds math). Everything mutable - cells and items - comes from Snapshot,
+		// a game-thread copy taken once per frame, which is what makes running this off the game
+		// thread safe. See UUnitObstacleSnapshotSubsystem.
 		static void FindCloseObstacles(const FVector& Center, const FVector::FReal SearchRadius, const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid,
+									const UUnitObstacleSnapshotSubsystem& Snapshot,
 									TArray<FMassNavigationObstacleItem, TFixedAllocator<MaxObstacleResults>>& OutCloseEntities, const int32 MaxResults)
 		{
 			OutCloseEntities.Reset();
@@ -143,15 +149,16 @@ static TAutoConsoleVariable<float> CVarRTS_ClientMovingAvoidanceForceScale(
 
 			Cells.Sort([](const FSortingCell& A, const FSortingCell& B) { return A.SqDist < B.SqDist; });
 
-			// Defensive: cache reference to items once
-			const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = AvoidanceObstacleGrid.GetItems();
-			
+			// Items come from the frame snapshot, not the live grid: nothing mutates them while
+			// we walk the chain, so index checks below are bounds checks, not race guards.
+			const TSparseArray<FNavigationObstacleHashGrid2D::FItem>& Items = Snapshot.GetItems();
+
 			// Early exit if the sparse array is empty - prevents issues with uninitialized/cleared arrays
 			if (Items.Num() == 0)
 			{
 				return;
 			}
-			
+
 			for (const FSortingCell& SortedCell : Cells)
 			{
 				// Ensure Level is still within bounds before calling FindCell
@@ -160,7 +167,7 @@ static TAutoConsoleVariable<float> CVarRTS_ClientMovingAvoidanceForceScale(
 					continue;
 				}
 
-				if (const FNavigationObstacleHashGrid2D::FCell* Cell = AvoidanceObstacleGrid.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
+				if (const FNavigationObstacleHashGrid2D::FCell* Cell = Snapshot.FindCell(SortedCell.X, SortedCell.Y, SortedCell.Level))
 				{
 					// Validate starting index
 					int32 Idx = Cell->First;
@@ -169,7 +176,6 @@ static TAutoConsoleVariable<float> CVarRTS_ClientMovingAvoidanceForceScale(
 					constexpr int32 MaxSafetyIterations = 1024;
 					while (Idx != INDEX_NONE && SafetyCounter++ < MaxSafetyIterations)
 					{
-						// Combined immediate check to handle potential concurrent modifications of the sparse array.
 						if (Idx < 0 || Idx >= Items.GetMaxIndex() || !Items.IsValidIndex(Idx))
 						{
 							break;
@@ -346,6 +352,7 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 	ExecutionOrder.ExecuteAfter.Add(FName("LOD"));
 	ExecutionOrder.ExecuteAfter.Add(FName("UnitMovementProcessor"));
 	ExecutionOrder.ExecuteAfter.Add(FName("MassNavigationObstacleGridProcessor"));
+	ExecutionOrder.ExecuteAfter.Add(FName("UnitObstacleSnapshotProcessor"));
 	ExecutionOrder.ExecuteAfter.Add(FName("DynamicObstacleRegProcessor"));
 
 	// No need to execute before anything
@@ -360,7 +367,8 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 	// Runs on Server + Client + Standalone (same as default)
 	ExecutionFlags = static_cast<uint8>(EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
 
-	// Does not require Game Thread
+	// Safe off the game thread again: the mutable part of the obstacle grid is read from
+	// UUnitObstacleSnapshotSubsystem, an immutable per-frame copy taken on the game thread.
 	bRequiresGameThreadExecution = false;
 }
 
@@ -396,6 +404,8 @@ void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 	EntityQuery.AddTagRequirement<FMassDisableAvoidanceTag>(EMassFragmentPresence::None);
 	EntityQuery.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
 	ProcessorRequirements.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
+	ProcessorRequirements.AddSubsystemRequirement<UUnitObstacleSnapshotSubsystem>(EMassFragmentAccess::ReadOnly);
+	EntityQuery.AddSubsystemRequirement<UUnitObstacleSnapshotSubsystem>(EMassFragmentAccess::ReadOnly);
 	
 	EntityQuery.RegisterWithProcessor(*this);
 }
@@ -413,7 +423,15 @@ void UUnitMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, F
 QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
 	const UMassNavigationSubsystem* ContextNavSubsystem = Context.GetSubsystem<UMassNavigationSubsystem>();
-	if (!World || !ContextNavSubsystem)
+	const UUnitObstacleSnapshotSubsystem* ObstacleSnapshot = Context.GetSubsystem<UUnitObstacleSnapshotSubsystem>();
+	if (!World || !ContextNavSubsystem || !ObstacleSnapshot)
+	{
+		return;
+	}
+
+	// Before the first snapshot there is nothing safe to read - skip the frame rather than
+	// falling back to the live grid, which is exactly the race we are avoiding.
+	if (!ObstacleSnapshot->IsValidSnapshot())
 	{
 		return;
 	}
@@ -423,7 +441,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		return;
 	}
 
-		EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, ContextNavSubsystem](FMassExecutionContext& Context)
+		EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, ContextNavSubsystem, ObstacleSnapshot](FMassExecutionContext& Context)
 	{
 		const float DeltaTime = Context.GetDeltaTimeSeconds();
 		const double CurrentTime = World->GetTimeSeconds();
@@ -877,7 +895,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
 			// Find close obstacles
 			UE::UnitMassAvoidance::FindCloseObstacles(AgentLocation, MovingAvoidanceParams.ObstacleDetectionDistance,
-				AvoidanceObstacleGrid, CloseEntities, UE::UnitMassAvoidance::MaxObstacleResults);
+				AvoidanceObstacleGrid, *ObstacleSnapshot, CloseEntities, UE::UnitMassAvoidance::MaxObstacleResults);
 
 			// Remove unwanted and find the closests in the CloseEntities
 			const FVector::FReal DistanceCutOffSqr = FMath::Square(MovingAvoidanceParams.ObstacleDetectionDistance);
