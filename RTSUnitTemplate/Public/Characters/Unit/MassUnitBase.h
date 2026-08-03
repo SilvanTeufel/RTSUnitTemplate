@@ -89,6 +89,21 @@ public:
 	//UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = ISM)
 	//bool bUseIsmWithActorMovement = true;
 	
+	/**
+	 * Where this unit "belongs" when it is spawned - seeded by ARTSGameModeBase near the unit's
+	 * waypoint (randomised within PatrolCloseOffset) and copied into
+	 * FMassAIStateFragment::StoredLocation by UMassActorBindingComponent.
+	 *
+	 * Every return-to-post path (chase-abort, idle walk-back) targets StoredLocation. Seeding it
+	 * from the raw spawn position made units walk all the way back to spawn after a fight.
+	 * Replicated because StoredLocation itself is not, so without it client and server would each
+	 * pick their own anchor and fight over the unit's position.
+	 *
+	 * ZeroVector = not seeded; the spawn position is then used as before.
+	 */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FVector SpawnStoredLocation = FVector::ZeroVector;
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsFlying = false;
 	

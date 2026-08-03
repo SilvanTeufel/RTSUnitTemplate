@@ -188,7 +188,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
-            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
             const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
 
             if (bIsFriendlyActive)
@@ -335,7 +335,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 continue;
             }
             
-            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
             const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
 
             if (bIsFriendlyActive)

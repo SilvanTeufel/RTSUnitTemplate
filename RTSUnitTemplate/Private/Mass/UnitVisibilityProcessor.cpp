@@ -105,11 +105,21 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	{
 		LocalTeamId = CustomPC->SelectableTeamId;
 
-		if (UGameInstance* GI = World->GetGameInstance())
+		// Prefer the controller's replicated mask. UPlayerTeamSubsystem is a GameInstance
+		// subsystem and its AlliedTeamsMap is NOT replicated, so on a client it is empty and
+		// the fallback below would collapse the mask to "own team only" - allied units would
+		// then be classified as enemies. MassActorBindingComponent already reads the mask in
+		// this order (see its LocalAllianceMask lookups); this keeps the processor consistent.
+		LocalAllianceMask = CustomPC->AlliedTeamsMask;
+
+		if (LocalAllianceMask == 0)
 		{
-			if (UPlayerTeamSubsystem* TeamSub = GI->GetSubsystem<UPlayerTeamSubsystem>())
+			if (UGameInstance* GI = World->GetGameInstance())
 			{
-				LocalAllianceMask = TeamSub->GetAlliedTeamsMask(LocalTeamId);
+				if (UPlayerTeamSubsystem* TeamSub = GI->GetSubsystem<UPlayerTeamSubsystem>())
+				{
+					LocalAllianceMask = TeamSub->GetAlliedTeamsMask(LocalTeamId);
+				}
 			}
 		}
 
@@ -269,7 +279,15 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					if (Unit)
 					{
 						Unit->IsOnViewport = bCalculatedOnViewport;
-						Unit->IsMyTeam = (LocalAllianceMask & (1LL << StatsList[i].TeamId)) != 0 || LocalTeamId == 0;
+						// Take the value computed above rather than recomputing it from
+						// LocalAllianceMask: that recomputation dropped the per-entity
+						// FMassAllianceFragment fallback applied a few lines up, so an allied unit
+						// ended up with IsMyTeam == false. That is what made its healthbar blink -
+						// APerformanceUnit::SetEnemyVisibility only early-outs on IsMyTeam, so it
+						// kept toggling IsVisibleEnemy on every detection change, and AHUDBase's
+						// bShowAllHealthBarsPermanent bypass never applied. The non-local-controller
+						// path below already assigns Vis.bIsMyTeam; this makes both paths agree.
+						Unit->IsMyTeam = Vis.bIsMyTeam;
 						Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
 					}
 					

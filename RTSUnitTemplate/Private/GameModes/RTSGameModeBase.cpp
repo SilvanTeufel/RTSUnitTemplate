@@ -18,6 +18,8 @@
 #include "MassReplicationFragments.h"
 #include "MassSignalSubsystem.h"
 #include "Actors/Waypoint.h"
+#include "Characters/Unit/MassUnitBase.h"
+
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Kismet/GameplayStatics.h"
@@ -42,6 +44,10 @@
 #include "MassCommandBuffer.h"
 #include "MassExecutionContext.h"
 #include "Mass/UnitMassTag.h"
+
+// Defined further down; seeds the spawn-time StoredLocation anchor from the unit's waypoint.
+static void SeedSpawnStoredLocationFromWaypoint(AUnitBase* UnitBase);
+
 
 
 void ARTSGameModeBase::BeginPlay()
@@ -1598,6 +1604,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 		UnitBase->SetMeshRotationServer();
 			
 		AssignWaypointToUnit(UnitBase, SpawnParameter.WaypointTag);
+		SeedSpawnStoredLocationFromWaypoint(UnitBase);
 
 
 		if(Waypoint)
@@ -1726,6 +1733,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				UnitBase->SetMeshRotationServer();
 				
 				AssignWaypointToUnit(UnitBase, SpawnParameter.WaypointTag);
+				SeedSpawnStoredLocationFromWaypoint(UnitBase);
 
 				/*
 				if(Waypoint != nullptr)
@@ -1825,6 +1833,34 @@ void ARTSGameModeBase::AddUnitIndexAndAssignToAllUnitsArrayWithIndex(AUnitBase* 
 	AllUnits.Add(UnitBase);
 }
 
+
+// Seeds AMassUnitBase::SpawnStoredLocation with a random point inside the unit's waypoint area.
+// StoredLocation is the anchor every return-to-post path uses; leaving it on the raw spawn
+// position is what made units walk back to spawn after a fight. Randomised inside
+// PatrolCloseOffset so a whole spawn wave does not share one anchor and pile up on it.
+static void SeedSpawnStoredLocationFromWaypoint(AUnitBase* UnitBase)
+{
+	AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitBase);
+	if (!MassUnit || !UnitBase->NextWaypoint)
+	{
+		return;
+	}
+
+	const FVector WaypointLocation = UnitBase->NextWaypoint->GetActorLocation();
+	const FVector2D Offset = UnitBase->NextWaypoint->PatrolCloseOffset;
+	const float Radius = FMath::Max(0.f, (Offset.X + Offset.Y) * 0.5f);
+
+	if (Radius <= KINDA_SMALL_NUMBER)
+	{
+		MassUnit->SpawnStoredLocation = WaypointLocation;
+		return;
+	}
+
+	// sqrt keeps the points evenly spread over the disc instead of bunching in the middle.
+	const float Angle = FMath::FRandRange(0.f, 2.f * PI);
+	const float R = Radius * FMath::Sqrt(FMath::FRand());
+	MassUnit->SpawnStoredLocation = WaypointLocation + FVector(R * FMath::Cos(Angle), R * FMath::Sin(Angle), 0.f);
+}
 
 void ARTSGameModeBase::AssignWaypointToUnit(AUnitBase* UnitBase, const FString& WaypointTag)
 {

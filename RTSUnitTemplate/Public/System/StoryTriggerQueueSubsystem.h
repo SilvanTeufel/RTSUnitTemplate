@@ -120,6 +120,10 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UStoryWidgetBase> ActiveWidget = nullptr;
 
+	/** Used when an entry resolves to no display time at all (no sound and LifetimeSeconds 0).
+	 *  Without this the close timer was never armed and the queue stalled forever. */
+	float FallbackDisplaySeconds = 5.0f;
+
 	FTimerHandle ActiveTimerHandle;
 	FTimerHandle NextStoryTimerHandle;
 

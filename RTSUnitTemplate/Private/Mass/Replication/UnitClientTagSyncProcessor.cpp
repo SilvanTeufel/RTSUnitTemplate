@@ -212,7 +212,13 @@ void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FM
 			StateFrag->CanMove = Unit->CanMove;
 			StateFrag->CanAttack = Unit->CanAttack;
 			StateFrag->IsInitialized = Unit->IsInitialized;
-			StateFrag->StoredLocation = Unit->GetActorLocation();
+			// StoredLocation is not replicated, so the client has to derive the same anchor the
+			// server uses. Pinning it to the current actor location every sync made the client
+			// disagree with the server about where the unit belongs. SpawnStoredLocation IS
+			// replicated, so prefer it and only fall back to the live position when unseeded.
+			StateFrag->StoredLocation = Unit->SpawnStoredLocation.IsNearlyZero()
+				? Unit->GetActorLocation()
+				: Unit->SpawnStoredLocation;
 
 			if (TargetFrag)
 			{

@@ -10,6 +10,7 @@
 #include "Core/RTSUnitUtils.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Mass/States/CombatPlaceholder.h"
 #include "Async/Async.h"
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
@@ -21,7 +22,14 @@ URunStateProcessor::URunStateProcessor(): EntityQuery()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    // This processor randomly accesses fragments of OTHER entities (TargetEntity /
+    // FriendlyTargetEntity), which is outside the per-chunk safety contract of a parallel
+    // ForEachEntityChunk: the IsEntityActive/IsEntityBuilt check and the GetFragmentDataPtr
+    // that follows are not atomic, so another thread can move the target to a different
+    // archetype in between (assert "CurrentArchetype", MassEntityManager.cpp:2367).
+    // Attack/Chase/PauseStateProcessor do the same cross-entity reads and are game-thread
+    // for exactly this reason - keep this one consistent with them.
+    bRequiresGameThreadExecution = true;
 }
 
 void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -189,7 +197,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
             if (bHasDetectTag && !bHasFriendly)
             {
-                const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+                const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
                 if (TargetFrag.bHasValidTarget && bIsTargetActive)
                 {
                     if (!Stats.bCanMoveWhileAttacking)
@@ -210,7 +218,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                         const float DistSq = FVector::DistSquared2D(CurrentLocation, TargetFrag.LastKnownLocation);
 
                         const FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
-                        const bool bIsEnemyActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+                        const bool bIsEnemyActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
                         const FMassAgentCharacteristicsFragment* TargetCharFrag = bIsEnemyActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
                         const FTransformFragment* TargetTransformFrag = bIsEnemyActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
                         const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
@@ -273,7 +281,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             const FVector CurrentLocation = CurrentMassTransform.GetLocation();
 
             // Recalculate follow position if moving and following
-          const bool bIsFriendlyActiveServer = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+          const bool bIsFriendlyActiveServer = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.FriendlyTargetEntity);
             /*
             if (bIsFriendlyActiveServer)
             {
@@ -313,7 +321,7 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
             StateFrag.StateTimer += ExecutionInterval;
 
-            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
             
             if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && bIsTargetActive && !Stats.bCanMoveWhileAttacking && !bIsFriendlyActiveServer)
             {
@@ -361,11 +369,7 @@ void URunStateProcessor::SwitchToIdleState(FMassEntityManager& EntityManager, FM
         Defer.AddTag<FMassStateDetectTag>(Entity);
     }
 
-    StateFrag.PlaceholderSignal = UnitSignals::Idle;
-    if (AUnitBase* UnitBase = Cast<AUnitBase>(UnitActor))
-    {
-        UnitBase->UnitStatePlaceholder = UnitData::Idle;
-    }
+    RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, UnitActor);
     
     if (Context.GetWorld() && Context.GetWorld()->IsNetMode(NM_Client))
     {

@@ -1349,7 +1349,17 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	PatrolFrag->IdleChance = UnitOwner->NextWaypoint->PatrolCloseIdlePercentage;
         	PatrolFrag->bSetUnitsBackToPatrol = false;
         	PatrolFrag->SetUnitsBackToPatrolTime = 3.f;
-      
+
+        	// Adopt the anchor the GameMode picked near this waypoint. StoredLocation is what every
+        	// return-to-post path targets, so seeding it here - rather than leaving it on the spawn
+        	// position - is what stops units walking back to spawn after a fight.
+        	if (!UnitOwner->SpawnStoredLocation.IsNearlyZero())
+        	{
+        		if (FMassAIStateFragment* AIStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+        		{
+        			AIStateFrag->StoredLocation = UnitOwner->SpawnStoredLocation;
+        		}
+        	}
         }
          else // Use default values
          {

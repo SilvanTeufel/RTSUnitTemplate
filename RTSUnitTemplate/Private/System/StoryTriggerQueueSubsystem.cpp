@@ -210,10 +210,16 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		}
 	}
 
-	if (DisplayTime > 0.f)
+	// A close timer must ALWAYS be armed. FStoryQueueItem::LifetimeSeconds defaults to 0 and
+	// bTillAudioEnds to true, so any entry without a sound (or with an indefinitely looping one)
+	// ended up here with DisplayTime == 0. The old code then simply skipped the timer, ActiveWidget
+	// stayed set forever, and TryPlayNext() bailed out at its first check - one silent entry
+	// blocked the whole rest of the queue and nobody spoke again.
+	if (DisplayTime <= 0.f)
 	{
-		World->GetTimerManager().SetTimer(ActiveTimerHandle, this, &UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished, DisplayTime, false);
+		DisplayTime = FallbackDisplaySeconds;
 	}
+	World->GetTimerManager().SetTimer(ActiveTimerHandle, this, &UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished, DisplayTime, false);
 }
 
 void UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished()

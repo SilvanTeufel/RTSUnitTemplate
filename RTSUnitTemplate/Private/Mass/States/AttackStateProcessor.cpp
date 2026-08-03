@@ -18,6 +18,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/Signals/MySignals.h"
 #include "Core/RTSUnitUtils.h"
+#include "Mass/States/CombatPlaceholder.h"
 #include "Async/Async.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 
@@ -181,7 +182,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
         }
     }
 
-    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
     const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
     const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
@@ -194,11 +195,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
             StateFrag.StateTimerClient = 0.f;
             if (Item) Item->PredictionTimer = 0.f;
 
-            StateFrag.PlaceholderSignal = UnitSignals::Idle;
-            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
-            {
-                UnitBase->UnitStatePlaceholder = UnitData::Idle;
-            }
+            RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
 
             auto& Defer = Context.Defer();
             Defer.RemoveTag<FMassStateAttackTag>(Entity);
@@ -218,11 +215,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
             StateFrag.StateTimerClient = 0.f;
             if (Item) Item->PredictionTimer = 0.f;
 
-            StateFrag.PlaceholderSignal = UnitSignals::Idle;
-            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
-            {
-                UnitBase->UnitStatePlaceholder = UnitData::Idle;
-            }
+            RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
 
             auto& Defer = Context.Defer();
             if (StateFrag.CanAttack && StateFrag.IsInitialized)
@@ -324,7 +317,7 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
         MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
     }
 
-    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
     const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
     const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
@@ -332,12 +325,7 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     if (bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, TargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, EntityManager.GetWorld(), FollowAcceptanceMultiplier))
     {
         StateFrag.SwitchingState = true;
-        StateFrag.PlaceholderSignal = UnitSignals::Idle;
-
-        if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
-        {
-            UnitBase->UnitStatePlaceholder = UnitData::Idle;
-        }
+        RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
 
         if (SignalSubsystem)
         {
@@ -352,12 +340,7 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     if (!bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead)
     {
         StateFrag.SwitchingState = true;
-        StateFrag.PlaceholderSignal = UnitSignals::Idle;
-
-        if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
-        {
-            UnitBase->UnitStatePlaceholder = UnitData::Idle;
-        }
+        RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
 
         if (SignalSubsystem)
         {

@@ -84,6 +84,7 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AMassUnitBase, bIsMassUnit);
+	DOREPLIFETIME(AMassUnitBase, SpawnStoredLocation);
 	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
 	//DOREPLIFETIME(AMassUnitBase, bUseIsmWithActorMovement);
 

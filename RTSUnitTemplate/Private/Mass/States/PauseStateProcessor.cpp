@@ -23,6 +23,7 @@
 #include "MassReplicationFragments.h"
 #include "Actors/Projectile.h"
 #include "Components/CapsuleComponent.h"
+#include "Mass/States/CombatPlaceholder.h"
 
 UPauseStateProcessor::UPauseStateProcessor(): EntityQuery()
 {
@@ -141,7 +142,7 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         MutableTargetFrag.bHasValidTarget = false;
     }
 
-    bool bIsTargetActive = EntityManager.IsEntityActive(MutableTargetFrag.TargetEntity);
+    bool bIsTargetActive = EntityManager.IsEntityActive(MutableTargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(MutableTargetFrag.TargetEntity);
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(MutableTargetFrag.FriendlyTargetEntity);
     const auto TransformList = Context.GetFragmentView<FTransformFragment>();
     const FTransform& Transform = TransformList[EntityIdx].GetTransform();
@@ -160,11 +161,7 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         {
             StateFrag.SwitchingState = true;
             
-            StateFrag.PlaceholderSignal = UnitSignals::Idle;
-            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
-            {
-                UnitBase->UnitStatePlaceholder = UnitData::Idle;
-            }
+            RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
 
             auto& Defer = Context.Defer();
             if (StateFrag.CanAttack && StateFrag.IsInitialized)
@@ -259,7 +256,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
     const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
 
-    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
     const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
@@ -272,11 +269,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
             StateFrag.StateTimerClient = 0.f;
             auto& Defer = Context.Defer();
 
-            StateFrag.PlaceholderSignal = UnitSignals::Idle;
-            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
-            {
-                UnitBase->UnitStatePlaceholder = UnitData::Idle;
-            }
+            RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
 
             if (StateFrag.CanAttack && StateFrag.IsInitialized)
             {
@@ -302,11 +295,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
             StateFrag.SwitchingStateClient = true;
             StateFrag.StateTimerClient = 0.f;
 
-            StateFrag.PlaceholderSignal = UnitSignals::Idle;
-            if (AUnitBase* UnitBase = Cast<AUnitBase>(Actor))
-            {
-                UnitBase->UnitStatePlaceholder = UnitData::Idle;
-            }
+            RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
 
             auto& Defer = Context.Defer();
             if (StateFrag.CanAttack && StateFrag.IsInitialized)

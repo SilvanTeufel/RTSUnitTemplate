@@ -3148,7 +3148,12 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				StateFrag.CanMove = Unit->CanMove;
 				StateFrag.CanAttack = Unit->CanAttack;
 				StateFrag.IsInitialized = Unit->IsInitialized;
-				StateFrag.StoredLocation = Unit->GetActorLocation(); // Always set on spawn
+				// Only seed from the actor when nothing has claimed the anchor yet - see
+				// UMassActorBindingComponent, which fills it from SpawnStoredLocation.
+				if (StateFrag.StoredLocation.IsNearlyZero())
+				{
+					StateFrag.StoredLocation = Unit->GetActorLocation();
+				}
 
 				if (PatrolFragPtr && Unit->UnitState == UnitData::PatrolRandom)
 				{

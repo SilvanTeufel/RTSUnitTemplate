@@ -136,7 +136,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
-            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
 
             if (StateFrag.SwitchingStateClient)
             {
@@ -300,11 +300,11 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
-            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity);
+            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
 
             if (StateFrag.SwitchingState) continue;
 
-            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.FriendlyTargetEntity);
             /*
             if (bIsFriendlyActive && !StateFrag.HoldPosition)
             {

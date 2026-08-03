@@ -97,8 +97,14 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 }
                 StateFrag.BirthTime = World->GetTimeSeconds();
 
-                // NEW: Initialize StoredLocation to spawn position
-                StateFrag.StoredLocation = TransformList[i].GetTransform().GetLocation();
+                // Initialize StoredLocation ("home") only if nothing has claimed it yet.
+                // UMassActorBindingComponent seeds it from AMassUnitBase::SpawnStoredLocation
+                // (a point near the unit's waypoint), and overwriting that with the raw spawn
+                // position is what made units walk back to spawn after a fight.
+                if (StateFrag.StoredLocation.IsNearlyZero())
+                {
+                    StateFrag.StoredLocation = TransformList[i].GetTransform().GetLocation();
+                }
             }else
             {
                 const float Age = World->GetTimeSeconds() - StateFrag.BirthTime;
@@ -169,8 +175,14 @@ void UMainStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                     SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::UnitSpawned, Entity);
                 }
 
-                // NEW: Initialize StoredLocation to spawn position
-                StateFrag.StoredLocation = TransformList[i].GetTransform().GetLocation();
+                // Initialize StoredLocation ("home") only if nothing has claimed it yet.
+                // UMassActorBindingComponent seeds it from AMassUnitBase::SpawnStoredLocation
+                // (a point near the unit's waypoint), and overwriting that with the raw spawn
+                // position is what made units walk back to spawn after a fight.
+                if (StateFrag.StoredLocation.IsNearlyZero())
+                {
+                    StateFrag.StoredLocation = TransformList[i].GetTransform().GetLocation();
+                }
             }
 
             bool bShouldDie = false;
