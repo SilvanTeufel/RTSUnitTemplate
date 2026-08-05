@@ -429,8 +429,19 @@ struct FUnitSpawnParameter : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInstance* Material = nullptr;
 	
+	/**
+	 * Tick this to let the row dictate the spawned unit's mesh rotation. Left off, the unit keeps
+	 * its own class default - which is what hand-placed units use, and why they always looked
+	 * right while table-spawned ones came out 90 degrees off: the row's rotation was applied
+	 * unconditionally, and a fresh row used to carry ZeroRotator.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	FRotator ServerMeshRotation = FRotator::ZeroRotator;
+	bool bOverrideServerMeshRotation = false;
+
+	// Only consulted when bOverrideServerMeshRotation is set. Defaults to the same -90 yaw as
+	// AUnitBase::ServerMeshRotation, so ticking the box does not move anything by surprise.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (EditCondition = "bOverrideServerMeshRotation"))
+	FRotator ServerMeshRotation = FRotator(0.f, -90.f, 0.f);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int TeamId = 0;

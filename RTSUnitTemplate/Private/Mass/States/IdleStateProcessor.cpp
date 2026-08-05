@@ -25,7 +25,11 @@ UIdleStateProcessor::UIdleStateProcessor(): EntityQuery()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    // Reads fragments of OTHER entities (TargetEntity / FriendlyTargetEntity), which is outside
+    // the per-chunk contract of a parallel ForEachEntityChunk. Attack/Chase/Pause/RunState do the
+    // same and are game-thread for exactly this reason - keep this one with them. Running it on a
+    // worker tripped "Assertion failed: IsEntityValid" inside IsEntityActive itself.
+    bRequiresGameThreadExecution = true;
 }
 
 void UIdleStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -136,7 +140,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
-            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
+            const bool bIsTargetActive = EntityManager.IsEntityValid(TargetFrag.TargetEntity) && EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
 
             if (StateFrag.SwitchingStateClient)
             {
@@ -145,7 +149,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             }
             
             
-            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+            const bool bIsFriendlyActive = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
   
             if (bIsFriendlyActive && !StateFrag.HoldPosition)
             {
@@ -300,11 +304,11 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
-            const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
+            const bool bIsTargetActive = EntityManager.IsEntityValid(TargetFrag.TargetEntity) && EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
 
             if (StateFrag.SwitchingState) continue;
 
-            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.FriendlyTargetEntity);
+            const bool bIsFriendlyActive = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.FriendlyTargetEntity);
             /*
             if (bIsFriendlyActive && !StateFrag.HoldPosition)
             {

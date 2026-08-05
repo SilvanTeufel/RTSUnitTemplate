@@ -129,6 +129,22 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 
 	if (!bUseSkeletalMovement)
 	{
+		// The unit itself is drawn as a pooled ISM instance, so the skeletal mesh must stay hidden -
+		// but gear bolted onto its sockets (weapons, packs) are ordinary components on this actor.
+		// The branch above is skipped for these units, so nothing ever propagated the fog state to
+		// them and a socketed weapon kept hovering where the unit had vanished. Push it to the
+		// children only, never to the skeletal mesh itself.
+		if (SkelMesh)
+		{
+			for (USceneComponent* Child : SkelMesh->GetAttachChildren())
+			{
+				if (Child)
+				{
+					Child->SetVisibility(desiredVisibility, true);
+				}
+			}
+		}
+
 		UUnitVisualManager* VisualManager = GetWorld()->GetSubsystem<UUnitVisualManager>();
 		if (VisualManager && MassActorBindingComponent)
 		{

@@ -1591,7 +1591,12 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 			UnitBase->TeamId = TeamId;
 		}
 
-		UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+		// Rows only dictate the mesh rotation when they say so; otherwise the unit's own
+		// class default stands, exactly as it does for hand-placed units.
+		if (SpawnParameter.bOverrideServerMeshRotation)
+		{
+			UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+		}
 			
 		UnitBase->OnRep_MeshAssetPath();
 		UnitBase->OnRep_MeshMaterialPath();
@@ -1721,7 +1726,12 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 					UnitBase->TeamId = SpawnParameter.TeamId;
 				}
 
-				UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+				// Rows only dictate the mesh rotation when they say so; otherwise the unit's own
+				// class default stands, exactly as it does for hand-placed units.
+				if (SpawnParameter.bOverrideServerMeshRotation)
+				{
+					UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+				}
 				
 				UnitBase->OnRep_MeshAssetPath();
 				UnitBase->OnRep_MeshMaterialPath();

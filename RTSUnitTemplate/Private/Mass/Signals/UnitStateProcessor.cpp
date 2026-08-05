@@ -2424,6 +2424,8 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								SpawnParameter.UnitMinRange = FVector(0.f);
 								SpawnParameter.UnitMaxRange = FVector(0.f);
 								SpawnParameter.ServerMeshRotation = UnitBase->BuildArea->ServerMeshRotationBuilding;
+								// Deliberate rotation from the caller - mark it so the spawn path applies it.
+								SpawnParameter.bOverrideServerMeshRotation = true;
 								SpawnParameter.State = UnitData::Idle;
 								SpawnParameter.StatePlaceholder = UnitData::Idle;
 								SpawnParameter.Material = nullptr;
@@ -2692,7 +2694,12 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
         UnitBase->TeamId = TeamId;
     }
 
-    UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+    // Rows only dictate the mesh rotation when they say so; otherwise the unit's own
+    // class default stands, exactly as it does for hand-placed units.
+    if (SpawnParameter.bOverrideServerMeshRotation)
+    {
+    	UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+    }
     UnitBase->OnRep_MeshAssetPath();
     UnitBase->OnRep_MeshMaterialPath();
 	

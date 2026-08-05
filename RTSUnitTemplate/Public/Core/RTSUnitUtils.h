@@ -20,6 +20,23 @@
 
 namespace RTSUnitUtils
 {
+	/**
+	 * The only safe way to ask "may I read this other entity's fragments?".
+	 *
+	 * IsEntityActive() and IsEntityBuilt() do NOT return false for a stale handle - they assert
+	 * (MassEntityManager.h: "Assertion failed: IsEntityValid"). And a handle that is active can still
+	 * have no archetype yet, which trips "Assertion failed: CurrentArchetype" inside
+	 * GetFragmentDataPtr. Both have crashed this project. Check all three, in this order, and check
+	 * it at the point of use - a flag computed earlier in the same loop can already be stale.
+	 */
+	inline bool IsEntityUsable(const FMassEntityManager& EntityManager, const FMassEntityHandle& Entity)
+	{
+		return Entity.IsSet()
+			&& EntityManager.IsEntityValid(Entity)
+			&& EntityManager.IsEntityActive(Entity)
+			&& EntityManager.IsEntityBuilt(Entity);
+	}
+
 	inline FVector FindGroundLocationAtPosition(const UObject* WorldContextObject, FVector Position, TArray<AActor*> ActorsToIgnore, float TraceDistance = 10000.f)
 	{
 		if (!WorldContextObject)

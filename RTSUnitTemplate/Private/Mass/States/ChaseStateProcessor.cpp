@@ -188,8 +188,8 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
-            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
-            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+            bool bIsTargetActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
+            const bool bIsFriendlyActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.FriendlyTargetEntity);
 
             if (bIsFriendlyActive)
             {
@@ -217,8 +217,9 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             {
                 const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-                const FMassAgentCharacteristicsFragment* TargetCharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity);
-                const FTransformFragment* TargetTransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity);
+                const bool bTgtUsable = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
+                const FMassAgentCharacteristicsFragment* TargetCharFrag = bTgtUsable ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+                const FTransformFragment* TargetTransformFrag = bTgtUsable ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
                 const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
                 const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
@@ -335,8 +336,8 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 continue;
             }
             
-            bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
-            const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+            bool bIsTargetActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
+            const bool bIsFriendlyActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.FriendlyTargetEntity);
 
             if (bIsFriendlyActive)
             {
@@ -381,8 +382,8 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
     
             const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
-            const FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
-            const FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
+            const FMassAgentCharacteristicsFragment* TargetCharFrag = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity) ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+            const FTransformFragment* TargetTransformFrag = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity) ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
             const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
             const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
@@ -407,7 +408,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             
            FVector TargetLocation = TargetFrag.LastKnownLocation;
 
-           const FMassAgentCharacteristicsFragment* TargetCharFragPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
+           const FMassAgentCharacteristicsFragment* TargetCharFragPtr = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity) ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
            if (TargetCharFragPtr  && !Stats.bCanMoveWhileAttacking) //  && !Stats.bCanMoveWhileAttacking
            {
                TargetLocation.Z = TargetCharFragPtr->LastGroundLocation;

@@ -1781,6 +1781,8 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 	SpawnParameter.UnitBaseClass = UnitBaseClass;
 	SpawnParameter.UnitOffset = FVector3d(0.f,0.f,0.f);
 	SpawnParameter.ServerMeshRotation = HostMeshRotation;
+	// Deliberate rotation from the caller - mark it so the spawn path applies it.
+	SpawnParameter.bOverrideServerMeshRotation = true;
 	SpawnParameter.State = UState;
 	SpawnParameter.StatePlaceholder = UStatePlaceholder;
 	SpawnParameter.Material = Material;
@@ -1854,7 +1856,12 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 				UnitBase->TeamId = NewTeamId;
 			}
 
-			UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+			// Rows only dictate the mesh rotation when they say so; otherwise the unit's own
+			// class default stands, exactly as it does for hand-placed units.
+			if (SpawnParameter.bOverrideServerMeshRotation)
+			{
+				UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
+			}
 			
 			UnitBase->OnRep_MeshAssetPath();
 			UnitBase->OnRep_MeshMaterialPath();

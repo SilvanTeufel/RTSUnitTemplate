@@ -154,6 +154,8 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	}
 
 	TArray<FMassEntityHandle> EntitiesToSignal;
+	// Everything seen this throttled tick, not just what changed - see the push at the bottom.
+	TArray<FMassEntityHandle> EntitiesToPush;
 
 	const float CurrentTime = World->GetTimeSeconds();
 
@@ -318,6 +320,16 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 				bIsVisibleByFog = Vis.bIsVisibleEnemy;
 			}
 
+			// Re-push the fog state to the actor on every throttled tick instead of only when it
+			// changed. SetCharacterVisibility propagates once, down the component tree; anything that
+			// appears afterwards - a weapon mesh arriving with replication on a client - misses that
+			// single push and then renders through the fog until the unit happens to change visibility
+			// again. Repeating is cheap: SetVisibility early-outs when the flag already matches.
+			if (bDoThrottledUpdate)
+			{
+				EntitiesToPush.Add(ChunkCtx.GetEntity(i));
+			}
+
 			bool bChanged = (Vis.bIsMyTeam != Vis.bLastIsMyTeam) || 
 							(Vis.bIsOnViewport != Vis.bLastIsOnViewport) ||
 							(Vis.bIsVisibleEnemy != Vis.bLastIsVisibleEnemy) ||
@@ -396,6 +408,11 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			}
 		}
 	});
+
+	if (bDoThrottledUpdate && EntitiesToPush.Num() > 0)
+	{
+		HandleVisibilitySignals(NAME_None, EntitiesToPush);
+	}
 
 	if (bDoThrottledUpdate && SignalSubsystem && EntitiesToSignal.Num() > 0)
 	{
