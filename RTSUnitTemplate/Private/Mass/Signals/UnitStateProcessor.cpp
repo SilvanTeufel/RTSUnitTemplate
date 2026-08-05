@@ -680,11 +680,33 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         	// Per-resource worker cap: an overflow worker is reassigned to a nearby same-type
                         	// resource (or idled) here instead of entering ResourceExtraction.
                         	bool bMayMine = true;
+                        	// State to re-signal AFTER this command-buffer window closes. Anything we add
+                        	// via Defer().AddTag here would be undone by the RemoveTag<...> calls queued at
+                        	// the top of this function, leaving the entity with NO state tag - a worker that
+                        	// simply freezes where it stands. Re-signalling gets a fresh buffer.
+                        	FName OverflowFollowUpSignal = NAME_None;
                         	if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
                         	{
                         		if (IsValid(Worker->ResourcePlace))
                         		{
-                        			bMayMine = Worker->ResourcePlace->ReserveMiningSlotOrReassign(Worker);
+                        			// Permission gate BEFORE the capacity gate: this is the live Mass entry into
+                        			// ResourceExtraction and it does not pass through
+                        			// AWorkArea::HandleResourceExtractionArea, so the check has to happen here too.
+                        			// Drop a deposit this worker may not gather and idle out - SynchronizeUnitState's
+                        			// rescan then re-assigns from the permission-filtered candidate list.
+                        			if (!Worker->CanMineWorkArea(Worker->ResourcePlace))
+                        			{
+                        				Worker->ReleaseResourcePlace();
+                        				Worker->SetUnitState(UnitData::Idle);
+                        				OverflowFollowUpSignal = UnitSignals::Idle;
+                        				bMayMine = false;
+                        			}
+                        			else
+                        			{
+                        				// Let the reserve call REPORT the state it wants instead of applying it,
+                        				// for the same reason (see OverflowFollowUpSignal above).
+                        				bMayMine = Worker->ResourcePlace->ReserveMiningSlotOrReassign(Worker, &OverflowFollowUpSignal);
+                        			}
                         		}
                         	}
                         	if (bMayMine)
@@ -693,6 +715,11 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         		TArray<FMassEntityHandle> CapturedEntitys;
                         		CapturedEntitys.Emplace(Entity);
                         		HandleGetClosestBaseArea(UnitSignals::GetClosestBase, CapturedEntitys);
+                        	}
+                        	else if (!OverflowFollowUpSignal.IsNone() && SignalSubsystem)
+                        	{
+                        		// Fresh buffer next signal pass -> the tag actually sticks.
+                        		SignalSubsystem->SignalEntity(OverflowFollowUpSignal, Entity);
                         	}
                         }
                     	
@@ -1480,15 +1507,14 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                 TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
                 if (!TargetStatsFrag) continue;
 
-                // Extend LoseSightRadius by 2 folds if not already extended
+                // Melee hit: widen the victim's detection range for a few seconds, but only while it
+                // has no target of its own (the helper enforces that).
                 if (FMassAIStateFragment* TargetAIStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity))
                 {
-                    if (!TargetAIStateFrag->bHasExtendedLoseSight)
+                    if (const FMassAITargetFragment* VictimTargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(TargetEntity))
                     {
-                        TargetStatsFrag->LoseSightRadius *= TargetStatsFrag->LoseSightRadiusFaktor;
-                        TargetAIStateFrag->bHasExtendedLoseSight = true;
+                        ApplyAttackedDetectionBonus(*TargetAIStateFrag, *VictimTargetFrag, *TargetStatsFrag);
                     }
-                    TargetAIStateFrag->ExtendedLoseSightTimer = TargetStatsFrag->LoseSightRadiusFaktorTimer;
                 }
                 
                 bool bIsMagicDamage = UnitBase->IsDoingMagicDamage;
@@ -1641,15 +1667,15 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 
                 if (!TargetTransformFrag || !TargetCharFrag || !TargetStatsFrag || !AttackerStats) continue;
 
-                // Extend LoseSightRadius by 2 folds if not already extended
+                // Ranged attack started: same treatment as the melee path. The hardcoded 2.0 factor /
+                // 2.0 s that used to live here are now the per-unit LoseSightRadiusFaktor and
+                // LoseSightRadiusFaktorTimer properties, applied by the shared helper.
                 if (FMassAIStateFragment* TargetAIStateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(TargetEntity))
                 {
-                    if (!TargetAIStateFrag->bHasExtendedLoseSight)
+                    if (const FMassAITargetFragment* VictimTargetFrag = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(TargetEntity))
                     {
-                        TargetStatsFrag->LoseSightRadius *= 2.f;
-                        TargetAIStateFrag->bHasExtendedLoseSight = true;
+                        ApplyAttackedDetectionBonus(*TargetAIStateFrag, *VictimTargetFrag, *TargetStatsFrag);
                     }
-                    TargetAIStateFrag->ExtendedLoseSightTimer = 2.f;
                 }
                 
                 float AttackerRange = AttackerUnitBase->Attributes ? AttackerUnitBase->Attributes->GetRange() : 0.0f;
@@ -1948,6 +1974,12 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                                 }
                                 Worker->BuildArea = nullptr;
                             }
+
+                            // Release the mining slot on death too. Only BuildArea was freed here; the
+                            // deposit was left occupied until AWorkingUnitBase::Destroyed() ran - which
+                            // never happens for a Blueprint with DestroyAfterDeath = false, so its
+                            // corpse kept a slot (and a phantom "N/Max") for the rest of the match.
+                            Worker->ReleaseResourcePlace();
                         }
                     }
                     else if (AEffectArea* Area = Cast<AEffectArea>(Actor))
@@ -2203,6 +2235,33 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 							FMassCarriedResourceFragment* CarriedFrag = EntityManager.GetFragmentDataPtr<FMassCarriedResourceFragment>(Entity);
 							if (CarriedFrag && CarriedFrag->bIsCarrying && ResourceGameMode)
 							{
+								// The base we arrived at may refuse this cargo (ABuildingBase::AcceptsResourceType).
+								// Then do NOT credit it here - look for a base of our team that does take it and
+								// walk on, still carrying. If none exists anywhere (e.g. the player re-configured
+								// the bases while this worker was already loaded), fall through and credit as
+								// before, so a full worker can never get stuck in an endless delivery loop.
+								const bool bBaseAcceptsCargo =
+									IsValid(UnitBase->Base) && UnitBase->Base->AcceptsResourceType(CarriedFrag->ResourceType);
+
+								if (!bBaseAcceptsCargo)
+								{
+									ABuildingBase* AcceptingBase =
+										ResourceGameMode->GetClosestBaseFromArray(UnitBase, ResourceGameMode->WorkAreaGroups.BaseAreas);
+
+									if (IsValid(AcceptingBase) && AcceptingBase != UnitBase->Base)
+									{
+										UnitBase->Base = AcceptingBase;
+										UnitBase->SetUEPathfinding = true;
+										UnitBase->SetUnitState(UnitData::GoToBase);
+										UnitBase->SwitchEntityTagByState(UnitData::GoToBase, UnitBase->UnitStatePlaceholder);
+										if (StateFrag)
+										{
+											StateFrag->SwitchingState = false;
+										}
+										continue;
+									}
+								}
+
 								ResourceGameMode->ModifyResource(CarriedFrag->ResourceType, UnitBase->TeamId, CarriedFrag->MinedAmount);
 								CarriedFrag->bIsCarrying = false;
 								CarriedFrag->MinedAmount = 0.f;
@@ -2225,12 +2284,28 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						else	
 							CanAffordConstruction = UnitBase->BuildArea? ResourceGameMode->CanAffordConstruction(UnitBase->BuildArea->ConstructionCost, UnitBase->TeamId) : false; //Worker->BuildArea->CanAffordConstruction(Worker->TeamId, ResourceGameMode->NumberOfTeams,ResourceGameMode->TeamResources) : false;
 
+						// Base can legitimately be null here (no base of this team is registered, or the
+						// only ones left reject this worker) - the two dereferences below used to assume
+						// otherwise. Idle out instead of crashing.
+						if (!IsValid(UnitBase->Base))
+						{
+							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+							if (StateFrag)
+							{
+								StateFrag->SwitchingState = false;
+							}
+							continue;
+						}
+
 						if (UnitBase->Base->IsFlying)
 						{
 							UnitBase->Multicast_SwitchToIdle();
-							return;
+							// 'continue', not 'return': this loop body handles ONE entity of the signal batch.
+							// Returning here aborted the whole AsyncTask, so every worker later in the same
+							// ReachedBase batch was silently never credited nor re-dispatched.
+							continue;
 						}
-						
+
 						if (ResourceGameMode)
 							UnitBase->Base->HandleBaseArea(UnitBase, ResourceGameMode, CanAffordConstruction);
 
@@ -2238,8 +2313,15 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 						if (!UnitBase->ResourcePlace && !UnitBase->BuildArea)
 						{
 							UnitBase->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
-							StateFrag->SwitchingState = false;
-							return;
+							if (StateFrag)
+							{
+								StateFrag->SwitchingState = false;
+							}
+							// See above: 'continue' so the rest of the batch is still processed. With the
+							// per-worker resource permissions this branch is reached more often (a worker whose
+							// only candidates were filtered out ends up here), which made the old 'return'
+							// starve the remaining workers of the batch.
+							continue;
 						}
 
 						if (UnitBase->WorkResource)

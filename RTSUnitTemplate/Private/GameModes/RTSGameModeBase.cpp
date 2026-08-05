@@ -88,6 +88,10 @@ void ARTSGameModeBase::BeginPlay()
 
 			FTimerHandle ReleaseEffectAreasTimer;
 			GetWorldTimerManager().SetTimer(ReleaseEffectAreasTimer, this, &ARTSGameModeBase::ReleaseEffectAreas, WidgetDuration, false);
+
+			// Gleiche Dauer wie der Ladebildschirm: ab hier ist er weg und das Match ist sichtbar.
+			FTimerHandle LoadingFinishedTimer;
+			GetWorldTimerManager().SetTimer(LoadingFinishedTimer, this, &ARTSGameModeBase::HandleLoadingScreenFinished, WidgetDuration, false);
 		}
 		else
 		{
@@ -823,6 +827,11 @@ void ARTSGameModeBase::HandleSeamlessTravelPlayer(AController*& C)
 	{
 		Super::HandleSeamlessTravelPlayer(C);
 	}
+}
+
+void ARTSGameModeBase::HandleLoadingScreenFinished()
+{
+	OnLoadingScreenFinished.Broadcast();
 }
 
 void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)

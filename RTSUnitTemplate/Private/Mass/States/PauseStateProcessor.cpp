@@ -142,8 +142,8 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         MutableTargetFrag.bHasValidTarget = false;
     }
 
-    bool bIsTargetActive = EntityManager.IsEntityActive(MutableTargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(MutableTargetFrag.TargetEntity);
-    const bool bIsFriendlyActive = EntityManager.IsEntityActive(MutableTargetFrag.FriendlyTargetEntity);
+    bool bIsTargetActive = RTSUnitUtils::IsEntityUsable(EntityManager, MutableTargetFrag.TargetEntity);
+    const bool bIsFriendlyActive = RTSUnitUtils::IsEntityUsable(EntityManager, MutableTargetFrag.FriendlyTargetEntity);
     const auto TransformList = Context.GetFragmentView<FTransformFragment>();
     const FTransform& Transform = TransformList[EntityIdx].GetTransform();
     const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
@@ -256,8 +256,8 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
     const FMassAgentCharacteristicsFragment& CharFrag = CharList[EntityIdx];
 
-    bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
-    const bool bIsFriendlyActive = EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
+    bool bIsTargetActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
+    const bool bIsFriendlyActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.FriendlyTargetEntity);
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
 

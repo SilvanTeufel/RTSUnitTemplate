@@ -467,6 +467,21 @@ struct FMassAIStateFragment : public FMassFragment
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     bool bHasExtendedLoseSight = false;
 
+    /**
+     * Extra DETECTION range (cm) granted for ExtendedLoseSightTimer seconds after this unit was hit
+     * while it had no target of its own, so it can turn around and find an attacker that stands
+     * outside its normal SightRadius. See ApplyAttackedDetectionBonus at the bottom of this file.
+     *
+     * DELIBERATELY a separate field instead of scaling FMassCombatStatsFragment::SightRadius /
+     * LoseSightRadius: those two are re-synced from the actor every PrePhysics tick by
+     * UUnitActorToFragmentSyncProcessor::SyncCombatStats (which is what broke the previous
+     * implementation), and SightRadius additionally drives fog-of-war reveal, enemy-unit reveal and
+     * the minimap radius. Only UDetectionProcessor adds this bonus, so the boost stays invisible to
+     * the player's vision.
+     */
+    UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+    float DetectionBonusRadius = 0.f;
+
     UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
     uint8 ProjectileFireCounter = 0;
 
@@ -786,6 +801,39 @@ struct FMassCombatStatsFragment : public FMassFragment
 	UPROPERTY(EditAnywhere, Category = "Stats")
 	float MinRange = 0.f;
 };
+
+/**
+ * "I got hit by someone I cannot see" - temporarily widens the VICTIM's detection range.
+ *
+ * Applied when a unit takes a hit while it has no target of its own, so it can acquire the attacker
+ * even when the attacker outranges its SightRadius. Does nothing if the victim is already fighting
+ * (bHasValidTarget), which is the "wenn sie selbst noch nicht angreift" rule.
+ *
+ * The bonus lifts the effective detection radius to SightRadius * LoseSightRadiusFaktor and lasts
+ * LoseSightRadiusFaktorTimer seconds (both are per-unit properties on UMassActorBindingComponent).
+ * UMainStateProcessor::HandleLoseSightExtension counts it down and clears it.
+ *
+ * Detection ONLY: UDetectionProcessor adds DetectionBonusRadius to its radii, while
+ * UUnitSightProcessor, the fog-of-war circle and the minimap keep using the unmodified SightRadius.
+ * Re-triggering while already active refreshes the timer and keeps the larger of the two bonuses.
+ */
+inline void ApplyAttackedDetectionBonus(FMassAIStateFragment& VictimState,
+                                        const FMassAITargetFragment& VictimTarget,
+                                        const FMassCombatStatsFragment& VictimStats)
+{
+	// Already hunting something -> no help needed.
+	if (VictimTarget.bHasValidTarget)
+	{
+		return;
+	}
+
+	const float Factor = FMath::Max(1.f, VictimStats.LoseSightRadiusFaktor);
+	const float Bonus = VictimStats.SightRadius * (Factor - 1.f);
+
+	VictimState.DetectionBonusRadius = FMath::Max(VictimState.DetectionBonusRadius, Bonus);
+	VictimState.ExtendedLoseSightTimer = FMath::Max(0.f, VictimStats.LoseSightRadiusFaktorTimer);
+	VictimState.bHasExtendedLoseSight = true;
+}
 
 
 //----------------------------------------------------------------------//

@@ -30,6 +30,7 @@ UCLASS()
 class RTSUNITTEMPLATE_API ACustomControllerBase : public AExtendedControllerBase
 {
 	GENERATED_BODY()
+
 protected:
 	// /** If true, the formation will be recalculated on the next move command, even if the selection hasn't changed. */
 	// UPROPERTY(BlueprintReadWrite, Category = "RTS")
@@ -65,6 +66,13 @@ protected:
 	bool TryCancelActiveAbilities();
 
 public:
+
+	/**
+	 * Multi_SetMyTeamUnits selects the whole army once controllers are gathered. Turn this off
+	 * where a pre-selected army is wrong - a recorded battle, a cinematic, a spectator view.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bSelectOwnUnitsOnMatchStart = true;
 	AUnitBase* GetUnitFromHitResult(const FHitResult& Hit) const;
 
 	virtual void BeginPlay() override;

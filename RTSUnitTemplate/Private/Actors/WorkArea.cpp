@@ -10,6 +10,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Characters/Unit/WorkingUnitBase.h"
+#include "Mass/Signals/MySignals.h"   // UnitSignals::Idle / GoToResourceExtraction (ReserveMiningSlotOrReassign follow-up)
 #include "Engine/Texture.h"
 
 
@@ -288,6 +289,10 @@ void AWorkArea::HandleResourceExtractionArea(AUnitBase* UnitBase)
 
 		if (this != UnitBase->ResourcePlace) return;
 
+		// Final gate: whatever route set ResourcePlace, extraction never starts on a resource this
+		// worker is not permitted to gather.
+		if (!UnitBase->CanMineWorkArea(this)) return;
+
 		// Enforce the per-resource worker cap: an overflow worker is reassigned/idled here (returns
 		// false) instead of starting extraction.
 		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase))
@@ -342,9 +347,18 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 	// extractable. Release it up front - decrement our per-type worker slot (symmetric with the +1
 	// paid on assignment) and forget it - so the logic below treats this worker as unassigned and
 	// never re-registers it onto a dead deposit. GetAllResourcePlaces already filters such places.
-	if (IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->AvailableResourceAmount <= 0.f)
+	// Also release a deposit this worker is no longer permitted to mine (its MineableResourceTypes
+	// changed, or no base of its team accepts that resource any more). Without this the "keep the
+	// current resource" branch further down would pin the worker to a now-forbidden deposit forever.
+	const bool bHoldsForbiddenPlace =
+		IsValid(UnitBase->ResourcePlace) &&
+		(!UnitBase->CanMineWorkArea(UnitBase->ResourcePlace) ||
+		 !ResourceGameMode->CanTeamDeliverResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type)));
+
+	if (IsValid(UnitBase->ResourcePlace) && (UnitBase->ResourcePlace->AvailableResourceAmount <= 0.f || bHoldsForbiddenPlace))
 	{
 		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+		UnitBase->ResourcePlace->RemoveWorkerFromArray(Worker);
 		UnitBase->ResourcePlace = nullptr;
 	}
 
@@ -394,10 +408,11 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 		{
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		}
-		UnitBase->ResourcePlace = NewResourcePlace;
-		
-		// Register worker at the new location immediately
-		UnitBase->ResourcePlace->AddWorkerToArray(Worker);
+		// SetResourcePlace, not a raw assignment: HandleBaseArea releases the old slot on the normal
+		// route, but SwitchResourceArea is also reached from paths that did not (the AutoMining rescan,
+		// a re-pick after the old deposit was destroyed). A raw assignment there left the worker in the
+		// old node's Workers array and produced a phantom "N/Max".
+		UnitBase->SetResourcePlace(NewResourcePlace, /*bRegisterOnNewPlace=*/true);
 	}
 	else if (!UnitBase->ResourcePlace)
 	{
@@ -420,26 +435,14 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 			}
 		}
 
-		// If still no fallback found with space, pick the one with absolute lowest count in close range
-		if (!BestFallback)
-		{
-			for (AWorkArea* WorkPlace : CloseWorkPlaces)
-			{
-				if (!IsValid(WorkPlace)) continue;
-				const int32 WorkerCount = WorkPlace->Workers.Num();
-				if (WorkerCount < LowestWorkerCount)
-				{
-					LowestWorkerCount = WorkerCount;
-					BestFallback = WorkPlace;
-				}
-			}
-		}
-		
+		// No uncapped second fallback here: taking a node that is already at MaxWorkerCount only sends
+		// the worker on a walk that ends in ReserveMiningSlotOrReassign bouncing it straight back.
+		// Leaving BestFallback null idles the worker instead; the AutoMining rescan retries later.
+
 		if (BestFallback)
 		{
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(BestFallback->Type), +1.0f);
-			UnitBase->ResourcePlace = BestFallback;
-			UnitBase->ResourcePlace->AddWorkerToArray(Worker);
+			UnitBase->SetResourcePlace(BestFallback, /*bRegisterOnNewPlace=*/true);
 		}
 		else
 		{
@@ -748,8 +751,35 @@ void AWorkArea::OnRep_WorkerCount()
 	// nothing to do here. Hook kept for future per-node client-side reactions.
 }
 
-bool AWorkArea::ReserveMiningSlotOrReassign(AWorkingUnitBase* Worker)
+bool AWorkArea::HasFreeMiningSlotFor(const AWorkArea* Area, const AWorkingUnitBase* Worker)
 {
+	if (!IsValid(Area) || Area->AvailableResourceAmount <= 0.f)
+	{
+		return false;
+	}
+
+	// MaxWorkerCount <= 0 means "unlimited".
+	if (Area->MaxWorkerCount <= 0)
+	{
+		return true;
+	}
+
+	// Already registered here -> the worker owns one of the slots, it does not need a new one.
+	if (Worker && Area->Workers.Contains(Worker))
+	{
+		return true;
+	}
+
+	return Area->Workers.Num() < Area->MaxWorkerCount;
+}
+
+bool AWorkArea::ReserveMiningSlotOrReassign(AWorkingUnitBase* Worker, FName* OutFollowUpSignal)
+{
+	if (OutFollowUpSignal)
+	{
+		*OutFollowUpSignal = NAME_None;
+	}
+
 	if (!Worker) return true;
 	if (!HasAuthority()) return true; // server owns the slot decision; clients just render
 
@@ -770,7 +800,25 @@ bool AWorkArea::ReserveMiningSlotOrReassign(AWorkingUnitBase* Worker)
 	RemoveWorkerFromArray(Worker);
 
 	AResourceGameMode* RGM = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr);
+
+	// First try a nearby deposit of the SAME type (cheapest, keeps the worker's job unchanged).
 	AWorkArea* Alt = RGM ? RGM->GetNearestAvailableResourceOfTypeWithin(Worker, Type, 3000.f) : nullptr;
+
+	// Widen the search when that fails: ANY deposit this worker is allowed to work and that still has a
+	// free slot, at any distance. GetAllResourcePlaces is already permission-filtered and distance
+	// sorted. Without this the same-type/3000-unit window almost never hit on a normal map, so the
+	// overflow worker went Idle and stopped contributing entirely.
+	if (!Alt && RGM)
+	{
+		for (AWorkArea* Candidate : RGM->GetAllResourcePlaces(Worker))
+		{
+			if (Candidate != this && HasFreeMiningSlotFor(Candidate, Worker))
+			{
+				Alt = Candidate;
+				break;
+			}
+		}
+	}
 
 	// Release the per-type team slot we paid for on this node's type before moving on.
 	if (RGM && IsValid(Worker->ResourcePlace))
@@ -778,22 +826,36 @@ bool AWorkArea::ReserveMiningSlotOrReassign(AWorkingUnitBase* Worker)
 		RGM->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
 	}
 
+	// Which state the worker should end up in. Applied directly here for the actor-overlap caller, or
+	// handed back via OutFollowUpSignal for the Mass caller (see the header comment).
+	TEnumAsByte<UnitData::EState> NewState = UnitData::Idle;
+	FName FollowUpSignal = UnitSignals::Idle;
+
 	if (Alt && RGM)
 	{
-		Worker->ResourcePlace = Alt;
-		Alt->AddWorkerToArray(Worker);
+		Worker->SetResourcePlace(Alt, /*bRegisterOnNewPlace=*/true);
 		RGM->AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Alt->Type), +1.0f);
-		if (AUnitBase* WU = Cast<AUnitBase>(Worker)) WU->SetUEPathfinding = true;
-		Worker->SetUnitState(UnitData::GoToResourceExtraction);
-		Worker->SwitchEntityTagByState(UnitData::GoToResourceExtraction, Worker->UnitStatePlaceholder);
+		NewState = UnitData::GoToResourceExtraction;
+		FollowUpSignal = UnitSignals::GoToResourceExtraction;
 	}
 	else
 	{
-		// No same-type resource with room within ~3000 -> idle.
-		Worker->ResourcePlace = nullptr;
-		if (AUnitBase* WU = Cast<AUnitBase>(Worker)) WU->SetUEPathfinding = true;
-		Worker->SetUnitState(UnitData::Idle);
-		Worker->SwitchEntityTagByState(UnitData::Idle, Worker->UnitStatePlaceholder);
+		// Nothing this worker may work has room -> idle. SynchronizeUnitState's AutoMining rescan
+		// retries later, once a slot frees up.
+		Worker->SetResourcePlace(nullptr);
+	}
+
+	if (AUnitBase* WU = Cast<AUnitBase>(Worker)) WU->SetUEPathfinding = true;
+	Worker->SetUnitState(NewState);
+
+	if (OutFollowUpSignal)
+	{
+		// Caller is inside a command-buffer window that would strip the tag again - let it re-signal.
+		*OutFollowUpSignal = FollowUpSignal;
+	}
+	else
+	{
+		Worker->SwitchEntityTagByState(NewState, Worker->UnitStatePlaceholder);
 	}
 	return false; // do NOT mine here
 }

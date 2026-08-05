@@ -280,6 +280,21 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 										
 										TargetUnit->HandleProjectileImpact(ShooterActor, PreciseImpactPos, Projectile.ProjectileClass, Projectile.Damage, Projectile.ProjectileEffect, Projectile.ProjectileEffect2, Projectile.ProjectileEffect3);
 
+										// Shot by someone outside our sight: widen the victim's DETECTION range for a
+										// few seconds so it can find the shooter, but only while it has no target of
+										// its own (ApplyAttackedDetectionBonus enforces that). This is the case the
+										// melee/ranged-start paths in UUnitStateProcessor cannot cover - the shooter
+										// may be far outside SightRadius when the projectile finally lands.
+										if (FMassAIStateFragment* VictimState = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Units[j]))
+										{
+											const FMassAITargetFragment* VictimTarget = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(Units[j]);
+											const FMassCombatStatsFragment* VictimStats = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(Units[j]);
+											if (VictimTarget && VictimStats)
+											{
+												ApplyAttackedDetectionBonus(*VictimState, *VictimTarget, *VictimStats);
+											}
+										}
+
 										// Fire the projectile CDO's ImpactEvent once per hit unit (server-only, mirrors GroundHit).
 										// This block only runs for a newly-hit unit (HitEntities dedup above), so it is one-shot per unit.
 										if (Projectile.ProjectileClass)

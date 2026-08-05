@@ -183,9 +183,16 @@ void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, F
 	Stats.CastTime = Unit.CastTime;
 	Stats.IsInitialized = Unit.IsInitialized;
 	Stats.bIsInitializedOnClient = true;
-	Stats.bCanMoveWhileAttacking = Unit.MassActorBindingComponent->CanMoveWhileAttacking;
-	Stats.SightRadius = Unit.MassActorBindingComponent->SightRadius;
-	Stats.LoseSightRadius = Unit.MassActorBindingComponent->LoseSightRadius;
+	// Null-guarded: SyncAIState guards the identical access, this one used to dereference blind.
+	if (Unit.MassActorBindingComponent)
+	{
+		Stats.bCanMoveWhileAttacking = Unit.MassActorBindingComponent->CanMoveWhileAttacking;
+		// Safe to overwrite unconditionally now: the "attacked -> see further" boost no longer scales
+		// these fields (it is the separate FMassAIStateFragment::DetectionBonusRadius), so this
+		// per-tick rewrite cannot erase it any more. It used to, which is why the old boost never worked.
+		Stats.SightRadius = Unit.MassActorBindingComponent->SightRadius;
+		Stats.LoseSightRadius = Unit.MassActorBindingComponent->LoseSightRadius;
+	}
 }
 
 void UUnitActorToFragmentSyncProcessor::SyncCharacteristics(const AUnitBase& Unit, FMassAgentCharacteristicsFragment& Characteristics)
@@ -278,14 +285,10 @@ void UUnitActorToFragmentSyncProcessor::SyncAIState(const AUnitBase& Unit, FMass
 		}
 	}
 
-	if (Unit.MassActorBindingComponent)
-	{
-		if (!AIState.bHasExtendedLoseSight)
-		{
-			CombatStats.SightRadius = Unit.MassActorBindingComponent->SightRadius;
-			CombatStats.LoseSightRadius = Unit.MassActorBindingComponent->LoseSightRadius;
-		}
-	}
+	// SightRadius / LoseSightRadius are synced once, in SyncCombatStats (which runs just before this for
+	// every entity that has both fragments). The duplicate write that used to live here was gated on
+	// bHasExtendedLoseSight to protect the old sight boost - a guard that never worked, because the
+	// unguarded copy in SyncCombatStats had already overwritten the values in the same pass.
 }
 
 void UUnitActorToFragmentSyncProcessor::SyncMoveTarget(const AUnitBase& Unit, FMassMoveTargetFragment& MoveTarget)

@@ -26,6 +26,9 @@ class AUnitBase;
 class AWinLoseConfigActor;
 class ULoadingWidget;
 
+/** Feuert, wenn der Ladebildschirm abgelaufen ist und das Match sichtbar beginnt. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FRTSOnLoadingScreenFinished);
+
 USTRUCT(BlueprintType)
 struct FTimerHandleMapping
 {
@@ -99,6 +102,17 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
 	TSubclassOf<class ULoadingWidget> LoadingWidgetClass;
+
+	/**
+	 * Fires once the loading widget's duration has elapsed - the moment the player actually sees
+	 * the level. Anything that must not happen behind the loading screen (starting a scripted
+	 * battle, a capture, a cinematic) should hang off this instead of BeginPlay.
+	 */
+	UPROPERTY(BlueprintAssignable, Category = RTSUnitTemplate)
+	FRTSOnLoadingScreenFinished OnLoadingScreenFinished;
+
+	UFUNCTION()
+	void HandleLoadingScreenFinished();
 
 	UPROPERTY()
 	int32 LoadingWidgetTriggerId = 0;

@@ -301,11 +301,27 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveWorkerFromArray(class AWorkingUnitBase* Worker);
 
+	// True if Worker could take a mining slot on Area right now: Area is valid, not depleted, and either
+	// uncapped (MaxWorkerCount <= 0), below MaxWorkerCount, or already holding a slot for this worker.
+	// Every assignment path must consult this BEFORE routing a worker, otherwise the worker walks to a
+	// full deposit and is bounced by ReserveMiningSlotOrReassign on arrival.
+	// A null Worker only checks the free-capacity part.
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	static bool HasFreeMiningSlotFor(const AWorkArea* Area, const AWorkingUnitBase* Worker);
+
 	// Server-only. Ensures the worker holds one of the MaxWorkerCount mining slots on this node: the
-	// first MaxWorkerCount workers (by Workers order) may mine; any overflow worker is reassigned to the
-	// nearest same-type resource within ~3000 units (else sent Idle). Returns true if the worker may
+	// first MaxWorkerCount workers (by Workers order) may mine; any overflow worker is reassigned to
+	// another deposit it is allowed to work (else sent Idle). Returns true if the worker may
 	// mine here now, false if it was reassigned/idled (caller must NOT start extraction).
-	bool ReserveMiningSlotOrReassign(class AWorkingUnitBase* Worker);
+	//
+	// OutFollowUpSignal: pass a non-null pointer when calling from inside a Mass command-buffer window
+	// that is already removing state tags for this entity (UUnitStateProcessor::SwitchState does exactly
+	// that). The function then does NOT touch Mass tags itself and instead reports the signal the caller
+	// must fire afterwards - UnitSignals::GoToResourceExtraction or UnitSignals::Idle, or NAME_None.
+	// Applying the tag directly in that situation is silently undone, because the enclosing
+	// RemoveTag<...> is flushed after this AddTag<...>, leaving the entity with NO state tag at all -
+	// which is precisely the "worker freezes on arrival at a full deposit" bug.
+	bool ReserveMiningSlotOrReassign(class AWorkingUnitBase* Worker, FName* OutFollowUpSignal = nullptr);
 
 	/** Duration after which a worker added to this WorkArea should be sent back to base and removed (defaults to BuildTime if <= 0). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

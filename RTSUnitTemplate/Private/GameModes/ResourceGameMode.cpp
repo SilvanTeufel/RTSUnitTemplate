@@ -450,6 +450,13 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 			}
 		}
 		
+		// Never hand out a node that is already at its per-node cap - a worker sent there just bounces
+		// off ReserveMiningSlotOrReassign on arrival. (Workers.Contains means WE already hold a slot.)
+		if (!AWorkArea::HasFreeMiningSlotFor(WorkPlace, Worker))
+		{
+			continue;
+		}
+
 		// Prefer work places with fewer workers for even distribution
 		const int32 WorkerCount = WorkPlace->Workers.Num();
 		if (WorkerCount < LowestWorkerCount)
@@ -458,7 +465,7 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 			BestWorkPlace = WorkPlace;
 		}
 	}
-	
+
 	// Fallback: if no suitable place found with distribution constraints, try without constraints
 	if (!BestWorkPlace && bWorkerDistributionSet)
 	{
@@ -468,13 +475,19 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 			{
 				continue;
 			}
-			
+
 			const float WorkPlaceDistance = FVector::Dist(ReferenceLocation, WorkPlace->GetActorLocation());
 			if (WorkPlaceDistance > DistanceThreshold)
 			{
 				continue;
 			}
-			
+
+			// The per-TYPE quota may be relaxed here, but the per-NODE cap still holds.
+			if (!AWorkArea::HasFreeMiningSlotFor(WorkPlace, Worker))
+			{
+				continue;
+			}
+
 			const int32 WorkerCount = WorkPlace->Workers.Num();
 			if (WorkerCount < LowestWorkerCount)
 			{
@@ -483,38 +496,84 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 			}
 		}
 	}
-	
-	// Final fallback: just pick the closest one
-	if (!BestWorkPlace && WorkPlaces.Num() > 0)
+
+	// Final fallback: the closest node that still has room. Deliberately NOT "just WorkPlaces[0]" any
+	// more: taking a full node here is what made freshly spawned workers walk to a 3/3 deposit and then
+	// stall. If every candidate is full the worker stays unassigned and idles - SynchronizeUnitState's
+	// AutoMining rescan retries later, when a slot has freed up.
+	if (!BestWorkPlace)
 	{
-		BestWorkPlace = WorkPlaces[0];
+		for (AWorkArea* WorkPlace : WorkPlaces)
+		{
+			if (AWorkArea::HasFreeMiningSlotFor(WorkPlace, Worker))
+			{
+				BestWorkPlace = WorkPlace;
+				break;
+			}
+		}
 	}
 	
-	Worker->ResourcePlace = BestWorkPlace;
+	// Pay back the previous assignment before overwriting it. This function runs TWICE for every
+	// worker - once from AWorkingUnitBase::BeginPlay and once from the UnitSpawned signal
+	// (UUnitStateProcessor::HandleUnitSpawnedSignal) - and because the selection prefers the node with
+	// the fewest workers, the second run usually picks a DIFFERENT node than the first. Without this
+	// release the first node keeps a phantom worker (and a phantom per-type count) forever, which is
+	// exactly the "2/3 with nobody mining" the HUD shows on a freshly started map.
+	if (IsValid(Worker->ResourcePlace) && Worker->ResourcePlace != BestWorkPlace)
+	{
+		AddCurrentWorkersForResourceType(Worker->TeamId, ConvertToResourceType(Worker->ResourcePlace->Type), -1.0f);
+	}
+
+	const bool bWasAlreadyAssignedHere = (Worker->ResourcePlace == BestWorkPlace);
+	Worker->SetResourcePlace(BestWorkPlace);
 
 	if (Worker->ResourcePlace)
 	{
 		// Update the CurrentWorkers count for the assigned resource type
 		// This ensures proper distribution when multiple workers are assigned in sequence
-		const EResourceType AssignedResourceType = ConvertToResourceType(Worker->ResourcePlace->Type);
-		AddCurrentWorkersForResourceType(Worker->TeamId, AssignedResourceType, +1.0f);
-		
+		if (!bWasAlreadyAssignedHere)
+		{
+			const EResourceType AssignedResourceType = ConvertToResourceType(Worker->ResourcePlace->Type);
+			AddCurrentWorkersForResourceType(Worker->TeamId, AssignedResourceType, +1.0f);
+		}
+
 		// Add worker to the WorkArea's worker list immediately to inform subsequent assignments
 		Worker->ResourcePlace->AddWorkerToArray(Worker);
+
+		// The base above was picked before we knew which resource this worker would gather, so at
+		// that point GetClosestBaseFromArray could not filter by cargo. Now that the deposit is
+		// known, re-pick the nearest base that actually accepts it. Only replace the current base
+		// if we find one - a null result would strand the worker.
+		if (ABuildingBase* AcceptingBase = GetClosestBaseFromArray(Worker, WorkAreaGroups.BaseAreas))
+		{
+			Worker->Base = AcceptingBase;
+		}
 	}
 
 }
 
 ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases)
 {
+    if (!IsValid(Worker))
+    {
+        return nullptr;
+    }
+
     ABuildingBase* ClosestBase = nullptr;
     float MinDistanceSquared = FLT_MAX;
+
+    // Only bases that accept what this worker carries (or is about to fetch) are eligible, so a
+    // restricted worker never walks to a drop-off that would reject its load.
+    const EResourceType RoutingType = GetWorkerRoutingResourceType(Worker);
 
     // The 'Bases' array is iterated over.
     for (ABuildingBase* Base : Bases)
     {
-       // Here, 'Base' is checked with IsValid(), which is good practice.
-       // BUT, the 'Worker' pointer is used immediately without any check.
+       if (IsValid(Base) && !Base->AcceptsResourceType(RoutingType))
+       {
+          continue;
+       }
+
        if (IsValid(Base) && Worker->TeamId == Base->TeamId && Base->GetUnitState() != UnitData::Dead)
        {
 			if (Worker->ResourcePlace)
@@ -583,10 +642,14 @@ TArray<AWorkArea*> AResourceGameMode::GetFiveClosestResourcePlaces(AWorkingUnitB
 	// workers are never assigned to a place they cannot actually extract from.
 	AllAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area) || Area->AvailableResourceAmount <= 0.f; });
 
+	// Same permission filter as GetAllResourcePlaces - this list is the one AssignWorkAreasToWorker
+	// uses for the initial assignment, and it builds its own copy instead of reusing that helper.
+	FilterResourcePlacesForWorker(Worker, AllAreas);
+
 	// Sort all areas by distance to the worker's base (if available), otherwise use worker location
 	// This ensures resources are selected based on proximity to the base, not the worker's current position
-	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base)) 
-		? Worker->Base->GetActorLocation() 
+	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base))
+		? Worker->Base->GetActorLocation()
 		: Worker->GetActorLocation();
 	
 	AllAreas.Sort([ReferenceLocation](const AWorkArea& AreaA, const AWorkArea& AreaB) {
@@ -762,6 +825,12 @@ TArray<AWorkArea*> AResourceGameMode::GetAllResourcePlaces(AWorkingUnitBase* Wor
 	// workers are never assigned to a place they cannot actually extract from.
 	AllAreas.RemoveAll([](AWorkArea* Area) { return !IsValid(Area) || Area->AvailableResourceAmount <= 0.f; });
 
+	// Drop everything this worker may not mine / may not hand in anywhere. Doing it here (and in
+	// GetFiveClosestResourcePlaces) covers every automatic ResourcePlace assignment: this list
+	// feeds AWorkArea::SwitchResourceArea, ABuildingBase::SwitchResourceArea and
+	// GetNearestAvailableResourceOfTypeWithin.
+	FilterResourcePlacesForWorker(Worker, AllAreas);
+
 	// Sort all areas by distance to the worker's base (if available), otherwise use worker location
 	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base))
 		? Worker->Base->GetActorLocation()
@@ -773,6 +842,67 @@ TArray<AWorkArea*> AResourceGameMode::GetAllResourcePlaces(AWorkingUnitBase* Wor
 	});
 
 	return AllAreas;
+}
+
+EResourceType AResourceGameMode::GetWorkerRoutingResourceType(AWorkingUnitBase* Worker) const
+{
+	// Blueprint-facing wrapper; the logic lives on the worker so the controllers can use it
+	// without reaching for the GameMode.
+	return IsValid(Worker) ? Worker->GetRoutingResourceType() : EResourceType::MAX;
+}
+
+bool AResourceGameMode::CanTeamDeliverResourceType(int32 TeamId, EResourceType ResourceType) const
+{
+	if (ResourceType == EResourceType::MAX)
+	{
+		return true;
+	}
+
+	bool bFoundAnyBase = false;
+	for (ABuildingBase* Base : WorkAreaGroups.BaseAreas)
+	{
+		if (!IsValid(Base) || Base->TeamId != TeamId || Base->GetUnitState() == UnitData::Dead)
+		{
+			continue;
+		}
+
+		bFoundAnyBase = true;
+		if (Base->AcceptsResourceType(ResourceType))
+		{
+			return true;
+		}
+	}
+
+	// No base of this team (yet) -> do not block gathering. Bases can still be built later, and
+	// this keeps teams that never register a base behaving exactly as before.
+	return !bFoundAnyBase;
+}
+
+void AResourceGameMode::FilterResourcePlacesForWorker(AWorkingUnitBase* Worker, TArray<AWorkArea*>& InOutAreas) const
+{
+	if (!Worker)
+	{
+		return;
+	}
+
+	const int32 TeamId = Worker->TeamId;
+	InOutAreas.RemoveAll([this, Worker, TeamId](const AWorkArea* Area)
+	{
+		if (!IsValid(Area))
+		{
+			return true;
+		}
+
+		// 1) Is this worker allowed to gather that resource at all?
+		if (!Worker->CanMineWorkArea(Area))
+		{
+			return true;
+		}
+
+		// 2) Could the load ever be handed in? Gathering something no base of the team accepts
+		//    would strand the worker in an endless mine -> walk -> rejected loop.
+		return !CanTeamDeliverResourceType(TeamId, ConvertToResourceType(Area->Type));
+	});
 }
 
 AWorkArea* AResourceGameMode::GetNearestAvailableResourceOfTypeWithin(AWorkingUnitBase* Worker, TEnumAsByte<WorkAreaData::WorkAreaType> Type, float Radius)
@@ -812,40 +942,50 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 	{
 		if (WorkArea)
 		{
-			EResourceType ResourceType = ConvertToResourceType(WorkArea->Type);
-	
-			int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
-			int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType);
-
-			if (CurrentWorkers < MaxWorkers)
+			// Per-NODE capacity is unconditional. It used to be nested inside the per-TYPE quota check
+			// below, which made it dead code in the default setup: with no worker distribution
+			// configured GetMaxWorkersForResourceType returns 0, so "CurrentWorkers < MaxWorkers" is
+			// "n < 0" and never passes - the whole capacity-respecting branch was unreachable and every
+			// caller fell through to the uncapped fallback underneath.
+			if (!AWorkArea::HasFreeMiningSlotFor(WorkArea, nullptr))
 			{
-				const int32 WorkerCount = WorkArea->Workers.Num();
-				if (WorkerCount < WorkArea->MaxWorkerCount)
-				{
-					// If distribution is set, we prioritize distance. 
-					// Since WorkAreas is already sorted by distance, return the first one found!
-					if (bDistributionSet)
-					{
-						return WorkArea;
-					}
+				continue;
+			}
 
-					if (WorkerCount < LowestWorkerCount)
-					{
-						LowestWorkerCount = WorkerCount;
-						BestWorkArea = WorkArea;
-					}
+			// Per-TYPE quota only applies when the team actually configured a distribution.
+			if (bDistributionSet)
+			{
+				const EResourceType ResourceType = ConvertToResourceType(WorkArea->Type);
+				const int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
+				const int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType);
+
+				if (CurrentWorkers >= MaxWorkers)
+				{
+					continue;
 				}
+
+				// Distribution set -> prioritize distance. WorkAreas is already sorted by distance,
+				// so the first qualifying one wins.
+				return WorkArea;
+			}
+
+			const int32 WorkerCount = WorkArea->Workers.Num();
+			if (WorkerCount < LowestWorkerCount)
+			{
+				LowestWorkerCount = WorkerCount;
+				BestWorkArea = WorkArea;
 			}
 		}
 	}
 
-	// Fallback: If no work area matches the MaxWorkers constraint and NO distribution is set, 
-	// pick the one with fewest workers anyway
-	if (!BestWorkArea && !bDistributionSet && WorkAreas.Num() > 0)
+	// Fallback: if the per-TYPE quota blocked everything, relax that quota - but NOT the per-node cap.
+	// Returning a full node here is what sent workers to a 3/3 deposit where they then stalled; with
+	// this returning null the caller idles the worker instead and retries once a slot frees up.
+	if (!BestWorkArea && bDistributionSet)
 	{
 		for (AWorkArea* WorkArea : WorkAreas)
 		{
-			if (WorkArea)
+			if (WorkArea && AWorkArea::HasFreeMiningSlotFor(WorkArea, nullptr))
 			{
 				const int32 WorkerCount = WorkArea->Workers.Num();
 				if (WorkerCount < LowestWorkerCount)

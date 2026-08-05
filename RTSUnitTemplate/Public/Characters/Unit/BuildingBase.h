@@ -73,6 +73,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsBase = false;
 
+	// --- Which resources may be delivered here? (Details panel) ----------------------------
+	// Only meaningful while IsBase is true. Off by default, which keeps the historical
+	// behavior: this base accepts EVERY resource type.
+	// Config only - set it on the Blueprint default. It is not replicated (clients read the same
+	// CDO value); change it at runtime on the SERVER only, where the worker AI runs.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Resources")
+	bool bRestrictAcceptedResources = false;
+
+	// The resource types a worker may drop off here. Only used when bRestrictAcceptedResources
+	// is true. An EMPTY list then means "this base accepts nothing".
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Resources", meta = (EditCondition = "bRestrictAcceptedResources"))
+	TArray<EResourceType> AcceptedResourceTypes;
+
+	// True if a worker may deliver ResourceType to this base. Always true while
+	// bRestrictAcceptedResources is off. EResourceType::MAX ("carrying nothing") always passes,
+	// so an empty-handed worker can still walk home to be re-dispatched.
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Resources")
+	bool AcceptsResourceType(EResourceType ResourceType) const;
+
 	// Per-building adjustment to controller SnapGap (can be negative). Effective gap is clamped to >= 0.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapGapAdjustment = 0.f;

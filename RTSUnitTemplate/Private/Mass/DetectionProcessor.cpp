@@ -416,8 +416,12 @@ void UDetectionProcessor::Execute(
 
                 const float TgtCapsule = Tgt.Char ? Tgt.Char->CapsuleRadius : 0.f;
 
-                // Effective radii: add both capsule radii to base sight radii (2D)
-                const float EffectiveSight = Det.Stats->SightRadius + DetCapsule + TgtCapsule;
+                // Effective radii: add both capsule radii to base sight radii (2D), plus the temporary
+                // "I was just hit and have no target" bonus (ApplyAttackedDetectionBonus, UnitMassTag.h).
+                // The bonus lives only here - UUnitSightProcessor, the fog circle and the minimap keep
+                // using the plain SightRadius, so widening detection never widens what the player sees.
+                const float DetBonus = Det.State ? Det.State->DetectionBonusRadius : 0.f;
+                const float EffectiveSight = Det.Stats->SightRadius + DetBonus + DetCapsule + TgtCapsule;
                 const float EffectiveSightSq = FMath::Square(EffectiveSight);
 
                 const float EffectiveMinRangeSq = Det.Stats->MinRange > 0.f ? FMath::Square(Det.Stats->MinRange + DetCapsule + TgtCapsule) : 0.f;
@@ -469,7 +473,7 @@ void UDetectionProcessor::Execute(
 
                 // “current” target still viable if it’s the same one and within effective lose‐sight radius
                 {
-                    const float EffectiveLoseSight = Det.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
+                    const float EffectiveLoseSight = Det.Stats->LoseSightRadius + DetBonus + DetCapsule + TgtCapsule;
                     const float EffectiveLoseSightSq = FMath::Square(EffectiveLoseSight);
                     bool bIsAllied = (Det.Alliance && (Det.Alliance->AlliedTeamsMask & (1LL << Tgt.Stats->TeamId)));
     
@@ -494,7 +498,7 @@ void UDetectionProcessor::Execute(
                     // reads further up) - a target entity without FMassSightFragment leaves it null.
                     // Dereferencing it here crashed UDetectionProcessor::Execute.
                     const int32* AttackingSightCount = Tgt.Sight ? Tgt.Sight->ConsistentAttackerTeamOverlapsPerTeam.Find(DetectorTeamId) : nullptr;
-                    const float DetEffectiveLoseSight = Det.Stats->LoseSightRadius + DetCapsule + TgtCapsule;
+                    const float DetEffectiveLoseSight = Det.Stats->LoseSightRadius + DetBonus + DetCapsule + TgtCapsule;
                     const float DetEffectiveLoseSightSq = FMath::Square(DetEffectiveLoseSight);
                     if (Tgt.Stats->Health > 0 && AttackingSightCount && *AttackingSightCount > 0 && DistSq < DetEffectiveLoseSightSq && DistSq >= EffectiveMinRangeSq)
                     {

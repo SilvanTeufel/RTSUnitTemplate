@@ -4338,6 +4338,9 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		return;
 	}
 	
+		// Switching to construction duty: give the deposit's mining slot back (see SendWorkerToWorkArea).
+		Worker->ReleaseResourcePlace();
+
 		Worker->BuildArea = Worker->CurrentDraggedWorkArea;
 		Worker->BuildArea->TeamId = Worker->TeamId;
 		Worker->BuildArea->PlannedBuilding = true;
@@ -5442,7 +5445,20 @@ void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBa
 {
 	if (!Worker || !Worker->IsWorker) return;
 
-	Worker->ResourcePlace = WorkArea;
+	// Honour the worker's resource permissions (AWorkingUnitBase::MineableResourceTypes) even for a
+	// direct player order - otherwise a right-click would hand the worker a deposit its AI is not
+	// allowed to work, and the next automatic re-assignment would silently undo the command.
+	// A null WorkArea is still allowed through: that is the "clear the assignment" call.
+	if (IsValid(WorkArea) && !Worker->CanMineWorkArea(WorkArea)) return;
+
+	// Server-side capacity check, mirroring SendWorkerToWorkArea. Without it a right-click could stack
+	// any number of workers onto a full deposit; they walked there and were then bounced by
+	// ReserveMiningSlotOrReassign into Idle, which reads as "they just stand there".
+	if (IsValid(WorkArea) && !AWorkArea::HasFreeMiningSlotFor(WorkArea, Worker)) return;
+
+	// SetResourcePlace (not a raw assignment) so the deposit the worker is leaving gets its slot back -
+	// otherwise the old node keeps counting this worker and shows a phantom "N/Max" forever.
+	Worker->SetResourcePlace(WorkArea, /*bRegisterOnNewPlace=*/true);
 	// Re-enable auto-mining: a deliberate right-click on a resource node restarts the continuous
 	// gather cycle. A prior move command sets AutoMining=false (CustomControllerBase) and nothing
 	// else turns it back on, so without this the worker mines exactly once and then idles forever
@@ -5462,6 +5478,11 @@ void AExtendedControllerBase::SendWorkerToWorkArea_Implementation(AWorkingUnitBa
 	{
 		return; 
 	}
+
+	// Going to build means it stops mining: hand the deposit's slot back. The BuildArea side of this
+	// hand-over was always cleaned up (StopWork, move orders, death), the resource side never was, so a
+	// miner sent to a construction site kept occupying its deposit indefinitely.
+	Worker->ReleaseResourcePlace();
 
 	Worker->BuildArea = WorkArea;
 	// Ensure the worker is registered in the area's worker list on the server
@@ -5602,7 +5623,9 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 		if (Base && Base->IsBase)
 		{
 			for (int32 i = 0; i < SelectedUnits.Num(); i++) {
-				if (SelectedUnits[i] && SelectedUnits[i]->IsWorker)
+				// Skip workers this base refuses (ABuildingBase::AcceptsResourceType): sending them
+				// there would only have them bounce off on arrival.
+				if (SelectedUnits[i] && SelectedUnits[i]->IsWorker && SelectedUnits[i]->CanDeliverToBase(Base))
 				{
 					SelectedUnits[i]->RemoveFocusEntityTarget();
 					SelectedUnits[i]->Base = Base;

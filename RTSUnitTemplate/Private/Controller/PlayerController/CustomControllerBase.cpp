@@ -78,6 +78,12 @@ void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AAc
 	HUDBase->DeselectAllUnits();
 	int32 FilteredCount = 0;
 
+	if (!bSelectOwnUnitsOnMatchStart)
+	{
+		SelectedUnits = HUDBase->SelectedUnits;
+		return;
+	}
+
 	for (int32 i = 0; i < AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
@@ -1422,7 +1428,8 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 			if (FollowTarget->bIsBuilding)
 			{
 				ABuildingBase* Building = static_cast<ABuildingBase*>(FollowTarget);
-				if (Building->IsBase)
+				// Only adopt it as the drop-off if it actually accepts this worker's load.
+				if (Building->IsBase && Unit->CanDeliverToBase(Building))
 				{
 					Unit->Base = Building;
 				}
@@ -1525,7 +1532,8 @@ void ACustomControllerBase::Retry_Server_SetUnitsFollowTarget()
 			if (StrongTarget->bIsBuilding)
 			{
 				ABuildingBase* Building = static_cast<ABuildingBase*>(StrongTarget);
-				if (Building->IsBase)
+				// Only adopt it as the drop-off if it actually accepts this worker's load.
+				if (Building->IsBase && Unit->CanDeliverToBase(Building))
 				{
 					Unit->Base = Building;
 				}
@@ -1581,7 +1589,8 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 			if (FollowTarget->bIsBuilding)
 			{
 				ABuildingBase* Building = static_cast<ABuildingBase*>(FollowTarget);
-				if (Building->IsBase)
+				// Only adopt it as the drop-off if it actually accepts this worker's load.
+				if (Building->IsBase && Unit->CanDeliverToBase(Building))
 				{
 					Unit->Base = Building;
 				}

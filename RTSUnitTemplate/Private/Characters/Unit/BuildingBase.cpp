@@ -151,12 +151,20 @@ void ABuildingBase::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* 
 	// Since Worker is already AWorkingUnitBase, no need to cast again
 	AUnitBase* UnitBase = Cast<AUnitBase>(OtherActor);
 	if (!UnitBase || !UnitBase->IsWorker) return;
-	
-	UnitBase->Base = this;
-	
+
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 	if (!ResourceGameMode) return;
-	
+
+	// Merely brushing past a base must not adopt it as the worker's drop-off when this base
+	// rejects the worker's cargo - that would send the load to a building that cannot take it.
+	// The worker keeps the base it was routed to and simply walks on.
+	if (!UnitBase->CanDeliverToBase(this))
+	{
+		return;
+	}
+
+	UnitBase->Base = this;
+
 	bool CanAffordConstruction = false;
 
 	if(UnitBase->BuildArea)
@@ -216,6 +224,25 @@ void ABuildingBase::MulticastRotateNiagaraToOrigin_Implementation(UNiagaraCompon
 	MulticastRotateNiagaraLinear(NiagaraToRotate, TargetRotation, InRotateDuration, InRotationEaseExponent);
 }
 
+bool ABuildingBase::AcceptsResourceType(EResourceType ResourceType) const
+{
+	// MAX means "the worker carries nothing". Such a worker is only coming home to be
+	// re-dispatched, so every base must let it in - otherwise an idle worker could never
+	// reach a base again.
+	if (ResourceType == EResourceType::MAX)
+	{
+		return true;
+	}
+
+	// Unrestricted base: accepts anything. This is the default, so existing content is untouched.
+	if (!bRestrictAcceptedResources)
+	{
+		return true;
+	}
+
+	return AcceptedResourceTypes.Contains(ResourceType);
+}
+
 void ABuildingBase::HandleBaseArea(AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode, bool CanAffordConstruction)
 {
 	UnitBase->UnitControlTimer = 0;
@@ -251,9 +278,18 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 	// extractable. Release it up front - decrement our per-type worker slot (symmetric with the +1
 	// paid on assignment) and forget it - so the logic below treats this worker as unassigned and
 	// never re-registers it onto a dead deposit. GetAllResourcePlaces already filters such places.
-	if (IsValid(UnitBase->ResourcePlace) && UnitBase->ResourcePlace->AvailableResourceAmount <= 0.f)
+	// Also release a deposit this worker is no longer permitted to mine (its MineableResourceTypes
+	// changed, or no base of its team accepts that resource any more). Without this the "keep the
+	// current resource" branch further down would pin the worker to a now-forbidden deposit forever.
+	const bool bHoldsForbiddenPlace =
+		IsValid(UnitBase->ResourcePlace) &&
+		(!UnitBase->CanMineWorkArea(UnitBase->ResourcePlace) ||
+		 !ResourceGameMode->CanTeamDeliverResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type)));
+
+	if (IsValid(UnitBase->ResourcePlace) && (UnitBase->ResourcePlace->AvailableResourceAmount <= 0.f || bHoldsForbiddenPlace))
 	{
 		ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(UnitBase->ResourcePlace->Type), -1.0f);
+		UnitBase->ResourcePlace->RemoveWorkerFromArray(UnitBase);
 		UnitBase->ResourcePlace = nullptr;
 	}
 
@@ -380,19 +416,11 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 				}
 			}
 
-			// If no area with space found, fallback to any closer area with lowest worker count
-			if (!BestWorkPlace)
-			{
-				for (AWorkArea* WorkPlace : SuitableCloserAreas)
-				{
-					const int32 WorkerCount = WorkPlace->Workers.Num();
-					if (WorkerCount < LowestWorkerCount)
-					{
-						LowestWorkerCount = WorkerCount;
-						BestWorkPlace = WorkPlace;
-					}
-				}
-			}
+			// Deliberately NO uncapped fallback here. This block only exists to OPTIMIZE an already
+			// working assignment ("a closer deposit became free"), so if no closer deposit has room we
+			// simply keep the current one. The fallback that used to sit here ignored MaxWorkerCount and
+			// returned early, so a worker coming back from the base was rerouted onto a full deposit and
+			// then bounced on arrival - this is the live path of the "workers stand around" report.
 			
 			if (BestWorkPlace)
 			{
@@ -405,14 +433,10 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 					ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(BestWorkPlace->Type), +1.0f);
 				}
 				
-				UnitBase->ResourcePlace = BestWorkPlace;
-				
-				// Register worker at the new location immediately
-				if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
-				{
-					UnitBase->ResourcePlace->AddWorkerToArray(WorkingUnit);
-				}
-				
+				// SetResourcePlace, not a raw assignment - it releases the slot on the deposit we are
+				// switching away from. A raw assignment here left a phantom worker on the old node.
+				UnitBase->SetResourcePlace(BestWorkPlace, /*bRegisterOnNewPlace=*/true);
+
 				UnitBase->SetUEPathfinding = true;
 				UnitBase->SetUnitState(UnitData::GoToResourceExtraction);
 				UnitBase->SwitchEntityTagByState(UnitData::GoToResourceExtraction, UnitBase->UnitStatePlaceholder);
@@ -433,13 +457,8 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 		{
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(NewResourcePlace->Type), +1.0f);
 		}
-		UnitBase->ResourcePlace = NewResourcePlace;
-
-		// Register worker at the new location immediately
-		if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
-		{
-			UnitBase->ResourcePlace->AddWorkerToArray(WorkingUnit);
-		}
+		// Releases the previous deposit's slot before taking the new one (see above).
+		UnitBase->SetResourcePlace(NewResourcePlace, /*bRegisterOnNewPlace=*/true);
 	}
 	else if (!IsValid(UnitBase->ResourcePlace))
 	{
@@ -465,31 +484,13 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 			}
 		}
 
-		// If still no fallback found with space, pick the one with absolute lowest count in close range
-		if (!BestFallback)
-		{
-			for (AWorkArea* WorkPlace : CloseWorkPlaces)
-			{
-				if (!IsValid(WorkPlace)) continue;
-				const int32 WorkerCount = WorkPlace->Workers.Num();
-				if (WorkerCount < LowestWorkerCount)
-				{
-					LowestWorkerCount = WorkerCount;
-					BestFallback = WorkPlace;
-				}
-			}
-		}
-		
+		// No uncapped second fallback here: a node at MaxWorkerCount would just bounce the worker back
+		// on arrival. Leaving BestFallback null idles it instead; the AutoMining rescan retries later.
+
 		if (BestFallback)
 		{
 			ResourceGameMode->AddCurrentWorkersForResourceType(UnitBase->TeamId, ConvertToResourceType(BestFallback->Type), +1.0f);
-			UnitBase->ResourcePlace = BestFallback;
-
-			// Register worker at the fallback location immediately
-			if (AWorkingUnitBase* WorkingUnit = Cast<AWorkingUnitBase>(UnitBase))
-			{
-				UnitBase->ResourcePlace->AddWorkerToArray(WorkingUnit);
-			}
+			UnitBase->SetResourcePlace(BestFallback, /*bRegisterOnNewPlace=*/true);
 		}
 		else
 		{

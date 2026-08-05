@@ -64,7 +64,59 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EResourceType ExtractingWorkResourceType = EResourceType::Primary;
-	
+
+	// --- Which resources may this worker gather? (Details panel) ---------------------------
+	// Off by default, which keeps the historical behavior: the worker may mine EVERY resource
+	// type. Switch it on to restrict the worker to MineableResourceTypes.
+	// Config only - set it on the Blueprint default. It is not replicated (clients read the same
+	// CDO value); change it at runtime on the SERVER only, where the worker AI runs.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Worker|Resources")
+	bool bRestrictMineableResources = false;
+
+	// The resource types this worker is allowed to gather. Only used when
+	// bRestrictMineableResources is true. An EMPTY list then means "this worker mines nothing".
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Worker|Resources", meta = (EditCondition = "bRestrictMineableResources"))
+	TArray<EResourceType> MineableResourceTypes;
+
+	// True if this worker may gather ResourceType. Always true while bRestrictMineableResources
+	// is off. EResourceType::MAX ("nothing") is never mineable.
+	UFUNCTION(BlueprintPure, Category = "Worker|Resources")
+	bool CanMineResourceType(EResourceType ResourceType) const;
+
+	// Convenience wrapper: resolves the WorkArea's type and defers to CanMineResourceType.
+	// A null area returns false.
+	UFUNCTION(BlueprintPure, Category = "Worker|Resources")
+	bool CanMineWorkArea(const AWorkArea* Area) const;
+
+	// The resource type this worker should be routed by right now: what it is carrying if it
+	// carries anything, otherwise the type of its assigned ResourcePlace, otherwise MAX
+	// ("unknown" - callers then apply no base filtering).
+	UFUNCTION(BlueprintPure, Category = "Worker|Resources")
+	EResourceType GetRoutingResourceType() const;
+
+	// True if InBase is a valid drop-off for what this worker carries (or is about to fetch).
+	// A null base returns false.
+	UFUNCTION(BlueprintPure, Category = "Worker|Resources")
+	bool CanDeliverToBase(const ABuildingBase* InBase) const;
+
+	// Assigns this worker's mining node and ALWAYS releases the slot it held on the previous node.
+	//
+	// Use this instead of writing ResourcePlace directly. A bare `Worker->ResourcePlace = X` leaves the
+	// worker registered in the old node's Workers array forever, and since AWorkArea::CurrentWorkers
+	// (what the HUD draws) is just Workers.Num(), the old node keeps showing phantom miners - a node
+	// reading "2/3" with nobody actually working it. Nothing reconciles those arrays afterwards:
+	// AWorkArea::OnOverflowTimer is only armed for BuildAreas (AWorkArea::InitWorkerOverflowTimer).
+	//
+	// bRegisterOnNewPlace additionally enters the worker in the new node's Workers array.
+	// Server-side only; the arrays and CurrentWorkers are server-authoritative and replicated.
+	UFUNCTION(BlueprintCallable, Category = "Worker|Resources")
+	void SetResourcePlace(AWorkArea* NewPlace, bool bRegisterOnNewPlace = false);
+
+	// Releases the slot on the current node (if any) and clears ResourcePlace. Equivalent to
+	// SetResourcePlace(nullptr), spelled out for call sites that just mean "stop mining here".
+	UFUNCTION(BlueprintCallable, Category = "Worker|Resources")
+	void ReleaseResourcePlace();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	float ResourceExtractionTime = 2.f;
 

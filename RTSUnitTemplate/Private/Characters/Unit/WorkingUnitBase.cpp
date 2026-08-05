@@ -71,6 +71,93 @@ void AWorkingUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(AWorkingUnitBase, CarryingResourceType);
 }
 
+bool AWorkingUnitBase::CanMineResourceType(EResourceType ResourceType) const
+{
+	// MAX is the "no resource" sentinel (also what ConvertToResourceType returns for Base /
+	// BuildArea / NoBuildZone areas) - never a valid mining target.
+	if (ResourceType == EResourceType::MAX)
+	{
+		return false;
+	}
+
+	// Unrestricted worker: mines anything. This is the default, so existing content is untouched.
+	if (!bRestrictMineableResources)
+	{
+		return true;
+	}
+
+	return MineableResourceTypes.Contains(ResourceType);
+}
+
+bool AWorkingUnitBase::CanMineWorkArea(const AWorkArea* Area) const
+{
+	if (!IsValid(Area))
+	{
+		return false;
+	}
+
+	return CanMineResourceType(ConvertToResourceType(Area->Type));
+}
+
+EResourceType AWorkingUnitBase::GetRoutingResourceType() const
+{
+	// Carrying something -> that cargo decides which base is valid.
+	if (CarryingResourceType != EResourceType::MAX)
+	{
+		return CarryingResourceType;
+	}
+
+	// Not carrying, but already assigned to a deposit -> route by what it is about to bring home,
+	// so it never walks to a base that would reject the load it is going to fetch.
+	if (IsValid(ResourcePlace))
+	{
+		return ConvertToResourceType(ResourcePlace->Type);
+	}
+
+	return EResourceType::MAX;
+}
+
+bool AWorkingUnitBase::CanDeliverToBase(const ABuildingBase* InBase) const
+{
+	if (!IsValid(InBase))
+	{
+		return false;
+	}
+
+	return InBase->AcceptsResourceType(GetRoutingResourceType());
+}
+
+void AWorkingUnitBase::SetResourcePlace(AWorkArea* NewPlace, bool bRegisterOnNewPlace)
+{
+	if (ResourcePlace == NewPlace)
+	{
+		// Same node: only make sure we are actually registered if the caller asked for it.
+		if (bRegisterOnNewPlace && IsValid(ResourcePlace))
+		{
+			ResourcePlace->AddWorkerToArray(this);
+		}
+		return;
+	}
+
+	// Give the old node its slot back. This is the step every raw assignment used to skip.
+	if (IsValid(ResourcePlace))
+	{
+		ResourcePlace->RemoveWorkerFromArray(this);
+	}
+
+	ResourcePlace = NewPlace;
+
+	if (bRegisterOnNewPlace && IsValid(ResourcePlace))
+	{
+		ResourcePlace->AddWorkerToArray(this);
+	}
+}
+
+void AWorkingUnitBase::ReleaseResourcePlace()
+{
+	SetResourcePlace(nullptr);
+}
+
 void AWorkingUnitBase::OnRep_CarryingResourceType()
 {
 	if (GetNetMode() == NM_DedicatedServer) return;

@@ -235,7 +235,12 @@ void UMainStateProcessor::HandleLoseSightExtension(FMassAIStateFragment& StateFr
         StateFrag.ExtendedLoseSightTimer -= ExecutionInterval;
         if (StateFrag.ExtendedLoseSightTimer <= 0.f)
         {
-            StatsFrag.LoseSightRadius /= StatsFrag.LoseSightRadiusFaktor;
+            // Clear the additive detection bonus (see ApplyAttackedDetectionBonus in UnitMassTag.h).
+            // This used to divide StatsFrag.LoseSightRadius by LoseSightRadiusFaktor instead. That was
+            // broken: UUnitActorToFragmentSyncProcessor::SyncCombatStats rewrites LoseSightRadius from
+            // the actor every PrePhysics tick, so the *= boost was gone after one tick and this /= then
+            // HALVED the configured radius for a tick - the opposite of the intended effect.
+            StateFrag.DetectionBonusRadius = 0.f;
             StateFrag.bHasExtendedLoseSight = false;
             StateFrag.ExtendedLoseSightTimer = 0.f;
         }

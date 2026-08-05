@@ -161,6 +161,25 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<AWorkArea*> GetAllResourcePlaces(AWorkingUnitBase* Worker);
 
+	// --- Per-worker / per-base resource permissions ----------------------------------------
+	// The resource type the worker should currently be routed by: what it is carrying if it
+	// carries anything, otherwise the type of its assigned ResourcePlace, otherwise MAX
+	// ("unknown" - callers then apply no base filtering).
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	EResourceType GetWorkerRoutingResourceType(AWorkingUnitBase* Worker) const;
+
+	// True if ANY living base of TeamId accepts ResourceType. Used so a worker never starts
+	// gathering something it could not hand in anywhere. Returns true when the team has no base
+	// at all, so a base-less team keeps behaving exactly as before.
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	bool CanTeamDeliverResourceType(int32 TeamId, EResourceType ResourceType) const;
+
+	// Drops every area the worker may not mine (AWorkingUnitBase::CanMineWorkArea) and every
+	// area whose resource no base of the worker's team accepts. Single chokepoint applied inside
+	// GetAllResourcePlaces and GetFiveClosestResourcePlaces, which together feed every automatic
+	// ResourcePlace assignment.
+	void FilterResourcePlacesForWorker(AWorkingUnitBase* Worker, TArray<AWorkArea*>& InOutAreas) const;
+
 	// Nearest (to the worker) non-depleted resource of the given WorkArea type that still has a free
 	// worker slot and is within Radius, excluding the worker's current ResourcePlace. Returns null if
 	// none qualify -> the caller sends the worker Idle. Used for the "resource full -> switch / idle" rule.
