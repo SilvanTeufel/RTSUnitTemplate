@@ -393,7 +393,12 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 	if (AbilityArray.IsValidIndex(AbilityIndex))
 	{
 		TSubclassOf<UGameplayAbilityBase> AbilityClass = AbilityArray[AbilityIndex];
-		if (AbilityClass && !UnitBase->IsAbilityOnCooldownByClass(AbilityClass))
+		// [Queue-on-cooldown] A click-targeted ability can only be queued if the player can still aim it,
+		// so the indicator must spawn during cooldown too when UseAbilityQue is set.
+		const bool bCooldownBlocksIndicator = AbilityClass
+			&& UnitBase->IsAbilityOnCooldownByClass(AbilityClass)
+			&& !AbilityClass->GetDefaultObject<UGameplayAbilityBase>()->UseAbilityQue;
+		if (AbilityClass && !bCooldownBlocksIndicator)
 		{
 			const UGameplayAbilityBase* AbilityCDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 			// Don't spawn the mouse-follow indicator for abilities that can't be activated.
@@ -842,13 +847,30 @@ TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclas
 				}
 			}
 
-			if (!bUnitOnCooldown)
+			// [Queue-on-cooldown] With UseAbilityQue the press must still reach the unit while the
+			// ability is on cooldown: AGASUnit::ActivateAbilityByInputID enqueues it when
+			// TryActivateAbilityByClass fails and retries after AbilityReactivationThrottle. Filtering
+			// the unit out here left TargetUnits empty, so the press never arrived anywhere at all.
+			if (!bUnitOnCooldown || AbilityCDO->UseAbilityQue)
 			{
 				PotentialUnits.Add(Unit);
 
-				const bool bWillQueue = GASUnit && AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive();
+				// A press that only gets QUEUED must not run the client-side prediction reset below -
+				// the unit keeps doing what it is doing until the queued ability actually starts.
+				// Cooldown counts as "queued for later" too.
+				const bool bWillQueue = GASUnit && AbilityCDO->UseAbilityQue
+					&& (GASUnit->IsAnyAbilityActive() || bUnitOnCooldown);
 
-				if (!bWillQueue && AbilityCDO->bStopMovementOnActivation && Unit->MassActorBindingComponent)
+				// [Cast-reset fix] Neither may a press that will be DROPPED. With UseAbilityQue == false
+				// and an ability already running, ActivateAbilityByInputID returns early and the caller
+				// drops the press - but ClearMassStateTagsLocally has by then already stripped
+				// FMassStateCastingTag and parked the entity in Idle, so the RUNNING cast loses its
+				// state and its StateTimer restarts once the tag returns. Measured on GA_Siege_Tank_AH
+				// (CastTime 3.5 s): 3.70 s for a single press, 5.49 s with 4 extra presses, 6.27 s with 10.
+				const bool bWillBeDropped = GASUnit && !AbilityCDO->UseAbilityQue
+					&& GASUnit->IsAnyAbilityActive();
+
+				if (!bWillQueue && !bWillBeDropped && AbilityCDO->bStopMovementOnActivation && Unit->MassActorBindingComponent)
 				{
 					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
 					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
@@ -961,11 +983,11 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 							continue;
 						}
 
-						if (!AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive()) 
+						if (!AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive())
 						{
-							continue; 
+							continue;
 						}
-						
+
 						GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
 						GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
 						ActivateAbilitiesByIndex_Implementation(GASUnit, InputID, AbilityArrayIndex, Hit);
@@ -997,7 +1019,10 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				if (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle) return;
 
 				if (!AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive()) return;
-				if (GASUnit->IsAbilityOnCooldownByClass(CameraAbilityClass)) return;
+				// [Queue-on-cooldown] With UseAbilityQue the press must reach AGASUnit::ActivateAbilityByInputID
+				// even while the ability is on cooldown: TryActivateAbilityByClass fails there and the ability
+				// is enqueued + retried (GASUnit.cpp). Returning here skipped the queue entirely.
+				if (!AbilityCDO->UseAbilityQue && GASUnit->IsAbilityOnCooldownByClass(CameraAbilityClass)) return;
 				
 				GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
 				GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
@@ -6016,7 +6041,12 @@ void AExtendedControllerBase::ProcessHeldAbilities()
 					if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
 					{
 						// Check Cooldown and Queue status
-						if (!GASUnit->IsAbilityOnCooldownByClass(AbilityClass) && GASUnit->GetQueuedAbilities().Num() == 0)
+						// [Queue-on-cooldown] UseAbilityQue means "let it be queued": neither an active cooldown
+						// nor an already non-empty queue may block the press here, otherwise it never reaches
+						// ActivateKeyboardAbilitiesOnMultipleUnits and the queue stays empty.
+						const bool bQueueAllowed = AbilityCDO && AbilityCDO->UseAbilityQue
+							&& GASUnit->GetQueuedAbilities().Num() < GASUnit->MaxAbilityQueueSize;
+						if (bQueueAllowed || (!GASUnit->IsAbilityOnCooldownByClass(AbilityClass) && GASUnit->GetQueuedAbilities().Num() == 0))
 						{
 							// Check if unit is ready for a NEW activation request
 							bool bThrottled = (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle);

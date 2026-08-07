@@ -514,8 +514,35 @@ void AGASUnit::ActivateNextQueuedAbility()
 			}
 			else
 			{
-				// If activation failed (e.g. cooldown), we drop it and try the next one
-				CancelCurrentAbility();
+				// Activation failed. By far the most common cause is the ability still being on
+				// cooldown right at the moment the previous one finished - and Dequeue() above has
+				// already taken this entry out of the queue, so the old "drop it" behaviour silently
+				// threw the whole rest of the queue away one entry at a time. Symptom: queue several
+				// upgrades on BP_BuildingBase_Singularian_NeuralArchive, the first runs and nothing
+				// follows once it completes.
+				// A cooldown-blocked entry therefore goes back to the FRONT and is retried. Any other
+				// failure keeps the old drop behaviour, so an entry that can never activate (missing
+				// resources, disabled ability) cannot stall the queue forever.
+				if (IsAbilityOnCooldownByClass(Next.AbilityClass))
+				{
+					TArray<FQueuedAbility> Pending;
+					FQueuedAbility Item;
+					while (AbilityQueue.Dequeue(Item))
+					{
+						Pending.Add(Item);
+					}
+					Pending.Insert(Next, 0);
+					for (const FQueuedAbility& It : Pending)
+					{
+						AbilityQueue.Enqueue(It);
+					}
+					QueSnapshot = Pending;
+					AbilityQueueSize = QueSnapshot.Num();
+				}
+				else
+				{
+					CancelCurrentAbility();
+				}
 
 				if (!AbilityQueue.IsEmpty())
 				{

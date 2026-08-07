@@ -224,10 +224,10 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 		}
 	}
 
-	// NOTE: the bUseCastingFallbackProcessor block used to sit here. It now runs AFTER the
-	// bStopMovementOnActivation block below, because that block ends with SetUnitState(Idle) and would
-	// otherwise overwrite the Casting actor state we are about to set. See the block before
-	// Super::ActivateAbility().
+	// NOTE: the bUseCastingFallbackProcessor block used to sit here. It has to run after the
+	// bStopMovementOnActivation block below (that one ends with SetUnitState(Idle) and would otherwise
+	// overwrite the Casting actor state) AND after Super::ActivateAbility(), so the Blueprint can still
+	// see the pre-cast UnitState. It now lives below the Super call.
 
 	if (bStopMovementOnActivation && ActorInfo && ActorInfo->IsNetAuthority())
 	{
@@ -255,14 +255,31 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 							StopMovement(*MoveTarget, GetWorld());
 						}
                         
-						// 3. Set state to Idle to sync animations
-						Unit->SetUnitState(UnitData::Idle);
+						// 3. Set state to Idle to sync animations.
+						//    NEVER clobber a running cast. Blueprints gate re-activation on
+						//    "UnitState != Casting" (GA_DropReactor_Parent_AH, GA_UpReactor*, GA_Siege_Tank_AH,
+						//    GA_UnSiege_Tank_AH, GA_BuildUnit_Parent_AH). This block runs BEFORE
+						//    Super::ActivateAbility(), so overwriting Casting with Idle here made that gate
+						//    pass on every re-press: the Blueprint restarted its move and SwitchEntityTag
+						//    zeroed StateFrag->StateTimer, i.e. the cast restarted from 0 on every press.
+						//    Leaving the Casting state intact lets the Blueprint take its else branch and
+						//    the running cast finishes undisturbed.
+						if (Unit->GetUnitState() != UnitData::Casting)
+						{
+							Unit->SetUnitState(UnitData::Idle);
+						}
 					}
 				}
 			}
 		}
 	}
 	
+	// NOTE: the bUseCastingFallbackProcessor block used to sit here, and later just above
+	// Super::ActivateAbility(). It now runs AFTER Super - see the block below the Super call.
+
+
+	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
+
 	// Enter the Casting state EXCLUSIVELY. This used to be a bare Defer().AddTag<FMassStateCastingTag>,
 	// which left the unit's previous state tag in place. A Casting+Run / Casting+Attack / Casting+Pause /
 	// Casting+<worker> entity matches NO query at all: UCastingStateProcessor excludes those tags
@@ -272,7 +289,19 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	// either - its condition needs the tag to be MISSING (CastingFallBackProcessor.cpp:69).
 	// SwitchEntityTag strips every other state tag, sets the actor UnitState to Casting and zeroes
 	// StateTimer, which is exactly the invariant this state machine relies on.
-	if (bUseCastingFallbackProcessor && ActorInfo && ActorInfo->IsNetAuthority())
+	// [Blueprint-gate fix] This deliberately runs AFTER Super::ActivateAbility(). Super executes the
+	// Blueprint's EventActivateAbility, and several abilities gate their entire body on
+	// "GetUnitState != Casting" (GA_DropReactor_Parent_AH, GA_Siege_Tank_AH, GA_UnSiege_Tank_AH,
+	// GA_BuildUnit_Parent_AH). SwitchEntityTag sets the actor UnitState to Casting immediately
+	// (MassUnitBase.cpp SwitchEntityTag -> SetUnitState(UnitData::Casting)), so running this BEFORE
+	// Super made that gate ALWAYS false: the ability activated, fell straight into its else branch
+	// and ended without ever moving the reactor / entering siege / starting the build. Running it
+	// after Super lets the Blueprint see the state from before this activation.
+	//
+	// The IsActive() guard covers the case the gate exists for: if the Blueprint saw the unit was
+	// already casting and called EndAbility, we must NOT re-apply the tag here - SwitchEntityTag
+	// zeroes StateFrag->StateTimer, which would restart the cast timer of the running cast.
+	if (bUseCastingFallbackProcessor && ActorInfo && ActorInfo->IsNetAuthority() && IsActive())
 	{
 		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
 		{
@@ -305,8 +334,6 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 			}
 		}
 	}
-
-	Super::ActivateAbility(Handle, ActorInfo, ActivationInfo, TriggerEventData);
 }
 
 bool UGameplayAbilityBase::CheckCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, FGameplayTagContainer* OptionalRelevantTags) const
