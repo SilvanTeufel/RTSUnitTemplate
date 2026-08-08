@@ -54,6 +54,43 @@ static const FISMAnimationData* FindISMRowForStateOrIdle(UDataTable* Table, TEnu
     return ExactMatch ? ExactMatch : IdleMatch;
 }
 
+// Skeletal counterpart of FindISMRowForStateOrIdle above: exact row, else the Idle row, else nullptr.
+// The skeletal path used to inline a plain search loop and write NOTHING when no row matched, while
+// still latching LastProcessedState to the new state. The blend points therefore kept the PREVIOUS
+// state's values and were never retried, so the unit went on playing the old animation - a unit that
+// left Run for a state with no row (Rooted and ContinousAttack have no row in either shipped
+// DT_UnitAnimData) kept running on the spot. The ISM path has carried this fallback and the comment
+// explaining why since it was written; the skeletal path was simply missed.
+static const FUnitAnimData* FindAnimRowForStateOrIdle(UDataTable* Table, TEnumAsByte<UnitData::EState> State, bool& bOutUsedFallback)
+{
+    bOutUsedFallback = false;
+    if (!Table)
+    {
+        return nullptr;
+    }
+
+    const FUnitAnimData* ExactMatch = nullptr;
+    const FUnitAnimData* IdleMatch = nullptr;
+    for (const TPair<FName, uint8*>& It : Table->GetRowMap())
+    {
+        if (const FUnitAnimData* Row = reinterpret_cast<const FUnitAnimData*>(It.Value))
+        {
+            if (Row->AnimState == State)
+            {
+                ExactMatch = Row;
+                break;
+            }
+            if (Row->AnimState == UnitData::Idle)
+            {
+                IdleMatch = Row;
+            }
+        }
+    }
+
+    bOutUsedFallback = (ExactMatch == nullptr && IdleMatch != nullptr);
+    return ExactMatch ? ExactMatch : IdleMatch;
+}
+
 UUnitAnimationProcessor::UUnitAnimationProcessor()
 {
     bRequiresGameThreadExecution = true;
@@ -114,25 +151,24 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                     {
                         if (UUnitBaseAnimInstance* AnimInst = Cast<UUnitBaseAnimInstance>(UnitBase->GetMesh()->GetAnimInstance()))
                         {
-                            if (AnimInst->AnimDataTable)
+                            // Exact row -> Idle fallback. Never leave the blend points on the previous
+                            // state's values (see FindAnimRowForStateOrIdle).
+                            bool bUsedIdleFallback = false;
+                            if (const FUnitAnimData* RowData = FindAnimRowForStateOrIdle(AnimInst->AnimDataTable, CurrentState, bUsedIdleFallback))
                             {
-                                 for (auto It : AnimInst->AnimDataTable->GetRowMap())
-                                 {
-                                     if (FUnitAnimData* RowData = reinterpret_cast<FUnitAnimData*>(It.Value))
-                                     {
-                                         if (RowData->AnimState == CurrentState)
-                                         {
-                                             AnimFrag.TargetBlendPoint_1 = RowData->BlendPoint_1;
-                                             AnimFrag.TargetBlendPoint_2 = RowData->BlendPoint_2;
-                                             AnimFrag.TransitionRate_1 = RowData->TransitionRate_1;
-                                             AnimFrag.TransitionRate_2 = RowData->TransitionRate_2;
-                                             AnimFrag.Resolution_1 = RowData->Resolution_1;
-                                             AnimFrag.Resolution_2 = RowData->Resolution_2;
-                                             AnimFrag.Sound = RowData->Sound;
-                                             break;
-                                         }
-                                     }
-                                 }
+                                AnimFrag.TargetBlendPoint_1 = RowData->BlendPoint_1;
+                                AnimFrag.TargetBlendPoint_2 = RowData->BlendPoint_2;
+                                AnimFrag.TransitionRate_1 = RowData->TransitionRate_1;
+                                AnimFrag.TransitionRate_2 = RowData->TransitionRate_2;
+                                AnimFrag.Resolution_1 = RowData->Resolution_1;
+                                AnimFrag.Resolution_2 = RowData->Resolution_2;
+                                AnimFrag.Sound = RowData->Sound;
+
+                                if (bUsedIdleFallback)
+                                {
+                                    UE_LOG(LogTemp, Warning, TEXT("[AnimRow] %s: no row for state %d in %s - fell back to Idle"),
+                                        *UnitBase->GetName(), (int32)CurrentState.GetValue(), *GetNameSafe(AnimInst->AnimDataTable));
+                                }
                             }
                         }
                     }

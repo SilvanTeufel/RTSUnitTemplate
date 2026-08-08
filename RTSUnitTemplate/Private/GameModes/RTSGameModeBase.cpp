@@ -1527,11 +1527,25 @@ int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 		FUnitSpawnData& UnitData = UnitSpawnDataSets[i];
 		if(UnitData.Id == SpawnParaId)
 		{
-			// Assuming AUnitBase has a method to check if the unit is dead
-			if (UnitData.UnitBase && UnitData.UnitBase->GetUnitState() == UnitData::Dead)
+			// A unit leaves the roster in two ways, and both have to free the Id's budget:
+			//   1. it dies normally  -> state becomes Dead (save its progression first), or
+			//   2. its actor is gone -> DestroyActor / level teardown / GC.
+			// Case 2 used to fall into the else branch below and keep counting as ALIVE, because the
+			// only test was "pointer set AND state == Dead". Anything that clears a round with
+			// DestroyActor (the Arena's AdvanceRound does exactly that) therefore leaked one phantom
+			// entry per unit per round, and once the phantoms reached MaxUnitSpawnCount the row stopped
+			// spawning entirely - silently, since SpawnUnits just skips the block.
+			const bool bUnitGone = !IsValid(UnitData.UnitBase);
+			const bool bUnitDead = !bUnitGone && UnitData.UnitBase->GetUnitState() == UnitData::Dead;
+
+			if (bUnitGone || bUnitDead)
 			{
-				// Save data for the dead unit (do not reuse index)
-				UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
+				if (bUnitDead)
+				{
+					// Save data for the dead unit (do not reuse index). Only reachable while the actor
+					// is still valid - a destroyed one has nothing left to save.
+					UnitData.UnitBase->SaveAbilityAndLevelData(FString::FromInt(UnitData.UnitBase->UnitIndex));
+				}
 				FoundDeadUnit = true;
 
 				AllUnits.Remove(UnitData.UnitBase);
