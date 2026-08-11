@@ -378,13 +378,27 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
+            // Haengengebliebenes SwitchingState loesen, bevor die Ausgaenge geprueft
+            // werden - sonst steht die Einheit dauerhaft in Chase, ohne sich zu bewegen.
+            // Siehe RTSUnitUtils::TickSwitchingStateWatchdog.
+            RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval);
+
             // --- Distance Check ---
-    
-            const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
             const FMassAgentCharacteristicsFragment* TargetCharFrag = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity) ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
             const FTransformFragment* TargetTransformFrag = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity) ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
             const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
+
+            // Lebendes Ziel = seine jetzige Position ist die letzte bekannte. Ohne das
+            // verfolgte die Einheit einen eingefrorenen Punkt, hielt sich dort fuer
+            // angekommen und blieb in Chase stehen; ausfuehrliche Begruendung in
+            // UPauseStateProcessor::ServerExecute.
+            if (TargetTransform)
+            {
+                const_cast<FMassAITargetFragment&>(TargetFrag).LastKnownLocation = TargetTransform->GetLocation();
+            }
+
+            const float DistSq = FVector::DistSquared2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
 
             const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
             const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;

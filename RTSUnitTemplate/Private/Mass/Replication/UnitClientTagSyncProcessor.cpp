@@ -14,6 +14,8 @@
 #include "Mass/MassActorBindingComponent.h"
 #include "MassSignalSubsystem.h"
 #include "Mass/Signals/MySignals.h"
+#include "Mass/Abilitys/CastingFallBackProcessor.h"
+#include "Characters/Unit/ConstructionUnit.h"
 
 UUnitClientTagSyncProcessor::UUnitClientTagSyncProcessor()
 	: EntityQuery(*this)
@@ -230,6 +232,18 @@ void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FM
 			}
 
 			Unit->SwitchEntityTagByState(Unit->StoredUnitState, Unit->UnitStatePlaceholder);
+
+			// A construction site is driven by this unit sitting in Casting, not by a GAS ability, so it
+			// needs FMassCastingFallbackTag to keep re-forcing that state - otherwise the server's initial
+			// kick strips FMassStateCastingTag and the site is stuck in Idle forever.
+			// The controller adds the tag when it spawns the site, but only if the Mass entity is already
+			// bound; at that moment it usually is not, so the safety net was missing in exactly the case it
+			// exists for. Observed as construction units sitting at Idle with a cast timer of 0 until some
+			// other worker happened to arrive.
+			if (Unit->StoredUnitState == UnitData::Casting && Unit->IsA(AConstructionUnit::StaticClass()))
+			{
+				EntityManager.Defer().AddTag<FMassCastingFallbackTag>(Entity);
+			}
 		}
 	}
 }

@@ -46,6 +46,21 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	float ArrivalDistanceMultiplier = 5.f;
+
+	/**
+	 * Hysterese der letzten Reichweitenpruefung vor dem Abschuss in UnitRangedAttack.
+	 *
+	 * Bis hierher hat die Einheit ihre komplette PauseDuration abgewartet. Eine strikte
+	 * Pruefung verwirft den Schuss dann noch, wenn das Ziel waehrend der Pause ein Stueck
+	 * weggelaufen ist - der ganze Zyklus war umsonst.
+	 *
+	 * Bewusst etwas groesser als AttackRangeHysteresis (1.15): der Entschluss zu schiessen
+	 * faellt in PauseStateProcessor bei 1.15, danach vergeht noch die Signallaufzeit, in
+	 * der sich das Ziel weiter bewegt. Diese Pruefung ist die letzte vor dem Abschuss und
+	 * darf deshalb nicht knapper sein als der Entschluss.
+	 */
+	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate, meta = (ClampMin = "1.0"))
+	float RangedAttackRangeHysteresis = 1.25f;
 protected:
 	// We don't need ConfigureQueries or Execute for typical frame updates
 	// We only need to register our signal handler

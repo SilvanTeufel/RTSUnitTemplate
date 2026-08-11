@@ -130,6 +130,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	float GetMaxResource(EResourceType ResourceType, int TeamId);
 
+	/** Which resource types behave like supply (a cap you occupy) rather than a stock you spend. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsSupplyLikeResource(EResourceType ResourceType) const;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool ModifyResourceCCost(const FBuildingCost& ConstructionCost, int32 TeamId);
 	

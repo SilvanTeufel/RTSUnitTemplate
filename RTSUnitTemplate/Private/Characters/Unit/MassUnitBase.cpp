@@ -492,6 +492,10 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 
 	// Reset state timers
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
+	// The fragment is optional on the entity; a unit mid-teardown has none. Everything below
+	// only touches it, so guard once instead of dereferencing blind.
+	if (StateFrag)
+	{
 	StateFrag->StateTimer = 0.f;
 	StateFrag->SwitchingState = false;
 	UnitControlTimer = 0.f;
@@ -500,7 +504,16 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	switch (UStatePlaceholder)
 	{
 	case UnitData::Idle: StateFrag->PlaceholderSignal = UnitSignals::Idle; break;
+	// UnitData::Patrol is the ACTOR-side name for "resume patrolling" - there is no plain
+	// Patrol Mass processor, only PatrolRandom / PatrolIdle. ChaseStateProcessor and
+	// RTSUnitUtils::ResolvePlaceholderAfterCombat both map the PatrolRandom signal onto
+	// UnitData::Patrol, and AAbilityUnit defaults UnitStatePlaceholder to Patrol, so this is
+	// the single most common value arriving here. Without the case it fell through to
+	// default: and spammed a warning on every state switch of every combat unit.
+	case UnitData::Patrol: StateFrag->PlaceholderSignal = UnitSignals::PatrolRandom; break;
 	//case UnitData::Chase: StateFrag->PlaceholderSignal = UnitSignals::Chase; break;
+	// ^ deliberately disabled in e764251a ("Reworked Detection", 2025-06-15): Chase is not a
+	//   state a unit should fall back INTO after combat. Leave it commented.
 	case UnitData::Attack: StateFrag->PlaceholderSignal = UnitSignals::Attack; break;
 	case UnitData::Pause: StateFrag->PlaceholderSignal = UnitSignals::Pause; break;
 	case UnitData::Dead: StateFrag->PlaceholderSignal = UnitSignals::Dead; break;
@@ -516,9 +529,16 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	case UnitData::ResourceExtraction: StateFrag->PlaceholderSignal = UnitSignals::ResourceExtraction; break;
 	case UnitData::GoToRepair: StateFrag->PlaceholderSignal = UnitSignals::GoToRepair; break;
 	case UnitData::Repair: StateFrag->PlaceholderSignal = UnitSignals::Repair; break;
-	default: 
-		UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): Invalid UnitStatePlaceholder."), *GetName());
+	default:
+		// Verbose, not Warning: reaching this is not an error, it just means the placeholder is a
+		// state with no Mass signal (Evasion, Jump, Aim, Custom*, None, ...). PlaceholderSignal
+		// simply keeps its previous value, which is the intended fallback. Logging the actual enum
+		// value makes it diagnosable instead of guesswork - the old message named neither the value
+		// nor a reason and fired several times per second per unit during combat.
+		UE_LOG(LogTemp, Verbose, TEXT("AMassUnitBase (%s): UnitStatePlaceholder %d has no Mass signal mapping; keeping previous PlaceholderSignal."),
+			*GetName(), static_cast<int32>(UStatePlaceholder.GetValue()));
 		break;
+	}
 	}
 	
 	

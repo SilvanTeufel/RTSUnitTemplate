@@ -308,6 +308,16 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			EM.Defer().AddTag<FMassStateStopSeparationTag>(NewMassEntityHandle);
 			EM.Defer().AddTag<FMassStateNeedsInitialKickTag>(NewMassEntityHandle);
 
+			// Opt-in aus der Spawn-Tabelle: nur getaggte Einheiten werden von
+			// UPreventIdlingProcessor aus dem Stillstand zurueck auf Patrouille geholt.
+			if (const AUnitBase* OwningUnit = Cast<AUnitBase>(MyOwner))
+			{
+				if (OwningUnit->bPreventIdling)
+				{
+					EM.Defer().AddTag<FMassPreventIdlingTag>(NewMassEntityHandle);
+				}
+			}
+
 			if (StopSeparation || Cast<AConstructionUnit>(MyOwner))
 			{
 				if (Cast<AConstructionUnit>(MyOwner))

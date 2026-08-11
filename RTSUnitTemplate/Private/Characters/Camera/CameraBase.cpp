@@ -315,27 +315,47 @@ bool ACameraBase::RotateFree(FVector MouseLocation)
 }
 
 
+float ACameraBase::GetFrameScale() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return 1.f;
+	}
+	// Auf 60 FPS normiert, damit alle bereits eingestellten Kamerawerte ihre Wirkung behalten.
+	// Deckel bei 3 (= 20 FPS): ein Ladehitch soll die Kamera nicht wegkatapultieren.
+	return FMath::Clamp(World->GetDeltaSeconds() * 60.f, 0.f, 3.f);
+}
+
 bool ACameraBase::RotateCamera(float Direction, float Add, bool stopCam)
 {
 	// Direction: 1.0f = Left, -1.0f = Right
 
+	// Alles hier lief pro FRAME statt pro Sekunde: Rampe und angewandter Yaw haengen damit
+	// an der Bildrate, Q/E dreht auf einer schnellen Maschine deutlich schneller als auf
+	// einer langsamen. GetFrameScale() normiert auf 60 FPS, die eingestellten Werte
+	// (RotationIncreaser, AddCamRotation) behalten dadurch exakt ihre bisherige Wirkung.
+	const float FrameScale = GetFrameScale();
+
 	if(stopCam && CurrentRotationValue > 0.f)
 	{
-		if(FMath::IsNearlyEqual(CurrentRotationValue, 0.f, RotationIncreaser*3))
+		if(FMath::IsNearlyEqual(CurrentRotationValue, 0.f, RotationIncreaser*3*FrameScale))
 			CurrentRotationValue = 0.0000f;
 		else
-			CurrentRotationValue -= RotationIncreaser*3;
+			CurrentRotationValue -= RotationIncreaser*3*FrameScale;
 	}
 	else if(CurrentRotationValue < Add)
 	{
-		CurrentRotationValue += RotationIncreaser;
+		CurrentRotationValue += RotationIncreaser*FrameScale;
 	}
 
 	// Apply rotation based on direction
-	SpringArmRotator.Yaw += CurrentRotationValue * Direction;
+	SpringArmRotator.Yaw += CurrentRotationValue * Direction * FrameScale;
 
-	if(CurrentRotationValue >= 1.0f)
-		SpringArmRotator.Yaw = floor(SpringArmRotator.Yaw+0.5);
+	// Das fruehere "Yaw auf ganze Grad runden, solange schnell gedreht wird" ist entfernt:
+	// bei hoher Bildrate ist der Yaw-Zuwachs pro Frame kleiner als 1 Grad, das Runden hat
+	// ihn dann komplett verschluckt und die Drehung in 1-Grad-Stufen springen lassen -
+	// genau das sichtbare Ruckeln. Die Fmod-Normierung unten haelt den Wert ohnehin im Rahmen.
 
 	// Normalize Yaw to [0, 360)
 	if (SpringArmRotator.Yaw >= 360.f) 
@@ -418,8 +438,9 @@ bool ACameraBase::ZoomOutAutoCam(float Distance, const FVector SelectedActorPosi
 
 	if (SpringArm && SpringArm->TargetArmLength - SelectedActorPosition.Z < Distance)
 	{
-		SpringArm->TargetArmLength += AutoZoomSpeed/10;
-		
+		// war ein Frame-Schritt: bei hoher Bildrate zoomte die AutoCam entsprechend schneller
+		SpringArm->TargetArmLength += (AutoZoomSpeed/10) * GetFrameScale();
+
 		return false;
 	}
 
@@ -432,8 +453,8 @@ bool ACameraBase::ZoomOutToPosition(float Distance, const FVector SelectedActorP
 
 	if (SpringArm && SpringArm->TargetArmLength - SelectedActorPosition.Z < Distance)
 	{
-			SpringArm->TargetArmLength += FastZoomSpeed;
-		
+			SpringArm->TargetArmLength += FastZoomSpeed * GetFrameScale();
+
 		return false;
 	}
 
@@ -446,8 +467,10 @@ bool ACameraBase::ZoomInToPosition(float Distance, const FVector SelectedActorPo
 	if (SpringArm && SpringArm->TargetArmLength > 100.f && SpringArm->TargetArmLength - SelectedActorPosition.Z > Distance)
 	{
 
-		SpringArm->TargetArmLength -= FastZoomSpeed;
-		
+		// Reinzoomen war der haerteste Frame-Schritt von allen (250 pro Frame): bei 200 FPS
+		// sind das 50000 Einheiten pro Sekunde, deshalb wirkte es ruckartig statt weich.
+		SpringArm->TargetArmLength -= FastZoomSpeed * GetFrameScale();
+
 		return false;
 	}
 	return true;

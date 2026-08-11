@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/UnitBase.h"
+#include "GameModes/ResourceGameMode.h"
 #include "Actors/EffectArea.h"
 #include "Actors/AreaDecalComponent.h"
 #include "Characters/Unit/BuildingBase.h"
@@ -135,6 +136,100 @@ AUnitBase::AUnitBase(const FObjectInitializer& ObjectInitializer):Super(ObjectIn
 }
 
 // Called when the game starts or when spawned
+void AUnitBase::ApplyStartupSupplyCost()
+{
+	if (bStartupSupplyCharged || !HasAuthority())
+	{
+		return;
+	}
+
+	// Level-placed units only. A trained unit already pays supply through its production ability, so
+	// charging it here as well would bill it twice.
+	if (!IsNetStartupActor())
+	{
+		return;
+	}
+
+	// Buildings are left out on purpose: several of them GRANT capacity, and they pay their own
+	// ConstructionCost. This is about the army a faction starts the match with.
+	if (bIsBuilding || bIsConstructionUnit)
+	{
+		return;
+	}
+
+	const int32 Amount = (StartupSupplyCost > 0) ? StartupSupplyCost : UnitSpaceNeeded;
+	if (Amount <= 0)
+	{
+		return;
+	}
+
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr);
+	if (!ResourceGameMode)
+	{
+		return;
+	}
+
+	static const EResourceType AllTypes[] = {
+		EResourceType::Primary, EResourceType::Secondary, EResourceType::Tertiary,
+		EResourceType::Rare, EResourceType::Epic, EResourceType::Legendary };
+
+	for (const EResourceType SupplyType : AllTypes)
+	{
+		if (!ResourceGameMode->IsSupplyLikeResource(SupplyType))
+		{
+			continue;
+		}
+		// Negative means "pay": ModifyResource inverts the sign for supply-like resources, so this
+		// raises the used amount exactly as training the unit would have.
+		ResourceGameMode->ModifyResource(SupplyType, TeamId, -(float)Amount);
+	}
+
+	bStartupSupplyCharged = true;
+}
+
+void AUnitBase::ReleaseUnitSupply()
+{
+	if (bSupplyReleased || !HasAuthority())
+	{
+		return;
+	}
+	bSupplyReleased = true;
+
+	// Buildings hand back their GRANTED capacity through ReleaseSupplyCapacity() instead.
+	if (bIsBuilding)
+	{
+		return;
+	}
+
+	// Mirror of ApplyStartupSupplyCost: give back exactly the footprint that was billed.
+	const int32 Amount = (StartupSupplyCost > 0) ? StartupSupplyCost : UnitSpaceNeeded;
+	if (Amount <= 0)
+	{
+		return;
+	}
+
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr);
+	if (!ResourceGameMode)
+	{
+		return;
+	}
+
+	static const EResourceType AllSupplyTypes[] = {
+		EResourceType::Primary, EResourceType::Secondary, EResourceType::Tertiary,
+		EResourceType::Rare, EResourceType::Epic, EResourceType::Legendary };
+
+	for (const EResourceType SupplyType : AllSupplyTypes)
+	{
+		if (!ResourceGameMode->IsSupplyLikeResource(SupplyType))
+		{
+			continue;
+		}
+		// Positive here: ModifyResource inverts the sign for supply-like resources, so this LOWERS
+		// the used amount - the opposite of the charge in ApplyStartupSupplyCost.
+		ResourceGameMode->ModifyResource(SupplyType, TeamId, (float)Amount);
+	}
+}
+
 void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
@@ -156,6 +251,13 @@ void AUnitBase::BeginPlay()
 	SetupTimerWidget();
 	
 	SetReplicateMovement(false);
+
+	if (HasAuthority())
+	{
+		// Deferred: TeamId is not reliable at BeginPlay, same reason the supply-granting buildings wait.
+		FTimerHandle StartupSupplyHandle;
+		GetWorldTimerManager().SetTimer(StartupSupplyHandle, this, &AUnitBase::ApplyStartupSupplyCost, 0.5f, false);
+	}
 
 	if (HasAuthority())
 	{
@@ -316,6 +418,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
+	DOREPLIFETIME(AUnitBase, bSuppressDeathEffects);
 	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
 	DOREPLIFETIME(AUnitBase, RunLocation);
 	DOREPLIFETIME(AUnitBase, MeshAssetPath);
@@ -679,8 +782,17 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 		CanBeSelected = false;
 		SetUnitState(UnitData::Dead);
 
+		// A dead unit no longer occupies supply. Without this the used amount only ever grew, so the
+		// side that takes casualties slowly locked itself out of training anything at all.
+		ReleaseUnitSupply();
+
 		if (ABuildingBase* Building = Cast<ABuildingBase>(this))
 		{
+			// Hand the supply capacity back here rather than in Destroyed(): a killed building is only
+			// switched to Dead, the actor lives on as a ruin, so Destroyed() never runs and the team
+			// kept the supply of buildings it had already lost.
+			Building->ReleaseSupplyCapacity();
+
 			if (Building->HasWaypoint && Building->NextWaypoint)
 			{
 				AWaypoint* WP = Building->NextWaypoint;
@@ -748,7 +860,34 @@ void AUnitBase::DeadMultiCast_Implementation()
 		}
 	}
 
+	// A death that is only bookkeeping (the Xeno worker becoming its building) must not play the
+	// explosion - the unit is hidden at that point, so the effect appears out of nowhere.
+	if (bSuppressDeathEffects)
+	{
+		return;
+	}
+
 	FireEffects_Implementation(ChosenDeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound, -1);
+}
+
+void AUnitBase::MulticastSuppressDeathEffects_Implementation()
+{
+	bSuppressDeathEffects = true;
+}
+
+void AUnitBase::KillSilently()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	// Reliable multicast first so every client has the flag before the death multicast reaches it -
+	// relying on the replicated property alone would race the RPC.
+	bSuppressDeathEffects = true;
+	MulticastSuppressDeathEffects();
+
+	SetHealth(0.f);
 }
 void AUnitBase::Multicast_SwitchToIdle_Implementation()
 {
@@ -1010,7 +1149,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 					
 					TArray<UActorComponent*> Comps = GetComponentsByTag(USceneComponent::StaticClass(), TEXT("ProjectileSpawn"));
 					FVector RelativeMuzzleLocation = ProjectileSpawnOffset;
-					
+
 					if (Comps.Num() > 0 && Comps[0])
 					{
 						if (USceneComponent* SpawnComp = Cast<USceneComponent>(Comps[0]))
@@ -1059,7 +1198,7 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 						FVector ShootingUnitForward = TF->GetTransform().GetRotation().Vector();
 						FinalPos += AttributeOffset * ShootingUnitForward;
 					}
-					
+
 					return FinalPos + GetActorRotation().RotateVector(AdditionalOffset);
 				}
 			}

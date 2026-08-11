@@ -337,7 +337,17 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
     FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetFrag.TargetEntity) : nullptr;
     const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
-    if (!bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead)
+    const bool bLostTarget = !bIsTargetActive || !TargetFrag.bHasValidTarget || bIsTargetDead;
+
+    // Ein bereits laufender Angriff wird zu Ende gebracht, statt beim Tod des Ziels
+    // abzubrechen. Sonst setzt der Zustandswechsel StateTimer zurueck und eine Einheit mit
+    // langer AttackDuration faengt bei jedem neuen Ziel wieder von vorn an - im Getuemmel
+    // kommt sie damit nie zum Schuss. Der Schuss geht auf LastKnownLocation.
+    const bool bAttackInProgress = bFinishAttackOnTargetLoss
+        && StateFrag.StateTimer > 0.f
+        && StateFrag.StateTimer <= Stats.AttackDuration;
+
+    if (bLostTarget && !bAttackInProgress)
     {
         StateFrag.SwitchingState = true;
         RTSUnitUtils::ResolvePlaceholderAfterCombat(StateFrag, Actor);
@@ -349,16 +359,36 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
         return;
     }
 
-    const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+    // Haengengebliebenes SwitchingState loesen, bevor die Ausgaenge geprueft werden.
+    // Siehe RTSUnitUtils::TickSwitchingStateWatchdog.
+    RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval);
+
     const FMassAgentCharacteristicsFragment& CharFrag = *CharFragPtr;
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
+    // Lebendes Ziel = seine jetzige Position ist die letzte bekannte. Ohne das schlug die
+    // Einheit endlos auf einen eingefrorenen Geisterpunkt neben sich ein; ausfuehrliche
+    // Begruendung in UPauseStateProcessor::ServerExecute. Nur serverseitig - der
+    // Client-Pfad lebt von den replizierten Werten.
+    if (bIsTargetActive && TargetTransform)
+    {
+        const_cast<FMassAITargetFragment&>(TargetFrag).LastKnownLocation = TargetTransform->GetLocation();
+    }
+
+    const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
+
     const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
     const float AttackRange = Stats.AttackRange + CombinedRadii;
 
-    if (Dist <= AttackRange)
+    // Austritt aus dem Angriff mit Hysterese: der Eintritt passiert bei AttackRange, der
+    // Abbruch erst ab AttackRange * AttackRangeHysteresis. Ohne diesen Abstand kippte eine
+    // Einheit an der Reichweitengrenze jeden Tick zwischen Angriff und Chase/Run und zuckte
+    // sichtbar, obwohl der Gegner direkt daneben stand.
+    const float BreakOffRange = AttackRange * FMath::Max(1.f, AttackRangeHysteresis);
+
+    if (Dist <= BreakOffRange)
     {
         // --- Melee Impact Check ---
         if (StateFrag.StateTimer <= Stats.AttackDuration)

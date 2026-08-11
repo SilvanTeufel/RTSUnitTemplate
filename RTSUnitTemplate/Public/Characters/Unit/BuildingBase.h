@@ -73,6 +73,72 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsBase = false;
 
+	/**
+	 * Resource capacity this building adds to its team while it stands, and gives back when it dies.
+	 *
+	 * Mainly for supply: units cost Rare, which is supply-like, so without a building that raises the Rare
+	 * cap a faction simply cannot train anything once it reaches the starting limit. The Singularian Reactor
+	 * does this from its own Blueprint; expressing it as data means any building can, without duplicating
+	 * that graph. Leave at zero for buildings that grant nothing.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Supply")
+	FBuildingCost SupplyCapacityGain;
+
+	/** Upper bound for the capacity this building may contribute to, matching the Reactor's own cap. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Supply")
+	float SupplyCapacityLimit = 150.f;
+
+	// --- Rally point ------------------------------------------------------------------------
+	// Where units this building produces go once they exist. Without one they are left standing on
+	// the spawn spot, which is inside the base, so they block the next production and the workers
+	// squeezing past them.
+
+	/** False means "no explicit point set", and GetRallyPointLocation falls back to the base edge. */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Rally")
+	bool bHasRallyPoint = false;
+
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Rally")
+	FVector RallyPointLocation = FVector::ZeroVector;
+
+	/** Set when the rally point was placed on a deposit: produced workers start mining there directly. */
+	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate|Rally")
+	TObjectPtr<class AWorkArea> RallyResourceArea = nullptr;
+
+	/** How far out the default (unset) rally point sits - the "edge of the base". */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Rally")
+	float DefaultRallyDistance = 900.f;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Rally")
+	void SetRallyPoint(FVector NewLocation, class AWorkArea* ResourceArea);
+
+	/** The explicit point when one is set, otherwise a point on the base edge facing away from home. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Rally")
+	FVector GetRallyPointLocation() const;
+
+	/** Sends a newly produced unit on its way; workers to the rallied deposit, everything else to the point. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Rally")
+	void ApplyRallyPointToUnit(AUnitBase* NewUnit);
+
+	/**
+	 * Gives the granted capacity back.
+	 *
+	 * Public because Destroyed() is not enough: a building that is killed in combat only goes to the
+	 * Dead state - the actor stays around as a ruin - so the capacity was never handed back and a team
+	 * kept the supply of buildings it had already lost. AUnitBase calls this from the death path too;
+	 * bSupplyCapacityApplied makes the double call harmless.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Supply")
+	void ReleaseSupplyCapacity();
+
+protected:
+	/** Grants SupplyCapacityGain once the team id is known. */
+	void ApplySupplyCapacity();
+
+	/** Guards against granting twice and against giving back what was never granted. */
+	bool bSupplyCapacityApplied = false;
+
+public:
+
 	// --- Which resources may be delivered here? (Details panel) ----------------------------
 	// Only meaningful while IsBase is true. Off by default, which keeps the historical
 	// behavior: this base accepts EVERY resource type.

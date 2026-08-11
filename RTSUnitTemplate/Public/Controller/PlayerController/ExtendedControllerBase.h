@@ -321,6 +321,47 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID);
 
+	/**
+	 * Builds a valid ground hit under the controlled agent pawn, standing in for the cursor hit a human
+	 * would produce. An AI controller has no cursor, so GetHitResultUnderCursor returns an invalid hit and
+	 * AGASUnit::ActivateAbilityByInputID never calls FireMouseHitAbility - which is where every build
+	 * ability actually places its work area. Without this the rule AI can decide to build but never does.
+	 * Returns false only when there is no pawn or world.
+	 */
+	bool GetAbilityHitResultForAI(FHitResult& OutHit) const;
+
+	/**
+	 * How many construction sites the AI may have running at once.
+	 *
+	 * Unit caps count FINISHED buildings, so while a dozen builds are in flight the cap never bites: the
+	 * agent kept starting new ones every decision and ended up with 38 open sites, 17 pods against a cap
+	 * of 6, its workers morphed away to 5 and every resource spent - so it never afforded a single combat
+	 * unit. Only the AI is bounded here; a player opens sites by hand and needs no limit.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI", meta=(ClampMin="1"))
+	int32 AIMaxConcurrentBuildSites = 3;
+
+	/**
+	 * AI placement only. Largest height difference tolerated across a candidate building's footprint.
+	 * Anything steeper is a ramp, and a building wedged onto one blocks the route past it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI Placement", meta=(ClampMin="0.0"))
+	float AIMaxGroundStep = 150.f;
+
+	/**
+	 * AI placement only. How far past its own footprint the navmesh must still reach in every direction,
+	 * so the agent keeps clear of cliff edges instead of sealing off the path along them.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI Placement", meta=(ClampMin="0.0"))
+	float AICliffClearance = 350.f;
+
+	/**
+	 * AI placement only. A deposit within this range of one of our own bases counts as already served, so an
+	 * expansion looks for the next field out instead of stacking another base on the one we already mine.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI Placement", meta=(ClampMin="0.0"))
+	float ExpansionClaimedRadius = 3500.f;
+
 	void SetAbilityInputHeld(EGASAbilityInputID InputID, bool bIsHeld);
 
 	// Releases every held ability input. Must be called whenever input can stop being delivered

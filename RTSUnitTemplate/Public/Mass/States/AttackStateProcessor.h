@@ -60,6 +60,30 @@ protected:
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;
 
+    /**
+     * Hysterese fuer den Wechsel Angriff -> Chase/Run.
+     *
+     * Der Eintritt in den Angriff passiert bei Dist <= AttackRange, der Austritt lief bis
+     * dahin bei exakt derselben Schwelle. Eine Einheit direkt an der Reichweitengrenze
+     * kippte deshalb jeden Tick zwischen Angriff und Chase hin und her - sichtbar als
+     * Zucken in der Animation, obwohl der Gegner unmittelbar daneben steht.
+     * Der Angriff wird jetzt erst bei AttackRange * diesem Faktor abgebrochen.
+     */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate, meta = (ClampMin = "1.0"))
+    float AttackRangeHysteresis = 1.15f;
+
+    /**
+     * Laesst einen bereits begonnenen Angriff zu Ende laufen, wenn das Ziel dazwischen
+     * stirbt, statt sofort abzubrechen.
+     *
+     * Ohne das kam eine Einheit mit langer AttackDuration (Siege-Kanone) im Getuemmel nie
+     * zum Schuss: Ziel stirbt waehrend des Zielens -> Abbruch -> Zustandswechsel setzt
+     * StateTimer auf 0 -> naechstes Ziel -> von vorn. Der Schuss geht jetzt auf die letzte
+     * bekannte Position; danach greift der normale Pause-Uebergang.
+     */
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+    bool bFinishAttackOnTargetLoss = true;
+
     static float GetCombinedRadii(const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
                                   const FMassAgentCharacteristicsFragment* TargetChar, const FTransform* TargetTransform,
                                   const FVector& TargetLocation);

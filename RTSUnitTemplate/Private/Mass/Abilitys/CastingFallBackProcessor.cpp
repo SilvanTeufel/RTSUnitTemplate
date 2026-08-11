@@ -66,8 +66,20 @@ void UCastingFallBackProcessor::Execute(FMassEntityManager& EntityManager, FMass
             
             if (UnitBase)
             {
-                if (UnitBase->GetUnitState() != UnitData::Casting || !DoesEntityHaveTag(EntityManager, Entity, FMassStateCastingTag::StaticStruct()))
+                if (UnitBase->GetUnitState() != UnitData::Casting)
                 {
+                    // The unit has moved on to something else - a worker that placed a building spends the
+                    // construction in the Build state, not Casting. Signalling here forced it back into
+                    // Casting AND the handler zeroes StateTimer, so the build timer was reset every
+                    // interval and construction could never finish. That is only visible on the Xeno,
+                    // because only their abilities set bUseCastingFallbackProcessor and therefore only
+                    // they ever carry this tag. Give up instead: the tag has done its job or never applied.
+                    ChunkContext.Defer().RemoveTag<FMassCastingFallbackTag>(Entity);
+                }
+                else if (!DoesEntityHaveTag(EntityManager, Entity, FMassStateCastingTag::StaticStruct()))
+                {
+                    // The real rescue case: still casting, but the Mass tag was stripped (the server's
+                    // initial kick does that), so the cast would silently stop progressing.
                     if (SignalSubsystem)
                     {
                         SignalSubsystem->SignalEntityDeferred(ChunkContext, TEXT("CastingFallbackSignal"), Entity);

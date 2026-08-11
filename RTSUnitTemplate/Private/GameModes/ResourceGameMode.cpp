@@ -222,6 +222,12 @@ void AResourceGameMode::DecreaseMaxResources(const FBuildingCost& CapacityDecrea
 	ModifyMaxResource(EResourceType::Legendary, TeamId, -(float)CapacityDecrease.LegendaryCost);
 }
 
+bool AResourceGameMode::IsSupplyLikeResource(EResourceType ResourceType) const
+{
+	const bool* Found = SupplyLikeResources.Find(ResourceType);
+	return Found ? *Found : false;
+}
+
 float AResourceGameMode::GetMaxResource(EResourceType ResourceType, int TeamId)
 {
 	for (const FResourceArray& ResourceArray : TeamResources)
@@ -1080,7 +1086,15 @@ void AResourceGameMode::SetAllCurrentWorkers(int TeamId)
 	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AWorkingUnitBase::StaticClass(), TempActors);
 	
 	TMap<EResourceType, int32> WorkerCountPerType;
-	
+
+	// Seed every type with 0. Without this the loop below only writes types that still have workers, so a
+	// type whose last worker died or went off to build kept its old number and the HUD showed a phantom
+	// "1/3" for the rest of the match.
+	for (int32 TypeIndex = 0; TypeIndex < static_cast<int32>(EResourceType::MAX); ++TypeIndex)
+	{
+		WorkerCountPerType.Add(static_cast<EResourceType>(TypeIndex), 0);
+	}
+
 	for (AActor* MyActor : TempActors)
 	{
 		AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(MyActor);

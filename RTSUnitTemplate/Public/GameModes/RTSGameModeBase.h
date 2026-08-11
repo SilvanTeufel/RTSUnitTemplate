@@ -249,7 +249,22 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector CalcLocation(FVector Offset, FVector MinRange, FVector MaxRange);
-	
+
+	/**
+	 * Live head count of a team. Pass bInvert = true to count every unit whose TeamId is
+	 * NOT InTeamId (used for "all opponents" when no explicit opponent team is configured).
+	 * Counts only valid, non-dead units from AllUnits, so hand-placed units count too.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	int32 CountAliveUnitsForTeam(int32 InTeamId, bool bInvert = false) const;
+
+	/**
+	 * Multiplier the adaptive reinforcement loop wants to apply to a row right now.
+	 * Returns 1.0 when the row has bAdaptiveSpawn off, so callers can multiply blindly.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	float GetAdaptiveSpawnMultiplier(const FUnitSpawnParameter& SpawnParameter) const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<FUnitSpawnData> UnitSpawnDataSets;
 

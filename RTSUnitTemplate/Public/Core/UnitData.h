@@ -469,6 +469,54 @@ struct FUnitSpawnParameter : public FTableRowBase
 	// Whether the spawned unit(s) can be selected by players (default: true)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CanBeSelected = true;
+
+	/**
+	 * Adaptive reinforcement (opt-in, OFF by default - a row with this unticked behaves
+	 * exactly as before).
+	 *
+	 * Fixed UnitCount/MaxUnitSpawnCount make an attrition fight bistable: whichever side
+	 * gets ahead keeps its units, the loser never accumulates, and the match snowballs.
+	 * With this on, the row scales its spawn amount by how far its own team's head count
+	 * has fallen behind the opposing team's, which pulls the fight back toward a stalemate
+	 * instead of relying on hand-tuned constants.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Adaptive")
+	bool bAdaptiveSpawn = false;
+
+	/** Team to measure against. Leave at -1 to mean "every unit whose TeamId is not TeamId". */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Adaptive", meta = (EditCondition = "bAdaptiveSpawn"))
+	int32 AdaptiveOpponentTeamId = -1;
+
+	/** Head-count ratio (own / opponent) the loop steers toward. 1.0 = parity. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Adaptive", meta = (EditCondition = "bAdaptiveSpawn", ClampMin = "0.05"))
+	float AdaptiveTargetRatio = 1.f;
+
+	/** Exponent on the correction. 0 disables it, 1 is proportional, >1 reacts harder. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Adaptive", meta = (EditCondition = "bAdaptiveSpawn", ClampMin = "0.0"))
+	float AdaptiveStrength = 1.f;
+
+	/** Lower clamp on the multiplier applied to UnitCount and MaxUnitSpawnCount. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Adaptive", meta = (EditCondition = "bAdaptiveSpawn", ClampMin = "0.0"))
+	float AdaptiveMinMultiplier = 0.25f;
+
+	/** Upper clamp on the multiplier applied to UnitCount and MaxUnitSpawnCount. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Adaptive", meta = (EditCondition = "bAdaptiveSpawn", ClampMin = "1.0"))
+	float AdaptiveMaxMultiplier = 3.f;
+
+	/** If false only UnitCount is scaled and MaxUnitSpawnCount stays a hard ceiling. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Adaptive", meta = (EditCondition = "bAdaptiveSpawn"))
+	bool bAdaptiveScalesMaxCount = true;
+
+	/**
+	 * Marks the spawned units as "should not stand around" (opt-in, OFF by default).
+	 *
+	 * Nothing happens from this flag alone. It only makes an AIdlePatrolEnforcer in the
+	 * level pick the unit up: that actor sends idling units back onto patrol. The switch
+	 * sits on the row rather than on the actor so a level can single out which spawns are
+	 * supposed to keep moving - transports, workers or garrison troops usually should not.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Idle")
+	bool bPreventIdling = false;
 };
 
 USTRUCT(BlueprintType)

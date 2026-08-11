@@ -18,7 +18,8 @@ UCastingStateProcessor::UCastingStateProcessor(): EntityQuery()
 	ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
 	ProcessingPhase = EMassProcessingPhase::PostPhysics;
 	bAutoRegisterWithProcessingPhases = true;
-	bRequiresGameThreadExecution = false;
+	// Cross-entity fragment reads (target lookups) - same rule as the other state processors.
+	bRequiresGameThreadExecution = true;
 }
 
 void UCastingStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)

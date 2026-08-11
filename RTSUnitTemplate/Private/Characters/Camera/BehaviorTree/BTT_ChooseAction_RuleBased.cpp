@@ -216,7 +216,20 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
             GS.CtrlQTagEnemyUnitCount, GS.CtrlWTagEnemyUnitCount, GS.CtrlETagEnemyUnitCount, GS.CtrlRTagEnemyUnitCount);
     }
 
-    const FString Json = Decider->ChooseJsonActionRuleBased(GS);
+    // Which brain decides is a per-team setting on the InferenceComponent. This task is the only place the
+    // decision is actually made - the RLAgent's own ChooseJsonAction path only runs with the shared-memory
+    // bridge enabled - so a trained network would never be consulted if this went straight to the rules.
+    FString Json;
+    UInferenceComponent* BrainComponent = Pawn->FindComponentByClass<UInferenceComponent>();
+    if (BrainComponent && BrainComponent->GetEffectiveBrainMode() == EBrainMode::RL_Model)
+    {
+        Json = BrainComponent->ChooseJsonAction(GS);
+    }
+    else
+    {
+        Json = Decider->ChooseJsonActionRuleBased(GS);
+    }
+
     if (Json.IsEmpty())
     {
         if (bDebug) UE_LOG(LogTemp, Warning, TEXT("BTT_ChooseAction_RuleBased: Decider returned empty JSON. Check rule thresholds and component configuration on %s."), *Pawn->GetName());

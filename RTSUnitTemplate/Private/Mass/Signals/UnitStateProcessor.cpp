@@ -1466,10 +1466,17 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
                                 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->ThrowAbilityID, StrongAttacker->ThrowAbilities);
                             }
 
-                            // If Throw Ability was not activated, attempt Offensive Ability
-                            if (!bIsActivated && StrongAttacker->OffensiveAbilityID != EGASAbilityInputID::None && StrongAttacker->OffensiveAbilities.Num() > 0) // Good practice: check if ID is set
+                            // If Throw Ability was not activated, attempt Offensive Ability.
+                            // bFireOffensiveAbilityOnce latches after the first engagement so
+                            // one-shot toggles (Siege) are not re-triggered every attack.
+                            const bool bOffensiveAllowed = !StrongAttacker->bFireOffensiveAbilityOnce || !StrongAttacker->bOffensiveAbilityFired;
+                            if (!bIsActivated && bOffensiveAllowed && StrongAttacker->OffensiveAbilityID != EGASAbilityInputID::None && StrongAttacker->OffensiveAbilities.Num() > 0) // Good practice: check if ID is set
                             {
                                 bIsActivated = StrongAttacker->ActivateAbilityByInputID(StrongAttacker->OffensiveAbilityID, StrongAttacker->OffensiveAbilities);
+                                if (bIsActivated)
+                                {
+                                    StrongAttacker->bOffensiveAbilityFired = true;
+                                }
                             }
 
                         }
@@ -1699,6 +1706,12 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                 }
                 
                 float RangeWithCapsule = AttackerRange + AttackerRadius + TargetRadius;
+                // Drittes Tor auf dem Weg zum Schuss - und bis hierher hat die Einheit ihre
+                // volle PauseDuration abgewartet. Eine strikte Pruefung verwirft den Schuss
+                // dann noch im letzten Moment, wenn das Ziel waehrend der Pause ein Stueck
+                // weggelaufen ist. Dieselbe Hysterese wie in Attack- und PauseStateProcessor,
+                // damit der Zyklus nicht kurz vor dem Abschuss verfaellt.
+                RangeWithCapsule *= RangedAttackRangeHysteresis;
                 float AttackRangeSquared = FMath::Square(RangeWithCapsule);
 
                 float DistSquared = FVector::DistSquared2D(AttackerLoc, TargetLoc);
@@ -1787,10 +1800,15 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                            bIsActivated = StrongAttacker->ActivateAbilityByInputID(ThrowAbilityID, ThrowAbilities);
                         }
                         
-                        if (!bIsActivated && OffensiveAbilityID != EGASAbilityInputID::None && OffensiveAbilities.Num() > 0)
+                        const bool bOffensiveAllowed = !StrongAttacker->bFireOffensiveAbilityOnce || !StrongAttacker->bOffensiveAbilityFired;
+                        if (!bIsActivated && bOffensiveAllowed && OffensiveAbilityID != EGASAbilityInputID::None && OffensiveAbilities.Num() > 0)
                         {
                             // Range check already passed in Processor
                             bIsActivated = StrongAttacker->ActivateAbilityByInputID(OffensiveAbilityID, OffensiveAbilities);
+                            if (bIsActivated)
+                            {
+                                StrongAttacker->bOffensiveAbilityFired = true;
+                            }
                         }
 
                         // Access Entity Manager on GameThread safely

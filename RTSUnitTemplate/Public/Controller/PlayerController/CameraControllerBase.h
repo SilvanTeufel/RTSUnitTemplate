@@ -144,6 +144,18 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	int UnitZoomScaler = 10;
+
+	/**
+	 * Geglaettete Fassung von UnitCountInRange, nur fuer das Zoomziel der AutoCam.
+	 * Die rohe Zahl springt in einer Schlacht jeden Frame; direkt verrechnet laesst sie das
+	 * Zoomziel um UnitZoomScaler * Schwankung zittern.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate")
+	float SmoothedUnitCountInRange = 0.f;
+
+	/** Wie schnell SmoothedUnitCountInRange nachzieht. Klein = ruhiger, traeger. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	float UnitCountSmoothingSpeed = 1.5f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetCameraAveragePosition(ACameraBase* Camera, float DeltaTime);

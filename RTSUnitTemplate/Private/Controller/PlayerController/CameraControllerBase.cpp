@@ -1309,11 +1309,20 @@ void ACameraControllerBase::CameraState_OrbitAndMove(float DeltaTime)
 
 	MoveCam(DeltaTime, CameraBase->OrbitLocation);
 
-	if(UnitCountInRange >= UnitCountToZoomOut)
+	// UnitCountInRange schwankt in einer laufenden Schlacht staendig (gemessen 49..57 in
+	// fuenf Sekunden). Weil das Zoomziel jeden Frame direkt daraus berechnet wurde, wanderte
+	// es permanent um UnitZoomScaler * Schwankung hin und her - bei Scaler 45 also um rund
+	// 360 Einheiten. Das war das sichtbare Zoom-Ruckeln, nicht die Zoomgeschwindigkeit.
+	// Deshalb wird die Zahl hier zeitbasiert geglaettet und nur der geglaettete Wert benutzt.
+	SmoothedUnitCountInRange = FMath::FInterpTo(
+		SmoothedUnitCountInRange, static_cast<float>(UnitCountInRange),
+		DeltaTime, UnitCountSmoothingSpeed);
+
+	if(SmoothedUnitCountInRange >= UnitCountToZoomOut)
 	{
 		if (IsLocalController())
 		{
-			CameraBase->ZoomOutAutoCam(CameraBase->ZoomPosition+UnitZoomScaler*UnitCountInRange);
+			CameraBase->ZoomOutAutoCam(CameraBase->ZoomPosition+UnitZoomScaler*SmoothedUnitCountInRange);
 		}
 	}
 	else
@@ -1396,10 +1405,14 @@ void ACameraControllerBase::MoveCamToPosition(float DeltaSeconds, FVector Destin
 		const float Distance = FVector::Distance(CamLocation, Destination);
 		const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
 
+		// Die Rampe lief pro Frame (+-10), die Bewegung selbst aber pro Sekunde. Dadurch
+		// beschleunigte die Kamera auf einer schnellen Maschine viel abrupter. Auf 60 FPS
+		// normiert, damit der eingestellte Verlauf erhalten bleibt.
+		const float RampStep = 10.f * CameraBase->GetFrameScale();
 		if (Distance <= 1000.f && CameraBase->MovePositionCamSpeed > 200.f)
-			CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 10.f : 0.f;
+			CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? RampStep : 0.f;
 		else
-			CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f;
+			CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? RampStep : 0.f;
 
 		CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
 
@@ -1514,10 +1527,14 @@ void ACameraControllerBase::MoveCam(float DeltaSeconds, FVector Destination)
 
 		const FVector ADirection = (Destination - CamLocation).GetSafeNormal();
 
+		// Beschleunigungsrampe pro Sekunde statt pro Frame - siehe MoveCamToPosition.
+		// Das ist die Rampe, die die AutoCam benutzt, wenn sie dem Schwerpunkt der
+		// Schlacht folgt; sie war der Grund fuer das kantige Anfahren.
+		const float RampStep = 10.f * CameraBase->GetFrameScale();
 		if (Distance <= 1000.f && CameraBase->MovePositionCamSpeed > 200.f)
-			CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? 10.f : 0.f;
+			CameraBase->MovePositionCamSpeed -= CameraBase->MovePositionCamSpeed > 200.0f? RampStep : 0.f;
 		else
-			CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? 10.f : 0.f;
+			CameraBase->MovePositionCamSpeed += CameraBase->MovePositionCamSpeed < 1000.0f? RampStep : 0.f;
 
 		CameraBase->AddActorWorldOffset(ADirection * CameraBase->MovePositionCamSpeed * DeltaSeconds);
 	}

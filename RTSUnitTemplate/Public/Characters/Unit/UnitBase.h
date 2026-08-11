@@ -276,6 +276,18 @@ public:
 
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "SetWaypoint", Keywords = "RTSUnitTemplate SetWaypoint"), Category = RTSUnitTemplate)
 	void SetWaypoint(class AWaypoint* NewNextWaypoint);
+
+	/**
+	 * Diese Einheit soll nicht herumstehen; gesetzt aus FUnitSpawnParameter::bPreventIdling.
+	 *
+	 * Fuer sich genommen wirkungslos - erst ein AIdlePatrolEnforcer im Level liest das
+	 * Flag und schickt die Einheit aus PatrolIdle/Idle zurueck auf Patrouille. Das Flag
+	 * sitzt an der Einheit statt am Actor, damit pro Spawn-Zeile entschieden werden kann.
+	 *
+	 * Bewusst nicht repliziert: der Enforcer laeuft nur auf dem Server.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bPreventIdling = false;
 ///////////////////////////////////////////////////////////////////
 
 
@@ -507,6 +519,53 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FBuildingCost ConstructionCost;
+
+	/**
+	 * Supply a unit that is already standing on the map when the match starts occupies.
+	 *
+	 * A trained unit pays supply through its production ability, but a level-placed one never pays
+	 * anything - so a faction that starts with an army got it for free and its cap only ever counted
+	 * what it built afterwards. Charged once on BeginPlay, server-side, for level-placed units only.
+	 *
+	 * Zero falls back to UnitSpaceNeeded, which every unit already authors (worker 1, heavy unit 4),
+	 * so this takes effect on existing content without hand-filling it everywhere. Note the fallback
+	 * is a size proxy, not the real training cost - set this explicitly where the two should match.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Supply")
+	int32 StartupSupplyCost = 0;
+
+	/** Charges StartupSupplyCost against the team's supply. Level-placed units only, server only. */
+	void ApplyStartupSupplyCost();
+
+	/**
+	 * Skips the death VFX/sound for this unit.
+	 *
+	 * The Xeno worker is killed at the moment its building finishes - it is hidden by then, but the
+	 * death effects still played at its position, which reads as a unit exploding for no reason.
+	 */
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bSuppressDeathEffects = false;
+
+	/** Kills the unit without the death effects. Use instead of SetHealth(0) where the death is cosmetic. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void KillSilently();
+
+	/** Sets the suppression flag on every machine before the death multicast, so clients skip it too. */
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastSuppressDeathEffects();
+
+	/** Guards against charging twice (BeginPlay can run more than once for a pooled actor). */
+	bool bStartupSupplyCharged = false;
+
+	/**
+	 * Hands this unit's supply footprint back to its team. Only buildings released capacity before, so
+	 * every fallen unit kept blocking supply forever: a faction that loses fights ran into its own cap
+	 * and could not even train workers any more (measured 57 used against ~30 built capacity).
+	 */
+	void ReleaseUnitSupply();
+
+	/** Guards against releasing twice - SetHealth can be entered again after death. */
+	bool bSupplyReleased = false;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ScheduleDelayedNavigationUpdate();

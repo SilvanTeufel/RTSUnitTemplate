@@ -10,9 +10,33 @@
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "AIController.h"
 #include "Characters/Camera/RLAgent.h"
+#include "Controller/PlayerController/ControllerBase.h"
+#include "GameFramework/Pawn.h"
 
 // Bring the NNE namespace into scope to simplify type names
 using namespace UE::NNE;
+
+namespace
+{
+    /**
+     * Softmax temperature for picking an action from the network's scores.
+     * 0 = greedy argmax. A behaviour-cloned policy needs sampling: it was trained to reproduce a mixture of
+     * actions per state, and argmax keeps only the single most likely one, which in practice means the
+     * agent repeats its most common key and never performs the rarer, decisive ones.
+     * 1.0 reproduces the learned distribution; lower is more decisive, higher more erratic.
+     */
+    static float GRLSamplingTemperature = 1.0f;
+    static FAutoConsoleVariableRef CVarRLSamplingTemperature(
+        TEXT("rts.ai.rl.temperature"),
+        GRLSamplingTemperature,
+        TEXT("Softmax temperature for RL action selection. 0 = greedy argmax, 1 = as trained."),
+        ECVF_Default);
+}
+
+float UInferenceComponent::GetSamplingTemperature()
+{
+    return GRLSamplingTemperature;
+}
 
 UInferenceComponent::UInferenceComponent()
 {
@@ -37,11 +61,69 @@ void UInferenceComponent::BeginPlay()
         return;
     }
 
-    if (!QNetworkModelData)
+    // The model itself is built lazily: the pawn is possessed after BeginPlay, so the team id needed to
+    // pick a per-team model is not known yet.
+}
+
+EBrainMode UInferenceComponent::GetEffectiveBrainMode() const
+{
+    const int32 TeamId = ResolveOwningTeamId();
+    if (TeamId >= 0)
     {
-        UE_LOG(LogTemp, Error, TEXT("InferenceComponent: QNetworkModelData asset is not assigned!"));
+        if (const EBrainMode* Found = TeamBrainMode.Find(TeamId))
+        {
+            return *Found;
+        }
+    }
+    return BrainMode;
+}
+
+int32 UInferenceComponent::ResolveOwningTeamId() const
+{
+    if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+    {
+        if (const AController* C = OwnerPawn->GetController())
+        {
+            if (const AControllerBase* CB = Cast<AControllerBase>(C))
+            {
+                return CB->SelectableTeamId;
+            }
+        }
+    }
+    return -1;
+}
+
+void UInferenceComponent::EnsureModelInitialised()
+{
+    if (bModelInitialised)
+    {
         return;
     }
+
+    const int32 TeamId = ResolveOwningTeamId();
+    if (TeamId < 0)
+    {
+        return; // Not possessed yet; try again on the next decision.
+    }
+
+    bModelInitialised = true;
+
+    UNNEModelData* ModelData = QNetworkModelData;
+    if (const TObjectPtr<UNNEModelData>* Found = TeamQNetworkModelData.Find(TeamId))
+    {
+        if (*Found)
+        {
+            ModelData = *Found;
+        }
+    }
+
+    if (!ModelData)
+    {
+        UE_LOG(LogTemp, Error, TEXT("InferenceComponent: No ONNX model for team %d (neither a per-team entry nor QNetworkModelData)."), TeamId);
+        return;
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Team %d uses model '%s'."), TeamId, *GetNameSafe(ModelData));
 
     // Get the specific CPU runtime for ONNX
     TWeakInterfacePtr<INNERuntimeCPU> Runtime = GetRuntime<INNERuntimeCPU>(TEXT("NNERuntimeORTCpu"));
@@ -52,7 +134,7 @@ void UInferenceComponent::BeginPlay()
     }
 
     // Create a model compatible with the CPU
-    RuntimeModel = Runtime->CreateModelCPU(QNetworkModelData);
+    RuntimeModel = Runtime->CreateModelCPU(ModelData);
     if (!RuntimeModel.IsValid())
     {
         UE_LOG(LogTemp, Error, TEXT("InferenceComponent: Failed to create a CPU Model from the provided asset."));
@@ -68,7 +150,7 @@ void UInferenceComponent::BeginPlay()
     }
 
     // Define the shape of the input tensor: [batch_size, num_features]
-    const FTensorShape InputShape = FTensorShape::Make({1, 21});
+    const FTensorShape InputShape = FTensorShape::Make({1, static_cast<uint32>(GetStateSize())});
     TArray<FTensorShape> InputShapes;
     InputShapes.Add(InputShape);
 
@@ -85,9 +167,26 @@ void UInferenceComponent::BeginPlay()
 
 TArray<float> UInferenceComponent::ConvertStateToArray(const FGameStateData& GameStateData) const
 {
+    return StateToArray(GameStateData);
+}
+
+int32 UInferenceComponent::GetActionSpaceSize()
+{
+    // Built once on a throwaway instance so callers (recorder, trainer export, UI) cannot disagree with the
+    // list in InitializeActionSpace.
+    static const int32 CachedSize = []()
+    {
+        UInferenceComponent* Probe = NewObject<UInferenceComponent>(GetTransientPackage());
+        Probe->InitializeActionSpace();
+        return Probe->ActionSpace.Num();
+    }();
+    return CachedSize;
+}
+
+TArray<float> UInferenceComponent::StateToArray(const FGameStateData& GameStateData)
+{
     TArray<float> StateArray;
-    // Pre-size the array for performance. The state size is 21 floats.
-    StateArray.Reserve(21); 
+    StateArray.Reserve(GetStateSize());
 
     // The order here MUST EXACTLY match the order used to train the model.
     StateArray.Add(static_cast<float>(GameStateData.MyUnitCount));
@@ -116,7 +215,41 @@ TArray<float> UInferenceComponent::ConvertStateToArray(const FGameStateData& Gam
     StateArray.Add(GameStateData.EpicResource);
     StateArray.Add(GameStateData.LegendaryResource);
 
+    // Per-hotkey friendly unit counts. Without these the vector says how many units exist but not *what*
+    // they are, and every build decision in this game turns on exactly that: "do I own a production
+    // building yet", "how many workers", "how many hives". Behaviour cloning against the rule AI could not
+    // get past chance level while these were missing - the network simply could not see what the rules read.
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl1TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl2TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl3TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl4TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl5TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl6TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlQTagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlWTagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlETagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlRTagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt1TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt2TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt3TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt4TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt5TagFriendlyUnitCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt6TagFriendlyUnitCount));
+
+    // What the agent just did. See FGameStateData::LastActionIndex - without it the two halves of a
+    // select-then-use decision are indistinguishable and the data cannot be learned from.
+    StateArray.Add(static_cast<float>(GameStateData.LastActionIndex));
+
+    check(StateArray.Num() == GetStateSize());
     return StateArray;
+}
+
+int32 UInferenceComponent::GetStateSize()
+{
+    // 21 original features + 16 per-hotkey friendly counts + the previous action. Changing this invalidates
+    // every previously trained model, so bump it deliberately and retrain - a mismatch is not reported by
+    // NNE, the network just reads garbage.
+    return 38;
 }
 
 FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)
@@ -333,15 +466,15 @@ int32 UInferenceComponent::ChooseAction(const TArray<float>& GameState)
         return 0;
     }
 
-    if (GameState.Num() != 21)
+    if (GameState.Num() != GetStateSize())
     {
-        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent: Invalid GameState size. Expected 21, got %d."), GameState.Num());
+        UE_LOG(LogTemp, Warning, TEXT("InferenceComponent: Invalid GameState size. Expected %d, got %d."), GetStateSize(), GameState.Num());
         return 0;
     }
 
     // --- Prepare Input Tensor ---
-    // The input tensor shape is [1, 21] (batch_size=1, num_features=21)
-    FTensorShape InputShape = FTensorShape::Make({1, 21});
+    // The input tensor shape is [1, GetStateSize()] (batch_size = 1)
+    FTensorShape InputShape = FTensorShape::Make({1, static_cast<uint32>(GetStateSize())});
     
     TArray<FTensorBindingCPU> InputBindings;
     InputBindings.Emplace();
@@ -387,10 +520,76 @@ int32 UInferenceComponent::ChooseAction(const TArray<float>& GameState)
     return BestActionIndex;
 }
 
+
+int32 UInferenceComponent::SelectActionFromScores(const TArray<float>& Scores)
+{
+    if (Scores.Num() == 0)
+    {
+        return 0;
+    }
+
+    const float Temperature = GetSamplingTemperature();
+
+    if (Temperature <= 0.f)
+    {
+        // Greedy. Correct for a value network, wrong for a cloned policy: the teacher plays a mixture, and
+        // always taking its most likely key collapses the agent onto that key. Measured on the Xeno model,
+        // greedy emitted "select workers" 13650 times and "use ability 1" 39 times where the teacher used
+        // them 15385 and 3387 times - an agent that selects endlessly and never builds.
+        int32 Best = 0;
+        for (int32 i = 1; i < Scores.Num(); ++i)
+        {
+            if (Scores[i] > Scores[Best])
+            {
+                Best = i;
+            }
+        }
+        return Best;
+    }
+
+    // Sample from the softmax so the action mix matches what the network was taught. Subtract the max
+    // before exponentiating - the raw scores are unbounded logits and would overflow.
+    float MaxScore = Scores[0];
+    for (int32 i = 1; i < Scores.Num(); ++i)
+    {
+        MaxScore = FMath::Max(MaxScore, Scores[i]);
+    }
+
+    TArray<float> Weights;
+    Weights.SetNumUninitialized(Scores.Num());
+    float Total = 0.f;
+    for (int32 i = 0; i < Scores.Num(); ++i)
+    {
+        Weights[i] = FMath::Exp((Scores[i] - MaxScore) / Temperature);
+        Total += Weights[i];
+    }
+
+    if (Total <= 0.f || !FMath::IsFinite(Total))
+    {
+        return 0;
+    }
+
+    float Roll = FMath::FRandRange(0.f, Total);
+    for (int32 i = 0; i < Weights.Num(); ++i)
+    {
+        Roll -= Weights[i];
+        if (Roll <= 0.f)
+        {
+            return i;
+        }
+    }
+    return Weights.Num() - 1;
+}
+
 FString UInferenceComponent::GetActionFromRLModel(const FGameStateData& GameState)
 {
+    // Feed back what this agent did last step. The training data is recorded the same way, and without it
+    // the model cannot tell "nothing selected yet" from "workers selected, now press the ability".
+    FGameStateData StateWithHistory = GameState;
+    StateWithHistory.LastActionIndex = LastChosenActionIndex;
+
     // Convert the input struct to the flat TArray<float> the model needs
-    const TArray<float> GameStateArray = ConvertStateToArray(GameState);
+    const TArray<float> GameStateArray = ConvertStateToArray(StateWithHistory);
 
     // --- Basic Checks ---
     if (!ModelInstance.IsValid())
@@ -400,9 +599,9 @@ FString UInferenceComponent::GetActionFromRLModel(const FGameStateData& GameStat
     }
 
     // This check is still useful to ensure the conversion function is correct
-    if (GameStateArray.Num() != 21)
+    if (GameStateArray.Num() != GetStateSize())
     {
-        UE_LOG(LogTemp, Error, TEXT("InferenceComponent: Converted GameState size is incorrect. Expected 21, got %d."), GameStateArray.Num());
+        UE_LOG(LogTemp, Error, TEXT("InferenceComponent: Converted GameState size is incorrect. Expected %d, got %d."), GetStateSize(), GameStateArray.Num());
         return TEXT("{}");
     }
 
@@ -428,34 +627,28 @@ FString UInferenceComponent::GetActionFromRLModel(const FGameStateData& GameStat
         return TEXT("{}");
     }
     
-    // --- Process Output (Argmax) ---
-    int32 BestActionIndex = 0;
-    if (QValues.Num() > 0)
-    {
-        float MaxQValue = QValues[0];
-        for (int32 i = 1; i < QValues.Num(); ++i)
-        {
-            if (QValues[i] > MaxQValue)
-            {
-                MaxQValue = QValues[i];
-                BestActionIndex = i;
-            }
-        }
-    }
-    
+    const int32 BestActionIndex = SelectActionFromScores(QValues);
+
+    LastChosenActionIndex = BestActionIndex;
+
     // --- Return the chosen action as a JSON string ---
     return GetActionAsJSON(BestActionIndex);
 }
 
 FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)
 {
-    if (BrainMode == EBrainMode::RL_Model)
+    const EBrainMode ActiveMode = GetEffectiveBrainMode();
+
+    if (ActiveMode == EBrainMode::RL_Model)
     {
+        // Cheap no-op once resolved; covers possession not being complete on the first decisions.
+        EnsureModelInitialised();
+
         // --- 1. Use the RL Brain ---
         return GetActionFromRLModel(GameState);
     }
     
-    if (BrainMode == EBrainMode::Behavior_Tree)
+    if (ActiveMode == EBrainMode::Behavior_Tree)
     {
         if (!BlackboardComp || !BehaviorTreeComp)
         {

@@ -13,7 +13,40 @@
 #include "Components/CapsuleComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameStates/ResourceGameState.h"
+#include "GameModes/ResourceGameMode.h"
+#include "GAS/GameplayAbilityBase.h"
+#include "GameModes/RTSGameModeBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
+#include "Characters/Unit/UnitBase.h"
+#include "GameplayTagContainer.h"
+#include "Characters/Camera/RL/RLRecorderSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "EngineUtils.h"
+
+namespace
+{
+	/**
+	 * 1 = always take the highest-frequency matching rule instead of sampling among the matches.
+	 *
+	 * This exists for recording RL training data. A network emits one action per state, so it can never
+	 * reproduce a teacher that rolls dice - behaviour cloning against the sampling AI measured a hard
+	 * ceiling of ~34% agreement, with half of all recorded states mapping to more than one action. With
+	 * deterministic selection the same state always yields the same action and that ceiling disappears.
+	 *
+	 * Off during normal play on purpose: it makes the AI open identically every match.
+	 */
+	static int32 GRTSRulesDeterministic = 0;
+	static FAutoConsoleVariableRef CVarRTSRulesDeterministic(
+		TEXT("rts.ai.rules.deterministic"),
+		GRTSRulesDeterministic,
+		TEXT("1 = rule AI always picks its highest-frequency matching rule (use while recording RL data)."),
+		ECVF_Default);
+
+	bool IsDeterministicRuleSelection()
+	{
+		return GRTSRulesDeterministic != 0;
+	}
+}
 #include "NavigationSystem.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -27,9 +60,73 @@ URTSRuleBasedDeciderComponent::URTSRuleBasedDeciderComponent()
 	RandomWanderActions = { ERTSAIAction::MoveDirection1, ERTSAIAction::MoveDirection2, ERTSAIAction::MoveDirection3, ERTSAIAction::MoveDirection4 };
 }
 
+int32 URTSRuleBasedDeciderComponent::ResolveOwningTeamId() const
+{
+	if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		if (const ARTSBTController* BTC = Cast<ARTSBTController>(OwnerPawn->GetController()))
+		{
+			return BTC->OrchestratorTeamId;
+		}
+		if (const AControllerBase* CB = Cast<AControllerBase>(OwnerPawn->GetController()))
+		{
+			return CB->SelectableTeamId;
+		}
+	}
+	return -1;
+}
+
+void URTSRuleBasedDeciderComponent::ApplyTeamTableOverrides()
+{
+	if (bTeamTablesApplied) return;
+
+	if (TeamRulesDataTables.Num() == 0 && TeamAttackRulesDataTables.Num() == 0)
+	{
+		bTeamTablesApplied = true;
+		return;
+	}
+
+	const int32 MyTeamId = ResolveOwningTeamId();
+	if (MyTeamId < 0) return; // Not possessed yet - retry on the next evaluation.
+
+	if (UDataTable* const* Found = TeamRulesDataTables.Find(MyTeamId))
+	{
+		if (*Found) RulesDataTable = *Found;
+	}
+	if (UDataTable* const* Found = TeamAttackRulesDataTables.Find(MyTeamId))
+	{
+		if (*Found) AttackRulesDataTable = *Found;
+	}
+	bTeamTablesApplied = true;
+
+	// Unlock whatever this AI is expected to be able to build. A player earns these through progression;
+	// the agent has no such path, so without this its rules keep firing against permanently locked abilities.
+	for (const FString& Key : ForceEnabledAbilityKeys)
+	{
+		if (!Key.IsEmpty())
+		{
+			UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey_Static(Key, MyTeamId, true);
+		}
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Team %d uses rules '%s' and attack rules '%s', %d ability key(s) unlocked."),
+		MyTeamId, *GetNameSafe(RulesDataTable), *GetNameSafe(AttackRulesDataTable), ForceEnabledAbilityKeys.Num());
+}
+
 void URTSRuleBasedDeciderComponent::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// The pawn is possessed after this component's BeginPlay, so the team id is only readable one tick later.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(this, &URTSRuleBasedDeciderComponent::InitializeRuleTables);
+	}
+}
+
+void URTSRuleBasedDeciderComponent::InitializeRuleTables()
+{
+	ApplyTeamTableOverrides();
 
 	if (bUseAttackDataTableRules && AttackRulesDataTable)
 	{
@@ -92,6 +189,29 @@ int32 URTSRuleBasedDeciderComponent::PickWanderActionIndex(const FGameStateData&
 	}
 	*/
 
+	// Recording mode: a die roll here would put the same state in the training set with four different
+	// answers. Steer toward the enemy instead - deterministic, and unlike a hash of the position it is
+	// behaviour worth teaching.
+	if (IsDeterministicRuleSelection())
+	{
+		const FVector Delta3D = GS.AverageEnemyPosition - GS.AgentPosition;
+		if (Delta3D.Size2D() > KINDA_SMALL_NUMBER)
+		{
+			switch (ArgMax2D(FVector2D(Delta3D.X, Delta3D.Y)))
+			{
+				case 0: return (int32)MoveRightAction;
+				case 1: return (int32)MoveLeftAction;
+				case 2: return (int32)MoveUpAction;
+				default: return (int32)MoveDownAction;
+			}
+		}
+
+		if (RandomWanderActions.Num() > 0)
+		{
+			return (int32)RandomWanderActions[0];
+		}
+	}
+
 	// Fallback: random from provided indices
 	if (RandomWanderActions.Num() > 0)
 	{
@@ -103,12 +223,49 @@ int32 URTSRuleBasedDeciderComponent::PickWanderActionIndex(const FGameStateData&
 	return (int32)MoveUpAction;
 }
 
+void URTSRuleBasedDeciderComponent::RecordDecisionForTraining(const TArray<int32>& Indices) const
+{
+	if (!bHasCachedRecordingState)
+	{
+		return;
+	}
+
+	const UWorld* World = GetWorld();
+	UGameInstance* GameInstance = World ? World->GetGameInstance() : nullptr;
+	URLRecorderSubsystem* Recorder = GameInstance ? GameInstance->GetSubsystem<URLRecorderSubsystem>() : nullptr;
+	if (!Recorder || !Recorder->IsRecording())
+	{
+		return;
+	}
+
+	// One line per action, because the network also emits one action per inference step. The two halves of
+	// a composite decision ("select the workers, then press ability 3") share a world state, so each sample
+	// carries the action that preceded it - otherwise the same state would appear with two different
+	// answers and the pair could never be learned.
+	const int32 TeamId = ResolveOwningTeamId();
+	FGameStateData StateForSample = CachedRecordingState;
+
+	for (int32 Index : Indices)
+	{
+		if (Index < 0 || Index == (int32)ERTSAIAction::None)
+		{
+			continue;
+		}
+
+		StateForSample.LastActionIndex = LastRecordedActionIndex;
+		Recorder->RecordSample(TeamId, UInferenceComponent::StateToArray(StateForSample), Index, ERLSampleSource::RuleBased);
+		LastRecordedActionIndex = Index;
+	}
+}
+
 FString URTSRuleBasedDeciderComponent::BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const
 {
 	if (!Inference || Indices.Num() == 0)
 	{
 		return TEXT("{}");
 	}
+
+	RecordDecisionForTraining(Indices);
 
 	if (Indices.Num() == 1)
 	{
@@ -195,6 +352,124 @@ static int32 GetTagCount(const FGameStateData& GS, ERTSUnitTag Tag)
 	return 0;
 }
 
+// "Ctrl5" for ERTSAIAction::Ctrl5 and so on - the suffix of the KeyTag a selection action maps to.
+static FString SelectionActionToKeyTagSuffix(ERTSAIAction Action)
+{
+	switch (Action)
+	{
+	case ERTSAIAction::CtrlQ: return TEXT("CtrlQ");
+	case ERTSAIAction::CtrlW: return TEXT("CtrlW");
+	case ERTSAIAction::CtrlE: return TEXT("CtrlE");
+	case ERTSAIAction::CtrlR: return TEXT("CtrlR");
+	case ERTSAIAction::Ctrl1: return TEXT("Ctrl1");
+	case ERTSAIAction::Ctrl2: return TEXT("Ctrl2");
+	case ERTSAIAction::Ctrl3: return TEXT("Ctrl3");
+	case ERTSAIAction::Ctrl4: return TEXT("Ctrl4");
+	case ERTSAIAction::Ctrl5: return TEXT("Ctrl5");
+	case ERTSAIAction::Ctrl6: return TEXT("Ctrl6");
+	default: return FString();
+	}
+}
+
+bool URTSRuleBasedDeciderComponent::TryGetAbilityCostForRule(const FRTSRuleRow& Row, FBuildingCost& OutCost) const
+{
+	const int32 AbilityIndex = static_cast<int32>(Row.AbilityAction) - static_cast<int32>(ERTSAIAction::Ability1);
+	if (AbilityIndex < 0 || AbilityIndex > 5)
+	{
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("DeriveCost: bad ability index %d"), AbilityIndex);
+		return false;
+	}
+
+	const FString TagSuffix = SelectionActionToKeyTagSuffix(Row.SelectionAction);
+	if (TagSuffix.IsEmpty())
+	{
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("DeriveCost: selection %d has no key tag"), (int32)Row.SelectionAction);
+		return false;
+	}
+
+	const FGameplayTag KeyTag = FGameplayTag::RequestGameplayTag(FName(*(TEXT("KeyTag.") + TagSuffix)), false);
+	if (!KeyTag.IsValid())
+	{
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("DeriveCost: tag KeyTag.%s not registered"), *TagSuffix);
+		return false;
+	}
+
+	UWorld* World = GetWorld();
+	ARTSGameModeBase* GameMode = World ? Cast<ARTSGameModeBase>(World->GetAuthGameMode()) : nullptr;
+	if (!GameMode)
+	{
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("DeriveCost: no RTSGameModeBase"));
+		return false;
+	}
+
+	const int32 TeamId = ResolveOwningTeamId();
+
+	// The rule presses one key for a whole group, and every member resolves its own ability, so the
+	// binding cost is the cheapest member - gating on the priciest one blocks the affordable ones.
+	bool bFound = false;
+	for (AActor* Actor : GameMode->AllUnits)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(Actor);
+		if (!Unit || Unit->TeamId != TeamId) continue;
+		if (!Unit->UnitTags.HasTagExact(KeyTag)) continue;
+		if (!Unit->DefaultAbilities.IsValidIndex(AbilityIndex)) continue;
+
+		const TSubclassOf<UGameplayAbilityBase> AbilityClass = Unit->DefaultAbilities[AbilityIndex];
+		if (!AbilityClass) continue;
+
+		const UGameplayAbilityBase* CDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		if (!CDO) continue;
+
+		if (!bFound || CDO->ConstructionCost.PrimaryCost < OutCost.PrimaryCost)
+		{
+			OutCost = CDO->ConstructionCost;
+			bFound = true;
+		}
+	}
+
+	if (bDebug && !bFound)
+	{
+		UE_LOG(LogTemp, Log, TEXT("DeriveCost: no unit with KeyTag.%s on team %d owning ability index %d (AllUnits=%d)"),
+			*TagSuffix, TeamId, AbilityIndex, GameMode->AllUnits.Num());
+	}
+
+	return bFound;
+}
+
+bool URTSRuleBasedDeciderComponent::IsRuleOnCooldown(const FRTSRuleRow& Row, const FName& RowName) const
+{
+	if (Row.MinSecondsBetweenActivations <= 0.f) return false;
+
+	const float* Last = LastRuleActivationTime.Find(RowName);
+	if (!Last) return false;
+
+	const UWorld* World = GetWorld();
+	const float Now = World ? World->GetTimeSeconds() : 0.f;
+	return (Now - *Last) < Row.MinSecondsBetweenActivations;
+}
+
+void URTSRuleBasedDeciderComponent::MarkRuleFired(const FName& RowName) const
+{
+	const UWorld* World = GetWorld();
+	LastRuleActivationTime.Add(RowName, World ? World->GetTimeSeconds() : 0.f);
+
+	// Point the controller at the array this rule targets. Doing it here - at the moment the rule
+	// actually wins - keeps it deterministic: the previous mechanism only nudged the index by one and
+	// never reset it, so which array an ability press landed in depended on the run's history.
+	if (!RulesDataTable) return;
+
+	const FRTSRuleRow* Row = RulesDataTable->FindRow<FRTSRuleRow>(RowName, TEXT("RTSRulesArrayIndex"));
+	if (!Row) return;
+
+	if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		if (ACameraControllerBase* CB = Cast<ACameraControllerBase>(OwnerPawn->GetController()))
+		{
+			CB->AbilityArrayIndex = FMath::Clamp(Row->AbilityArrayIndex, 0, 3);
+		}
+	}
+}
+
 FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference) const
 {
 	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<Unnamed>") : Row.RuleName.ToString();
@@ -246,13 +521,65 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 		return true;
 	};
 
-	// Resource thresholds
-	if (!CheckResource(GS.PrimaryResource, GS.MaxPrimaryResource, Row.ResourceThresholds.PrimaryCost, EResourceType::Primary, TEXT("Primary"))) return TEXT("{}");
-	if (!CheckResource(GS.SecondaryResource, GS.MaxSecondaryResource, Row.ResourceThresholds.SecondaryCost, EResourceType::Secondary, TEXT("Secondary"))) return TEXT("{}");
-	if (!CheckResource(GS.TertiaryResource, GS.MaxTertiaryResource, Row.ResourceThresholds.TertiaryCost, EResourceType::Tertiary, TEXT("Tertiary"))) return TEXT("{}");
-	if (!CheckResource(GS.RareResource, GS.MaxRareResource, Row.ResourceThresholds.RareCost, EResourceType::Rare, TEXT("Rare"))) return TEXT("{}");
-	if (!CheckResource(GS.EpicResource, GS.MaxEpicResource, Row.ResourceThresholds.EpicCost, EResourceType::Epic, TEXT("Epic"))) return TEXT("{}");
-	if (!CheckResource(GS.LegendaryResource, GS.MaxLegendaryResource, Row.ResourceThresholds.LegendaryCost, EResourceType::Legendary, TEXT("Legendary"))) return TEXT("{}");
+	// Resource thresholds. Prefer the real cost of the ability this rule presses over the table value -
+	// see bDeriveThresholdsFromAbility for why the table cannot be trusted to stay in sync.
+	FBuildingCost Thr = Row.ResourceThresholds;
+	if (bDeriveThresholdsFromAbility)
+	{
+		FBuildingCost Derived;
+		if (TryGetAbilityCostForRule(Row, Derived))
+		{
+			auto Scale = [this](int32 Value) -> int32
+			{
+				return Value > 0 ? FMath::CeilToInt(Value * DerivedThresholdMultiplier) : 0;
+			};
+			Thr.PrimaryCost   = Scale(Derived.PrimaryCost);
+			Thr.SecondaryCost = Scale(Derived.SecondaryCost);
+			Thr.TertiaryCost  = Scale(Derived.TertiaryCost);
+			// Supply-like resources are compared against the remaining cap, so scaling would
+			// reserve headroom that does not exist. Use the real cost.
+			Thr.RareCost      = Derived.RareCost;
+			Thr.EpicCost      = Derived.EpicCost;
+			Thr.LegendaryCost = Derived.LegendaryCost;
+		}
+	}
+
+	if (!CheckResource(GS.PrimaryResource, GS.MaxPrimaryResource, Thr.PrimaryCost, EResourceType::Primary, TEXT("Primary"))) return TEXT("{}");
+	if (!CheckResource(GS.SecondaryResource, GS.MaxSecondaryResource, Thr.SecondaryCost, EResourceType::Secondary, TEXT("Secondary"))) return TEXT("{}");
+	if (!CheckResource(GS.TertiaryResource, GS.MaxTertiaryResource, Thr.TertiaryCost, EResourceType::Tertiary, TEXT("Tertiary"))) return TEXT("{}");
+	if (!CheckResource(GS.RareResource, GS.MaxRareResource, Thr.RareCost, EResourceType::Rare, TEXT("Rare"))) return TEXT("{}");
+	if (!CheckResource(GS.EpicResource, GS.MaxEpicResource, Thr.EpicCost, EResourceType::Epic, TEXT("Epic"))) return TEXT("{}");
+	if (!CheckResource(GS.LegendaryResource, GS.MaxLegendaryResource, Thr.LegendaryCost, EResourceType::Legendary, TEXT("Legendary"))) return TEXT("{}");
+
+	// Upper bounds: the rule is only allowed while the resource is still SHORT. Supply-like resources are
+	// judged by their remaining headroom, since "running out of energy" means the cap is close, not that
+	// the stored amount is small.
+	auto CheckResourceMax = [&](float Current, float Max, int32 Limit, EResourceType Type, const FString& Name) -> bool
+	{
+		if (Limit <= 0) return true;
+
+		bool bIsSupply = false;
+		if (RGState && RGState->IsSupplyLike.IsValidIndex(static_cast<int32>(Type)))
+		{
+			bIsSupply = RGState->IsSupplyLike[static_cast<int32>(Type)];
+		}
+
+		const float Value = bIsSupply ? (Max - Current) : Current;
+		if (Value >= (float)Limit)
+		{
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed %s upper bound: %.2f >= %d%s"),
+				*RowLabel, *Name, Value, Limit, bIsSupply ? TEXT(" (headroom)") : TEXT(""));
+			return false;
+		}
+		return true;
+	};
+
+	if (!CheckResourceMax(GS.PrimaryResource, GS.MaxPrimaryResource, Row.ResourceMaxThresholds.PrimaryCost, EResourceType::Primary, TEXT("Primary"))) return TEXT("{}");
+	if (!CheckResourceMax(GS.SecondaryResource, GS.MaxSecondaryResource, Row.ResourceMaxThresholds.SecondaryCost, EResourceType::Secondary, TEXT("Secondary"))) return TEXT("{}");
+	if (!CheckResourceMax(GS.TertiaryResource, GS.MaxTertiaryResource, Row.ResourceMaxThresholds.TertiaryCost, EResourceType::Tertiary, TEXT("Tertiary"))) return TEXT("{}");
+	if (!CheckResourceMax(GS.RareResource, GS.MaxRareResource, Row.ResourceMaxThresholds.RareCost, EResourceType::Rare, TEXT("Rare"))) return TEXT("{}");
+	if (!CheckResourceMax(GS.EpicResource, GS.MaxEpicResource, Row.ResourceMaxThresholds.EpicCost, EResourceType::Epic, TEXT("Epic"))) return TEXT("{}");
+	if (!CheckResourceMax(GS.LegendaryResource, GS.MaxLegendaryResource, Row.ResourceMaxThresholds.LegendaryCost, EResourceType::Legendary, TEXT("Legendary"))) return TEXT("{}");
 
 	// Caps
 	if (!(GS.MyUnitCount < Row.MaxFriendlyUnitCount)) { if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount cap: %d !< %d"), *RowLabel, GS.MyUnitCount, Row.MaxFriendlyUnitCount); return TEXT("{}"); }
@@ -318,6 +645,45 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 	return BuildCompositeActionJSON(ActionIndices, Inference);
 }
 
+float URTSRuleBasedDeciderComponent::GetSupplyHeadroom() const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return -1.f;
+	}
+
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(World->GetAuthGameMode());
+	const int32 TeamId = ResolveOwningTeamId();
+	if (!ResourceGameMode || TeamId < 0)
+	{
+		return -1.f;
+	}
+
+	// The tightest of the supply-like resources decides: one of them being full is enough to block
+	// production, so the smallest remaining headroom is the number that matters.
+	static const EResourceType AllTypes[] = {
+		EResourceType::Primary, EResourceType::Secondary, EResourceType::Tertiary,
+		EResourceType::Rare, EResourceType::Epic, EResourceType::Legendary };
+
+	float Tightest = -1.f;
+	for (const EResourceType Type : AllTypes)
+	{
+		if (!ResourceGameMode->IsSupplyLikeResource(Type))
+		{
+			continue;
+		}
+		// Note the argument order differs between the two: GetMaxResource(Type, Team), GetResource(Team, Type).
+		const float Headroom = ResourceGameMode->GetMaxResource(Type, TeamId) - ResourceGameMode->GetResource(TeamId, Type);
+		if (Tightest < 0.f || Headroom < Tightest)
+		{
+			Tightest = Headroom;
+		}
+	}
+
+	return Tightest;
+}
+
 FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference) const
 {
 	if (!RulesDataTable)
@@ -351,6 +717,12 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 			continue;
 		}
 
+		if (IsRuleOnCooldown(*Row, Name))
+		{
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' on cooldown (%.0fs)."), *Name.ToString(), Row->MinSecondsBetweenActivations);
+			continue;
+		}
+
 		const FString Out = EvaluateRuleRow(*Row, GS, Inference);
 		if (!Out.IsEmpty() && Out != TEXT("{}"))
 		{
@@ -362,6 +734,74 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 
 	if (MatchingRules.Num() > 0)
 	{
+		// Supply before everything, including expansion: at the cap the team cannot train a single unit,
+		// so it fields no army, so no attack rule can ever match and there is never a fight.
+		if (ForceSupplyBelowHeadroom > 0 && SupplyRuleNames.Num() > 0)
+		{
+			const UWorld* SupplyWorld = GetWorld();
+			const float Now = SupplyWorld ? SupplyWorld->GetTimeSeconds() : 0.f;
+			const bool bIntervalElapsed = (Now - LastSupplyForceTimeSeconds) >= SupplyForceIntervalSeconds;
+
+			if (bIntervalElapsed)
+			{
+				const float Headroom = GetSupplyHeadroom();
+				if (Headroom >= 0.f && Headroom < (float)ForceSupplyBelowHeadroom)
+				{
+					for (const FMatchingRule& Match : MatchingRules)
+					{
+						if (SupplyRuleNames.Contains(Match.Name))
+						{
+							LastSupplyForceTimeSeconds = Now;
+							MarkRuleFired(Match.Name);
+							UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: supply rule '%s' forced (headroom %.0f)."),
+							       *Match.Name.ToString(), Headroom);
+							return Match.Output;
+						}
+					}
+				}
+			}
+		}
+
+		// Expansion next, on its own clock. Everything else still goes through the draw below; this only
+		// guarantees that when a base is due AND affordable, it is not out-voted by twenty cheap rules.
+		if (ExpansionIntervalSeconds > 0.f && ExpansionRuleNames.Num() > 0)
+		{
+			const UWorld* World = GetWorld();
+			const float Now = World ? World->GetTimeSeconds() : 0.f;
+			if (Now - LastExpansionFireTimeSeconds >= ExpansionIntervalSeconds)
+			{
+				for (const FMatchingRule& Match : MatchingRules)
+				{
+					if (ExpansionRuleNames.Contains(Match.Name))
+					{
+						LastExpansionFireTimeSeconds = Now;
+						MarkRuleFired(Match.Name);
+						UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: expansion rule '%s' forced by cadence at %.0fs."),
+						       *Match.Name.ToString(), Now);
+						return Match.Output;
+					}
+				}
+			}
+		}
+
+		if (IsDeterministicRuleSelection())
+		{
+			const FMatchingRule* Best = &MatchingRules[0];
+			for (const FMatchingRule& Match : MatchingRules)
+			{
+				// Strictly greater, so a tie keeps the earlier row. Without that tiebreak the "deterministic"
+				// mode would still wobble between equally weighted rules and defeat its own purpose.
+				if (Match.Frequency > Best->Frequency)
+				{
+					Best = &Match;
+				}
+			}
+
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (deterministic, freq=%.1f)."), *Best->Name.ToString(), Best->Frequency);
+			MarkRuleFired(Best->Name);
+			return Best->Output;
+		}
+
 		if (TotalFrequency > 0.0f)
 		{
 			float RandomValue = FMath::FRandRange(0.0f, TotalFrequency);
@@ -372,6 +812,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 				if (RandomValue <= CumulativeFrequency)
 				{
 					if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *Match.Name.ToString(), Match.Frequency, TotalFrequency);
+					MarkRuleFired(Match.Name);
 					return Match.Output;
 				}
 			}
@@ -379,6 +820,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 		
 		// Fallback to first matching if total frequency is 0
 		if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (fallback to first, total frequency was 0)."), *MatchingRules[0].Name.ToString());
+		MarkRuleFired(MatchingRules[0].Name);
 		return MatchingRules[0].Output;
 	}
 
@@ -715,7 +1157,19 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 	if (MatchingRules.Num() > 0)
 	{
 		const FMatchingAttackRule* SelectedMatch = nullptr;
-		if (TotalFrequency > 0.0f)
+		if (IsDeterministicRuleSelection())
+		{
+			// Highest frequency, ties to the earlier row - same reasoning as the build rules.
+			SelectedMatch = &MatchingRules[0];
+			for (const FMatchingAttackRule& Match : MatchingRules)
+			{
+				if (Match.Frequency > SelectedMatch->Frequency)
+				{
+					SelectedMatch = &Match;
+				}
+			}
+		}
+		else if (TotalFrequency > 0.0f)
 		{
 			float RandomValue = FMath::FRandRange(0.0f, TotalFrequency);
 			float CumulativeFrequency = 0.0f;
@@ -897,19 +1351,48 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 			FinalPos.Z = Hit.ImpactPoint.Z;
 		}
 
-		// 2. NavMesh correction
+		// 2. NavMesh correction. An attack order to a point the navmesh does not cover leaves the units
+		// walking into it and stopping, which is what "they get stuck" looks like. Widen the search
+		// instead of giving up after two tries, and keep the previous valid position rather than
+		// publishing an unreachable one.
+		bool bProjected = false;
 		if (NavSys)
 		{
+			static const FVector Extents[] = {
+				FVector(50.f, 50.f, 250.f), FVector(500.f, 500.f, 500.f),
+				FVector(1500.f, 1500.f, 1500.f), FVector(4000.f, 4000.f, 2000.f) };
+
 			FNavLocation NavLoc;
-			// 1. Try with the provided extent
 			if (NavSys->ProjectPointToNavigation(FinalPos, NavLoc, NavMeshProjectionExtent))
 			{
 				FinalPos = NavLoc.Location;
+				bProjected = true;
 			}
-			// 2. Wide projection fallback if the provided extent fails (mirroring CustomControllerBase logic)
-			else if (NavSys->ProjectPointToNavigation(FinalPos, NavLoc, FVector(1500.f, 1500.f, 1500.f)))
+			else
 			{
-				FinalPos = NavLoc.Location;
+				for (const FVector& Extent : Extents)
+				{
+					if (NavSys->ProjectPointToNavigation(FinalPos, NavLoc, Extent))
+					{
+						FinalPos = NavLoc.Location;
+						bProjected = true;
+						break;
+					}
+				}
+			}
+		}
+
+		if (!bProjected)
+		{
+			// Nothing reachable anywhere near the target. Keep whatever we published last time - a stale
+			// but reachable target beats a fresh unreachable one - and say so, because silently handing
+			// out an off-navmesh position is exactly how the units ended up standing still.
+			UE_LOG(LogTemp, Warning,
+			       TEXT("RuleBasedDecider: attack position for row %d could not be projected onto the NavMesh (%s). Keeping the previous target."),
+			       i, *FinalPos.ToCompactString());
+			if (AttackPositions.IsValidIndex(i) && !AttackPositions[i].IsNearlyZero())
+			{
+				continue;
 			}
 		}
 
@@ -925,8 +1408,176 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 	}
 }
 
+void URTSRuleBasedDeciderComponent::EvaluateDefence()
+{
+	UWorld* World = GetWorld();
+	if (!bEnableDefence || !World)
+	{
+		return;
+	}
+
+	const int32 MyTeamId = ResolveOwningTeamId();
+	if (MyTeamId < 0)
+	{
+		return;
+	}
+
+	// 1. Where is our base being hit? Take the enemy that is closest to any of our buildings.
+	TArray<FVector> OwnBuildings;
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		ABuildingBase* Building = *It;
+		if (IsValid(Building) && Building->TeamId == MyTeamId && Building->GetUnitState() != UnitData::Dead)
+		{
+			OwnBuildings.Add(Building->GetActorLocation());
+		}
+	}
+	if (OwnBuildings.Num() == 0)
+	{
+		return;
+	}
+
+	const float TriggerSq = DefenceTriggerRadius * DefenceTriggerRadius;
+	FVector ThreatLocation = FVector::ZeroVector;
+	double BestDistSq = TNumericLimits<double>::Max();
+
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		AUnitBase* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId == MyTeamId || Unit->TeamId <= 0) continue;
+		if (Unit->GetUnitState() == UnitData::Dead || Unit->bIsBuilding) continue;
+
+		const FVector Loc = Unit->GetActorLocation();
+		for (const FVector& Building : OwnBuildings)
+		{
+			const double DistSq = FVector::DistSquared2D(Loc, Building);
+			if (DistSq <= TriggerSq && DistSq < BestDistSq)
+			{
+				BestDistSq = DistSq;
+				ThreatLocation = Loc;
+			}
+		}
+	}
+
+	if (BestDistSq == TNumericLimits<double>::Max())
+	{
+		return; // nobody in our base
+	}
+
+	// 2. Everything that can fight goes there. Units already fighting are left alone - re-issuing a move
+	// every few seconds would pull them out of combat over and over.
+	TArray<AUnitBase*> Fighters;
+	TArray<AUnitBase*> Workers;
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		AUnitBase* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId != MyTeamId) continue;
+		if (Unit->bIsBuilding || Unit->bIsConstructionUnit) continue;
+
+		const TEnumAsByte<UnitData::EState> State = Unit->GetUnitState();
+		if (State == UnitData::Dead || State == UnitData::Attack || State == UnitData::Chase ||
+			State == UnitData::Casting || State == UnitData::Build)
+		{
+			continue;
+		}
+
+		if (Unit->IsWorker)
+		{
+			Workers.Add(Unit);
+		}
+		else
+		{
+			Fighters.Add(Unit);
+		}
+	}
+
+	TArray<AUnitBase*>& Defenders = Fighters;
+	if (Fighters.Num() == 0)
+	{
+		if (!bDefendWithWorkersAsLastResort)
+		{
+			return;
+		}
+		// Keep the economy alive: only the surplus above MinWorkersKeptMining picks up the fight.
+		const int32 Spare = Workers.Num() - MinWorkersKeptMining;
+		if (Spare <= 0)
+		{
+			return;
+		}
+		Workers.SetNum(Spare);
+		Defenders = Workers;
+	}
+
+	if (Defenders.Num() == 0)
+	{
+		return;
+	}
+
+	// 3. The rally point has to be reachable, or they walk at it and stop - the same trap the attack
+	// positions had.
+	FVector Target = ThreatLocation;
+	if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+	{
+		FNavLocation NavLoc;
+		if (NavSys->ProjectPointToNavigation(Target, NavLoc, FVector(500.f, 500.f, 500.f)) ||
+			NavSys->ProjectPointToNavigation(Target, NavLoc, FVector(2000.f, 2000.f, 1000.f)))
+		{
+			Target = NavLoc.Location;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("RuleBasedDecider: defence target %s is off the NavMesh, skipping."), *Target.ToCompactString());
+			return;
+		}
+	}
+
+	AControllerBase* Controller = nullptr;
+	if (APawn* OwnerPawn = Cast<APawn>(GetOwner()))
+	{
+		Controller = Cast<AControllerBase>(OwnerPawn->GetController());
+	}
+
+	for (AUnitBase* Defender : Defenders)
+	{
+		Defender->SetUEPathfinding = true;
+		Defender->RunLocation = Target;
+		if (Controller)
+		{
+			Controller->MoveToLocationUEPathFinding(Defender, Target);
+		}
+		Defender->SetUnitState(UnitData::Run);
+		Defender->SwitchEntityTagByState(UnitData::Run, Defender->UnitStatePlaceholder);
+		// Let them acquire targets on the way instead of running past the enemy.
+		Defender->SetToggleUnitDetection(true);
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: team %d defending - sent %d %s to %s."),
+	       MyTeamId, Defenders.Num(), Fighters.Num() > 0 ? TEXT("fighters") : TEXT("workers"),
+	       *Target.ToCompactString());
+}
+
 FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStateData& GameState)
 {
+	// No-op once resolved; covers the case where possession was still pending on the first tick.
+	ApplyTeamTableOverrides();
+
+	// Defence runs before anything else and outside the rule system: a raid has to be answered even
+	// while the build rules are on cooldown or an attack-return block is active.
+	if (UWorld* DefenceWorld = GetWorld())
+	{
+		const float Now = DefenceWorld->GetTimeSeconds();
+		if (Now - LastDefenceCheckTimeSeconds >= DefenceCheckIntervalSeconds)
+		{
+			LastDefenceCheckTimeSeconds = Now;
+			EvaluateDefence();
+		}
+	}
+
+	// Every path below funnels through BuildCompositeActionJSON, which records the decision. It needs the
+	// state that caused it, and only this entry point has it.
+	CachedRecordingState = GameState;
+	bHasCachedRecordingState = true;
+
 	UInferenceComponent* Inference = GetInferenceComponent();
 	if (!Inference)
 	{
@@ -1036,9 +1687,13 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 		return TEXT("{}");
 	};
 
-	// Alternate which path is attempted first each call (static toggle survives between calls)
+	// Alternate which path is attempted first each call (static toggle survives between calls).
+	// In recording mode the order is fixed to the rule table: the alternation depends on call count rather
+	// than on game state, so the same state would otherwise land in the training set as a build decision
+	// one moment and a camera wander the next. (Note the toggle is a function-local static, i.e. shared by
+	// every decider in the level - both AI teams flip it for each other.)
 	static bool bTryTableFirstNext = true;
-	const bool bTryTableFirst = bTryTableFirstNext;
+	const bool bTryTableFirst = IsDeterministicRuleSelection() ? true : bTryTableFirstNext;
 	bTryTableFirstNext = !bTryTableFirstNext;
 
 	FString Result;

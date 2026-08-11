@@ -33,7 +33,16 @@ protected:
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RLAgent, meta = (AllowPrivateAccess = "true"))
     TObjectPtr<UInferenceComponent> InferenceComponent;
-    
+
+    /**
+     * Spawn location, used to pick this agent's own "RLAgentCameraBounds" box when the level contains one
+     * per team. Taken once at BeginPlay because the agent wanders far from its base later on, and matching
+     * against its current position would let it drift into the enemy's box.
+     */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RLAgent)
+    FVector CameraBoundsReference = FVector::ZeroVector;
+
+
 public:
     // Called every frame
     virtual void Tick(float DeltaTime) override;
@@ -47,6 +56,14 @@ public:
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
     float FallbackBounceDelta = 1000.0f;
+
+    /**
+     * How far from a right-click the agent will re-aim onto a friendly transporter (the Antimatter
+     * reactor) when it has loadable workers selected. Its click traces straight down from the camera,
+     * so without this it can never hit one and that resource source stays unused. 0 disables.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
+    float AiTransporterClickRadius = 3000.0f;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bDebug = false;

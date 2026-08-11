@@ -48,9 +48,11 @@ void AWorkingUnitBase::Destroyed()
 	}
 
 	// Release the resource slot too, so CurrentWorkers (the HUD count) stays symmetric when a worker dies.
+	// Goes through SetResourcePlace so the game mode's per-team counters are resynced as well - calling
+	// RemoveWorkerFromArray directly only fixed the node's own count and left the HUD showing a phantom.
 	if (ResourcePlace)
 	{
-		ResourcePlace->RemoveWorkerFromArray(this);
+		SetResourcePlace(nullptr);
 	}
 
 	if (WorkResource)
@@ -140,7 +142,8 @@ void AWorkingUnitBase::SetResourcePlace(AWorkArea* NewPlace, bool bRegisterOnNew
 	}
 
 	// Give the old node its slot back. This is the step every raw assignment used to skip.
-	if (IsValid(ResourcePlace))
+	const bool bHadPlace = IsValid(ResourcePlace);
+	if (bHadPlace)
 	{
 		ResourcePlace->RemoveWorkerFromArray(this);
 	}
@@ -151,11 +154,55 @@ void AWorkingUnitBase::SetResourcePlace(AWorkArea* NewPlace, bool bRegisterOnNew
 	{
 		ResourcePlace->AddWorkerToArray(this);
 	}
+
+	// RemoveWorkerFromArray only maintains the per-node count. The "N/Max" the HUD shows comes from the
+	// game mode's per-team counters, which are kept by hand with +1/-1 at the assignment sites - and none
+	// of those run when a worker simply gives up its deposit (it died, or was sent off to build). That is
+	// why a slot stayed occupied by a worker that no longer exists. Recompute instead of patching, so the
+	// count cannot drift no matter which path released the worker.
+	if (bHadPlace && HasAuthority())
+	{
+		if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
+		{
+			ResourceGameMode->SetAllCurrentWorkers(TeamId);
+		}
+	}
 }
 
 void AWorkingUnitBase::ReleaseResourcePlace()
 {
 	SetResourcePlace(nullptr);
+}
+
+FVector AWorkingUnitBase::GetBuildAreaEffectScale(float BaseScale, float ReferenceSize,
+                                                  float MinScale, float MaxScale) const
+{
+	const FVector Fallback(BaseScale, BaseScale, BaseScale);
+
+	if (!IsValid(BuildArea) || ReferenceSize <= KINDA_SMALL_NUMBER)
+	{
+		return Fallback;
+	}
+
+	// Prefer the area's mesh bounds; the actor bounding box also swallows trigger capsules and would
+	// report a footprint far larger than what the player sees.
+	FVector Size = FVector::ZeroVector;
+	if (BuildArea->Mesh)
+	{
+		Size = BuildArea->Mesh->Bounds.GetBox().GetSize();
+	}
+	if (Size.IsNearlyZero())
+	{
+		Size = BuildArea->GetComponentsBoundingBox(true).GetSize();
+	}
+	if (Size.IsNearlyZero())
+	{
+		return Fallback;
+	}
+
+	const float Footprint = FMath::Max(Size.X, Size.Y);
+	const float Scale = FMath::Clamp((Footprint / ReferenceSize) * BaseScale, MinScale, MaxScale);
+	return FVector(Scale, Scale, Scale);
 }
 
 void AWorkingUnitBase::OnRep_CarryingResourceType()

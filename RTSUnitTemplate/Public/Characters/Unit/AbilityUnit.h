@@ -126,6 +126,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	EGASAbilityInputID OffensiveAbilityID;
 
+	/**
+	 * Fire the offensive ability at most ONCE per unit lifetime, on first engagement,
+	 * instead of on every attack event. Off by default, so existing units are unaffected.
+	 *
+	 * Needed for one-shot toggles like the Siege tank: GetAbilityForInputID resolves the
+	 * ability by ARRAY INDEX (InputID - AbilityOne), and the AI always passes
+	 * OffensiveAbilityID, so it can only ever reach index 0. A Siege/UnSiege pair therefore
+	 * never un-sieges from the offensive slot - the unit just re-triggers Siege forever.
+	 * With this ticked the unit sieges once when it first engages and then stays that way.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
+	bool bFireOffensiveAbilityOnce = false;
+
+	/** Runtime latch for bFireOffensiveAbilityOnce. Not for authoring. */
+	UPROPERTY(BlueprintReadWrite, Category = Ability)
+	bool bOffensiveAbilityFired = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	EGASAbilityInputID DefensiveAbilityID;
 

@@ -750,28 +750,37 @@ void ARTSGameModeBase::NavInitialisation()
             {
                 UE_LOG(LogTemp, Log, TEXT("Found valid points. Performing dummy pathfinding query..."));
 
-                // Use the controlled Pawn as the navigation agent.
-                APawn* Pawn = World->GetFirstPlayerController()->GetPawn();
-                if (!Pawn)
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("No Pawn found to use as navigation agent."));
-                    return;
-                }
-                
+                // Use the controlled Pawn as the navigation agent - wenn es einen gibt.
+                //
+                // Auf einem Dedicated Server existiert zu diesem Zeitpunkt noch KEIN
+                // PlayerController: es hat sich ja erst ein Client zu verbinden. Der
+                // frueher hier stehende Direktzugriff
+                //     World->GetFirstPlayerController()->GetPawn()
+                // hat den Server deshalb beim Start mit EXCEPTION_ACCESS_VIOLATION
+                // abgeschossen; die Pruefung auf !Pawn kam eine Zeile zu spaet.
+                APlayerController* PC = World->GetFirstPlayerController();
+                APawn* Pawn = PC ? PC->GetPawn() : nullptr;
                 INavAgentInterface* NavAgent = Cast<INavAgentInterface>(Pawn);
-                if (!NavAgent)
-                {
-                    UE_LOG(LogTemp, Warning, TEXT("Pawn does not implement INavAgentInterface."));
-                    return;
-                }
-
 
             	// Create a default query filter
             	FSharedConstNavQueryFilter QueryFilter = NavData->GetQueryFilter(UNavigationQueryFilter::StaticClass());
-            	
-            	
-                // Now create the dummy pathfinding query with the proper parameters.
-                FPathFindingQuery DummyQuery(*NavAgent, *NavData, PointA.Location, PointB.Location, QueryFilter);
+
+            	// The only pointer in this block that was never checked, and the warm-up query dereferences
+            	// it. NavInitialisation crashed here with an access violation during level start; a missing
+            	// filter is not worth taking the session down for, the query is only a warm-up.
+            	if (!QueryFilter.IsValid())
+            	{
+            		UE_LOG(LogTemp, Warning, TEXT("NavInitialisation: no default nav query filter, skipping the warm-up query."));
+            		return;
+            	}
+
+                // Ohne Nav-Agent (headless) wird die Aufwaermabfrage mit dieser GameMode-
+                // Instanz als Owner gestellt. Das Ergebnis interessiert ohnehin nicht - der
+                // einzige Zweck ist, das Navigationssystem einmal warmlaufen zu lassen -
+                // und so passiert das auf dem Server genauso wie im Standalone-Spiel.
+                FPathFindingQuery DummyQuery = NavAgent
+                    ? FPathFindingQuery(*NavAgent, *NavData, PointA.Location, PointB.Location, QueryFilter)
+                    : FPathFindingQuery(this, *NavData, PointA.Location, PointB.Location, QueryFilter);
                 FPathFindingResult PathResult = NavSystem->FindPathSync(DummyQuery);
                 UE_LOG(LogTemp, Log, TEXT("Dummy pathfinding complete. Success: %s"), 
                        PathResult.IsSuccessful() ? TEXT("Yes") : TEXT("No"));
@@ -1466,8 +1475,38 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnitFromDataTable(int id, FVector Locati
 				FUnitSpawnParameter* SpawnParameter = UnitSpawnParameter->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
 				if (SpawnParameter && SpawnParameter->Id == id)
 				{
-			
-					return SpawnSingleUnit(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+					AUnitBase* Spawned = SpawnSingleUnit(*SpawnParameter, Location, UnitToChase, TeamId, Waypoint);
+
+					// Send it to the producing building's rally point. Deliberately only here and not in
+					// SpawnSingleUnit: this is the production entry point the abilities call, while the
+					// level spawn tables go through SpawnUnits_Implementation and must keep their own
+					// waypoint/patrol behaviour untouched.
+					if (Spawned && !Waypoint)
+					{
+						ABuildingBase* Producer = nullptr;
+						double BestDistSq = TNumericLimits<double>::Max();
+						for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+						{
+							ABuildingBase* Building = *It;
+							if (!IsValid(Building) || Building->TeamId != Spawned->TeamId) continue;
+
+							const double DistSq = FVector::DistSquared2D(Building->GetActorLocation(), Location);
+							if (DistSq < BestDistSq)
+							{
+								BestDistSq = DistSq;
+								Producer = Building;
+							}
+						}
+
+						// Only if the spawn really came out of that building - otherwise this is some other
+						// kind of summon and none of our business.
+						if (Producer && BestDistSq <= FMath::Square(1500.f))
+						{
+							Producer->ApplyRallyPointToUnit(Spawned);
+						}
+					}
+
+					return Spawned;
 				}
 			}
 		}
@@ -1515,6 +1554,57 @@ bool ARTSGameModeBase::RemoveDeadUnitWithIndexFromDataSet(int32 UnitIndex)
 			}
 		}
 	return false;
+}
+
+int32 ARTSGameModeBase::CountAliveUnitsForTeam(int32 InTeamId, bool bInvert) const
+{
+	int32 Count = 0;
+	for (AActor* Actor : AllUnits)
+	{
+		const AUnitBase* Unit = Cast<AUnitBase>(Actor);
+		if (!IsValid(Unit) || Unit->GetUnitState() == UnitData::Dead)
+		{
+			continue;
+		}
+
+		const bool bMatches = bInvert ? (Unit->TeamId != InTeamId) : (Unit->TeamId == InTeamId);
+		if (bMatches)
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
+float ARTSGameModeBase::GetAdaptiveSpawnMultiplier(const FUnitSpawnParameter& SpawnParameter) const
+{
+	if (!SpawnParameter.bAdaptiveSpawn || SpawnParameter.AdaptiveStrength <= 0.f)
+	{
+		return 1.f;
+	}
+
+	const int32 Own = CountAliveUnitsForTeam(SpawnParameter.TeamId);
+	const int32 Opponent = (SpawnParameter.AdaptiveOpponentTeamId >= 0)
+		? CountAliveUnitsForTeam(SpawnParameter.AdaptiveOpponentTeamId)
+		: CountAliveUnitsForTeam(SpawnParameter.TeamId, /*bInvert=*/true);
+
+	// Nothing to measure against yet (opening seconds) - stay neutral rather than
+	// spiking to the upper clamp on an empty battlefield.
+	if (Opponent <= 0)
+	{
+		return 1.f;
+	}
+
+	const float Desired = FMath::Max(1.f, Opponent * FMath::Max(0.05f, SpawnParameter.AdaptiveTargetRatio));
+	const float Actual = FMath::Max(1.f, static_cast<float>(Own));
+
+	// Ratio form (not a difference): behind by 3x asks for 3x the reinforcements, ahead by
+	// 3x throttles to a third. Symmetric, which is what stops either side snowballing.
+	const float Multiplier = FMath::Pow(Desired / Actual, SpawnParameter.AdaptiveStrength);
+
+	const float MinMul = FMath::Max(0.f, SpawnParameter.AdaptiveMinMultiplier);
+	const float MaxMul = FMath::Max(MinMul, SpawnParameter.AdaptiveMaxMultiplier);
+	return FMath::Clamp(Multiplier, MinMul, MaxMul);
 }
 
 int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
@@ -1690,20 +1780,29 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
 
+	// Adaptive reinforcement. Returns exactly 1.0 when the row has bAdaptiveSpawn off, so
+	// the effective values below are identical to the raw ones for every existing table.
+	const float AdaptiveMultiplier = GetAdaptiveSpawnMultiplier(SpawnParameter);
+	const int32 EffectiveMaxUnitSpawnCount = SpawnParameter.bAdaptiveSpawn && SpawnParameter.bAdaptiveScalesMaxCount
+		? FMath::Max(1, FMath::RoundToInt(SpawnParameter.MaxUnitSpawnCount * AdaptiveMultiplier))
+		: SpawnParameter.MaxUnitSpawnCount;
+	const int32 EffectiveUnitCount = SpawnParameter.bAdaptiveSpawn
+		? FMath::Max(1, FMath::RoundToInt(SpawnParameter.UnitCount * AdaptiveMultiplier))
+		: SpawnParameter.UnitCount;
 
 	FTimerHandleMapping TimerMap = GetTimerHandleMappingById(SpawnParameter.Id);
-	if(UnitCount < SpawnParameter.MaxUnitSpawnCount && TimerMap.SkipTimer && SpawnParameter.SkipTimerAfterDeath){
+	if(UnitCount < EffectiveMaxUnitSpawnCount && TimerMap.SkipTimer && SpawnParameter.SkipTimerAfterDeath){
 		SetSkipTimerMappingById(SpawnParameter.Id, false);
 		return;
 	}
-	
+
 	HighestSquadId++;
-	
-	if(UnitCount < SpawnParameter.MaxUnitSpawnCount)
+
+	if(UnitCount < EffectiveMaxUnitSpawnCount)
 	{
 		HighestSquadId++;
 		int RandomCount = FMath::RandRange(SpawnParameter.MinRandomCount, SpawnParameter.MaxRandomCount);
-		for(int i = 0; i < SpawnParameter.UnitCount + RandomCount; i++)
+		for(int i = 0; i < EffectiveUnitCount + RandomCount; i++)
 		{
 			// Waypointspawn
 			const FVector FirstLocation = CalcLocation(SpawnParameter.UnitOffset+Location, SpawnParameter.UnitMinRange, SpawnParameter.UnitMaxRange);
@@ -1767,6 +1866,10 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				
 				AssignWaypointToUnit(UnitBase, SpawnParameter.WaypointTag);
 				SeedSpawnStoredLocationFromWaypoint(UnitBase);
+
+				// Reicht den Zeilen-Schalter an die Einheit weiter. Ohne einen
+				// AIdlePatrolEnforcer im Level bleibt das Flag folgenlos.
+				UnitBase->bPreventIdling = SpawnParameter.bPreventIdling;
 
 				/*
 				if(Waypoint != nullptr)

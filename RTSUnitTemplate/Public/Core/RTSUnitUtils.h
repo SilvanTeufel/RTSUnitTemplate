@@ -299,4 +299,40 @@ namespace RTSUnitUtils
 
 		return Dist2D <= Threshold;
 	}
+
+	/**
+	 * Loest ein haengengebliebenes SwitchingState nach TimeoutSeconds wieder.
+	 *
+	 * SwitchingState bedeutet "Zustandswechsel unterwegs" und wird normalerweise vom
+	 * Signal-Handler geloescht, sobald der Wechsel vollzogen ist. Kommt das Signal nicht
+	 * an oder steigt der Handler vorher aus, bleibt das Flag gesetzt. Da JEDER Ausgang aus
+	 * Pause, Attack und Chase auf !SwitchingState prueft - auch der Ausgang "Ziel
+	 * verloren" -, steht die Einheit dann fuer den Rest ihres Lebens still: sie wechselt
+	 * den Zustand nicht mehr, bewegt sich nicht und greift nicht an.
+	 *
+	 * Ein Wechsel ist innerhalb eines oder zweier Ticks vollzogen; eine Sekunde ist also
+	 * grosszuegig und trifft nur echte Haenger. Aufzurufen zu Beginn der serverseitigen
+	 * Auswertung eines Zustands, bevor die Ausgaenge geprueft werden.
+	 *
+	 * @return true, wenn ein Haenger geloest wurde (nur fuer Diagnosezwecke interessant).
+	 */
+	inline bool TickSwitchingStateWatchdog(FMassAIStateFragment& StateFrag, float DeltaSeconds,
+		float TimeoutSeconds = 1.0f)
+	{
+		if (!StateFrag.SwitchingState)
+		{
+			StateFrag.SwitchingStateTime = 0.f;
+			return false;
+		}
+
+		StateFrag.SwitchingStateTime += DeltaSeconds;
+		if (StateFrag.SwitchingStateTime < TimeoutSeconds)
+		{
+			return false;
+		}
+
+		StateFrag.SwitchingState = false;
+		StateFrag.SwitchingStateTime = 0.f;
+		return true;
+	}
 }

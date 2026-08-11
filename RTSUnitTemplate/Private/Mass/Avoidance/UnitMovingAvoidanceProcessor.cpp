@@ -369,7 +369,13 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 
 	// Safe off the game thread again: the mutable part of the obstacle grid is read from
 	// UUnitObstacleSnapshotSubsystem, an immutable per-frame copy taken on the game thread.
-	bRequiresGameThreadExecution = false;
+	// Builds FMassEntityView over neighbouring obstacle entities and reads their velocity,
+	// move-target and collider fragments - a cross-entity read like the state processors.
+	// This was deliberately set to false once for throughput; that removed a de-facto
+	// serialization barrier and is what let the CurrentArchetype race surface under heavy
+	// combat. Correctness wins here; if the throughput is needed back, the obstacle data has
+	// to come from the snapshot subsystem instead of live entity views.
+	bRequiresGameThreadExecution = true;
 }
 
 void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)

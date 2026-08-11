@@ -12,6 +12,9 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "EngineUtils.h"
 #include "System/RTSBeaconSubsystem.h"
+#include "Actors/WorkArea.h"
+#include "Actors/Waypoint.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -33,6 +36,166 @@ void ABuildingBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ABuildingBase, EnergyWallArray);
+	DOREPLIFETIME(ABuildingBase, bHasRallyPoint);
+	DOREPLIFETIME(ABuildingBase, RallyPointLocation);
+}
+
+void ABuildingBase::SetRallyPoint(FVector NewLocation, AWorkArea* ResourceArea)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	RallyPointLocation = NewLocation;
+	bHasRallyPoint = true;
+	RallyResourceArea = ResourceArea;
+}
+
+FVector ABuildingBase::GetRallyPointLocation() const
+{
+	// The waypoint the player drags with a right-click is the existing, visible rally (the HUD even
+	// draws the line to it), so it wins over anything computed here.
+	if (HasWaypoint && IsValid(NextWaypoint))
+	{
+		return NextWaypoint->GetActorLocation();
+	}
+
+	if (bHasRallyPoint)
+	{
+		return RallyPointLocation;
+	}
+
+	// No point set: put one on the edge of the base, pointing away from the rest of our buildings.
+	// Units otherwise pile up on the spot they spawned at - which is inside the base - and block both
+	// the next unit out of this building and the workers walking through.
+	const FVector Here = GetActorLocation();
+	FVector Centroid = FVector::ZeroVector;
+	int32 Count = 0;
+
+	if (const UWorld* World = GetWorld())
+	{
+		for (TActorIterator<ABuildingBase> It(World); It; ++It)
+		{
+			const ABuildingBase* Other = *It;
+			if (!IsValid(Other) || Other == this || Other->TeamId != TeamId)
+			{
+				continue;
+			}
+			Centroid += Other->GetActorLocation();
+			++Count;
+		}
+	}
+
+	FVector Outward = GetActorForwardVector();
+	if (Count > 0)
+	{
+		Centroid /= Count;
+		const FVector Away = Here - Centroid;
+		if (!Away.IsNearlyZero())
+		{
+			Outward = Away;
+		}
+	}
+
+	Outward.Z = 0.f;
+	Outward = Outward.GetSafeNormal();
+	if (Outward.IsNearlyZero())
+	{
+		Outward = FVector::ForwardVector;
+	}
+
+	FVector Target = Here + Outward * DefaultRallyDistance;
+
+	// Drop it onto the ground, or the unit walks at a point floating over a slope.
+	if (UWorld* World = GetWorld())
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(this);
+		if (World->LineTraceSingleByChannel(Hit, Target + FVector(0.f, 0.f, 2000.f), Target - FVector(0.f, 0.f, 5000.f), ECC_Visibility, Params))
+		{
+			Target.Z = Hit.Location.Z;
+		}
+	}
+
+	return Target;
+}
+
+void ABuildingBase::ApplyRallyPointToUnit(AUnitBase* NewUnit)
+{
+	if (!HasAuthority() || !IsValid(NewUnit) || NewUnit->GetUnitState() == UnitData::Dead)
+	{
+		return;
+	}
+
+	// A worker rallied onto a deposit goes straight to work. Mirrors SendWorkerToResource, including
+	// its permission and capacity checks - skipping those would have the worker walk over and bounce.
+	if (NewUnit->IsWorker && IsValid(RallyResourceArea))
+	{
+		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(NewUnit))
+		{
+			if (Worker->CanMineWorkArea(RallyResourceArea) && AWorkArea::HasFreeMiningSlotFor(RallyResourceArea, Worker))
+			{
+				Worker->SetResourcePlace(RallyResourceArea, /*bRegisterOnNewPlace=*/true);
+				Worker->AutoMining = true;
+				NewUnit->SetUEPathfinding = true;   // declared on AUnitBase, not on AWorkingUnitBase
+				NewUnit->SetUnitState(UnitData::GoToResourceExtraction);
+				NewUnit->SwitchEntityTagByState(UnitData::GoToResourceExtraction, NewUnit->UnitStatePlaceholder);
+				return;
+			}
+		}
+	}
+
+	// Everything else walks to the point. Workers without a rallied deposit are left alone: their own
+	// GoToBase/SwitchResourceArea cycle already assigns them, and a move order would only cancel it.
+	if (NewUnit->IsWorker)
+	{
+		return;
+	}
+
+	NewUnit->RunLocation = GetRallyPointLocation();
+	NewUnit->SetUEPathfinding = true;
+	NewUnit->SetUnitState(UnitData::Run);
+	NewUnit->SwitchEntityTagByState(UnitData::Run, NewUnit->UnitStatePlaceholder);
+}
+
+void ABuildingBase::ApplySupplyCapacity()
+{
+	if (bSupplyCapacityApplied || !HasAuthority())
+	{
+		return;
+	}
+
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr);
+	if (!ResourceGameMode)
+	{
+		return;
+	}
+
+	// Respect the same ceiling the Reactor uses, so a stack of supply buildings cannot run away with it.
+	if (ResourceGameMode->GetMaxResource(EResourceType::Rare, TeamId) >= SupplyCapacityLimit)
+	{
+		return;
+	}
+
+	ResourceGameMode->IncreaseMaxResources(SupplyCapacityGain, TeamId);
+	bSupplyCapacityApplied = true;
+}
+
+void ABuildingBase::ReleaseSupplyCapacity()
+{
+	// Hand the capacity back, otherwise losing supply buildings would still leave the team able to train.
+	if (!bSupplyCapacityApplied || !HasAuthority())
+	{
+		return;
+	}
+
+	if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
+	{
+		ResourceGameMode->DecreaseMaxResources(SupplyCapacityGain, TeamId);
+	}
+	bSupplyCapacityApplied = false;
 }
 
 void ABuildingBase::BeginPlay()
@@ -48,6 +211,18 @@ void ABuildingBase::BeginPlay()
 
 	if(ResourceGameMode)
 		ResourceGameMode->AddBaseToGroup(this);
+
+	// Grant this building's supply capacity. Deferred a moment because TeamId is assigned after spawn - the
+	// Singularian Reactor's Blueprint waits half a second for exactly the same reason.
+	const bool bGrantsCapacity =
+		SupplyCapacityGain.PrimaryCost || SupplyCapacityGain.SecondaryCost || SupplyCapacityGain.TertiaryCost ||
+		SupplyCapacityGain.RareCost || SupplyCapacityGain.EpicCost || SupplyCapacityGain.LegendaryCost;
+
+	if (HasAuthority() && bGrantsCapacity)
+	{
+		FTimerHandle SupplyHandle;
+		GetWorldTimerManager().SetTimer(SupplyHandle, this, &ABuildingBase::ApplySupplyCapacity, 0.5f, false);
+	}
 }
 
 void ABuildingBase::SetBeaconRange(float NewRange)
@@ -108,8 +283,10 @@ bool ABuildingBase::GetEnergyWallActive() const
 
 void ABuildingBase::Destroyed()
 {
+	ReleaseSupplyCapacity();
+
 	Super::Destroyed();
-	
+
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 	
 	if(ResourceGameMode)

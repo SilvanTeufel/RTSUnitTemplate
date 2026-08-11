@@ -40,6 +40,17 @@ public:
 	
 	UFUNCTION(Client, Reliable)
 	void ClientReceiveWorkArea(AWorkArea* ClientArea);
+
+	/**
+	 * Effect scale that matches the footprint of this worker's BuildArea.
+	 *
+	 * The finish-build effect used a fixed scale, so it looked the same over a small pod and over a
+	 * hive. Takes the larger of the area's X/Y extent and expresses it as a multiple of ReferenceSize.
+	 * Falls back to BaseScale when there is no build area to measure.
+	 */
+	UFUNCTION(BlueprintPure, Category = Worker)
+	FVector GetBuildAreaEffectScale(float BaseScale = 1.f, float ReferenceSize = 300.f,
+	                                float MinScale = 0.5f, float MaxScale = 6.f) const;
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* ResourcePlace;

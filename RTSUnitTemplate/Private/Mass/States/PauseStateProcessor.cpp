@@ -125,6 +125,7 @@ void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecu
             }
         }
     });
+
 }
 
 void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
@@ -134,8 +135,13 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     UWorld* World = EntityManager.GetWorld();
     if (!World) return;
 
+    // Haengengebliebenes SwitchingState wieder loesen, bevor die Ausgaenge geprueft
+    // werden - sonst bleibt die Einheit dauerhaft in Pause stehen. Siehe
+    // RTSUnitUtils::TickSwitchingStateWatchdog.
+    RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval);
+
     FMassAITargetFragment& MutableTargetFrag = const_cast<FMassAITargetFragment&>(TargetFrag);
-    
+
     if (!StateFrag.CanAttack)
     {
         MutableTargetFrag.TargetEntity.Reset();
@@ -155,7 +161,22 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
     
-    if ((bIsFriendlyActive && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, MutableTargetFrag, CharFragPtr, Transform.GetLocation(), MoveTarget, World, FollowAcceptanceMultiplier)) || !bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead)
+    // Eine bereits angefangene Pause wird zu Ende gebracht, auch wenn das Ziel dazwischen
+    // stirbt. Hier faellt der Schuss der Projektil-Einheiten (RangedAttack am Ende der
+    // Pause); brach der Zustand vorher ab, ging StateTimer auf 0 und eine Einheit mit langer
+    // PauseDuration - Siege-Kanone: 3 s - fing beim naechsten Ziel wieder von vorn an und
+    // kam nie zum Schuss.
+    const bool bPauseInProgress = bFinishPauseOnTargetLoss
+        && Stats.bUseProjectile
+        && StateFrag.StateTimer > 0.f
+        && StateFrag.StateTimer < Stats.PauseDuration;
+
+    const bool bLostTarget = !bIsTargetActive || !MutableTargetFrag.bHasValidTarget || bIsTargetDead;
+    const bool bFriendlyOutOfRange = bIsFriendlyActive
+        && !RTSUnitUtils::IsWithinFollowThreshold(EntityManager, Entity, MutableTargetFrag,
+            CharFragPtr, Transform.GetLocation(), MoveTarget, World, FollowAcceptanceMultiplier);
+
+    if (bFriendlyOutOfRange || (bLostTarget && !bPauseInProgress))
     {
         if (!StateFrag.SwitchingState)
         {
@@ -184,47 +205,83 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(MutableTargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
 
+    // Solange das Ziel lebt und greifbar ist, IST seine jetzige Position die letzte
+    // bekannte. Ohne diese Auffrischung fror LastKnownLocation ein, sobald das Ziel aus
+    // der Sicht lief. Die Einheit mass dann gegen einen Geisterpunkt direkt neben sich,
+    // hielt sich fuer in Reichweite und blieb dauerhaft in Pause -> Attack -> Pause
+    // stehen, waehrend der echte Gegner ueber 1000 Einheiten entfernt war. Gemessen:
+    // sechs Einheiten 12 s bewegungslos, naechster Gegner 947 bis 2357 Einheiten weg.
+    if (bIsTargetActive && TargetTransform)
+    {
+        MutableTargetFrag.LastKnownLocation = TargetTransform->GetLocation();
+    }
+
     const float Dist = FVector::Dist2D(Transform.GetLocation(), MutableTargetFrag.LastKnownLocation);
-    
+
     const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, MutableTargetFrag.LastKnownLocation);
     const float AttackRange = Stats.AttackRange + CombinedRadii;
 
-    if (Dist <= AttackRange)
+    // Gleiches Totband wie im AttackStateProcessor: Eintritt bei AttackRange, Austritt erst
+    // bei AttackRange * Hysterese. Ohne das verlor eine Einheit an der Reichweitengrenze bei
+    // jedem Flackern ihren angefangenen Angriffszyklus.
+    const float BreakOffRange = AttackRange * FMath::Max(1.f, AttackRangeHysteresis);
+
+    auto GoAfterTarget = [this, &Context, &Stats, Entity]()
     {
-        if (StateFrag.StateTimer >= Stats.PauseDuration && !StateFrag.SwitchingState)
+        if (SignalSubsystem)
         {
-            StateFrag.SwitchingState = true;
-            if (Stats.bUseProjectile)
+            SignalSubsystem->SignalEntityDeferred(Context,
+                Stats.bCanMoveWhileAttacking ? UnitSignals::Run : UnitSignals::Chase, Entity);
+        }
+    };
+
+    if (StateFrag.StateTimer >= Stats.PauseDuration && !StateFrag.SwitchingState)
+    {
+        // Abklingzeit vorbei - jetzt wird neu entschieden, und dafuer zaehlt die ECHTE
+        // Reichweite, nicht das Hysteresefenster.
+        //
+        // Mit BreakOffRange an dieser Stelle entstand eine Endlosschleife: im Ring zwischen
+        // AttackRange und AttackRange * Hysterese schickte Pause die Einheit wieder in den
+        // Angriff, AttackStateProcessor liess sie im selben erweiterten Fenster gewaehren
+        // und schickte sie zurueck in die Pause. Die Einheit stand damit dauerhaft auf
+        // Abstand zum Gegner, statt das letzte Stueck heranzugehen - am deutlichsten bei
+        // kurzen Reichweiten wie dem Skitterling, wo dieser Abstand ins Auge faellt.
+        //
+        // Das gilt ausdruecklich AUCH fuer Fernkaempfer. Ein Ausnahmezweig, der hier
+        // BreakOffRange verwendete, hat den Skitterling weiter haengen lassen: der
+        // Entschluss rechnet mit AttackRange + CombinedRadii - also inklusive Radius des
+        // ZIELS -, die Abschlusspruefung in UnitRangedAttack dagegen mit RangeWithCapsule.
+        // Eine kleine Einheit vor einem grossen Gegner durfte damit schiessen wollen, ohne
+        // dass der Schuss die Pruefung bestand: Pause, kein Schuss, Pause. Der Entschluss
+        // muss enger sein als die Abschusspruefung, nie weiter.
+        StateFrag.SwitchingState = true;
+
+        if (Dist > AttackRange)
+        {
+            GoAfterTarget();
+        }
+        else if (Stats.bUseProjectile)
+        {
+            if (SignalSubsystem)
             {
-                if (SignalSubsystem)
-                {
-                    StateFrag.StateTimer = 0.f;
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
-                }
+                StateFrag.StateTimer = 0.f;
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
             }
-            else
+        }
+        else
+        {
+            if (SignalSubsystem)
             {
-                if (SignalSubsystem)
-                {
-                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Attack, Entity);
-                }
+                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Attack, Entity);
             }
         }
     }
-    else if (!StateFrag.SwitchingState)
+    else if (Dist > BreakOffRange && !StateFrag.SwitchingState)
     {
+        // Waehrend der laufenden Abklingzeit erst jenseits des Totbands abbrechen - das ist
+        // der Fall, fuer den die Hysterese gedacht war.
         StateFrag.SwitchingState = true;
-        if (SignalSubsystem)
-        {
-            if (Stats.bCanMoveWhileAttacking)
-            {
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Run, Entity);
-            }
-            else
-            {
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Chase, Entity);
-            }
-        }
+        GoAfterTarget();
     }
 }
 

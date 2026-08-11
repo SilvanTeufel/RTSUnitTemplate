@@ -75,6 +75,12 @@ USTRUCT() struct FMassStatePatrolTag : public FMassTag { GENERATED_BODY() }; // 
 USTRUCT() struct FMassStatePatrolRandomTag : public FMassTag { GENERATED_BODY() }; // Zufllig um WP
 USTRUCT() struct FMassStatePatrolIdleTag : public FMassTag { GENERATED_BODY() }; // Idle bei Zufalls-Patrouille
 
+// Diese Einheit soll nicht herumstehen. Gesetzt beim Binden aus
+// AUnitBase::bPreventIdling, das wiederum aus FUnitSpawnParameter::bPreventIdling
+// kommt - also pro Spawn-Zeile schaltbar, ab Werk aus. UPreventIdlingProcessor
+// laeuft ausschliesslich ueber dieses Tag; ohne Tag existiert das Verhalten nicht.
+USTRUCT() struct FMassPreventIdlingTag : public FMassTag { GENERATED_BODY() };
+
 // --- Andere Zustnde ---
 USTRUCT() struct FMassStateEvasionTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRootedTag : public FMassTag { GENERATED_BODY() };
@@ -438,6 +444,20 @@ struct FMassAIStateFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool SwitchingState = false;
+
+	/**
+	 * Wie lange SwitchingState schon gesetzt ist. Grundlage fuer den Watchdog in
+	 * RTSUnitUtils::TickSwitchingStateWatchdog.
+	 *
+	 * SwitchingState heisst "Wechsel unterwegs" und wird erst geloescht, wenn der
+	 * Signal-Handler den Wechsel wirklich ausfuehrt. Geht das Signal verloren oder
+	 * steigt der Handler vorher aus, bleibt das Flag stehen - und weil jeder Ausgang
+	 * aus Pause, Attack und Chase auf !SwitchingState prueft, ist die Einheit dann
+	 * dauerhaft eingefroren. Gemessen am 2026-08-10: durchgehend 7 bis 9 Einheiten
+	 * gleichzeitig, ueber Minuten, mit laengst abgelaufener Abklingzeit.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float SwitchingStateTime = 0.f;
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool SwitchingStateClient = false;

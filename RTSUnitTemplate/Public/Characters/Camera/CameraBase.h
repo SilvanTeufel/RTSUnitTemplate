@@ -143,6 +143,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float AutoZoomSpeed = 25.f;
 
+	/**
+	 * Faktor, mit dem die pro-Frame-Schritte der Kamera auf 60 FPS normiert werden.
+	 *
+	 * Zoom, Rotation und Bewegungsbeschleunigung wurden urspruenglich pro Frame addiert,
+	 * nicht pro Sekunde - damit lief die Kamera auf einer schnellen Maschine um ein
+	 * Vielfaches schneller. Bei 60 FPS liefert das hier 1.0, die vorhandenen Werte behalten
+	 * also genau ihre eingestellte Wirkung; bei 200 FPS 0.3, bei 30 FPS 2.0.
+	 * Nach oben begrenzt, damit ein einzelner Hitch die Kamera nicht wegschleudert.
+	 */
+	float GetFrameScale() const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float ZoomAccelerationRate = 10.0f;
 

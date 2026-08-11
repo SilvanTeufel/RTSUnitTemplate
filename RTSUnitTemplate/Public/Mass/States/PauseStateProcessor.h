@@ -45,7 +45,28 @@ protected:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
-	
+
+	/**
+	 * Laesst eine bereits laufende Angriffspause zu Ende laufen, wenn das Ziel dazwischen
+	 * stirbt, statt sofort abzubrechen.
+	 *
+	 * Der Schuss einer Projektil-Einheit faellt NICHT im Attack-Zustand, sondern am Ende
+	 * dieser Pause (UnitSignals::RangedAttack). Die ResonanceCannon hat gesiegt eine
+	 * PauseDuration von 3 s - sie muss also dasselbe Ziel drei Sekunden am Leben halten.
+	 * Starb es vorher, brach der Zustand ab, StateTimer ging auf 0 und die Kanone begann
+	 * beim naechsten Ziel von vorn: im Getuemmel kam sie damit nie zum Schuss.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool bFinishPauseOnTargetLoss = true;
+
+	/**
+	 * Hysterese fuer den Austritt aus der Pause Richtung Chase/Run - dasselbe Totband wie
+	 * im AttackStateProcessor, damit eine Einheit an der Reichweitengrenze nicht zwischen
+	 * den Zustaenden flackert und dabei jedes Mal ihren Angriffszyklus verliert.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate, meta = (ClampMin = "1.0"))
+	float AttackRangeHysteresis = 1.15f;
+
 private:
 	void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
 		FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 
@@ -62,6 +83,7 @@ private:
 	FMassEntityQuery EntityQuery;
 
 	float TimeSinceLastRun = 0.0f;
+
 
 	UPROPERTY(Transient)
 	TObjectPtr<UMassSignalSubsystem> SignalSubsystem;

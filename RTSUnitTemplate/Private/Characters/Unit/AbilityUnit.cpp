@@ -398,6 +398,35 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 	// THIS IS NOT SAFE FOR MASS
 	if (IsWorker)
 	{
+		// A worker is only meant to stand still while it is actually building. The Xeno Brood-Mite freezes
+		// itself in EventStartBuild (hidden, immobile, unselectable) and treats EventFinishedBuild - which
+		// kills it - as the only way out, so every interrupted build left a permanently paralysed husk: it
+		// still counted as a worker and still held its mining slot, but never moved again. That is what
+		// "the Xeno run out of workers" actually was. Reaching any other state means the build is over one
+		// way or another, so lift the freeze here rather than trusting each faction's Blueprint to do it.
+		// CanMove/CanBeSelected live on AUnitBase, several levels below this class, hence the cast.
+		if (AUnitBase* SelfUnit = Cast<AUnitBase>(this))
+		{
+			if (NewUnitState != UnitData::Build && NewUnitState != UnitData::Casting &&
+				NewUnitState != UnitData::Dead && !SelfUnit->bIsBuilding)
+			{
+				SelfUnit->CanMove = true;
+				SelfUnit->CanBeSelected = true;
+
+				// The same Blueprint hides the mesh with SetHiddenInGame, which SetCharacterVisibility
+				// does NOT undo - that one works on bVisible - so a recovered worker would walk around
+				// invisible. Only touched here, for a worker coming out of a build; fog of war uses
+				// bVisible and the ISM path, so neither is disturbed.
+				if (USkeletalMeshComponent* SkelMesh = GetMesh())
+				{
+					if (SkelMesh->bHiddenInGame)
+					{
+						SkelMesh->SetHiddenInGame(false, true);
+					}
+				}
+			}
+		}
+
 		if (NewUnitState == UnitData::GoToResourceExtraction)
 		{
 			if (bCanCallBPEvents) { GoToResource(); }

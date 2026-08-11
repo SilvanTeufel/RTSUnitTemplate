@@ -28,6 +28,7 @@ ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
 void ARLAgent::BeginPlay()
 {
     Super::BeginPlay();
+    CameraBoundsReference = GetActorLocation();
     if (bDebug) UE_LOG(LogTemp, Log, TEXT("[RLAgent] BeginPlay on %s Controller=%s HasAuthority=%s"), *GetNameSafe(this), *GetNameSafe(GetController()), HasAuthority() ? TEXT("true") : TEXT("false"));
 }
 
@@ -251,9 +252,38 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                     {
                         // Prefer an Actor with the tag; then try to use its BoxComponent (or any primitive component) tagged with the same tag
                         UGameplayStatics::GetAllActorsWithTag(GetWorld(), FName(TEXT("RLAgentCameraBounds")), BoundsActors);
-                        if (BoundsActors.Num() > 0 && BoundsActors[0])
+
+                        // With more than one AI in the level each side needs its own box, otherwise every
+                        // agent is pinned to whichever one happened to be found first and builds its base
+                        // across the map. Each agent takes the box it started inside, or else the closest.
+                        AActor* BoundsActor = nullptr;
                         {
-                            AActor* BoundsActor = BoundsActors[0];
+                            double BestDistSq = TNumericLimits<double>::Max();
+                            for (AActor* Candidate : BoundsActors)
+                            {
+                                if (!Candidate) continue;
+
+                                FVector CandOrigin, CandExtent;
+                                Candidate->GetActorBounds(true, CandOrigin, CandExtent);
+                                const FBox CandBox(CandOrigin - CandExtent, CandOrigin + CandExtent);
+
+                                if (CandBox.IsInsideXY(CameraBoundsReference))
+                                {
+                                    BoundsActor = Candidate;
+                                    break;
+                                }
+
+                                const double DistSq = FVector::DistSquared2D(CandOrigin, CameraBoundsReference);
+                                if (DistSq < BestDistSq)
+                                {
+                                    BestDistSq = DistSq;
+                                    BoundsActor = Candidate;
+                                }
+                            }
+                        }
+
+                        if (BoundsActor)
+                        {
                             // Look for a component on this actor with ComponentTag "RLAgentCameraBounds"
                             TInlineComponentArray<UActorComponent*> Comps;
                             BoundsActor->GetComponents(Comps);
@@ -334,12 +364,27 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
             }
             else if (ActionName == "switch_camera_state" || ActionName.StartsWith("switch_camera_state_ability") || ActionName.StartsWith("stop_move_camera") || ActionName == "change_ability_index")
             {
-                if (ExtendedController->SelectedUnits.Num() > 0 &&
-                    ExtendedController->SelectedUnits[0] &&
-                    ExtendedController->SelectedUnits[0]->BuildArea != nullptr)
+                // This used to abort the WHOLE action when SelectedUnits[0] happened to hold a BuildArea.
+                // The agent selects every worker it owns, so index 0 is arbitrary - and self-reinforcing:
+                // the worker that took the last build order is exactly the one carrying a BuildArea, so
+                // from then on every further ability action was dropped until it finished. Whole factions
+                // built nothing because of this. Only give up when NOBODY in the selection is free.
                 {
-                    if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Cannot perform action while unit is Building."));
-                    return;
+                    bool bAnyFree = false;
+                    for (AUnitBase* Selected : ExtendedController->SelectedUnits)
+                    {
+                        if (IsValid(Selected) && Selected->BuildArea == nullptr)
+                        {
+                            bAnyFree = true;
+                            break;
+                        }
+                    }
+
+                    if (!bAnyFree && ExtendedController->SelectedUnits.Num() > 0)
+                    {
+                        if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Every selected unit is already building."));
+                        return;
+                    }
                 }
                 
                 bool bSkipSwitch = false;
@@ -373,10 +418,43 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                     if (bIsWorker)
                     {
                         if (bDebug) UE_LOG(LogTemp, Warning, TEXT("TRYING DROPPING WORKAREA"));
-                        ExtendedController->SetWorkArea(GetActorTransform());
+
                         if (ExtendedController->SelectedUnits.Num() > 0 && ExtendedController->SelectedUnits[0])
                         {
-                            ExtendedController->DropWorkAreaForUnit(ExtendedController->SelectedUnits[0], false, ExtendedController->DropWorkAreaFailedSound);
+                            // The build ability spawned the work-area ghost during the SwitchControllerStateMachine
+                            // call above, so this frame its bounds and overlap set are still empty. Validating now
+                            // makes PerformWorkAreaDistanceResolution bail out and GetOverlappingActors come back
+                            // empty, which is how the AI ended up stacking buildings on top of each other. One tick
+                            // later the ghost is fully registered and the normal placement rules do their job.
+                            // Drop the ghost for the worker that actually RECEIVED it. The controller no
+                            // longer forces the order onto SelectedUnits[0] for the AI, so assuming index 0
+                            // here would hand the drop to a worker holding nothing while the real ghost
+                            // stayed stuck on another one.
+                            AUnitBase* GhostOwner = ExtendedController->SelectedUnits[0];
+                            for (AUnitBase* Selected : ExtendedController->SelectedUnits)
+                            {
+                                if (IsValid(Selected) && Selected->CurrentDraggedWorkArea)
+                                {
+                                    GhostOwner = Selected;
+                                    break;
+                                }
+                            }
+
+                            TWeakObjectPtr<AExtendedControllerBase> WeakController(ExtendedController);
+                            TWeakObjectPtr<AUnitBase> WeakWorker(GhostOwner);
+                            const FTransform DropTransform = GetActorTransform();
+
+                            if (UWorld* World = GetWorld())
+                            {
+                                World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateLambda(
+                                    [WeakController, WeakWorker, DropTransform]()
+                                    {
+                                        if (!WeakController.IsValid() || !WeakWorker.IsValid()) return;
+                                        WeakController->SetWorkArea(DropTransform);
+                                        WeakController->DropWorkAreaForUnit(WeakWorker.Get(), false,
+                                            WeakController->DropWorkAreaFailedSound);
+                                    }));
+                            }
                         }
                         else
                         {
@@ -463,15 +541,64 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
 
     ExtendedController->AttackToggled = false;
 
-    
-    if (!ExtendedController->CheckClickOnTransportUnit(HitResult))
+    // The agent's right-click traces straight DOWN from its camera, so it can only ever hit whatever
+    // happens to sit directly underneath - it will practically never land on a transporter. A human
+    // aims at the Antimatter reactor and the workers get loaded; the agent could not, so that resource
+    // source stayed unused. Re-aim the click at a nearby friendly transporter when the selection is
+    // made of loadable workers. AI-only by construction: this whole class is the agent's input path.
+    FHitResult EffectiveHit = HitResult;
+    {
+        bool bHasLoadableWorker = false;
+        for (AUnitBase* Selected : ExtendedController->SelectedUnits)
+        {
+            if (IsValid(Selected) && Selected->IsWorker && Selected->CanBeTransported &&
+                Selected->GetUnitState() != UnitData::Dead)
+            {
+                bHasLoadableWorker = true;
+                break;
+            }
+        }
+
+        if (bHasLoadableWorker && !Cast<AUnitBase>(HitResult.GetActor()))
+        {
+            const FVector ClickLocation = HitResult.Location;
+            AUnitBase* BestTransporter = nullptr;
+            double BestDistSq = TNumericLimits<double>::Max();
+
+            for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+            {
+                AUnitBase* Candidate = *It;
+                if (!IsValid(Candidate) || !Candidate->IsATransporter) continue;
+                if (Candidate->TeamId != ExtendedController->SelectableTeamId) continue;
+                if (Candidate->GetUnitState() == UnitData::Dead) continue;
+                // Full transporters are skipped, otherwise the workers walk over and bounce off.
+                if (Candidate->CurrentUnitsLoaded >= Candidate->MaxTransportUnits) continue;
+
+                const double DistSq = FVector::DistSquared2D(Candidate->GetActorLocation(), ClickLocation);
+                if (DistSq < BestDistSq)
+                {
+                    BestDistSq = DistSq;
+                    BestTransporter = Candidate;
+                }
+            }
+
+            if (BestTransporter && BestDistSq <= FMath::Square(AiTransporterClickRadius))
+            {
+                EffectiveHit.Location = BestTransporter->GetActorLocation();
+                EffectiveHit.ImpactPoint = EffectiveHit.Location;
+                EffectiveHit.HitObjectHandle = FActorInstanceHandle(BestTransporter);
+            }
+        }
+    }
+
+    if (!ExtendedController->CheckClickOnTransportUnit(EffectiveHit))
     {
         if (ExtendedController->SelectedUnits.Num() == 0 ||
             (ExtendedController->SelectedUnits[0] && !ExtendedController->SelectedUnits[0]->CurrentDraggedWorkArea))
         {
-            if (!ExtendedController->CheckClickOnWorkArea(HitResult))
+            if (!ExtendedController->CheckClickOnWorkArea(EffectiveHit))
             {
-                ExtendedController->RunUnitsAndSetWaypointsMass(HitResult);
+                ExtendedController->RunUnitsAndSetWaypointsMass(EffectiveHit);
                 // RunUnitsAndSetWaypoints(HitResult, ExtendedController);
             }
         }

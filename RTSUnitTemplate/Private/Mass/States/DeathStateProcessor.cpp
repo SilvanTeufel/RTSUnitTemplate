@@ -33,7 +33,9 @@ UDeathStateProcessor::UDeathStateProcessor(): EntityQuery()
     ExecutionOrder.ExecuteInGroup = UE::Mass::ProcessorGroupNames::Behavior;
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
-    bRequiresGameThreadExecution = false;
+    // Reads fragments of other entities (9 sites) while units are dying, i.e. exactly while
+    // archetypes are being moved. Must not run on a worker thread. See CurrentArchetype assert.
+    bRequiresGameThreadExecution = true;
 }
 
 void UDeathStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)

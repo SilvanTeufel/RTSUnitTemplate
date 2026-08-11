@@ -107,6 +107,18 @@ struct FGameStateData
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxEpicResource = 0.0f;
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) float MaxLegendaryResource = 0.0f;
 
+	/**
+	 * The action taken on the previous step, or -1 at the start.
+	 *
+	 * Decisions in this game come in pairs - select a group, then press an ability - and both halves are
+	 * emitted from the same world state. Without knowing which half already happened, one state maps to two
+	 * different correct answers and no policy can be learned from it: measured on a recorded session, 97% of
+	 * states were ambiguous for exactly this reason. It is also what an RL model needs to play at all,
+	 * because it has to press the ability *after* its own selection.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+	int32 LastActionIndex = -1;
+
 	// Per-tag unit counts (friendly/enemy) for selection/ability groups
 	// Alt1..Alt6
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagFriendlyUnitCount = 0;
@@ -257,6 +269,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	int32 ChooseAction(const TArray<float>& GameState);
 
+	/**
+	 * The model's input encoding, exposed so the recorder writes training data in exactly the layout
+	 * inference reads. Keeping one implementation is the point: if these two ever drift, a network trains on
+	 * one feature order and plays on another, which fails silently and looks like a bad policy.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
+	static TArray<float> StateToArray(const FGameStateData& GameStateData);
+
+	/** Number of entries in the action space, i.e. the size the model's output layer must have. */
+	UFUNCTION(BlueprintPure, Category = "AI|Inference")
+	static int32 GetActionSpaceSize();
+
+	/** Length of the state vector, i.e. the size the model's input layer must have. */
+	UFUNCTION(BlueprintPure, Category = "AI|Inference")
+	static int32 GetStateSize();
+
 	// Router that chooses between RL and BT
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	FString ChooseJsonAction(const FGameStateData& GameState);
@@ -277,7 +305,7 @@ public:
 	void InitializeBehaviorTree(class AController* OwnerController);
 
 // Expose current brain mode to other systems
-	EBrainMode GetBrainMode() const { return BrainMode; }
+	EBrainMode GetBrainMode() const { return GetEffectiveBrainMode(); }
 
 	// Public wrapper to push GameState into the Blackboard (safe to call from controllers/pawns/services)
 	UFUNCTION(BlueprintCallable, Category = "AI|BehaviorTree")
@@ -309,10 +337,54 @@ protected:
 	UPROPERTY(Transient)
 	UBehaviorTreeComponent* BehaviorTreeComp = nullptr;
 
+public:
+	/**
+	 * Per-team ONNX models, chosen by the owning AI's team id. The two factions play differently enough
+	 * that one network cannot serve both, and a single AI pawn class serves every team - so the model has
+	 * to be picked by team, exactly like the rule tables. A team without an entry falls back to
+	 * QNetworkModelData.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Inference")
+	TMap<int32, TObjectPtr<UNNEModelData>> TeamQNetworkModelData;
+
+	/**
+	 * Per-team brain override. Teams without an entry use BrainMode. Being able to give one side the network
+	 * and the other the rules is what makes a trained model measurable - otherwise both sides change at once
+	 * and any difference in the outcome could be either of them.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Inference")
+	TMap<int32, EBrainMode> TeamBrainMode;
+
+	/** BrainMode for this component's team, falling back to BrainMode when the team has no override. */
+	UFUNCTION(BlueprintPure, Category = "AI|Inference")
+	EBrainMode GetEffectiveBrainMode() const;
+
 private:
 	// Assign your ONNX asset in the editor
 	UPROPERTY(EditAnywhere, Category = "AI|Inference", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UNNEModelData> QNetworkModelData;
+
+	/**
+	 * Builds the runtime model for this component's team. Deferred rather than done in BeginPlay because
+	 * the pawn is possessed afterwards, and until then there is no team id to select a model with.
+	 */
+	void EnsureModelInitialised();
+
+	/** Team id of the owning pawn, or -1 while it has no controller yet. */
+	int32 ResolveOwningTeamId() const;
+
+	bool bModelInitialised = false;
+
+	/** Action this component chose last, fed back as the LastActionIndex feature on the next inference. */
+	int32 LastChosenActionIndex = -1;
+
+	/**
+	 * Turns the network's raw scores into one action - greedily, or by sampling the softmax when
+	 * rts.ai.rl.temperature is above zero. See the CVar for why a cloned policy needs the latter.
+	 */
+	static int32 SelectActionFromScores(const TArray<float>& Scores);
+
+	static float GetSamplingTemperature();
 
 	// Runtime model + instance
 	TSharedPtr<UE::NNE::IModelCPU> RuntimeModel;

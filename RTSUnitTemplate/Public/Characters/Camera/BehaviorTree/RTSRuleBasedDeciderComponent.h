@@ -61,6 +61,16 @@ struct FRTSRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
 	FBuildingCost ResourceThresholds;
 
+	/**
+	 * Upper resource bounds - the counterpart to ResourceThresholds, for rules that should only fire while
+	 * something is running SHORT (a power plant, an extra depot). A non-zero entry means "only match while
+	 * the team has less than this much"; 0 disables the check for that resource.
+	 * For supply-like resources the comparison uses the remaining headroom (Max - Current) instead of the
+	 * raw amount, so "build a reactor once we are within 4 of the energy cap" is expressible directly.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	FBuildingCost ResourceMaxThresholds;
+
 	// Caps
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	int32 MaxFriendlyUnitCount = 999;
@@ -82,6 +92,25 @@ struct FRTSRuleRow : public FTableRowBase
 	// The frequency of this rule (0-100). Higher values relative to other matching rules increase the chance of selection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0", ClampMax="100.0"))
 	float Frequency = 100.0f;
+
+	/**
+	 * Minimum seconds between two activations of this rule. 0 = no limit.
+	 * Resource checks alone cannot prevent a burst: the cost is only deducted once the building
+	 * actually starts, so a rich AI fires the same rule several times in a row and puts down three
+	 * reactors before the first one exists. Set this to at least the build time.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output", meta=(ClampMin="0.0"))
+	float MinSecondsBetweenActivations = 0.f;
+
+	/**
+	 * Which ability array the AbilityAction refers to: 0 = DefaultAbilities, 1 = SecondAbilities,
+	 * 2 = ThirdAbilities, 3 = FourthAbilities.
+	 * The only way to reach a higher array used to be IntermediateAction=ChangeAbilityIndex, which just
+	 * does AddAbilityIndex(+1) and is never reset - so the second array was hit only by luck and the
+	 * third (WallTower, Bunker, Tesla) could not be reached at all. This sets the index outright.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output", meta=(ClampMin="0", ClampMax="3"))
+	int32 AbilityArrayIndex = 0;
 
 	// Output actions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
@@ -176,6 +205,24 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(EditCondition="bUseAttackDataTableRules"))
 	UDataTable* AttackRulesDataTable = nullptr;
+
+	// Per-team rule tables. One AI pawn class serves every team, so the tables have to be picked by team id.
+	// If the owning pawn's team has an entry here it replaces RulesDataTable; teams without an entry keep the default.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Table")
+	TMap<int32, UDataTable*> TeamRulesDataTables;
+
+	// Same principle as TeamRulesDataTables, for the attack table.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
+	TMap<int32, UDataTable*> TeamAttackRulesDataTables;
+
+	/**
+	 * AbilityKeys to force-enable for this AI's team at match start (e.g. "BuildFactory").
+	 * Abilities can be locked behind progression via their bDisabled flag - a human unlocks them by playing,
+	 * but the AI has no progression path, so anything listed here stays permanently unbuildable for it.
+	 * Keys that do not exist are simply ignored, so one shared list can cover every faction.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules")
+	TArray<FString> ForceEnabledAbilityKeys;
 	// Time to wait before returning the RLAgent to its original location after issuing attack orders
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0"))
 	float AttackReturnDelaySeconds = 3.0f;
@@ -197,6 +244,80 @@ public:
 	/** The extent used when projecting a point to the NavMesh to validate attack/move commands. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Rules|AttackTable")
 	FVector NavMeshProjectionExtent = FVector(50.f, 50.f, 250.f);
+
+	// ---------------- Supply priority ----------------
+	// Being at the supply cap stops unit production dead, so no army is ever fielded and no attack rule
+	// can ever match. Leaving the supply building in the weighted draw meant a team could sit at 10/10 for
+	// six minutes without building the one thing that unblocks it. When headroom runs out it is not a
+	// preference any more - it takes precedence.
+
+	/** Rules that raise the supply cap; forced whenever headroom drops below ForceSupplyBelowHeadroom. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Supply")
+	TArray<FName> SupplyRuleNames = { FName(TEXT("SynapseCluster")), FName(TEXT("Reactor")) };
+
+	/** Remaining supply below which the supply rule bypasses the draw. 0 disables the override. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Supply", meta=(ClampMin="0"))
+	int32 ForceSupplyBelowHeadroom = 10;
+
+	/**
+	 * Minimum gap between two forced supply builds.
+	 *
+	 * Without it the override took EVERY decision while headroom was low, so both factions built nothing
+	 * but supply buildings for eight minutes - no unit producers, no army, no fight. The point is to
+	 * guarantee supply keeps up, not to monopolise the AI.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Supply", meta=(ClampMin="0.0"))
+	float SupplyForceIntervalSeconds = 20.f;
+
+	mutable float LastSupplyForceTimeSeconds = -1000000.f;
+
+	/** Remaining supply for this team, or -1 when it cannot be determined. */
+	float GetSupplyHeadroom() const;
+
+	// ---------------- Expansion cadence ----------------
+	// Expanding was left to the weighted draw, where a frequency of 200 competes against a pool of
+	// several thousand: the rule PASSED 65 times in five minutes and was picked exactly zero times.
+	// A base is a scheduling decision, not a lottery ticket, so these rules get their own timer.
+
+	/** Rule rows that run on a fixed cadence instead of competing in the weighted draw. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Expansion")
+	TArray<FName> ExpansionRuleNames = { FName(TEXT("HiveExpansion")), FName(TEXT("BaseExpansion")) };
+
+	/** Seconds between forced expansions. 0 disables the cadence and leaves them in the draw. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|Expansion", meta=(ClampMin="0.0"))
+	float ExpansionIntervalSeconds = 240.f;
+
+	/** Mutable: the selection pass is const, but the cadence has to remember when it last fired. */
+	mutable float LastExpansionFireTimeSeconds = 0.f;
+
+	// ---------------- Defence ----------------
+	// Attack rules only ever send units OUT. Nothing brought them home when the base itself was being
+	// torn down, so a raid met no resistance at all.
+
+	/** Off disables the defence reaction entirely. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Defence")
+	bool bEnableDefence = true;
+
+	/** How far from one of our own buildings an enemy counts as "attacking the base". */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Defence", meta=(ClampMin="0.0"))
+	float DefenceTriggerRadius = 4000.f;
+
+	/** Seconds between defence checks. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Defence", meta=(ClampMin="0.1"))
+	float DefenceCheckIntervalSeconds = 3.0f;
+
+	/** Send workers when there is no combat unit left, so a raid is not simply walked through. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Defence")
+	bool bDefendWithWorkersAsLastResort = true;
+
+	/** Keeps this many workers mining even while defending with workers. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AI|Defence", meta=(ClampMin="0"))
+	int32 MinWorkersKeptMining = 4;
+
+	/** Checks for an attack on our base and sends units to meet it. Server only. */
+	void EvaluateDefence();
+
+	float LastDefenceCheckTimeSeconds = -1000000.f;
 
 	// ---------------- Wander (small movement) fallback ----------------
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander")
@@ -237,7 +358,50 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Wander", meta=(ClampMin="1"))
 	int32 WanderMinSameDirectionRepeats = 3;
 
+public:
+	// Team id of the owning AI pawn, or -1 while it has no controller yet.
+	// Public because the RL panel has to map "which AI plays for which team" without duplicating this.
+	UFUNCTION(BlueprintCallable, Category = "AI|Rules")
+	int32 ResolveOwningTeamId() const;
+
+	/**
+	 * Read each rule's resource thresholds from the ability it actually presses instead of the table.
+	 * Hand-maintained thresholds drift from the abilities they gate - measured cases included a cost
+	 * transcribed into the wrong resource column (500 Primary instead of 500 Secondary, so the rule
+	 * never fired) and rules whose threshold was a third of what the ability really costs, so they
+	 * fired and failed every time. With this on, changing an ability's ConstructionCost is enough.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules")
+	bool bDeriveThresholdsFromAbility = true;
+
+	// Headroom on the derived cost for Primary/Secondary/Tertiary (1.0 = exactly the ability cost).
+	// Supply-like resources are never scaled - there the check is "does it still fit under the cap".
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules", meta=(ClampMin="1.0"))
+	float DerivedThresholdMultiplier = 1.0f;
+
+	/** Resolves Row.SelectionAction + Row.AbilityAction to the ability's ConstructionCost. */
+	bool TryGetAbilityCostForRule(const FRTSRuleRow& Row, FBuildingCost& OutCost) const;
+
 private:
+
+	/** True while Row.MinSecondsBetweenActivations has not elapsed since this rule last fired. */
+	bool IsRuleOnCooldown(const FRTSRuleRow& Row, const FName& RowName) const;
+
+	/** Stamps the activation time used by IsRuleOnCooldown. Call wherever a rule's output is returned. */
+	void MarkRuleFired(const FName& RowName) const;
+
+	// Keyed by DataTable row name, so two rows sharing a RuleName still get separate clocks.
+	mutable TMap<FName, float> LastRuleActivationTime;
+
+	// Swaps in the team's entries from TeamRulesDataTables / TeamAttackRulesDataTables.
+	// Cheap and idempotent: retries every evaluation until the pawn is possessed and a team id is known.
+	void ApplyTeamTableOverrides();
+
+	// Runs one tick after BeginPlay, once the AI pawn has been possessed and its team id is readable.
+	void InitializeRuleTables();
+
+	bool bTeamTablesApplied = false;
+
 	int32 PickWanderActionIndex(const FGameStateData& GS) const;
 	UInferenceComponent* GetInferenceComponent() const;
 	// Tracking for wander direction repetition
@@ -262,6 +426,20 @@ private:
 
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
 	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const;
+
+	/**
+	 * Hands the decision to URLRecorderSubsystem so a network can be trained to imitate it. This is how the
+	 * rule AI seeds the first RL model: it already plays a competent game, so its decisions are the cheapest
+	 * source of "understands the rules" behaviour there is. No-op unless a recording is running.
+	 */
+	void RecordDecisionForTraining(const TArray<int32>& Indices) const;
+
+	/** State that produced the current decision, cached so each recorded action pairs with its own input. */
+	FGameStateData CachedRecordingState;
+	bool bHasCachedRecordingState = false;
+
+	/** Previous action written to the training set; becomes the next sample's LastActionIndex feature. */
+	mutable int32 LastRecordedActionIndex = -1;
 
 	// Timestamp of the last time we attempted to evaluate attack rules (seconds). Initialized so first check is allowed immediately.
 	float LastAttackRuleCheckTimeSeconds = -1000000.f;

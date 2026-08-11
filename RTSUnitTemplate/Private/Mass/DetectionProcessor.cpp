@@ -21,6 +21,12 @@ UDetectionProcessor::UDetectionProcessor(): EntityQuery()
     ProcessingPhase = EMassProcessingPhase::PostPhysics;
     bAutoRegisterWithProcessingPhases = true;
     ExecutionFlags = static_cast<int32>(EProcessorExecutionFlags::All);
+    // This processor random-accesses fragments of OTHER entities (targets, sight, characteristics)
+    // 17 times. Mass only guarantees safe access to entities in your own chunk, so doing that from
+    // a worker thread races against archetype moves and asserts on CurrentArchetype
+    // (MassEntityManager.cpp:2367). The flag was never set here, so it defaulted to false - this was
+    // the odd one out among the cross-entity readers (Attack/Chase/Pause/Run/Idle are all true).
+    bRequiresGameThreadExecution = true;
 }
 
 void UDetectionProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMassEntityManager>& EntityManager)

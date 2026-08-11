@@ -92,6 +92,25 @@ void AWorkArea::InitWorkerOverflowTimer()
 			WorkerReturnDelay,
 			true // loop
 		);
+		return;
+	}
+
+	// Resource deposits need the same tick, for the stale-entry purge at the top of OnOverflowTimer rather
+	// than for overflow. This timer used to be build-areas-only, which is precisely why deposits were the
+	// places that accumulated phantom workers and kept reporting "1/3" with nobody mining.
+	const bool bIsResourceType = (Type == WorkAreaData::Primary || Type == WorkAreaData::Secondary ||
+		Type == WorkAreaData::Tertiary || Type == WorkAreaData::Rare || Type == WorkAreaData::Epic ||
+		Type == WorkAreaData::Legendary);
+
+	if (bIsResourceType && HasAuthority())
+	{
+		GetWorld()->GetTimerManager().SetTimer(
+			OverflowWorkersTimerHandle,
+			this,
+			&AWorkArea::OnOverflowTimer,
+			2.0f,
+			true // loop
+		);
 	}
 }
 
@@ -503,6 +522,13 @@ bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 
 		if (bCanWork)
 		{
+			// Leaving to build means it stops mining, so give the deposit's slot back. SendWorkerToWorkArea
+			// (the explicit player order) already did this; this auto-assignment path - the one the AI takes
+			// via ReachedBase - never did. The worker stayed registered on its deposit forever, which is why
+			// nodes kept showing "1/3" for workers that had long since walked off, and why the slots filled
+			// up with phantoms until nobody could mine there any more.
+			Worker->ReleaseResourcePlace();
+
 			Worker->BuildArea = SelectedArea;
 			SelectedArea->AddWorkerToArray(Worker); // Reserve early
 			UnitBase->SetUEPathfinding = true;
@@ -862,6 +888,70 @@ bool AWorkArea::ReserveMiningSlotOrReassign(AWorkingUnitBase* Worker, FName* Out
 
 void AWorkArea::OnOverflowTimer()
 {
+	// Purge stale entries first. A worker can leave this deposit through many routes - dying, morphing into
+	// a building, being re-tasked - and every one of them has to remember to unregister. They did not, which
+	// left nodes advertising "1/3" with nobody actually mining and eventually filled every slot with ghosts
+	// so real workers were turned away. Rather than trust each caller, verify: an entry is only valid while
+	// the worker exists and still points back at this area.
+	{
+		// Which pointer proves membership depends on what this area IS: a deposit is referenced through
+		// ResourcePlace, a construction site through BuildArea. Checking only ResourcePlace purged every
+		// worker from every build site within seconds - construction stopped dead for both factions.
+		const bool bIsBuildArea = (Type == WorkAreaData::BuildArea);
+
+		const int32 Before = Workers.Num();
+		Workers.RemoveAll([this, bIsBuildArea](AWorkingUnitBase* Worker)
+		{
+			if (!IsValid(Worker))
+			{
+				return true;
+			}
+			return bIsBuildArea ? (Worker->BuildArea != this) : (Worker->ResourcePlace != this);
+		});
+
+		if (!bIsBuildArea)
+		{
+			// A worker sent off to construct still points at this deposit through ResourcePlace, so the
+			// check above keeps it - and the node keeps advertising an occupied slot for someone who is
+			// nowhere near it. Releasing the slot here is deliberately independent of the assignment path:
+			// there are several places that hand a worker a BuildArea, and relying on each of them to
+			// release first is what produced the stale "1/3" in the first place. Collect before releasing,
+			// because ReleaseResourcePlace mutates Workers.
+			// The state has to agree, not just the pointer: BuildArea is cleared by a good dozen call sites
+			// and a leftover value on a worker that is mining again would otherwise get its slot revoked
+			// every two seconds.
+			TArray<AWorkingUnitBase*> Builders;
+			for (AWorkingUnitBase* Worker : Workers)
+			{
+				if (!IsValid(Worker) || Worker->BuildArea == nullptr)
+				{
+					continue;
+				}
+
+				const TEnumAsByte<UnitData::EState> State = Worker->GetUnitState();
+				if (State == UnitData::GoToBuild || State == UnitData::Build || State == UnitData::Casting)
+				{
+					Builders.Add(Worker);
+				}
+			}
+			for (AWorkingUnitBase* Worker : Builders)
+			{
+				Worker->ReleaseResourcePlace();
+			}
+		}
+
+		if (Workers.Num() != Before)
+		{
+			CurrentWorkers = Workers.Num();
+
+			// The per-team totals the HUD reads are maintained separately, so they need the same correction.
+			if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
+			{
+				ResourceGameMode->SetAllCurrentWorkers(TeamId);
+			}
+		}
+	}
+
 	// Process overflow: send extra workers back until within capacity
 	const int32 Allowed = MaxWorkerCount;
 	if (Allowed <= 0)

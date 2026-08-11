@@ -380,7 +380,11 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		return;
 	}
 
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	// bIsAi is exempt: this throttle exists to stop a remote client from spamming the server RPCs, but an AI
+	// controller is not remote and reaches these functions through a local call chain that stamps
+	// LastAbilityRequestTime on the way in. The next link then measures a delta of 0 against its own stamp and
+	// bailed out, so no AI-issued ability ever reached ActivateAbilityByInputID.
+	if (!bIsAi && !IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -439,7 +443,11 @@ void AExtendedControllerBase::ActivateDefaultAbilities_Implementation(AGASUnit* 
 	if (!UnitBase) return;
 
 	// Server-side throttle to prevent spamming from clients
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	// bIsAi is exempt: this throttle exists to stop a remote client from spamming the server RPCs, but an AI
+	// controller is not remote and reaches these functions through a local call chain that stamps
+	// LastAbilityRequestTime on the way in. The next link then measures a delta of 0 against its own stamp and
+	// bailed out, so no AI-issued ability ever reached ActivateAbilityByInputID.
+	if (!bIsAi && !IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -457,7 +465,11 @@ void AExtendedControllerBase::ActivateSecondAbilities_Implementation(AGASUnit* U
 	if (!UnitBase) return;
 
 	// Server-side throttle to prevent spamming from clients
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	// bIsAi is exempt: this throttle exists to stop a remote client from spamming the server RPCs, but an AI
+	// controller is not remote and reaches these functions through a local call chain that stamps
+	// LastAbilityRequestTime on the way in. The next link then measures a delta of 0 against its own stamp and
+	// bailed out, so no AI-issued ability ever reached ActivateAbilityByInputID.
+	if (!bIsAi && !IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -475,7 +487,11 @@ void AExtendedControllerBase::ActivateThirdAbilities_Implementation(AGASUnit* Un
 	if (!UnitBase) return;
 
 	// Server-side throttle to prevent spamming from clients
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	// bIsAi is exempt: this throttle exists to stop a remote client from spamming the server RPCs, but an AI
+	// controller is not remote and reaches these functions through a local call chain that stamps
+	// LastAbilityRequestTime on the way in. The next link then measures a delta of 0 against its own stamp and
+	// bailed out, so no AI-issued ability ever reached ActivateAbilityByInputID.
+	if (!bIsAi && !IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -493,7 +509,11 @@ void AExtendedControllerBase::ActivateFourthAbilities_Implementation(AGASUnit* U
 	if (!UnitBase) return;
 
 	// Server-side throttle to prevent spamming from clients
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	// bIsAi is exempt: this throttle exists to stop a remote client from spamming the server RPCs, but an AI
+	// controller is not remote and reaches these functions through a local call chain that stamps
+	// LastAbilityRequestTime on the way in. The next link then measures a delta of 0 against its own stamp and
+	// bailed out, so no AI-issued ability ever reached ActivateAbilityByInputID.
+	if (!bIsAi && !IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -513,7 +533,11 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 		return;
 	}
 
-	if (!IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
+	// bIsAi is exempt: this throttle exists to stop a remote client from spamming the server RPCs, but an AI
+	// controller is not remote and reaches these functions through a local call chain that stamps
+	// LastAbilityRequestTime on the way in. The next link then measures a delta of 0 against its own stamp and
+	// bailed out, so no AI-issued ability ever reached ActivateAbilityByInputID.
+	if (!bIsAi && !IsLocalController() && GetWorld()->GetTimeSeconds() - UnitBase->LastAbilityRequestTime < UnitBase->AbilityReactivationThrottle)
 	{
 		return;
 	}
@@ -910,6 +934,39 @@ TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclas
 	return FinalUnits;
 }
 
+bool AExtendedControllerBase::GetAbilityHitResultForAI(FHitResult& OutHit) const
+{
+	const APawn* AgentPawn = GetPawn();
+	UWorld* World = GetWorld();
+	if (!AgentPawn || !World)
+	{
+		return false;
+	}
+
+	const FVector Origin = AgentPawn->GetActorLocation();
+	const FVector Start = Origin + FVector(0.f, 0.f, 1000.f);
+	const FVector End = Origin - FVector(0.f, 0.f, 100000.f);
+
+	FCollisionQueryParams Params;
+	Params.AddIgnoredActor(AgentPawn);
+
+	if (World->LineTraceSingleByChannel(OutHit, Start, End, ECC_Visibility, Params) && OutHit.bBlockingHit)
+	{
+		return true;
+	}
+
+	// No ground below the agent (it can drift past the landscape edge). Hand back its own position as a
+	// blocking hit anyway: the placement checks in DropWorkAreaForUnit then reject it properly, instead of
+	// the ability silently doing nothing because the hit was invalid.
+	OutHit = FHitResult();
+	OutHit.bBlockingHit = true;
+	OutHit.Location = Origin;
+	OutHit.ImpactPoint = Origin;
+	OutHit.TraceStart = Start;
+	OutHit.TraceEnd = End;
+	return true;
+}
+
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID)
 {
 	if (AltIsPressed || IsCtrlPressed) return;
@@ -920,7 +977,13 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 	TSubclassOf<UGameplayAbilityBase> AbilityClass = AbilityArray.IsValidIndex(AbilityIndex) ? AbilityArray[AbilityIndex] : nullptr;
 
 	FHitResult Hit;
-	if (IsLocalController())
+	if (bIsAi)
+	{
+		// The agent has no cursor, so the ground under its pawn stands in for the click position.
+		// That is the same spot ARLAgent drops the work area at, so decision and placement agree.
+		GetAbilityHitResultForAI(Hit);
+	}
+	else if (IsLocalController())
 	{
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 	}
@@ -947,6 +1010,35 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 
 		AUnitBase* CurrentUnit = SelectedUnits[CurrentUnitWidgetIndex];
 
+		// A human picks WHICH worker builds by focusing it, so the single-unit path below is right for a
+		// player and stays untouched. The agent has no focus: it selects every worker it owns and the
+		// press always landed on SelectedUnits[0] - the same worker every single time. Whenever that one
+		// worker was walking, mining or already carrying a build order, EVERY build attempt failed
+		// silently while dozens of idle workers stood next to it. That is why whole factions produced
+		// nothing: no pod, so CtrlQ stays 0, so the worker AND combat rules are all blocked at once.
+		if (bIsAi && CurrentUnit && CurrentUnit->IsWorker)
+		{
+			for (AUnitBase* Candidate : SelectedUnits)
+			{
+				if (!IsValid(Candidate) || !Candidate->IsWorker || !Candidate->CanActivateAbilities)
+				{
+					continue;
+				}
+				// Skip anyone already committed to a build. A worker that is dragging a ghost OR already
+				// assigned to a site must not be handed a second order: taking it re-points its BuildArea,
+				// which purges it from the previous site, and that site then stands at zero workers and is
+				// abandoned. That is how sites piled up unmanned while the agent kept ordering more.
+				if (Candidate->CurrentDraggedWorkArea || Candidate->BuildArea ||
+					Candidate->GetUnitState() == UnitData::Dead)
+				{
+					continue;
+				}
+
+				CurrentUnit = Candidate;
+				break;
+			}
+		}
+
 		// Special case: if the currently focused unit is a worker, we only activate for it
 		if (CurrentUnit && CurrentUnit->IsWorker && CurrentUnit->CanActivateAbilities)
 		{
@@ -962,6 +1054,51 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				HUDBase->SetUnitSelected(CurrentUnit, bIsAi);
 				CurrentUnitWidgetIndex = 0;
 				SelectedUnits = HUDBase->SelectedUnits;
+			}
+		}
+		else if (bIsAi)
+		{
+			// The batch path below resolves ONE ability class from the focused unit and then only
+			// activates units that own exactly that class. A player focuses deliberately, so that is
+			// correct for him - but the agent selects a whole tag group at once. With a CarapacePod first
+			// in the selection the class became "build NeedleWing", and the LarvalPods - the only thing
+			// that makes workers - were never pressed at all. Measured: BroodMite_Priority fired 114
+			// times, every LarvalPod sat Idle with timer 0, and the Xeno ran down to ZERO workers.
+			// Resolve the ability per unit instead, so every producer runs its own slot.
+			for (AUnitBase* Unit : SelectedUnits)
+			{
+				if (!IsValid(Unit) || Unit->IsWorker || !Unit->CanActivateAbilities ||
+					Unit->GetUnitState() == UnitData::Dead)
+				{
+					continue;
+				}
+
+				const TArray<TSubclassOf<UGameplayAbilityBase>> UnitAbilities = GetAbilityArrayForUnit(Unit);
+				if (!UnitAbilities.IsValidIndex(AbilityIndex) || !UnitAbilities[AbilityIndex])
+				{
+					continue;
+				}
+
+				AGASUnit* GASUnit = Cast<AGASUnit>(Unit);
+				if (!GASUnit)
+				{
+					continue;
+				}
+
+				const UGameplayAbilityBase* UnitAbilityCDO = UnitAbilities[AbilityIndex]->GetDefaultObject<UGameplayAbilityBase>();
+				if (GetWorld()->GetTimeSeconds() - GASUnit->LastAbilityRequestTime < GASUnit->AbilityReactivationThrottle)
+				{
+					continue;
+				}
+				if (UnitAbilityCDO && !UnitAbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive())
+				{
+					continue;
+				}
+
+				GASUnit->LastAbilityRequestTime = GetWorld()->GetTimeSeconds();
+				GASUnit->LastAbilitySafetyWindowTime = GetWorld()->GetTimeSeconds();
+				ActivateAbilitiesByIndex_Implementation(GASUnit, InputID, AbilityArrayIndex, Hit);
+				bActivatedAny = true;
 			}
 		}
 		else
@@ -4327,10 +4464,22 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 					return;
 				}
 				
+					// Third and last assignment path that handed out a BuildArea raw. Like the other two it
+					// has to give the deposit its slot back and register on the site, otherwise the node keeps
+					// counting a worker that is off building an extension.
+					if (AWorkingUnitBase* WorkerUnit = Cast<AWorkingUnitBase>(Unit))
+					{
+						WorkerUnit->ReleaseResourcePlace();
+					}
+
 					Unit->BuildArea = Unit->CurrentDraggedWorkArea;
 					Unit->BuildArea->TeamId = Unit->TeamId;
 					Unit->BuildArea->PlannedBuilding = true;
 					Unit->BuildArea->ControlTimer = 0.f;
+					if (AWorkingUnitBase* WorkerUnit = Cast<AWorkingUnitBase>(Unit))
+					{
+						Unit->BuildArea->AddWorkerToArray(WorkerUnit);
+					}
 					Unit->BuildArea->AddAreaToGroup();
 					AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode);
 
@@ -4371,6 +4520,10 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		Worker->BuildArea->PlannedBuilding = true;
 		Worker->BuildArea->ControlTimer = 0.f;
 		Worker->BuildArea->AddAreaToGroup();
+		// Register on the site like the other two dispatch paths do (SendWorkerToWorkArea, SwitchBuildArea).
+		// Without it the area reports zero workers while someone is walking to it, so it reads as unmanned
+		// and other logic that counts Workers.Num() treats the site as free.
+		Worker->BuildArea->AddWorkerToArray(Worker);
 		AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(RTSGameMode);
 
 		if(ResourceGameMode && Worker->BuildArea->IsPaid)
@@ -4516,89 +4669,459 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		// 1. Ensure grounded and resolve distances (move if colliding or too close to resources)
 		if (!bIsExtensionArea)
 		{
-			DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, DraggedWorkArea->GetActorLocation()));
-			PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
-
-			// 2. Final check for valid placement
-			TArray<AActor*> OverlappingActors;
-			DraggedWorkArea->GetOverlappingActors(OverlappingActors);
-
+			// 2. Final check for valid placement.
 			bool bIsOverlappingWithValidArea = false;
 			bool bIsNoBuildZone = false;
+			bool bTooCloseToResources = false;
+			bool bNeedsBeaconOutOfRange = false;
+			bool bOffNavMesh = false;
+			bool bOnSlope = false;
+			bool bTooCloseToCliff = false;
 			ABuildingBase* InitiatingBuilding = Cast<ABuildingBase>(UnitBase);
 
-
-			for (AActor* OverlappedActor : OverlappingActors)
+			// Runs the full rule set against wherever the area currently sits. Returns true when the spot is
+			// legal; the individual flags stay set so the rejection path can still say what was wrong.
+			auto EvaluatePlacement = [&]() -> bool
 			{
-				if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
+				bIsOverlappingWithValidArea = false;
+				bIsNoBuildZone = false;
+				bTooCloseToResources = false;
+				bNeedsBeaconOutOfRange = false;
+				bOffNavMesh = false;
+				bOnSlope = false;
+				bTooCloseToCliff = false;
+
+				// The agent moves the area and validates it in the same breath, and the cached overlap set is
+				// only refreshed when the engine gets around to it - so query it explicitly, otherwise the
+				// check reads a stale (often empty) set and waves a stacked building through. A human drags
+				// over many frames and already has an up-to-date set, so leave that path exactly as it was.
+				if (bIsAi)
 				{
-					continue;
+					DraggedWorkArea->UpdateOverlaps(false);
 				}
-				if (OverlappedActor && (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass())))
+
+				TArray<AActor*> OverlappingActors;
+				DraggedWorkArea->GetOverlappingActors(OverlappingActors);
+
+				for (AActor* OverlappedActor : OverlappingActors)
 				{
-					AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
-					if (NoBuildZone && NoBuildZone->IsNoBuildZone == true)
+					if (bIsExtensionArea && InitiatingBuilding && OverlappedActor == InitiatingBuilding)
 					{
-						bIsNoBuildZone = true;
+						continue;
 					}
-					bIsOverlappingWithValidArea = true;
-					// After resolution, we do NOT tolerate any overlap if not explicitly snapped
-					if (!bWorkAreaIsSnapped) break;
-				}
-			}
-
-			bool bTooCloseToResources = false;
-			if (DraggedWorkArea->DenyPlacementCloseToResources)
-			{
-				for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
-				{
-					AWorkArea* ResWA = *ItWA;
-					if (ResWA && ResWA != DraggedWorkArea)
+					if (OverlappedActor && (OverlappedActor->IsA(AWorkArea::StaticClass()) || OverlappedActor->IsA(ABuildingBase::StaticClass())))
 					{
-						const WorkAreaData::WorkAreaType T = ResWA->Type;
-						const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
-						if (bIsResourceType)
+						AWorkArea* NoBuildZone = Cast<AWorkArea>(OverlappedActor);
+						if (NoBuildZone && NoBuildZone->IsNoBuildZone == true)
 						{
-							if (FVector::Dist2D(DraggedWorkArea->GetActorLocation(), ResWA->GetActorLocation()) < DraggedWorkArea->ResourcePlacementDistance)
+							bIsNoBuildZone = true;
+						}
+						bIsOverlappingWithValidArea = true;
+						// After resolution, we do NOT tolerate any overlap if not explicitly snapped
+						if (!bWorkAreaIsSnapped) break;
+					}
+				}
+
+				if (DraggedWorkArea->DenyPlacementCloseToResources)
+				{
+					for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
+					{
+						AWorkArea* ResWA = *ItWA;
+						if (ResWA && ResWA != DraggedWorkArea)
+						{
+							const WorkAreaData::WorkAreaType T = ResWA->Type;
+							const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+							if (bIsResourceType)
 							{
-								bTooCloseToResources = true;
-								break;
+								if (FVector::Dist2D(DraggedWorkArea->GetActorLocation(), ResWA->GetActorLocation()) < DraggedWorkArea->ResourcePlacementDistance)
+								{
+									bTooCloseToResources = true;
+									break;
+								}
 							}
 						}
 					}
 				}
-			}
 
-			bool bNeedsBeaconOutOfRange = false;
-			if (DraggedWorkArea->NeedsBeacon)
-			{
-				UWorld* WorldCtx = GetWorld();
-				if (WorldCtx)
+				if (DraggedWorkArea->NeedsBeacon)
 				{
-					const FVector Pos = DraggedWorkArea->GetActorLocation();
-					bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
+					if (UWorld* WorldCtx = GetWorld())
+					{
+						const FVector Pos = DraggedWorkArea->GetActorLocation();
+						bNeedsBeaconOutOfRange = !ABuildingBase::IsLocationInBeaconRange(WorldCtx, Pos);
+					}
+				}
+
+				UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+				if (NavSys)
+				{
+					FNavLocation NavLoc;
+					if (!NavSys->ProjectPointToNavigation(DraggedWorkArea->GetActorLocation(), NavLoc, FVector(200.f, 200.f, 1000.f)))
+					{
+						bOffNavMesh = true;
+					}
+				}
+
+				// Terrain quality, agent only. A player sees a slope or a cliff edge and moves the ghost; the
+				// agent does not, and a building wedged onto a ramp or hard against a drop seals off the route
+				// past it. Probe the ground around the footprint for height variation, and require the navmesh
+				// to still reach a little beyond the footprint in every direction.
+				if (bIsAi && !bOffNavMesh)
+				{
+					const FVector Centre = DraggedWorkArea->GetActorLocation();
+
+					FVector AreaOrigin, AreaExtent;
+					DraggedWorkArea->GetActorBounds(true, AreaOrigin, AreaExtent);
+					const float Footprint = FMath::Max(FMath::Max(AreaExtent.X, AreaExtent.Y), 200.f);
+
+					float MinGroundZ = TNumericLimits<float>::Max();
+					float MaxGroundZ = TNumericLimits<float>::Lowest();
+
+					for (int32 Step = 0; Step < 8; ++Step)
+					{
+						const float Angle = FMath::DegreesToRadians(45.f * Step);
+						const FVector Dir(FMath::Cos(Angle), FMath::Sin(Angle), 0.f);
+
+						FHitResult GroundHit;
+						FCollisionQueryParams GroundParams;
+						GroundParams.AddIgnoredActor(DraggedWorkArea);
+						const FVector Probe = Centre + Dir * Footprint;
+						if (GetWorld()->LineTraceSingleByChannel(GroundHit, Probe + FVector(0.f, 0.f, 2000.f),
+							Probe - FVector(0.f, 0.f, 4000.f), ECC_Visibility, GroundParams))
+						{
+							MinGroundZ = FMath::Min(MinGroundZ, (float)GroundHit.ImpactPoint.Z);
+							MaxGroundZ = FMath::Max(MaxGroundZ, (float)GroundHit.ImpactPoint.Z);
+						}
+
+						if (NavSys)
+						{
+							FNavLocation EdgeNav;
+							const FVector Edge = Centre + Dir * (Footprint + AICliffClearance);
+							if (!NavSys->ProjectPointToNavigation(Edge, EdgeNav, FVector(150.f, 150.f, 600.f)))
+							{
+								bTooCloseToCliff = true;
+							}
+						}
+					}
+
+					if (MaxGroundZ > MinGroundZ && (MaxGroundZ - MinGroundZ) > AIMaxGroundStep)
+					{
+						bOnSlope = true;
+					}
+				}
+
+				return !((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone
+					|| bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh
+					|| bOnSlope || bTooCloseToCliff);
+			};
+
+			// Bound how many sites the agent may run at once. Without this every decision starts another
+			// build, because the rules' unit caps only count FINISHED buildings - measured: 38 open sites,
+			// 17 pods against a cap of 6, workers morphed down to 5 and the whole Primary income gone, so
+			// no combat unit was ever affordable.
+			if (bIsAi && AIMaxConcurrentBuildSites > 0)
+			{
+				// Count only sites somebody is ACTUALLY working on. Counting every planned site deadlocked
+				// the agent: abandoned sites keep PlannedBuilding set with zero workers, so three of them
+				// occupied the whole budget for good and no further order could ever be issued. A site with
+				// no worker and no progress is not costing the team anything, so it must not block.
+				int32 OpenSites = 0;
+				for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
+				{
+					AWorkArea* Site = *ItWA;
+					if (!IsValid(Site) || Site == DraggedWorkArea ||
+						Site->Type != WorkAreaData::BuildArea || !Site->PlannedBuilding ||
+						Site->TeamId != UnitBase->TeamId)
+					{
+						continue;
+					}
+
+					const bool bBeingWorked = Site->Workers.Num() > 0 || Site->CurrentBuildTime > 0.f ||
+					                          Site->bConstructionUnitSpawned;
+					if (bBeingWorked)
+					{
+						++OpenSites;
+					}
+				}
+
+				if (OpenSites >= AIMaxConcurrentBuildSites)
+				{
+					UE_LOG(LogTemp, Verbose, TEXT("[Build] team %d already has %d open sites, dropping this order."),
+					       UnitBase->TeamId, OpenSites);
+					DraggedWorkArea->Destroy();
+					UnitBase->BuildArea = nullptr;
+					UnitBase->CurrentDraggedWorkArea = nullptr;
+					CancelCurrentAbility(UnitBase);
+					return true;
 				}
 			}
 
-			bool bOffNavMesh = false;
-			if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld()))
+			DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, DraggedWorkArea->GetActorLocation()));
+			PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+
+			bool bPlacementValid = EvaluatePlacement();
+
+			// A main base must go through the marker logic EVERY time, not only as a rescue when the
+			// first guess is illegal. While this ran as a fallback, any spot that happened to be legal
+			// was kept - which is how bases ended up scattered 1200-3700 units from the sites that were
+			// authored for them, even though the marker code itself worked.
+			bool bForceAiRelocation = false;
+			if (bIsAi && !bPlacementValid) bForceAiRelocation = true;
+			if (bIsAi && DraggedWorkArea && DraggedWorkArea->BuildingClass)
 			{
-				FNavLocation NavLoc;
-				if (!NavSys->ProjectPointToNavigation(DraggedWorkArea->GetActorLocation(), NavLoc, FVector(200.f, 200.f, 1000.f)))
+				if (const ABuildingBase* CheckCDO = DraggedWorkArea->BuildingClass->GetDefaultObject<ABuildingBase>())
 				{
-					bOffNavMesh = true;
+					if (CheckCDO->IsBase) bForceAiRelocation = true;
 				}
 			}
-			
-		
 
- 		if ((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone || bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh)
+			if (bForceAiRelocation)
+			{
+				// A human drags the ghost around until it turns valid. The agent only ever offers the single
+				// spot its camera happens to hover over - usually inside its own base or next to a deposit -
+				// so without a search almost every build attempt is thrown away. Walk outwards in rings and
+				// take the first legal spot instead.
+				//
+				// Search around the nearest friendly building rather than the camera: buildings that need a
+				// beacon are only legal near the team's own structures, and the agent's camera roams. Anchoring
+				// the search to the base also stops it from smearing the base across the map.
+				const FVector DropOrigin = DraggedWorkArea->GetActorLocation();
+				FVector Origin = DropOrigin;
+
+				// A main base is the building workers hand resources in at, so it belongs next to an
+				// unclaimed deposit, not next to the base we already have. Everything else stays close to
+				// existing structures (and inside beacon range).
+				bool bIsMainBase = false;
+				if (DraggedWorkArea->BuildingClass)
+				{
+					if (const ABuildingBase* BuildingCDO = DraggedWorkArea->BuildingClass->GetDefaultObject<ABuildingBase>())
+					{
+						bIsMainBase = BuildingCDO->IsBase;
+					}
+				}
+
+				// Hand-placed markers win over any heuristic: an actor tagged "AIExpansionSite" says "put a
+				// base exactly here", which is the only way to guarantee a spot that is both close to the
+				// deposits and actually good ground. Falls back to the search below when a level has none.
+				bool bUsedMarker = false;
+				int32 ExpansionMarkerCount = 0;
+				if (bIsMainBase)
+				{
+					TArray<AActor*> Markers;
+					UGameplayStatics::GetAllActorsWithTag(GetWorld(), FName(TEXT("AIExpansionSite")), Markers);
+					ExpansionMarkerCount = Markers.Num();
+
+					const float ClaimedRadiusSq = ExpansionClaimedRadius * ExpansionClaimedRadius;
+					double BestDistSq = TNumericLimits<double>::Max();
+
+					for (AActor* Marker : Markers)
+					{
+						if (!IsValid(Marker)) continue;
+
+						double NearestBaseDistSq = TNumericLimits<double>::Max();
+						for (TActorIterator<ABuildingBase> ItBD(GetWorld()); ItBD; ++ItBD)
+						{
+							ABuildingBase* Building = *ItBD;
+							if (!IsValid(Building) || !Building->IsBase || Building->TeamId != UnitBase->TeamId) continue;
+							NearestBaseDistSq = FMath::Min(NearestBaseDistSq, (double)FVector::DistSquared2D(Building->GetActorLocation(), Marker->GetActorLocation()));
+						}
+
+						// A site is also taken while a base is still GOING UP there. Counting only finished
+						// bases meant a marker stayed "free" for the whole build time, and the AI queued
+						// another expansion onto it every cooldown - measured 8 bases on 4 markers.
+						for (TActorIterator<AWorkArea> ItSite(GetWorld()); ItSite; ++ItSite)
+						{
+							AWorkArea* Site = *ItSite;
+							if (!IsValid(Site) || Site == DraggedWorkArea) continue;
+							if (Site->Type != WorkAreaData::BuildArea) continue;
+							if (!Site->BuildingClass) continue;
+
+							const ABuildingBase* SiteCDO = Site->BuildingClass->GetDefaultObject<ABuildingBase>();
+							if (!SiteCDO || !SiteCDO->IsBase) continue;
+
+							NearestBaseDistSq = FMath::Min(NearestBaseDistSq,
+								(double)FVector::DistSquared2D(Site->GetActorLocation(), Marker->GetActorLocation()));
+						}
+
+						// Already taken by one of our bases.
+						if (NearestBaseDistSq <= ClaimedRadiusSq) continue;
+
+						// Nearest to home, so the AI expands outwards step by step instead of leaping across
+						// the map to a site it cannot defend.
+						const double DistSq = FVector::DistSquared2D(Marker->GetActorLocation(), DropOrigin);
+						if (DistSq < BestDistSq)
+						{
+							BestDistSq = DistSq;
+							Origin = Marker->GetActorLocation();
+							bUsedMarker = true;
+						}
+					}
+				}
+
+				// When a level ships hand-placed sites, those are the ONLY legal spots for a base: every
+				// marker taken means "do not expand", not "put one somewhere else". Levels without any
+				// marker keep the deposit fallback below.
+				const bool bExpansionSitesExhausted = bIsMainBase && ExpansionMarkerCount > 0 && !bUsedMarker;
+				if (bExpansionSitesExhausted)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d aborted: all %d AIExpansionSite markers are claimed."),
+					       UnitBase->TeamId, ExpansionMarkerCount);
+				}
+
+				if (bIsMainBase && !bUsedMarker && !bExpansionSitesExhausted)
+				{
+					// Take the CLOSEST deposit that no base of ours already covers. Picking the furthest one
+					// instead sends the AI across the map, where the expansion is undefendable and the
+					// workers walk forever; nearest-unclaimed keeps the economy compact while still opening
+					// a new field rather than crowding the one we are already mining.
+					const float ClaimedRadiusSq = ExpansionClaimedRadius * ExpansionClaimedRadius;
+					double BestDistSq = TNumericLimits<double>::Max();
+
+					for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
+					{
+						AWorkArea* ResWA = *ItWA;
+						if (!IsValid(ResWA) || ResWA == DraggedWorkArea) continue;
+
+						const WorkAreaData::WorkAreaType T = ResWA->Type;
+						const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+						if (!bIsResourceType) continue;
+
+						double NearestBaseDistSq = TNumericLimits<double>::Max();
+						for (TActorIterator<ABuildingBase> ItBD(GetWorld()); ItBD; ++ItBD)
+						{
+							ABuildingBase* Building = *ItBD;
+							if (!IsValid(Building) || !Building->IsBase || Building->TeamId != UnitBase->TeamId) continue;
+							NearestBaseDistSq = FMath::Min(NearestBaseDistSq, (double)FVector::DistSquared2D(Building->GetActorLocation(), ResWA->GetActorLocation()));
+						}
+
+						// Already served by one of our bases - no reason to put another one here.
+						if (NearestBaseDistSq <= ClaimedRadiusSq) continue;
+
+						if (NearestBaseDistSq < BestDistSq)
+						{
+							BestDistSq = NearestBaseDistSq;
+							Origin = ResWA->GetActorLocation();
+						}
+					}
+				}
+				else if (!bIsMainBase)
+				{
+					// Note the !bIsMainBase: a plain "else" also caught the case where a marker HAD been
+					// picked above, and promptly overwrote Origin with the nearest own building - so the
+					// markers were read, then thrown away, and expansions kept landing next to home.
+					double BestDistSq = TNumericLimits<double>::Max();
+					for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+					{
+						ABuildingBase* Building = *It;
+						if (!IsValid(Building) || Building->TeamId != UnitBase->TeamId) continue;
+
+						const double DistSq = FVector::DistSquared2D(Building->GetActorLocation(), DropOrigin);
+						if (DistSq < BestDistSq)
+						{
+							BestDistSq = DistSq;
+							Origin = Building->GetActorLocation();
+						}
+					}
+				}
+
+				// A main base has to end up next to the deposit it is claiming, or its workers walk the whole
+				// distance every trip. Start much closer and grow slowly; ordinary buildings can afford the
+				// wider spacing that keeps a base from becoming a solid block.
+				static const float BaseSearchRadii[] = { 350.f, 550.f, 800.f, 1100.f, 1500.f };
+				static const float NormalSearchRadii[] = { 900.f, 1500.f, 2200.f, 3000.f, 4000.f };
+				// A hand-placed site means "here". Searching 1500 units outwards from it is how bases
+				// ended up scattered across the map even though a marker was picked - so when the anchor
+				// IS a marker, allow only enough slack to dodge a rock, never enough to leave the spot.
+				static const float MarkerSearchRadii[] = { 150.f, 250.f, 350.f, 350.f, 350.f };
+
+				const float* SearchRadii = bUsedMarker ? MarkerSearchRadii
+				                                       : (bIsMainBase ? BaseSearchRadii : NormalSearchRadii);
+
+				if (bIsMainBase)
+				{
+					// Expansions were failing with nothing in the log to say where. Name the anchor that
+					// was picked so a failed expansion can be told apart from one that never started.
+					UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d anchor=%s origin=%s (drop was %s)"),
+					       UnitBase->TeamId, bUsedMarker ? TEXT("marker") : TEXT("deposit/fallback"),
+					       *Origin.ToCompactString(), *DropOrigin.ToCompactString());
+				}
+
+				// Try the anchor itself before any ring. For a hand-placed marker this is the whole point -
+				// the spot was chosen deliberately, and the smallest ring (350) would already push the base
+				// off it. For the deposit fallback it is only a first guess that fails harmlessly (a base
+				// on top of the deposit trips the too-close-to-resources check) and the rings take over.
+				if (bExpansionSitesExhausted)
+				{
+					// Nothing to search: leaving bPlacementValid false makes the caller drop the ghost
+					// instead of putting a base down off-marker.
+					bPlacementValid = false;
+				}
+				else if (bUsedMarker)
+				{
+					// A hand-placed site is authoritative and is deliberately put NEXT TO a deposit -
+					// which is exactly what the spacing pass and the too-close-to-resources check push a
+					// base away from. Measured: the ghost was shoved 1076 units off the marker every
+					// single time, so either the base landed somewhere else or nothing was built at all.
+					// The designer already decided this spot is good, so drop it there and skip both.
+					DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Origin));
+					bPlacementValid = true;
+					UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d placed on marker at %s (spacing pass skipped)."),
+					       UnitBase->TeamId, *DraggedWorkArea->GetActorLocation().ToCompactString());
+				}
+				else
+				{
+				DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Origin));
+				PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+				bPlacementValid = EvaluatePlacement();
+
+				for (int32 RadiusIndex = 0; RadiusIndex < 5 && !bPlacementValid; ++RadiusIndex)
+				{
+					const float Radius = SearchRadii[RadiusIndex];
+					for (int32 Step = 0; Step < 8 && !bPlacementValid; ++Step)
+					{
+						const float Angle = FMath::DegreesToRadians(45.f * Step);
+						const FVector Candidate = Origin + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.f);
+						DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Candidate));
+						PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+						bPlacementValid = EvaluatePlacement();
+					}
+					if (bPlacementValid) break;
+				}
+				}
+
+				// Choosing the marker is not enough: PerformWorkAreaDistanceResolution runs after every
+				// candidate and pushes the ghost clear of neighbours and deposits, which measured up to
+				// 5900 units away from the marker it started on. A base that far off is not on the site
+				// any more, so treat it as no placement at all.
+				if (bUsedMarker && bPlacementValid)
+				{
+					const float DriftSq = FVector::DistSquared2D(DraggedWorkArea->GetActorLocation(), Origin);
+					const float MaxDrift = 450.f;
+					if (DriftSq > MaxDrift * MaxDrift)
+					{
+						UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d rejected: drifted %.0f from its marker."),
+						       UnitBase->TeamId, FMath::Sqrt(DriftSq));
+						bPlacementValid = false;
+					}
+				}
+
+				if (bIsMainBase)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d search %s at %s"),
+					       UnitBase->TeamId, bPlacementValid ? TEXT("SUCCEEDED") : TEXT("FAILED"),
+					       *DraggedWorkArea->GetActorLocation().ToCompactString());
+				}
+			}
+
+			if (!bPlacementValid)
 			{
 				if (bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because overlapping with valid area and not snapped."));
 				if (bIsNoBuildZone) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because in No-Build Zone."));
 				if (bNeedsBeaconOutOfRange) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because beacon required but out of range."));
 				if (bTooCloseToResources) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because too close to resources."));
 				if (bOffNavMesh) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because location is off NavMesh."));
+				if (bOnSlope) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because ground is too steep."));
+				if (bTooCloseToCliff) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because too close to a NavMesh edge (cliff)."));
 
  				if (InDropWorkAreaFailedSound)
 				{
@@ -5690,8 +6213,17 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 				{
 					if (SelectedUnits[i] && SelectedUnits[i]->UnitState != UnitData::Dead)
 					{
-						
+						// A selected building cannot walk to a deposit, so for it the click means
+						// "workers you produce start mining here". This also stops the cast below from
+						// dereferencing null, which is what a building in the selection used to do.
+						if (ABuildingBase* Building = Cast<ABuildingBase>(SelectedUnits[i]))
+						{
+							Building->SetRallyPoint(WorkArea->GetActorLocation(), WorkArea);
+							continue;
+						}
+
 						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
+						if (!Worker) continue;
 						Worker->RemoveFocusEntityTarget();
 						SendWorkerToResource(Worker, WorkArea);
 					}
