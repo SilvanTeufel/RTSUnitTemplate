@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -96,6 +96,21 @@ public:
 	
 	UFUNCTION()
 	void ActivateNextQueuedAbility();
+
+	/**
+	 * Drops ActivatedAbilityInstance when it points at an ability that is no longer active.
+	 * Guards against EndAbility being swallowed by IsEndAbilityValid() during activation, which
+	 * otherwise locks the unit out of every ability. See the implementation for the measured case.
+	 */
+	void ClearStaleActivatedAbility();
+
+	/**
+	 * Prueft zwei Zusicherungen, die der Nutzer als Regel gesetzt hat, und stellt sie wieder her:
+	 *   1. Laeuft eine Ability mit bUseCastingFallbackProcessor, MUSS die Einheit casten.
+	 *   2. Ist keine Ability aktiv (beendet oder abgebrochen), darf sie NICHT im Casting bleiben.
+	 * Ein Verstoss muss zwei Durchlaeufe ueberdauern, damit kurze Umschaltfenster nicht anschlagen.
+	 */
+	void EnforceCastingInvariant();
 
 	virtual void BeginPlay() override;
 
@@ -211,6 +226,10 @@ public:
 
 	UPROPERTY()
 	float QueueFallbackTimer = 0.f;
+
+	// Taktgeber und Ausdauerzaehler fuer EnforceCastingInvariant.
+	float CastInvariantTimer = 0.f;
+	int32 CastInvariantStrikes = 0;
 
 	UPROPERTY()
 	float LastAbilityRequestTime = 0.f;

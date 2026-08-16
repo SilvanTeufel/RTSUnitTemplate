@@ -7,6 +7,9 @@
 #include "MassMovementFragments.h"
 #include "MassNavigationFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/UnitNavigationFragments.h"  // nur fuer die Stall-Diagnose
+#include "NavigationSystem.h"
+#include "NavigationData.h"
 #include "Core/RTSUnitUtils.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/UnitBase.h"
@@ -47,6 +50,8 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
    	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+    // Nur fuer die Stall-Diagnose: existiert ueberhaupt ein Navigationspfad?
+    EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
@@ -258,6 +263,8 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
+        const auto NavPathList = ChunkContext.GetFragmentView<FUnitNavigationPathFragment>(); // nur Diagnose
+        const bool bHasNavPathFrag = NavPathList.Num() > 0;
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
@@ -320,6 +327,84 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             const float AcceptanceRadius = MoveTarget.SlackRadius; //150.f;
 
             StateFrag.StateTimer += ExecutionInterval;
+
+            // Ein Laufbefehl auf einen UNERREICHBAREN Punkt hatte bisher keinen Ausgang: beide
+            // Idle-Bedingungen weiter unten verlangen Naehe zum Ziel. Steht die Einheit weit
+            // entfernt still - blockierter Weg, Ziel hinter unpassierbarem Gelaende, oder der auf
+            // eine Klippenkante geschnappte Angriffspunkt (siehe AttackWaypointInwardPull im
+            // RuleBasedDecider) - dann ist die Entfernung gross UND die Geschwindigkeit null, also
+            // greift keine der beiden. Der RunTag blieb fuer immer haengen: die Laufanimation
+            // spielt, die Einheit bewegt sich nie wieder. Deshalb hier ein Fortschrittswaechter,
+            // und zwar VOR allen Ausstiegszweigen, damit ihn kein continue ueberspringt.
+            if (RunStallTimeout > 0.f)
+            {
+                // FORTSCHRITT HEISST NAEHER AM ZIEL, nicht "irgendwie bewegt" - derselbe Fehler,
+                // der schon im ChaseStateProcessor stand. Wer vor einem Hindernis hin- und
+                // herzappelt, verschiebt sich jeden Takt um mehr als die Schwelle und setzte den
+                // Timer damit dauernd zurueck; der Waechter konnte nie ausloesen.
+                const float DistToDest = FVector::Dist2D(CurrentLocation, FinalDestination);
+
+                // Neues Ziel? Dann ist die alte Bestmarke bedeutungslos - neu ansetzen statt
+                // faelschlich Stillstand zu melden (siehe BestTargetRefDestination).
+                if (FVector::Dist2D(StateFrag.BestTargetRefDestination, FinalDestination) > 250.f)
+                {
+                    StateFrag.BestTargetRefDestination = FinalDestination;
+                    StateFrag.BestTargetDistance = DistToDest;
+                    StateFrag.LastProgressLocation = CurrentLocation;
+                    StateFrag.NoProgressTimer = 0.f;
+                }
+                else if (DistToDest < StateFrag.BestTargetDistance - RunStallProgressDistance)
+                {
+                    StateFrag.BestTargetDistance = DistToDest;
+                    StateFrag.LastProgressLocation = CurrentLocation;
+                    StateFrag.NoProgressTimer = 0.f;
+                }
+                else
+                {
+                    StateFrag.NoProgressTimer += ExecutionInterval;
+                    if (StateFrag.NoProgressTimer >= RunStallTimeout)
+                    {
+                        // Gleiche Triage wie bei [ChaseStall]: trennt "kein Befehl" von
+                        // "Befehl da, aber blockiert" von "bewegt sich ohne Fortschritt", und
+                        // zeigt die Navigationslage dazu.
+                        int32 PfadPunkte = -1, PfadIndex = -1, SuchtGerade = -1;
+                        float NaechsterWP = -1.f;
+                        if (bHasNavPathFrag)
+                        {
+                            const FUnitNavigationPathFragment& Nav = NavPathList[i];
+                            SuchtGerade = Nav.bIsPathfindingInProgress ? 1 : 0;
+                            PfadIndex = Nav.CurrentPathPointIndex;
+                            if (Nav.CurrentPath.IsValid())
+                            {
+                                const TArray<FNavPathPoint>& Punkte = Nav.CurrentPath->GetPathPoints();
+                                PfadPunkte = Punkte.Num();
+                                if (Punkte.IsValidIndex(Nav.CurrentPathPointIndex))
+                                {
+                                    NaechsterWP = FVector::Dist2D(CurrentLocation, Punkte[Nav.CurrentPathPointIndex].Location);
+                                }
+                            }
+                            else { PfadPunkte = 0; }
+                        }
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[RunStall] bei (%.0f, %.0f) DistZiel=%.0f SollTempo=%.0f Versatz=%.0f Pfadpunkte=%d Index=%d NaechsterWP=%.0f Sucht=%d"),
+                            CurrentLocation.X, CurrentLocation.Y, DistToDest,
+                            MoveTarget.DesiredSpeed.Get(),
+                            FVector::Dist2D(CurrentLocation, StateFrag.LastProgressLocation),
+                            PfadPunkte, PfadIndex, NaechsterWP, SuchtGerade);
+
+                        StateFrag.NoProgressTimer = 0.f;
+                        StateFrag.BestTargetDistance = TNumericLimits<float>::Max();
+                        StateFrag.LastProgressLocation = CurrentLocation;
+                        StateFrag.StoredLocation = CurrentLocation;
+                        VelocityList[i].Value = FVector::ZeroVector;
+                        StopMovement(MoveTargetList[i], World);
+                        // Idle setzt den Detect-Tag wieder, die Einheit kann also sofort neu
+                        // erfassen und neue Befehle annehmen, statt blockiert zu bleiben.
+                        SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                        continue;
+                    }
+                }
+            }
 
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
             

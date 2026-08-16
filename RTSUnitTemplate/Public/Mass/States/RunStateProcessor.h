@@ -45,6 +45,18 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float VelocityToIdle = 50.f;
+
+	/**
+	 * Sekunden ohne messbaren Fortschritt, nach denen ein Laufbefehl aufgegeben wird.
+	 * Ohne diesen Waechter haengt eine Einheit, deren Ziel nicht erreichbar ist, dauerhaft im
+	 * Laufzustand fest. 0 schaltet den Waechter ab.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float RunStallTimeout = 6.f;
+
+	/** Strecke, ab der ein Tick als Fortschritt zaehlt und der Waechter zurueckgesetzt wird. */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float RunStallProgressDistance = 25.f;
 private:
 	FMassEntityQuery EntityQuery;
 

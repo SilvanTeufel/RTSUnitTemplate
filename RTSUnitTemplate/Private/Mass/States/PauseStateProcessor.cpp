@@ -149,14 +149,26 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     }
 
     bool bIsTargetActive = RTSUnitUtils::IsEntityUsable(EntityManager, MutableTargetFrag.TargetEntity);
+
+    // Guard und Fremdzugriff stehen bewusst DIREKT beieinander. Vorher lagen die vier Zeilen
+    // fuer Friendly-Pruefung, Transform- und Charakteristik-Sicht dazwischen; ein Absturz am
+    // 15.08.2026 traf genau diesen Zugriff:
+    //   Assertion failed: CurrentArchetype [MassEntityManager.cpp:2367]
+    // Das ist der ungepruefte Pfad (InternalGetFragmentDataPtr) - er prueft NICHT, ob die
+    // Entitaet noch aktiv ist, sondern assertet direkt auf dem Archetyp. Der Guard eine
+    // Handvoll Zeilen vorher genuegt dafuer nicht; dieselbe Lehre steht weiter unten vor
+    // TargetCharFrag. Der Absturz lag auf dem GameThread, nicht in einem Worker - die
+    // GameThread-Bindung im Konstruktor schuetzt hier also nichts.
+    FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive
+        ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MutableTargetFrag.TargetEntity)
+        : nullptr;
+    const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
+
     const bool bIsFriendlyActive = RTSUnitUtils::IsEntityUsable(EntityManager, MutableTargetFrag.FriendlyTargetEntity);
     const auto TransformList = Context.GetFragmentView<FTransformFragment>();
     const FTransform& Transform = TransformList[EntityIdx].GetTransform();
     const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
     const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
-
-    FMassCombatStatsFragment* TgtStatsPtr = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MutableTargetFrag.TargetEntity) : nullptr;
-    const bool bIsTargetDead = TgtStatsPtr && TgtStatsPtr->Health <= 0.f;
 
     auto MoveTargetList = Context.GetMutableFragmentView<FMassMoveTargetFragment>();
     FMassMoveTargetFragment& MoveTarget = MoveTargetList[EntityIdx];
@@ -199,6 +211,16 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
     }
 
     StateFrag.StateTimer += ExecutionInterval;
+
+    // bIsTargetActive stammt aus dem Anfang dieser Funktion. Zwischen dort und hier liegen
+    // ueber fuenfzig Zeilen mit Deferred Commands und einem SignalEntityDeferred. Stirbt das
+    // Ziel in diesem Fenster oder wechselt es seinen Archetyp, behauptet das alte Flag
+    // weiterhin "aktiv" und der Zugriff unten assertet:
+    //   Assertion failed: CurrentArchetype [MassEntityManager.cpp:2367]
+    // Die GameThread-Bindung (bRequiresGameThreadExecution im Konstruktor) verhindert das
+    // NICHT - sie schuetzt gegen fremde Threads, nicht gegen einen veralteten eigenen Guard.
+    // Deshalb unmittelbar vor dem Zugriff neu pruefen.
+    bIsTargetActive = bIsTargetActive && RTSUnitUtils::IsEntityUsable(EntityManager, MutableTargetFrag.TargetEntity);
 
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(MutableTargetFrag.TargetEntity) : nullptr;
     const FMassAgentCharacteristicsFragment& CharFrag = *CharFragPtr;
@@ -256,7 +278,20 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         // muss enger sein als die Abschusspruefung, nie weiter.
         StateFrag.SwitchingState = true;
 
-        if (Dist > AttackRange)
+        // Kleiner ABSOLUTER Zuschlag als Totband gegen das Hin- und Herkippen:
+        // Chase meldet "angekommen" bei Dist <= AttackRange, hier wird ab Dist > AttackRange
+        // wieder losgeschickt. Ohne Zuschlag sind das komplementaere Schwellen - eine Einheit
+        // genau auf der Kante wechselt bei jeder Distanzschwankung, und weil sich beide Gegner
+        // bewegen, schwankt die Distanz staendig.
+        //
+        // Bewusst ABSOLUT und klein, nicht multiplikativ: ein Faktor auf der Chase-Seite
+        // (ChaseArrivalRangeFactor < 1) verlangt physisches Naeherkommen, das Kollision und
+        // Separation verhindern koennen - dann jagt die Einheit ewig und laeuft auf der Stelle.
+        // Ein Faktor HIER (BreakOffRange) war der frueher dokumentierte Fehler in die andere
+        // Richtung: bei Reichweite 900 sind 15 % ganze 135 Einheiten, und die Einheiten parkten
+        // sichtbar auf Abstand. 25 Einheiten sind kleiner als jede Angriffsreichweite im Spiel
+        // und faellt optisch nicht auf.
+        if (Dist > AttackRange + PauseRechaseEpsilon)
         {
             GoAfterTarget();
         }
@@ -364,6 +399,11 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
         }
         return;
     }
+
+    // Gleiche Falle wie im Server-Pfad: der Guard ist am Funktionsanfang berechnet, dazwischen
+    // liegen Deferred Commands. Vor dem Fremdzugriff neu pruefen, sonst assertet
+    // CurrentArchetype (MassEntityManager.cpp:2367).
+    bIsTargetActive = bIsTargetActive && RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
 
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;

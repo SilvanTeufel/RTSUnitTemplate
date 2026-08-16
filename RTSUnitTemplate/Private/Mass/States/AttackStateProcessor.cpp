@@ -230,6 +230,15 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
 
     const float Dist = FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation);
     const FMassAgentCharacteristicsFragment& CharFrag = *CharFragPtr;
+    // Gleicher Defekt wie im PauseStateProcessor (dort als Absturz aufgetreten:
+    // "Assertion failed: CurrentArchetype", MassEntityManager.cpp:2367): bIsTargetActive ist
+    // am Funktionsanfang berechnet, zwischen dort und hier liegen ~45 Zeilen mit Deferred
+    // Commands. Stirbt das Ziel in diesem Fenster oder wechselt es den Archetyp, behauptet
+    // das alte Flag weiterhin "aktiv" und der Zugriff assertet. Die GameThread-Bindung
+    // schuetzt gegen fremde Threads, nicht gegen einen veralteten eigenen Guard.
+    // Vorbild fuer die saubere Variante: ChaseStateProcessor.cpp:395 prueft inline am Zugriff.
+    bIsTargetActive = bIsTargetActive && RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
+
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;
@@ -317,6 +326,14 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
         MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
     }
 
+    // Haengengebliebenes SwitchingState loesen - VOR jedem Ausstieg aus dieser Funktion.
+    // Der Aufruf stand frueher hinter den "Freund ausser Reichweite"- und "Ziel verloren"-Zweigen,
+    // die das Flag selbst setzen und dann zurueckkehren: die Einheit setzte das Flag, uebersprang
+    // den Watchdog, traf im naechsten Tick dieselbe Bedingung an und blieb dauerhaft haengen.
+    // Derselbe Fehler steckte im ChaseStateProcessor und wurde dort messbar (160 s ohne einen
+    // einzigen Positionswechsel).
+    RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval);
+
     bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
     const auto CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
     const FMassAgentCharacteristicsFragment* CharFragPtr = CharList.IsValidIndex(EntityIdx) ? &CharList[EntityIdx] : nullptr;
@@ -359,11 +376,18 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
         return;
     }
 
-    // Haengengebliebenes SwitchingState loesen, bevor die Ausgaenge geprueft werden.
-    // Siehe RTSUnitUtils::TickSwitchingStateWatchdog.
-    RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval);
+    // (Watchdog laeuft jetzt weiter oben, vor den Ausstiegszweigen.)
 
     const FMassAgentCharacteristicsFragment& CharFrag = *CharFragPtr;
+    // Gleicher Defekt wie im PauseStateProcessor (dort als Absturz aufgetreten:
+    // "Assertion failed: CurrentArchetype", MassEntityManager.cpp:2367): bIsTargetActive ist
+    // am Funktionsanfang berechnet, zwischen dort und hier liegen ~45 Zeilen mit Deferred
+    // Commands. Stirbt das Ziel in diesem Fenster oder wechselt es den Archetyp, behauptet
+    // das alte Flag weiterhin "aktiv" und der Zugriff assertet. Die GameThread-Bindung
+    // schuetzt gegen fremde Threads, nicht gegen einen veralteten eigenen Guard.
+    // Vorbild fuer die saubere Variante: ChaseStateProcessor.cpp:395 prueft inline am Zugriff.
+    bIsTargetActive = bIsTargetActive && RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
+
     FMassAgentCharacteristicsFragment* TargetCharFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(TargetFrag.TargetEntity) : nullptr;
     FTransformFragment* TargetTransformFrag = bIsTargetActive ? EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.TargetEntity) : nullptr;
     const FTransform* TargetTransform = TargetTransformFrag ? &TargetTransformFrag->GetTransform() : nullptr;

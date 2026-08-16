@@ -3,6 +3,8 @@
 #include "Actors/WorkArea.h"
 
 #include "Characters/Unit/BuildingBase.h"
+#include "EngineUtils.h"   // TActorIterator (AbandonIfUnclaimed: find a worker still walking here)
+#include "Controller/PlayerController/ControllerBase.h"   // bIsAi / SelectableTeamId (AI-only orphan cleanup)
 #include "Core/WorkerData.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
@@ -78,7 +80,162 @@ void AWorkArea::BeginPlay()
 	if (HasAuthority())
 	{
 		InitWorkerOverflowTimer();
+
+		// A build area nobody ever claims must not sit on the map forever - it blocks placement for
+		// everyone (a stray BroodHive area even ended up on an enemy DataCenter). After the timeout it
+		// is removed and, if it had already been paid for, refunded.
+		if (Type == WorkAreaData::BuildArea && AbandonTimeoutSeconds > 0.f)
+		{
+			GetWorld()->GetTimerManager().SetTimer(
+				AbandonTimerHandle, this, &AWorkArea::AbandonIfUnclaimed, AbandonTimeoutSeconds, false);
+		}
+
+		// Recurring orphan check for AI-owned areas. The AI ownership test lives inside the callback, not
+		// here: a build area can spawn before the controllers are up, and asking too early would answer
+		// "not AI" for every area and silently disable the whole thing.
+		if (Type == WorkAreaData::BuildArea && AiOrphanTimeoutSeconds > 0.f && AiOrphanCheckInterval > 0.f)
+		{
+			GetWorld()->GetTimerManager().SetTimer(
+				AiOrphanTimerHandle, this, &AWorkArea::TickAiOrphanCheck, AiOrphanCheckInterval, true);
+		}
 	}
+}
+
+bool AWorkArea::IsOwnedByAiTeam() const
+{
+	const UWorld* World = GetWorld();
+	if (!World) return false;
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (const AControllerBase* PC = Cast<AControllerBase>(It->Get()))
+		{
+			if (PC->SelectableTeamId == TeamId)
+			{
+				return PC->bIsAi;
+			}
+		}
+	}
+	return false;
+}
+
+void AWorkArea::TickAiOrphanCheck()
+{
+	if (!HasAuthority()) return;
+	if (Type != WorkAreaData::BuildArea) return;
+	if (!IsOwnedByAiTeam()) return;   // the human player manages their own areas
+
+	// Cheap claims first. Note that StartedBuilding is deliberately NOT one of them: an area whose
+	// builder died mid-build keeps StartedBuilding=true forever and is precisely what has to go.
+	if (ConstructionUnit || Building || bFinalBuildingSpawned || Workers.Num() > 0)
+	{
+		AiOrphanElapsed = 0.f;
+		bAiOrphanWasClaimed = true;
+		return;
+	}
+
+	// StartedBuilding/bConstructionUnitSpawned survive the death of the builder, so they are proof that
+	// this area WAS claimed once - not proof that it still is. They only pick the timeout, never skip it.
+	if (StartedBuilding || bConstructionUnitSpawned)
+	{
+		bAiOrphanWasClaimed = true;
+	}
+
+	// A unit still walking here counts as a claim - it carries the area as its BuildArea and shows up in
+	// none of the fields above. Skipping this check is what made the one-shot abandon timer delete areas
+	// whose builder was merely on the way, cutting the Xeno base from ~14-22 buildings down to 5-7.
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		const AUnitBase* Unit = *It;
+		if (IsValid(Unit) && Unit->BuildArea == this)
+		{
+			AiOrphanElapsed = 0.f;
+			bAiOrphanWasClaimed = true;
+			return;
+		}
+	}
+
+	AiOrphanElapsed += AiOrphanCheckInterval;
+
+	// Nobody is on this area, so it must not keep claiming to be spoken for: GetClosestBuildPlaces filters
+	// out everything with PlannedBuilding=true, which means a flag left over from a builder that never
+	// arrived hides the area from every future worker. Clearing it gives the area one honest chance to be
+	// picked up again before the timeout below removes it.
+	if (PlannedBuilding && !StartedBuilding)
+	{
+		PlannedBuilding = false;
+	}
+
+	// An area that was claimed and lost its builder is dead and goes on the short timeout. One that was
+	// never claimed at all may simply be queued behind a busy worker, so it gets the long grace period.
+	const float Timeout = bAiOrphanWasClaimed ? AiOrphanTimeoutSeconds : AiUnclaimedTimeoutSeconds;
+	if (Timeout <= 0.f || AiOrphanElapsed < Timeout) return;
+
+	// Only refund what was actually taken - the cost is charged when a worker STARTS building.
+	if (IsPaid)
+	{
+		if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode()))
+		{
+			ResourceGameMode->ModifyResource(EResourceType::Primary,   TeamId, ConstructionCost.PrimaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Secondary, TeamId, ConstructionCost.SecondaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Tertiary,  TeamId, ConstructionCost.TertiaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Rare,      TeamId, ConstructionCost.RareCost);
+			ResourceGameMode->ModifyResource(EResourceType::Epic,      TeamId, ConstructionCost.EpicCost);
+			ResourceGameMode->ModifyResource(EResourceType::Legendary, TeamId, ConstructionCost.LegendaryCost);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[WorkArea] %s removed: orphaned %.0fs (AI team %d, wasClaimed=%d, started=%d, refunded=%d)."),
+	       *GetName(), AiOrphanElapsed, TeamId, bAiOrphanWasClaimed ? 1 : 0, StartedBuilding ? 1 : 0, IsPaid ? 1 : 0);
+
+	GetWorld()->GetTimerManager().ClearTimer(AiOrphanTimerHandle);
+	Destroy();
+}
+
+void AWorkArea::AbandonIfUnclaimed()
+{
+	if (!HasAuthority()) return;
+
+	// Claimed in any way? Then leave it alone: a worker started, the ConstructionUnit spawned, or the
+	// finished building already exists.
+	if (StartedBuilding || bConstructionUnitSpawned || ConstructionUnit || Building || Workers.Num() > 0)
+	{
+		return;
+	}
+
+	// A worker still WALKING here counts as assigned - it appears in none of the fields above, it only
+	// carries this area as its BuildArea. Without this check the timer deleted areas whose builder was
+	// simply still on the way; measured, it wiped CarapacePod/LarvalPod/BroodHive/Bunker areas
+	// repeatedly and cut the Xeno base from ~14-22 buildings down to 5-7. The defense push (+2800)
+	// made it worst for defense areas, which have the longest walk.
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		AUnitBase* Unit = *It;
+		if (IsValid(Unit) && Unit->BuildArea == this)
+		{
+			return;
+		}
+	}
+
+	// Only refund what was actually taken - the cost is charged when a worker STARTS building, so an
+	// area that never got that far was never paid for.
+	if (IsPaid)
+	{
+		if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode()))
+		{
+			ResourceGameMode->ModifyResource(EResourceType::Primary,   TeamId, ConstructionCost.PrimaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Secondary, TeamId, ConstructionCost.SecondaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Tertiary,  TeamId, ConstructionCost.TertiaryCost);
+			ResourceGameMode->ModifyResource(EResourceType::Rare,      TeamId, ConstructionCost.RareCost);
+			ResourceGameMode->ModifyResource(EResourceType::Epic,      TeamId, ConstructionCost.EpicCost);
+			ResourceGameMode->ModifyResource(EResourceType::Legendary, TeamId, ConstructionCost.LegendaryCost);
+		}
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[WorkArea] %s abandoned after %.0fs (team %d, refunded=%d)."),
+	       *GetName(), AbandonTimeoutSeconds, TeamId, IsPaid ? 1 : 0);
+
+	Destroy();
 }
 
 void AWorkArea::InitWorkerOverflowTimer()
@@ -487,9 +644,42 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, AResourceGameMode* ResourceGameMode)
 {
 	if (!HasAuthority()) return false;
+	// A worker that still carries an unfinished build area RESUMES it instead of re-rolling.
+	// ABuildingBase::HandleBaseArea unregisters the worker from its area right before calling in here, and
+	// GetClosestBuildPlaces hides every area with PlannedBuilding=true - including this worker's own. So
+	// whenever nothing else happened to be free, the worker silently dropped the job it already had, and
+	// the area was left behind with PlannedBuilding=true forever: invisible to every future worker, no
+	// builder, never built. Measured: 15 of 21 areas removed by the orphan cleanup carried exactly this
+	// signature (wasClaimed=1, started=0 - a worker had been assigned and nothing was ever built).
+	if (IsValid(Worker->BuildArea)
+		&& !Worker->BuildArea->IsExtensionArea
+		&& !Worker->BuildArea->bFinalBuildingSpawned
+		&& !IsValid(Worker->BuildArea->Building)
+		&& (Worker->BuildArea->TeamId == 0 || Worker->BuildArea->TeamId == Worker->TeamId))
+	{
+		AWorkArea* Existing = Worker->BuildArea;
+		Worker->ReleaseResourcePlace();
+		Existing->PlannedBuilding = true;
+		Existing->AddWorkerToArray(Worker);
+		UnitBase->SetUEPathfinding = true;
+		Worker->SetUnitState(UnitData::GoToBuild);
+		Worker->SwitchEntityTagByState(UnitData::GoToBuild, Worker->UnitStatePlaceholder);
+		return true;
+	}
+
 	TArray<AWorkArea*> BuildAreas = ResourceGameMode->GetClosestBuildPlaces(Worker);
-	BuildAreas.SetNum(3);
-	
+
+	// Keep only the three closest candidates - but SHRINK ONLY. SetNum(3) also PADS with nullptr when
+	// fewer than three are available, and GetRandomClosestWorkArea returns whatever slot it draws. With
+	// a single free build area the worker was therefore turned away two times out of three although the
+	// area was right in front of it: BuildArea=nullptr, walk back to base, try again. That is the
+	// "workers get sent back and forth instead of gathering" report, and it also produced build areas
+	// that never got a builder at all.
+	if (BuildAreas.Num() > 3)
+	{
+		BuildAreas.SetNum(3);
+	}
+
 	AWorkArea* SelectedArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas);
 	if (!SelectedArea || SelectedArea->IsExtensionArea)
 	{

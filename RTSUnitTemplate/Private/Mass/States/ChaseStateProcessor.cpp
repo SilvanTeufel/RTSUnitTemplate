@@ -16,6 +16,9 @@
 #include "Core/RTSUnitUtils.h"
 
 #include "Mass/UnitMassTag.h"
+#include "Mass/UnitNavigationFragments.h"  // FUnitNavigationPathFragment - nur fuer die Stall-Diagnose
+#include "NavigationSystem.h"
+#include "NavigationData.h"
 #include "Mass/Signals/MySignals.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
@@ -48,6 +51,8 @@ void UChaseStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
     EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassNetworkIDFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    // Nur fuer die Stall-Diagnose: existiert ueberhaupt ein Navigationspfad?
+    EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
@@ -297,6 +302,8 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
         const bool bHasMoveTarget = MoveTargetList.Num() > 0;
         const auto CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const auto NavPathList = ChunkContext.GetFragmentView<FUnitNavigationPathFragment>(); // nur Diagnose
+        const bool bHasNavPathFrag = NavPathList.Num() > 0;
 
             
         for (int32 i = 0; i < NumEntities; ++i)
@@ -319,6 +326,15 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 }
             }
 
+            // Haengengebliebenes SwitchingState loesen - und zwar VOR jedem Ausstieg aus dieser
+            // Schleife. Der Aufruf stand frueher weiter unten, hinter dem "Ziel verloren"-Zweig,
+            // der das Flag selbst setzt und dann per continue aussteigt: eine Einheit, die ihr
+            // Ziel verlor, setzte das Flag, uebersprang den Watchdog, betrat im naechsten Tick
+            // denselben Zweig und blieb so fuer den Rest ihres Lebens bewegungslos in Chase
+            // stehen - gemessen 160 s ohne einen einzigen Positionswechsel. Der Watchdog konnte
+            // ausgerechnet die Einheiten nicht retten, fuer die er gebaut wurde.
+            RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval);
+
             if (StateFrag.HoldPosition)
             {
                 StateFrag.StoredLocation = Transform.GetLocation();
@@ -338,6 +354,112 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             
             bool bIsTargetActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
             const bool bIsFriendlyActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.FriendlyTargetEntity);
+
+            // Fortschrittswaechter - dieselbe Luecke, die der RunStateProcessor hatte, nur eine
+            // Ebene weiter: Chase steigt aus, wenn das Ziel ein Verbuendeter (unten) oder tot bzw.
+            // ungueltig ist. Verfolgt eine Einheit aber ein LEBENDES, nur unerreichbares Ziel, ist
+            // bIsTargetActive wahr, kein Ausstieg greift, und sie laeuft endlos ohne anzukommen.
+            // Genau das passiert hier staendig: ein Nahkaempfer (Reichweite 200) jagt einen
+            // Fernkaempfer (Reichweite 900), der im Rueckzug feuert - das Ziel bleibt dauerhaft
+            // gueltig und wird nie erreicht. Deshalb VOR allen Ausstiegszweigen pruefen.
+            // Werte bewusst identisch zum RunStall-Waechter (6 s / 25 Einheiten).
+            {
+                // FORTSCHRITT HEISST NAEHER AM ZIEL, nicht "irgendwie bewegt".
+                // Die erste Fassung mass die rohe Verschiebung der Einheit gegen
+                // LastProgressLocation. Genau daran ist sie gescheitert: eine Einheit, die vor
+                // dem Gegner hin- und herzappelt, verschiebt sich jeden Takt um mehr als die
+                // Schwelle und setzt den Timer damit dauernd zurueck - der Waechter konnte nie
+                // ausloesen. Gemessen am 2026-08-14: Chase stellte den mit Abstand groessten
+                // Anteil der "laeuft auf der Stelle"-Meldungen, und dieselbe Einheit wurde an
+                // derselben Stelle immer wieder gemeldet.
+                const float ChaseStallTimeout = 6.f;
+                const float ChaseStallProgressDistance = 25.f;
+                const FVector ChaseNow = Transform.GetLocation();
+                const float DistToTarget = FVector::Dist2D(ChaseNow, TargetFrag.LastKnownLocation);
+
+                // Zielwechsel (anderer Gegner, oder das Ziel ist weit gesprungen)? Dann ist die
+                // alte Bestmarke bedeutungslos - neu ansetzen statt faelschlich Stillstand zu
+                // melden. Ein Gegner, der sich normal fortbewegt, bleibt innerhalb der Toleranz
+                // und wird weiterhin korrekt als "kein Fortschritt" gewertet.
+                if (FVector::Dist2D(StateFrag.BestTargetRefDestination, TargetFrag.LastKnownLocation) > 1000.f)
+                {
+                    StateFrag.BestTargetRefDestination = TargetFrag.LastKnownLocation;
+                    StateFrag.BestTargetDistance = DistToTarget;
+                    StateFrag.LastProgressLocation = ChaseNow;
+                    StateFrag.NoProgressTimer = 0.f;
+                }
+                else if (DistToTarget < StateFrag.BestTargetDistance - ChaseStallProgressDistance)
+                {
+                    StateFrag.BestTargetDistance = DistToTarget;
+                    StateFrag.BestTargetRefDestination = TargetFrag.LastKnownLocation;
+                    StateFrag.LastProgressLocation = ChaseNow;
+                    StateFrag.NoProgressTimer = 0.f;
+                }
+                else
+                {
+                    StateFrag.NoProgressTimer += ExecutionInterval;
+                    if (StateFrag.NoProgressTimer >= ChaseStallTimeout)
+                    {
+                        // TRIAGE: die drei Verdaechtigen lassen sich hier in EINER Zeile trennen.
+                        //   DesiredSpeed == 0        -> der Bewegungsbefehl wurde gar nicht gesetzt
+                        //   DesiredSpeed > 0, v ~ 0  -> Befehl da, aber blockiert (Kollision/Separation/Nav)
+                        //   v > 0, kein Fortschritt  -> sie bewegt sich, laeuft aber im Kreis/hin und her
+                        // Ausserdem: Abstand Bewegungsziel <-> Gegner. Weichen die auseinander, zeigt der
+                        // Befehl gar nicht auf den Gegner.
+                        const float Tempo = FVector::Dist2D(ChaseNow, StateFrag.LastProgressLocation);
+                        const float SollTempo = bHasMoveTarget ? MoveTargetList[i].DesiredSpeed.Get() : -1.f;
+                        const float ZielAbw = bHasMoveTarget
+                            ? FVector::Dist2D(MoveTargetList[i].Center, TargetFrag.LastKnownLocation) : -1.f;
+
+                        // Navigationslage: trennt "kein Pfad gefunden" von "Pfad da, Bewegung
+                        // wird nicht ausgefuehrt". -1 heisst: das Fragment fehlt der Entity ganz.
+                        int32 PfadPunkte = -1;
+                        int32 PfadIndex = -1;
+                        int32 SuchtGerade = -1;
+                        float NaechsterWP = -1.f;
+                        if (bHasNavPathFrag)
+                        {
+                            const FUnitNavigationPathFragment& Nav = NavPathList[i];
+                            SuchtGerade = Nav.bIsPathfindingInProgress ? 1 : 0;
+                            PfadIndex = Nav.CurrentPathPointIndex;
+                            if (Nav.CurrentPath.IsValid())
+                            {
+                                const TArray<FNavPathPoint>& Punkte = Nav.CurrentPath->GetPathPoints();
+                                PfadPunkte = Punkte.Num();
+                                if (Punkte.IsValidIndex(Nav.CurrentPathPointIndex))
+                                {
+                                    NaechsterWP = FVector::Dist2D(ChaseNow, Punkte[Nav.CurrentPathPointIndex].Location);
+                                }
+                            }
+                            else
+                            {
+                                PfadPunkte = 0;
+                            }
+                        }
+
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[ChaseStall] bei (%.0f, %.0f) DistZiel=%.0f Reichweite=%.0f SollTempo=%.0f Versatz=%.0f ZielBefehlAbw=%.0f Pfadpunkte=%d Index=%d NaechsterWP=%.0f Sucht=%d"),
+                            ChaseNow.X, ChaseNow.Y, DistToTarget,
+                            Stats.AttackRange, SollTempo, Tempo, ZielAbw,
+                            PfadPunkte, PfadIndex, NaechsterWP, SuchtGerade);
+
+                        StateFrag.NoProgressTimer = 0.f;
+                        StateFrag.BestTargetDistance = TNumericLimits<float>::Max();
+                        StateFrag.LastProgressLocation = ChaseNow;
+                        StateFrag.StoredLocation = ChaseNow;
+                        StateFrag.SwitchingState = true;
+                        if (bHasMoveTarget)
+                        {
+                            StopMovement(MoveTargetList[i], World);
+                        }
+                        if (SignalSubsystem)
+                        {
+                            SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::Idle, Entity);
+                        }
+                        continue;
+                    }
+                }
+            }
 
             if (bIsFriendlyActive)
             {
@@ -378,10 +500,7 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 continue;
             }
 
-            // Haengengebliebenes SwitchingState loesen, bevor die Ausgaenge geprueft
-            // werden - sonst steht die Einheit dauerhaft in Chase, ohne sich zu bewegen.
-            // Siehe RTSUnitUtils::TickSwitchingStateWatchdog.
-            RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval);
+            // (Watchdog laeuft jetzt weiter oben, vor den Ausstiegszweigen.)
 
             // --- Distance Check ---
 
@@ -402,7 +521,23 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
 
             const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
             const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
-            const float AttackRangeSq = FMath::Square(EffectiveAttackRange);
+
+            // Chase haelt bewusst ETWAS INNERHALB der Reichweite an, nicht genau auf ihrer Kante.
+            //
+            // Vorher war die Ankunftsschwelle hier exakt EffectiveAttackRange - und
+            // UPauseStateProcessor schickt die Einheit wieder los, sobald Dist > EffectiveAttackRange.
+            // Das sind komplementaere Schwellen OHNE Totband: eine Einheit, die genau auf der Kante
+            // zum Stehen kommt, kippt bei jedem Ruckeln der Distanz zwischen Chase und Pause hin und
+            // her. Weil sich beide Gegner bewegen, schwankt Dist staendig um diesen Punkt - genau das
+            // sichtbare "Zittern", wenn zwei Einheiten sich begegnen.
+            //
+            // Die Loesung gehoert auf DIESE Seite: die Pause-Schwelle darf nicht aufgeweicht werden
+            // (mit BreakOffRange dort entstand frueher der umgekehrte Fehler - Einheiten parkten
+            // dauerhaft auf Abstand, siehe Kommentar in PauseStateProcessor). Wer naeher herangeht
+            // als noetig, erzeugt dagegen ein sauberes Totband: Chase stoppt bei 0.9 * Reichweite,
+            // Pause greift erst ab 1.0 * Reichweite - dazwischen passiert nichts.
+            const float ArrivalRange = EffectiveAttackRange * FMath::Clamp(ChaseArrivalRangeFactor, 0.1f, 1.f);
+            const float AttackRangeSq = FMath::Square(ArrivalRange);
 
             // --- In Attack Range ---
             if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)

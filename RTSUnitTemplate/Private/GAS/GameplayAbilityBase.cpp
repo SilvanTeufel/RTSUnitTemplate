@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "GAS/GameplayAbilityBase.h"
 #include "GAS/AttributeSetBase.h"
@@ -7,6 +7,7 @@
 
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/MassUnitBase.h" // SwitchEntityTag
+#include "GameModes/RTSGameModeBase.h"
 #include "Containers/Map.h"
 #include "Containers/Set.h"
 #include "Engine/World.h"
@@ -320,6 +321,8 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 						}
 						else
 						{
+							// Nur der Mass-Tag, OHNE den Actor-Zustand: GetUnitState bleibt auf Idle und
+							// jedes Blueprint-Gate "UnitState == Casting" sieht die Einheit als nicht castend.
 							EntityManager.Defer().AddTag<FMassStateCastingTag>(Entity);
 						}
 
@@ -354,6 +357,44 @@ bool UGameplayAbilityBase::CheckCost(const FGameplayAbilitySpecHandle Handle, co
 	return true;
 }
 
+/**
+ * Live count of one unit type on the owner's team. Used by the per-type population cap.
+ * Returns false when the cap is not configured, so callers can skip the whole check.
+ */
+bool UGameplayAbilityBase::IsUnitTypeCapReached(const FGameplayAbilityActorInfo* ActorInfo) const
+{
+	if (MaxUnitsOfType <= 0 || !UnitCapClass || !ActorInfo)
+	{
+		return false;
+	}
+
+	const AUnitBase* Owner = Cast<AUnitBase>(ActorInfo->OwnerActor.Get());
+	const UWorld* World = Owner ? Owner->GetWorld() : nullptr;
+	if (!Owner || !World)
+	{
+		return false;
+	}
+
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+	if (!GameMode)
+	{
+		return false;
+	}
+
+	int32 Count = 0;
+	for (AActor* Actor : GameMode->AllUnits)
+	{
+		const AUnitBase* Unit = Cast<AUnitBase>(Actor);
+		if (!Unit || Unit->TeamId != Owner->TeamId || !Unit->IsA(UnitCapClass)) continue;
+
+		if (++Count >= MaxUnitsOfType)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 void UGameplayAbilityBase::ApplyCost(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
 {
 	Super::ApplyCost(Handle, ActorInfo, ActivationInfo);
@@ -368,6 +409,33 @@ void UGameplayAbilityBase::ApplyCost(const FGameplayAbilitySpecHandle Handle, co
 
 void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	// Eine Cast-Ability muss ihren Zustand beim Beenden selbst aufraeumen.
+	//
+	// Es gibt zwei saubere Ausstiege - EndCast -> SwitchState(PlaceholderSignal) fuer den
+	// durchgelaufenen Cast und CancelCurrentAbility_Implementation -> SwitchEntityTagByState fuer den
+	// Abbruch. Beendet ein Blueprint seine Ability auf einem DRITTEN Weg (schlicht EndAbility), bleibt
+	// die Einheit auf Casting stehen. AGASUnit::EnforceCastingInvariant raeumt das zwar nach ~0,5 s weg,
+	// aber in diesem Fenster lehnt der Riegel in CanActivateAbility jeden neuen Cast dieser Einheit ab.
+	// Gemessen am 16.08.2026: 5 solcher Faelle in 120 s (SynapseCluster, BroodHive - jeweils
+	// GA_UpgradeBuildingExtension_Slime_Free_Xeno_AH). Hier ist der Zustand ohne Wartezeit korrekt.
+	if (bUseCastingFallbackProcessor && ActorInfo && ActorInfo->IsNetAuthority())
+	{
+		if (AUnitBase* EndingUnit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			if (EndingUnit->GetUnitState() == UnitData::Casting)
+			{
+				if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(EndingUnit))
+				{
+					MassUnit->SwitchEntityTagByState(EndingUnit->UnitStatePlaceholder, EndingUnit->UnitStatePlaceholder);
+				}
+				else
+				{
+					EndingUnit->SetUnitState(EndingUnit->UnitStatePlaceholder);
+				}
+			}
+		}
+	}
+
 	if (!IsEndAbilityValid(Handle, ActorInfo))
 	{
 		return;
@@ -563,7 +631,46 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 		return false;
 	}
 
-	return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+	// The per-type population cap lives HERE, not in CheckCost. CheckCost is called a second time by
+	// CommitAbility - and several Blueprints (GA_BuildUnit_Parent_AH and friends) call SwitchEntityTag
+	// into the Casting state BEFORE they commit. A cap that fails at commit would therefore leave the
+	// unit parked in Casting with no running ability, and every later press hits the Blueprint's own
+	// "UnitState == Casting -> EndAbility" gate: the unit would never cast again. As an activation
+	// condition the cap simply refuses up front and changes no state.
+	// Eine castende Einheit darf ihren eigenen Cast nicht neu starten.
+	//
+	// Jede Aktivierung ruft am Ende von ActivateAbility SwitchEntityTag(Casting), und das nullt
+	// StateFrag->StateTimer. Wird dieselbe Ability waehrend des Casts erneut aktiviert - und genau das
+	// tut AExtendedControllerBase::ActivateDefaultAbilities aus dem Blueprint heraus wiederholt -, faengt
+	// der Cast jedes Mal bei 0 an und erreicht seine CastTime nie. Gemessen am 16.08.2026 per Callstack:
+	// sechs Neustarts in Folge auf BP_BuildingBase_Singularian_DataCenter_C_1, Timer konstant 0.00-0.30
+	// bei CastTime 15.00, kein einziges EndCast, danach Abbruch.
+	//
+	// Der Riegel loest sich von selbst: mit ihm laeuft der Timer durch, EndCast feuert, SwitchState setzt
+	// den Zustand zurueck - und die naechste Aktivierung ist wieder erlaubt. Nur Abilities mit
+	// bUseCastingFallbackProcessor sind betroffen, also genau die, die ueberhaupt casten.
+	if (bUseCastingFallbackProcessor && ActorInfo)
+	{
+		// Owner ODER Avatar - je nach Aufrufweg traegt nur einer von beiden die Einheit.
+		const AUnitBase* OwnerUnit  = Cast<AUnitBase>(ActorInfo->OwnerActor.Get());
+		const AUnitBase* AvatarUnit = Cast<AUnitBase>(ActorInfo->AvatarActor.Get());
+		const AUnitBase* CastingUnit = OwnerUnit ? OwnerUnit : AvatarUnit;
+		if (CastingUnit && CastingUnit->GetUnitState() == UnitData::Casting)
+		{
+			return false;
+		}
+	}
+
+	if (IsUnitTypeCapReached(ActorInfo))
+	{
+		return false;
+	}
+
+	if (!Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags))
+	{
+		return false;
+	}
+	return true;
 }
 
 void UGameplayAbilityBase::Debug_DumpDisabledAbilityKeys()

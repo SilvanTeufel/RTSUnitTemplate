@@ -4,6 +4,7 @@
 #include "Characters/Camera/RL/InferenceComponent.h"
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Core/RTSUnitTemplateSettings.h"   // AITimeScale from Project Settings
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "HAL/PlatformFileManager.h"
@@ -57,6 +58,27 @@ namespace
 		TEXT("Global time dilation for AI training runs. 1 = real time."),
 		ECVF_Default);
 
+	/**
+	 * The effective time scale: project setting by default, console variable when it was explicitly set.
+	 * Rationale: the setting is the persistent, discoverable place (Project Settings -> Plugins -> RTS
+	 * Unit Template); the CVar stays the quick override for a single test run without touching config.
+	 * "Explicitly set" = anything other than 1, which is also the CVar's default.
+	 */
+	float GetEffectiveTimeScale()
+	{
+		if (!FMath::IsNearlyEqual(GRLTimeScale, 1.f))
+		{
+			return GRLTimeScale;
+		}
+
+		if (const URTSUnitTemplateSettings* Settings = URTSUnitTemplateSettings::Get())
+		{
+			return FMath::Max(0.1f, Settings->AITimeScale);
+		}
+
+		return 1.f;
+	}
+
 	const TCHAR* SourceToToken(ERLSampleSource Source)
 	{
 		switch (Source)
@@ -87,7 +109,8 @@ void URLRecorderSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	}
 
 	// The world does not exist yet at subsystem init, so apply the speed-up once play begins.
-	if (!FMath::IsNearlyEqual(GRLTimeScale, 1.f))
+	// Checks the EFFECTIVE scale so a value coming from Project Settings registers too, not just the CVar.
+	if (!FMath::IsNearlyEqual(GetEffectiveTimeScale(), 1.f))
 	{
 		FWorldDelegates::OnPostWorldInitialization.AddUObject(this, &URLRecorderSubsystem::ApplyTimeScaleToWorld);
 	}
@@ -100,18 +123,22 @@ void URLRecorderSubsystem::ApplyTimeScaleToWorld(UWorld* World, const UWorld::In
 		return;
 	}
 
+	const float EffectiveScale = GetEffectiveTimeScale();
+
 	if (AWorldSettings* Settings = World->GetWorldSettings())
 	{
 		// Raise the ceiling first: SetGlobalTimeDilation clamps against it, so without this a request of 10
 		// quietly becomes 20's-worth of nothing or the default cap.
-		Settings->MaxGlobalTimeDilation = FMath::Max(Settings->MaxGlobalTimeDilation, GRLTimeScale);
+		Settings->MaxGlobalTimeDilation = FMath::Max(Settings->MaxGlobalTimeDilation, EffectiveScale);
 		// Frames are allowed to represent more simulated time; otherwise the engine caps the step and the
 		// world runs slower than the dilation asks for.
 		Settings->MinUndilatedFrameTime = 0.0001f;
 	}
 
-	UGameplayStatics::SetGlobalTimeDilation(World, GRLTimeScale);
-	UE_LOG(LogTemp, Log, TEXT("[RLRecorder] Time scale %.1fx applied to '%s'."), GRLTimeScale, *World->GetName());
+	UGameplayStatics::SetGlobalTimeDilation(World, EffectiveScale);
+	UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] Time scale %.1fx applied to '%s' (source: %s)."),
+	       EffectiveScale, *World->GetName(),
+	       FMath::IsNearlyEqual(GRLTimeScale, 1.f) ? TEXT("Project Settings") : TEXT("CVar rts.ai.timescale"));
 }
 
 namespace

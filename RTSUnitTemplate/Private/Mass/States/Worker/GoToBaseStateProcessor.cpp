@@ -180,9 +180,87 @@ void UGoToBaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, F
                 }
             }
 
+            // --- 1b2. Pfadende-Settle (Variante b aus #150, R131) ---
+            // GEMESSEN: ein Arbeiter stand von Sekunde 10 bis 160 bei Dist 784 zur Basis, aber
+            // nur 12 Einheiten von seinem eigenen MoveTarget.Center. Der Server klemmt Center
+            // auf das Pfadende (#105) - reicht der Pfad nicht bis zur Basis, hat die Einheit
+            // ihr Ziel erreicht, ohne die Ankunftsbedingung oben je erfuellen zu koennen.
+            // Ein neues Ziel zu setzen hilft nachweislich NICHT (der Server klemmt sofort
+            // wieder auf dasselbe Pfadende; genau deshalb blieb diese Klasse beim ersten Fix
+            // unveraendert). Also derselbe Ausgang wie beim Crowd-Settle daneben: abladen und
+            // neu disponieren, statt auf eine Ankunft zu warten, die der Pfad nicht hergibt.
+            if (bHasVelocity && !AIState.SwitchingState &&
+                AIState.StateTimer >= PathEndSettleMinStateTime &&
+                DistanceToTargetCenter > WorkerStats.BaseArrivalDistance * CrowdSettleRadiusMultiplier)
+            {
+                const float ZielAbstand = FVector::Dist2D(CurrentTransform.GetLocation(), MoveTarget.Center);
+                // Tempo mitpruefen, damit eine Einheit, die gerade normal auf einen nahen
+                // Zwischenpunkt zulaeuft, nicht faelschlich abgeraeumt wird.
+                if (ZielAbstand <= PathEndSettleRadius &&
+                    VelocityList[i].Value.Size2D() <= CrowdSettleSpeedThreshold)
+                {
+                    AIState.SwitchingState = true;
+                    StopMovement(MoveTarget, World);
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(ChunkContext, UnitSignals::ReachedBase, Entity);
+                    }
+                    continue;
+                }
+            }
+
+            // --- 1c. Diagnose #150: Arbeiter haengt UNTERWEGS (nur Messung, kein Eingriff) ---
+            // Der Crowd-Settle darueber verlangt Basisnaehe. Wer weiter draussen blockiert wird,
+            // faellt durch beide Raster: das MoveTarget wird hier bewusst nicht mehr nachgefuehrt
+            // (siehe der auskommentierte Aufruf unten, Fix gegen die R105-Endlosschleife), also
+            // bleibt die Einheit auf ihr altes Ziel gedreht stehen - genau das vom Nutzer
+            // gemeldete "dreht sich auf der Stelle, waehrend sie eine Ressource traegt".
+            // Diese Zeile stellt nur fest, OB und WIE OFT das passiert. Vor Auslieferung raus.
+            if (bHasVelocity && AIState.StateTimer >= StuckLogIntervalSeconds &&
+                DistanceToTargetCenter > WorkerStats.BaseArrivalDistance * CrowdSettleRadiusMultiplier)
+            {
+                const float Speed2D = VelocityList[i].Value.Size2D();
+                if (Speed2D <= StuckLogSpeedThreshold)
+                {
+                    // Nur beim Ueberschreiten eines Vielfachen loggen - sonst kaeme bei
+                    // ExecutionInterval 0.1 s je Einheit zehnmal pro Sekunde eine Zeile.
+                    const int32 VorherStufe = (int32)((AIState.StateTimer - ExecutionInterval) / StuckLogIntervalSeconds);
+                    const int32 JetztStufe  = (int32)(AIState.StateTimer / StuckLogIntervalSeconds);
+                    if (JetztStufe > VorherStufe)
+                    {
+                        const FVector Ort = CurrentTransform.GetLocation();
+                        // ZielAbst = Entfernung zum aktuellen MoveTarget.Center, NICHT zur Basis.
+                        // Der Unterschied entscheidet die Diagnose der Variante (b): ist er klein,
+                        // waehrend Dist zur Basis gross bleibt, dann klemmt der Server Center auf
+                        // ein entartetes Pfadende (der Arbeiter laeuft auf den Punkt zu, auf dem er
+                        // schon steht) - das ist der Mechanismus aus #105. Ist er dagegen gross,
+                        // will die Einheit wirklich weiter und wird physisch aufgehalten.
+                        const float ZielAbst = FVector::Dist2D(Ort, MoveTarget.Center);
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[ArbeiterHaengt] %d %d Dist %d Zeit %.1f Tempo %.0f ZielAbst %d ZielRest %d"),
+                            FMath::RoundToInt(Ort.X), FMath::RoundToInt(Ort.Y),
+                            FMath::RoundToInt(DistanceToTargetCenter), AIState.StateTimer, Speed2D,
+                            FMath::RoundToInt(ZielAbst),
+                            FMath::RoundToInt(MoveTarget.DistanceToGoal));
+
+                        // Der Ausweg: Ziel neu setzen, damit der Laeufer einen frischen Pfad
+                        // anfordert. BEWUSST nur hier, im selben ratenbegrenzten Zweig - also
+                        // hoechstens alle StuckLogIntervalSeconds einmal und nur bei belegtem
+                        // Stillstand. Genau daran ist R105 gescheitert: der Aufruf stand
+                        // ungebremst in JEDEM Takt, und weil die Pfadsuche die Geschwindigkeit
+                        // auf null setzt, hat er die Einheit dauerhaft gelaehmt statt befreit.
+                        if (!AIState.SwitchingState)
+                        {
+                            UpdateMoveTarget(MoveTarget, WorkerStats.BasePosition,
+                                             CombatStatsList[i].RunSpeed, World);
+                        }
+                    }
+                }
+            }
+
             //if (!AIState.SwitchingState)
                 //UpdateMoveTarget(MoveTarget, WorkerStats.BasePosition, CombatStatsList[i].RunSpeed, World);
-            
+
 
             // --- 2. Movement Logic ---
         } // End loop through entities

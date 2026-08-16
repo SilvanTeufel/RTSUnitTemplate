@@ -185,6 +185,75 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     bool DestroyAfterBuild = true;
 
+	/**
+	 * Marks this as a DEFENSE build area (tower, spore, bunker...). Such areas are pushed toward the
+	 * nearest enemy base on drop, because the AI otherwise places them behind its own base - it drops
+	 * buildings under its camera, and the camera sits back with the workers. Measured: defense buildings
+	 * ended up ~2300 units BEHIND the base centre while the rest of the base reached ~930 forward.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
+	bool bIsDefenseArea = false;
+
+	/**
+	 * A build area that nobody ever starts is abandoned after this many seconds: it is destroyed and,
+	 * if it had already been paid for, the ConstructionCost is refunded. Prevents stray areas from
+	 * sitting on the map forever and blocking placement. Set <= 0 to disable.
+	 *
+	 * CURRENTLY 0 (off) while tracking down the Xeno collapse: with the defence push already ruled out,
+	 * this timer is the next suspect - in the failing runs the Xeno base never grew past 4-6 buildings
+	 * (14-22 in the good ones), which is what an over-eager cleanup looks like.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
+	float AbandonTimeoutSeconds = 0.f;
+
+	/** Server-side timer for AbandonTimeoutSeconds. */
+	FTimerHandle AbandonTimerHandle;
+
+	/** Destroys this area (with refund) if no worker/ConstructionUnit ever picked it up. */
+	UFUNCTION()
+	void AbandonIfUnclaimed();
+
+	/**
+	 * AI ONLY: how long a build area may stay orphaned before it is removed and refunded.
+	 *
+	 * Difference to AbandonTimeoutSeconds above: that one is a ONE-SHOT timer armed at BeginPlay, so it
+	 * only ever catches areas that were never claimed at all. It cannot see an area that HAD a builder
+	 * and lost it - worker killed on the way, worker pulled off by a group order - which is exactly the
+	 * case the human player reported ("WorkAreas an denen keiner baut und keine ConstructionUnit ist").
+	 * This check is recurring and ignores StartedBuilding, so a half-started area whose builder died is
+	 * cleaned up too. <= 0 disables.
+	 *
+	 * The human player's areas are never touched by this - they are their own to manage.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
+	float AiOrphanTimeoutSeconds = 45.f;
+
+	/**
+	 * Longer grace period for an area that was NEVER claimed by anyone. Such an area is not necessarily
+	 * dead - the AI drops it and the worker is only assigned once one is free, which can take a while.
+	 * Deleting those on the short timeout is exactly the over-eager cleanup that once cut the Xeno base
+	 * from ~14-22 buildings down to 5-7.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
+	float AiUnclaimedTimeoutSeconds = 150.f;
+
+	/** Poll interval for AiOrphanTimeoutSeconds. Kept coarse: the claim scan walks all units. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
+	float AiOrphanCheckInterval = 10.f;
+
+	/** Server-side timer + accumulator for AiOrphanTimeoutSeconds. */
+	FTimerHandle AiOrphanTimerHandle;
+	float AiOrphanElapsed = 0.f;
+
+	/** Set once this area has been claimed by anyone; picks the short timeout from then on. */
+	bool bAiOrphanWasClaimed = false;
+
+	UFUNCTION()
+	void TickAiOrphanCheck();
+
+	/** True if the team owning this area is played by an AI controller (not the human). */
+	bool IsOwnedByAiTeam() const;
+
     // Guard to ensure the final building is spawned only once per build session
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
     bool bFinalBuildingSpawned = false;

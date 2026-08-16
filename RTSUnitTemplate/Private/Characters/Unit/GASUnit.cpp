@@ -11,6 +11,8 @@
 #include <GameplayEffectTypes.h>
 
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/MassUnitBase.h"
+#include "Mass/UnitMassTag.h"
 #include "Engine/Engine.h"
 #include "Characters/Unit/LevelUnit.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -52,10 +54,18 @@ void AGASUnit::Tick(float DeltaTime)
 
 	if (HasAuthority())
 	{
+		CastInvariantTimer += DeltaTime;
+		if (CastInvariantTimer >= 0.25f)
+		{
+			CastInvariantTimer = 0.f;
+			EnforceCastingInvariant();
+		}
+
 		QueueFallbackTimer += DeltaTime;
 		if (QueueFallbackTimer >= 1.0f)
 		{
 			QueueFallbackTimer = 0.f;
+			ClearStaleActivatedAbility();
 			if (!ActivatedAbilityInstance && !AbilityQueue.IsEmpty())
 			{
 				ActivateNextQueuedAbility();
@@ -320,6 +330,66 @@ bool AGASUnit::IsAnyAbilityActive() const
 }
 
 
+void AGASUnit::EnforceCastingInvariant()
+{
+	AUnitBase* SelfUnit = Cast<AUnitBase>(this);
+	AMassUnitBase* MassSelf = Cast<AMassUnitBase>(this);
+	if (!SelfUnit || !MassSelf) return;
+
+	const bool bCastAbilityActive =
+		ActivatedAbilityInstance
+		&& ActivatedAbilityInstance->bUseCastingFallbackProcessor
+		&& ActivatedAbilityInstance->IsActive();
+
+	const bool bImCasting = (SelfUnit->GetUnitState() == UnitData::Casting);
+
+	// Regel 1: aktive Cast-Ability ohne Casting-Zustand.
+	// Regel 2: kein aktiver Cast, Einheit haengt trotzdem im Casting.
+	const bool bVerstoss = (bCastAbilityActive && !bImCasting) || (!bCastAbilityActive && bImCasting);
+
+	if (!bVerstoss)
+	{
+		CastInvariantStrikes = 0;
+		return;
+	}
+
+	// Ein einzelner Durchlauf kann ein legitimes Umschaltfenster sein (Aktivierung laeuft gerade,
+	// EndCast ist unterwegs). Erst zwei Treffer in Folge gelten als Verstoss.
+	if (++CastInvariantStrikes < 2) return;
+	CastInvariantStrikes = 0;
+
+	if (bCastAbilityActive)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CastInvariant] %s: '%s' laeuft, Einheit castet aber NICHT (Zustand=%d) - wird nachgezogen"),
+			*GetName(), *GetNameSafe(ActivatedAbilityInstance), (int32)SelfUnit->GetUnitState());
+		MassSelf->SwitchEntityTag(FMassStateCastingTag::StaticStruct());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[CastInvariant] %s: keine Cast-Ability aktiv, Einheit haengt im Casting - wird geloest"),
+			*GetName());
+		MassSelf->SwitchEntityTag(FMassStateIdleTag::StaticStruct());
+	}
+}
+
+void AGASUnit::ClearStaleActivatedAbility()
+{
+	// Self-heal for a stranded ActivatedAbilityInstance.
+	//
+	// The pointer is normally cleared by OnAbilityEnded. That callback only fires when GAS really ends
+	// the ability - and UGameplayAbilityBase::EndAbility returns early via IsEndAbilityValid() when the
+	// Blueprint ends itself DURING activation. GA_BuildUnit_Parent_AH does exactly that on its failure
+	// paths ("NOT ENOUGH RESOURCES", "already casting", "cannot build while flying"). The instance was
+	// then finished but still registered here, and ActivateAbilityByInputID refuses every further
+	// ability while one is registered - so a single failed press locked the unit out of ALL abilities
+	// for the rest of the match. Measured on BP_BuildingBase_Singularian_DataCenter_C_1: four presses
+	// in a row logged "busy, 'GA_BuildUnit_EchoNode_AH_C_0' still active" with the queue filling up.
+	if (ActivatedAbilityInstance && !ActivatedAbilityInstance->IsActive())
+	{
+		ActivatedAbilityInstance = nullptr;
+	}
+}
+
 bool AGASUnit::ActivateAbilityByInputID(
 	EGASAbilityInputID InputID,
 	const TArray<TSubclassOf<UGameplayAbilityBase>>& AbilitiesArray,
@@ -331,6 +401,8 @@ bool AGASUnit::ActivateAbilityByInputID(
 	{
 		return false;
 	}
+
+	ClearStaleActivatedAbility();
 
 	TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
 
@@ -363,6 +435,8 @@ bool AGASUnit::ActivateAbilityByInputID(
 			AbilityQueue.Enqueue(Queued);
 			AbilityQueueSize = QueSnapshot.Num();
 		}
+		// A stale ActivatedAbilityInstance locks the unit out of EVERY ability, which looks exactly like
+		// "casting does not start any more". Name it instead of failing silently.
 		return false;
 	}
 	else
@@ -371,6 +445,9 @@ bool AGASUnit::ActivateAbilityByInputID(
 		CurrentInstigatorPC = InstigatorPC;
 
 		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
+		if (!bIsActivated)
+		{
+		}
 		if (bIsActivated && ActivatedAbilityInstance)
 		{
 			ActivatedAbilityInstance->AbilityInputID = InputID;
@@ -471,6 +548,10 @@ void AGASUnit::ActivateNextQueuedAbility()
 {
 	if (!HasAuthority()) return;
 
+	// Without this the queue drains never again once a finished instance is stranded - the entries
+	// pile up (measured: queued=4) and nothing ever runs.
+	ClearStaleActivatedAbility();
+
 	if (ActivatedAbilityInstance)
 	{
 		return;
@@ -523,7 +604,20 @@ void AGASUnit::ActivateNextQueuedAbility()
 				// A cooldown-blocked entry therefore goes back to the FRONT and is retried. Any other
 				// failure keeps the old drop behaviour, so an entry that can never activate (missing
 				// resources, disabled ability) cannot stall the queue forever.
-				if (IsAbilityOnCooldownByClass(Next.AbilityClass))
+				// VORUEBERGEHENDE Hindernisse duerfen den Eintrag nicht kosten. Neben dem Cooldown
+				// gehoert dazu ein gerade laufender Cast: der Riegel in
+				// UGameplayAbilityBase::CanActivateAbility lehnt Cast-Abilities ab, solange die Einheit
+				// castet - und unmittelbar nach einem Abbruch steht sie dort noch fuer den Bruchteil
+				// einer Sekunde. Ohne diese Ausnahme wird der bereits entnommene Eintrag verworfen, der
+				// Timer holt sofort den naechsten, der genauso scheitert, und die Warteschlange blutet
+				// Eintrag fuer Eintrag aus. Von aussen sieht das aus, als haette ein einziges Abbrechen
+				// die GANZE Queue geleert - vom Nutzer am 16.08.2026 genau so gemeldet.
+				const AUnitBase* SelfUnit = Cast<AUnitBase>(this);
+				const bool bNurVoruebergehend =
+					IsAbilityOnCooldownByClass(Next.AbilityClass)
+					|| (SelfUnit && SelfUnit->GetUnitState() == UnitData::Casting);
+
+				if (bNurVoruebergehend)
 				{
 					TArray<FQueuedAbility> Pending;
 					FQueuedAbility Item;

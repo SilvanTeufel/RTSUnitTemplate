@@ -29,6 +29,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/BoxComponent.h"
 #include "NavigationSystem.h"
+#include "NavigationData.h"   // FPathFindingQuery / IsPartial - nur fuer die Bauplatz-Diagnose
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Default.h"
 #include "Engine/EngineTypes.h"
@@ -4520,6 +4521,65 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		Worker->BuildArea->PlannedBuilding = true;
 		Worker->BuildArea->ControlTimer = 0.f;
 		Worker->BuildArea->AddAreaToGroup();
+
+		// REINE DIAGNOSE, kein Eingriff - Nutzerpunkte 2 und 4.
+		//
+		// Der Pruefsatz in DropWorkAreaForUnit (Zeile ~5241 ff.) kontrolliert ausschliesslich den
+		// BAUPLATZ SELBST: Navmesh, Steigung, Klippennaehe, Sperrzone, Ressourcennaehe,
+		// Ueberlappung. Was er NICHT prueft, ist die ERREICHBARKEIT vom Arbeiter aus. Ein Platz
+		// kann alle Pruefungen bestehen und trotzdem auf einer Navmesh-Insel liegen, zu der es
+		// keinen Weg gibt - oder der Weg wurde inzwischen zugebaut. Das sind zwei verschiedene
+		// Fehler, und diese Zeile trennt sie:
+		//   Ergebnis=Fehlgeschlagen -> gar kein Weg (Insel / abgeschnitten)
+		//   Ergebnis=Teilweise      -> Weg endet unterwegs, RestZumPlatz zeigt wie weit davor
+		//   Ergebnis=Voll           -> Platz ist erreichbar, das Problem liegt woanders
+		if (UWorld* DiagWorld = GetWorld())
+		{
+			if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(DiagWorld))
+			{
+				const FVector Von = Worker->GetActorLocation();
+				const FVector Nach = Worker->BuildArea->GetActorLocation();
+				if (const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance())
+				{
+					FPathFindingQuery Query(nullptr, *NavData, Von, Nach);
+					Query.SetAllowPartialPaths(true);
+					const FPathFindingResult Ergebnis = NavSys->FindPathSync(Query, EPathFindingMode::Regular);
+
+					const TCHAR* Lage = TEXT("Fehlgeschlagen");
+					float RestZumPlatz = -1.f;
+					if (Ergebnis.IsSuccessful() && Ergebnis.Path.IsValid())
+					{
+						const FVector Ende = Ergebnis.Path->GetEndLocation();
+						RestZumPlatz = FVector::Dist2D(Ende, Nach);
+						Lage = Ergebnis.Path->IsPartial() ? TEXT("Teilweise") : TEXT("Voll");
+					}
+
+					// BEIDE ENDEN messen, nicht nur das Ergebnis.
+					//
+					// In Runde 94 habe ich aus fehlgeschlagenen Pfaden geschlossen, die BAUPLAETZE
+					// seien unerreichbar, und daraufhin abgelehnt - die Xeno brachen komplett
+					// zusammen (165 Ablehnungen, 0 Gebaeude). Tatsaechlich stand der ARBEITER
+					// neben dem Navmesh, und von dort schlaegt jeder Pfad fehl, egal wohin.
+					// Eine Pfadsuche misst immer BEIDE Enden. Deshalb hier getrennt:
+					//   ArbeiterAbw gross -> der Arbeiter steht daneben, der Platz ist unschuldig
+					//   PlatzAbw gross    -> der Bauplatz liegt daneben
+					//   beide klein       -> beide auf dem Navmesh, es gibt schlicht keine Verbindung
+					const FVector Suchbox(500.f, 500.f, 500.f);
+					FNavLocation ProjArbeiter, ProjPlatz;
+					const bool bArbeiterAufNav = NavSys->ProjectPointToNavigation(Von, ProjArbeiter, Suchbox);
+					const bool bPlatzAufNav   = NavSys->ProjectPointToNavigation(Nach, ProjPlatz, Suchbox);
+					const float ArbeiterAbw = bArbeiterAufNav ? FVector::Dist(Von, ProjArbeiter.Location) : -1.f;
+					const float PlatzAbw    = bPlatzAufNav   ? FVector::Dist(Nach, ProjPlatz.Location)   : -1.f;
+
+					UE_LOG(LogTemp, Warning,
+						TEXT("[BauplatzWeg] Team=%d Platz=(%.0f, %.0f) Arbeiter=(%.0f, %.0f) Luftlinie=%.0f Ergebnis=%s RestZumPlatz=%.0f ArbeiterAufNav=%d ArbeiterAbw=%.0f PlatzAufNav=%d PlatzAbw=%.0f"),
+						Worker->TeamId, Nach.X, Nach.Y, Von.X, Von.Y,
+						FVector::Dist2D(Von, Nach), Lage, RestZumPlatz,
+						bArbeiterAufNav ? 1 : 0, ArbeiterAbw,
+						bPlatzAufNav ? 1 : 0, PlatzAbw);
+				}
+			}
+		}
 		// Register on the site like the other two dispatch paths do (SendWorkerToWorkArea, SwitchBuildArea).
 		// Without it the area reports zero workers while someone is walking to it, so it reads as unmanned
 		// and other logic that counts Workers.Num() treats the site as free.
@@ -4665,7 +4725,120 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 	if (DraggedWorkArea && DraggedWorkArea->PlannedBuilding == false)
 	{
 		const bool bIsExtensionArea = DraggedWorkArea->IsExtensionArea;
-		
+
+		// Defense areas belong at the FRONT of the base. The AI drops buildings under its camera, and the
+		// camera sits back with the workers - measured, ThresherRoot/VenomCyst ended up ~2300 units
+		// BEHIND the base centre while the rest of the base reached ~930 forward. Push them toward the
+		// nearest ENEMY BASE (not AverageEnemyPosition: that unit centroid points into the middle when
+		// enemies stand on two sides). Runs BEFORE the overlap guard so the pushed spot is the one checked.
+		// Logged BEFORE the branch: the first attempt logged only inside the success path, so when the
+		// push never happened there was no way to tell WHICH condition rejected it.
+		UE_LOG(LogTemp, Warning, TEXT("[Defense] drop %s: isDefense=%d push=%.0f unit=%d"),
+		       *DraggedWorkArea->GetName(), DraggedWorkArea->bIsDefenseArea ? 1 : 0,
+		       DefenseAreaForwardPush, UnitBase ? 1 : 0);
+
+		if (DraggedWorkArea->bIsDefenseArea && DefenseAreaForwardPush > 0.f && UnitBase)
+		{
+			const FVector From = DraggedWorkArea->GetActorLocation();
+			const ABuildingBase* NearestEnemy = nullptr;
+			double BestSq = TNumericLimits<double>::Max();
+			for (TActorIterator<ABuildingBase> ItE(GetWorld()); ItE; ++ItE)
+			{
+				ABuildingBase* Enemy = *ItE;
+				if (!IsValid(Enemy) || Enemy->TeamId == UnitBase->TeamId) continue;
+				const double DistSq = FVector::DistSquared2D(From, Enemy->GetActorLocation());
+				if (DistSq < BestSq) { BestSq = DistSq; NearestEnemy = Enemy; }
+			}
+
+			if (NearestEnemy)
+			{
+				const FVector Dir = (NearestEnemy->GetActorLocation() - From).GetSafeNormal2D();
+				if (!Dir.IsNearlyZero())
+				{
+					if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+					{
+						FNavLocation Projected;
+						if (NavSys->ProjectPointToNavigation(From + Dir * DefenseAreaForwardPush,
+						                                     Projected, FVector(600.f, 600.f, 600.f)))
+						{
+							DraggedWorkArea->SetActorLocation(Projected.Location);
+							UE_LOG(LogTemp, Log, TEXT("[Defense] %s pushed %.0f toward %s."),
+							       *DraggedWorkArea->GetName(), DefenseAreaForwardPush, *NearestEnemy->GetName());
+						}
+					}
+				}
+			}
+		}
+
+		// A work area must NEVER come down on top of an existing building or another work area - not on
+		// one's own team's, and least of all on an enemy's. Extension areas used to skip the whole rule
+		// set below, which is how Singularian extensions ended up sitting on Xeno BroodHives; base areas
+		// had no such check at all, which is how a Xeno BroodHive area landed on a Singularian DataCenter.
+		// The single legitimate exception is an extension overlapping the building it attaches to.
+		{
+			ABuildingBase* ParentBuilding = nullptr;
+			if (bIsExtensionArea)
+			{
+				ParentBuilding = Cast<ABuildingBase>(UnitBase);
+				if (!ParentBuilding)
+				{
+					if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase)) ParentBuilding = Worker->Base;
+				}
+			}
+
+			const FVector DropLoc = DraggedWorkArea->GetActorLocation();
+			// Buildings get the generous reach (they occupy real footprint); work areas only need to be
+			// kept from literally overlapping, otherwise dense resource fields would block all building.
+			// 120 was far too small: a building's footprint is much larger than that, so an area dropped
+			// ~200 units away passed the check and still sat visually on top of the building - reported
+			// for enemy buildings and especially for extension sites. Use the building's own bounds when
+			// available and never go below MinBuildingClearance.
+			float BuildingReach = FMath::Max(MinBuildingClearance,
+			                                 DraggedWorkArea->ResourcePlacementDistance * 0.5f);
+			const AActor* Blocker = nullptr;
+
+			for (TActorIterator<ABuildingBase> ItB(GetWorld()); ItB; ++ItB)
+			{
+				ABuildingBase* Other = *ItB;
+				if (!IsValid(Other) || Other == ParentBuilding) continue;
+
+				// The building's real footprint beats any fixed radius: a BroodHive and a Tesla are not
+				// the same size, and a single constant is wrong for one of them.
+				float Reach = BuildingReach;
+				FVector Origin, Extent;
+				Other->GetActorBounds(true, Origin, Extent);
+				Reach = FMath::Max(Reach, FMath::Max(Extent.X, Extent.Y));
+
+				if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < Reach) { Blocker = Other; break; }
+			}
+
+			if (!Blocker)
+			{
+				for (TActorIterator<AWorkArea> ItW(GetWorld()); ItW; ++ItW)
+				{
+					AWorkArea* Other = *ItW;
+					if (!IsValid(Other) || Other == DraggedWorkArea) continue;
+					// ONLY other BUILD areas block. Resource places are not obstacles - blocking against
+					// them stopped the AI from building near resources at all (measured: Xeno pods fell
+					// to 0-1 and the ratio dropped from 137% to 53%, with
+					// "LarvalPod would sit on BP_WorkArea_ResourcePlace_Primary" in the log).
+					if (Other->Type != WorkAreaData::BuildArea) continue;
+					if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < WorkAreaBlockRadius) { Blocker = Other; break; }
+				}
+			}
+
+			if (Blocker)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: rejected, %s would sit on %s."),
+				       *DraggedWorkArea->GetName(), *Blocker->GetName());
+				DraggedWorkArea->Destroy();
+				UnitBase->BuildArea = nullptr;
+				UnitBase->CurrentDraggedWorkArea = nullptr;
+				CancelCurrentAbility(UnitBase);
+				return true;
+			}
+		}
+
 		// 1. Ensure grounded and resolve distances (move if colliding or too close to resources)
 		if (!bIsExtensionArea)
 		{
@@ -4922,7 +5095,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 						for (TActorIterator<ABuildingBase> ItBD(GetWorld()); ItBD; ++ItBD)
 						{
 							ABuildingBase* Building = *ItBD;
-							if (!IsValid(Building) || !Building->IsBase || Building->TeamId != UnitBase->TeamId) continue;
+							// KEIN Teamfilter: ein Platz ist auch dann belegt, wenn dort eine FREMDE Basis
+							// steht. Vorher stand hier "Building->TeamId != UnitBase->TeamId", womit jede
+							// Fraktion nur ihre eigenen Basen sah - Xeno und Singularianer bauten dadurch
+							// uebereinander. Die WorkArea-Schleife daneben filtert ebenfalls nicht nach
+							// Team, war also schon richtig.
+							if (!IsValid(Building) || !Building->IsBase) continue;
 							NearestBaseDistSq = FMath::Min(NearestBaseDistSq, (double)FVector::DistSquared2D(Building->GetActorLocation(), Marker->GetActorLocation()));
 						}
 
@@ -4990,7 +5168,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 						for (TActorIterator<ABuildingBase> ItBD(GetWorld()); ItBD; ++ItBD)
 						{
 							ABuildingBase* Building = *ItBD;
-							if (!IsValid(Building) || !Building->IsBase || Building->TeamId != UnitBase->TeamId) continue;
+							// KEIN Teamfilter: ein Platz ist auch dann belegt, wenn dort eine FREMDE Basis
+							// steht. Vorher stand hier "Building->TeamId != UnitBase->TeamId", womit jede
+							// Fraktion nur ihre eigenen Basen sah - Xeno und Singularianer bauten dadurch
+							// uebereinander. Die WorkArea-Schleife daneben filtert ebenfalls nicht nach
+							// Team, war also schon richtig.
+							if (!IsValid(Building) || !Building->IsBase) continue;
 							NearestBaseDistSq = FMath::Min(NearestBaseDistSq, (double)FVector::DistSquared2D(Building->GetActorLocation(), ResWA->GetActorLocation()));
 						}
 
@@ -5070,9 +5253,40 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				}
 				else
 				{
+				// Nutzerregel: gewoehnliche Gebaeude duerfen nur auf der HOEHE/Ebene einer bereits
+				// stehenden eigenen MainBase landen. Ohne das setzt die KI Baustellen auf Felsen und
+				// Plateaus, die vom Navmesh abgeschnitten sind - gemessen in #110/#111, wo Arbeiter
+				// 330-481 Einheiten ERHOEHT ueber dem begehbaren Boden standen und jede Pfadsuche
+				// scheiterte. Die MainBase selbst ist ausgenommen: sie definiert die Ebene erst.
+				// Rueckfall: steht noch keine eigene Basis, greift die Regel nicht (sonst koennte die
+				// KI ueberhaupt nicht anfangen zu bauen).
+				static constexpr float AiBuildHeightTolerance = 400.f;
+				auto IsOnOwnBaseLevel = [this, UnitBase](const FVector& Loc, bool& bOutHadBase) -> bool
+				{
+					bOutHadBase = false;
+					for (TActorIterator<ABuildingBase> ItLvl(GetWorld()); ItLvl; ++ItLvl)
+					{
+						ABuildingBase* Base = *ItLvl;
+						if (!IsValid(Base) || !Base->IsBase || Base->TeamId != UnitBase->TeamId) continue;
+						bOutHadBase = true;
+						if (FMath::Abs(Loc.Z - Base->GetActorLocation().Z) <= AiBuildHeightTolerance)
+						{
+							return true;
+						}
+					}
+					return false;
+				};
+				auto HeightRuleOk = [&](const FVector& Loc) -> bool
+				{
+					if (bIsMainBase) return true;
+					bool bHadBase = false;
+					const bool bOk = IsOnOwnBaseLevel(Loc, bHadBase);
+					return bHadBase ? bOk : true;
+				};
+
 				DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Origin));
 				PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
-				bPlacementValid = EvaluatePlacement();
+				bPlacementValid = EvaluatePlacement() && HeightRuleOk(DraggedWorkArea->GetActorLocation());
 
 				for (int32 RadiusIndex = 0; RadiusIndex < 5 && !bPlacementValid; ++RadiusIndex)
 				{
@@ -5083,7 +5297,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 						const FVector Candidate = Origin + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.f);
 						DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Candidate));
 						PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
-						bPlacementValid = EvaluatePlacement();
+						bPlacementValid = EvaluatePlacement() && HeightRuleOk(DraggedWorkArea->GetActorLocation());
 					}
 					if (bPlacementValid) break;
 				}
@@ -5110,6 +5324,48 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d search %s at %s"),
 					       UnitBase->TeamId, bPlacementValid ? TEXT("SUCCEEDED") : TEXT("FAILED"),
 					       *DraggedWorkArea->GetActorLocation().ToCompactString());
+				}
+			}
+
+			// ERREICHBARKEIT - die Pruefung, die bisher fehlte (Nutzerpunkte 2 und 4).
+			//
+			// Alle Pruefungen darueber betreffen den BAUPLATZ SELBST: Navmesh, Steigung,
+			// Klippennaehe, Sperrzone, Ressourcennaehe, Ueberlappung. Keine davon fragt, ob der
+			// Arbeiter da ueberhaupt HINKOMMT. Ein Platz kann auf sauberem Navmesh liegen und
+			// trotzdem auf einer Insel sein, zu der kein Weg fuehrt.
+			//
+			// Gemessen am 2026-08-14 ueber einen vollen Lauf mit der Zeile [BauplatzWeg]:
+			//   Singularianer 30 Bauplaetze, davon 30 voll erreichbar - kein einziger Ausfall.
+			//   Xeno          36 Bauplaetze, davon 11 OHNE JEDEN WEG und 1 nur teilweise.
+			// Ein Drittel der Xeno-Bauplaetze war also von vornherein unerreichbar. Die
+			// bestehenden Pruefungen fingen davon nichts ab (3 Ablehnungen im ganzen Lauf).
+			//
+			// Abgelehnt wird NUR der Totalausfall (gar kein Pfad). Teilpfade bleiben zulaessig:
+			// ein Bauplatz hat Kollision, der Pfad endet also regelmaessig davor - das ist der
+			// Normalfall und keine Stoerung (siehe die Ankunftskorrektur in #106).
+			if (bPlacementValid && bCheckBuildSiteReachability && DraggedWorkArea && UnitBase)
+			{
+				if (UWorld* ReachWorld = GetWorld())
+				{
+					if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(ReachWorld))
+					{
+						if (const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance())
+						{
+							const FVector Von = UnitBase->GetActorLocation();
+							const FVector Nach = DraggedWorkArea->GetActorLocation();
+							FPathFindingQuery Query(nullptr, *NavData, Von, Nach);
+							Query.SetAllowPartialPaths(true);
+							const FPathFindingResult Ergebnis = NavSys->FindPathSync(Query, EPathFindingMode::Regular);
+
+							if (!Ergebnis.IsSuccessful() || !Ergebnis.Path.IsValid())
+							{
+								UE_LOG(LogTemp, Warning,
+									TEXT("[BauplatzUnerreichbar] Team=%d Platz=(%.0f, %.0f) Arbeiter=(%.0f, %.0f) Luftlinie=%.0f - abgelehnt, kein Weg"),
+									UnitBase->TeamId, Nach.X, Nach.Y, Von.X, Von.Y, FVector::Dist2D(Von, Nach));
+								bPlacementValid = false;
+							}
+						}
+					}
 				}
 			}
 
@@ -5810,9 +6066,29 @@ void AExtendedControllerBase::StopWorkOnSelectedUnit()
 	{
 		if (AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit))
 		{
+			// CheckClickOnWorkArea calls this before it even looks at what was clicked, so for the AI -
+			// which always has its whole worker tag group selected - every single work-area click wiped
+			// the build assignment of every builder that was still walking to its site (and refunded it).
+			// Measured in a developed match: 67 build targets handed out, 59 dropped before a single
+			// Build tick, 4 sites left standing untouched for the whole run. A human clicks a deliberate
+			// selection and means "stop what you are doing", so the player keeps the old behaviour.
+			if (bIsAi && IsWorkerCommittedToBuild(Worker))
+			{
+				continue;
+			}
+
 			StopWork(Worker);
 		}
 	}
+}
+
+bool AExtendedControllerBase::IsWorkerCommittedToBuild(const AWorkingUnitBase* Worker) const
+{
+	if (!IsValid(Worker)) return false;
+
+	return Worker->BuildArea != nullptr
+		|| Worker->GetUnitState() == UnitData::GoToBuild
+		|| Worker->GetUnitState() == UnitData::Build;
 }
 
 
@@ -6224,6 +6500,17 @@ bool AExtendedControllerBase::CheckClickOnWorkArea(FHitResult Hit_Pawn)
 
 						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(SelectedUnits[i]);
 						if (!Worker) continue;
+
+						// The AI always selects the whole worker tag group, so every resource order used to
+						// yank the builders that were still walking to a site off their job. Measured over
+						// 60s: 112 build assignments, 100 of them dropped again before a single Build tick,
+						// only 12 finished - the sites then stand around unbuilt forever. A human clicks a
+						// deliberate selection, so the override stays intact for the player.
+						if (bIsAi && IsWorkerCommittedToBuild(Worker))
+						{
+							continue;
+						}
+
 						Worker->RemoveFocusEntityTarget();
 						SendWorkerToResource(Worker, WorkArea);
 					}

@@ -184,6 +184,8 @@ void AUnitBase::ApplyStartupSupplyCost()
 		ResourceGameMode->ModifyResource(SupplyType, TeamId, -(float)Amount);
 	}
 
+	// Remember the exact figure so ReleaseUnitSupply hands back what was taken, not an estimate.
+	ChargedSupplyAmount = Amount;
 	bStartupSupplyCharged = true;
 }
 
@@ -201,8 +203,11 @@ void AUnitBase::ReleaseUnitSupply()
 		return;
 	}
 
-	// Mirror of ApplyStartupSupplyCost: give back exactly the footprint that was billed.
-	const int32 Amount = (StartupSupplyCost > 0) ? StartupSupplyCost : UnitSpaceNeeded;
+	// Prefer the figure that was actually billed. UnitSpaceNeeded is only the fallback for units that
+	// paid through their build ability, where the exact amount is not recorded on the unit.
+	const int32 Amount = (ChargedSupplyAmount > 0)
+		? ChargedSupplyAmount
+		: ((StartupSupplyCost > 0) ? StartupSupplyCost : UnitSpaceNeeded);
 	if (Amount <= 0)
 	{
 		return;
@@ -230,11 +235,55 @@ void AUnitBase::ReleaseUnitSupply()
 	}
 }
 
+void AUnitBase::Destroyed()
+{
+	// Messung: STERBEN/Verschwinden einer Einheit. Gegenstueck zu [EinheitAuf].
+	// Destroyed() feuert genau einmal je Actor - der frueher benutzte Signalweg
+	// (UnitStateProcessor::HandleStartDead) feuerte fuer EIN totes Gebaeude ueber
+	// tausendmal und zaehlte damit Signalaufrufe statt Tode. Reine Protokollzeile.
+	// Position mitschreiben: sie unterscheidet zwei Erklaerungen fuer die in R125
+	// belegte doppelte Verlustrate der Xeno (31 gegen 17 bei gleicher Produktion).
+	// Weit gestreute Sterbeorte -> die Einheiten kommen einzeln an.
+	// Gebuendelte Sterbeorte auf dem Weg -> Nahkampf stirbt vor dem Fernkampf.
+	// Xeno-Basis liegt bei (6023, -6839); die Entfernung dorthin wird beim Auswerten
+	// gerechnet, nicht hier - das Log soll roh bleiben.
+	// AKTORNAME zusaetzlich: nur damit laesst sich EIN Arbeiter verfolgen. In R137
+	// blieben 96 "Arbeitertode" je Lauf unerklaert - Kampf ist ausgeschlossen (nur
+	// 0-3 Gegner in der Basis) und Bauverbrauch auch (der Arbeiter ueberlebt den
+	// Bauabschluss, UnitStateProcessor:565-579 schickt ihm SetUnitStatePlaceholder).
+	// Bleibt der Verdacht, dass Destroyed() hier gar keinen Tod meldet, sondern
+	// einen Actor-Wechsel. Taucht derselbe Name spaeter wieder in [EinheitAuf] auf,
+	// ist es kein Tod. Diagnosezeile - vor Auslieferung raus.
+	// ZUSTAND beim Verschwinden - das ist die entscheidende Spalte. Kampf,
+	// Bauverbrauch und Messfehler sind als Ursache ausgeschlossen (R137), also
+	// muss die Zeile selbst sagen, WAS die Einheit gerade tat. Korrelationstests
+	// haben hier nicht getragen: bei 0,41 Spawns/s liegt die Zufallserwartung
+	// fuer ein 3-s-Fenster schon bei ~70 %, ein Trefferanteil ist damit wertlos.
+	const FVector Ort = GetActorLocation();
+	UE_LOG(LogTemp, Warning, TEXT("[EinheitAb] %s %d %d %s Zustand %d Health %.0f"),
+		*GetClass()->GetName(), FMath::RoundToInt(Ort.X), FMath::RoundToInt(Ort.Y),
+		*GetName(), (int32)UnitState, Attributes ? Attributes->GetHealth() : -1.f);
+
+	Super::Destroyed();
+}
+
 void AUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Messung: ENTSTEHEN einer Einheit. Gegenstueck ist [EinheitAb] im Todespfad
+	// (UnitStateProcessor::HandleStartDead). Der Klassenname traegt Fraktion UND Typ,
+	// deshalb reicht er - TeamId ist zu diesem Zeitpunkt noch nicht zuverlaessig gesetzt.
+	// Zweck: die Frage "sterben die Einheiten oder entstehen sie gar nicht erst?"
+	// laesst sich NUR ueber Ereignisse beantworten, nie ueber Stichproben der
+	// Bestandszahl - Verlust und Neubau heben sich im Abtastintervall sonst auf.
+	// Aktorname wie in [EinheitAb] - erst das Paar erlaubt, EINEN Actor ueber
+	// seine Lebensdauer zu verfolgen (siehe Begruendung dort).
+	UE_LOG(LogTemp, Warning, TEXT("[EinheitAuf] %s %s"),
+		*GetClass()->GetName(), *GetName());
+
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+
 	{
 		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
 		{
@@ -1941,11 +1990,53 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 		GameMode->HighestSquadId++;
 		SharedSquadId = GameMode->HighestSquadId;
 	}
+
+	// Spawnabstand: der Kapselradius der zu spawnenden Klasse, doppelt, plus 10.
+	//
+	// Vorher hing `FinalSpawnLocation` NICHT von `i` ab - `UnitOffset` steht auf (0,0,0) und
+	// wurde in der Schleife nie veraendert. Alle Einheiten eines Schubs erschienen also exakt
+	// auf demselben Punkt. Der Abstand war nicht zu klein, er war null. Auseinander geschoben
+	// hat sie erst `AdjustIfPossibleButAlwaysSpawn` und die Separation danach - genau das
+	// beobachtete Abstossen. Das kann Einheiten auch auf angrenzende Geometrie druecken, was
+	// zum Befund aus #111 passt (Arbeiter 330-481 Einheiten ueber der begehbaren Flaeche).
+	float SpawnAbstand = 100.f;
+	if (UnitBaseClass)
+	{
+		if (const AUnitBase* DefaultUnit = UnitBaseClass->GetDefaultObject<AUnitBase>())
+		{
+			if (const UCapsuleComponent* Capsule = DefaultUnit->GetCapsuleComponent())
+			{
+				SpawnAbstand = Capsule->GetScaledCapsuleRadius() * 2.f + 10.f;
+			}
+		}
+	}
+
+	// Ringfoermige Verteilung: die erste Einheit in die Mitte, danach Ringe mit 6*Ring
+	// Plaetzen im Abstand Ring*SpawnAbstand. Auf diese Weise liegt jeder Nachbar - im Ring
+	// wie zwischen zwei Ringen - mindestens SpawnAbstand entfernt, und die Gruppe waechst
+	// kompakt nach aussen statt in einer langen Reihe.
+	auto RingVersatz = [SpawnAbstand](int32 Index) -> FVector
+	{
+		if (Index <= 0) return FVector::ZeroVector;
+		int32 Ring = 1;
+		int32 Erster = 1;              // erster Index dieses Rings
+		while (Index >= Erster + 6 * Ring)
+		{
+			Erster += 6 * Ring;
+			++Ring;
+		}
+		const int32 PlatzImRing = Index - Erster;
+		const int32 PlaetzeImRing = 6 * Ring;
+		const float Winkel = (2.f * PI * PlatzImRing) / PlaetzeImRing;
+		const float Radius = Ring * SpawnAbstand;
+		return FVector(FMath::Cos(Winkel) * Radius, FMath::Sin(Winkel) * Radius, 0.f);
+	};
+
 	for(int i = 0; i < UnitCount; i++)
 	{
 		FTransform UnitTransform;
-	
-		FVector FinalSpawnLocation = BaseSpawnLocation + (FVector)SpawnParameter.UnitOffset;
+
+		FVector FinalSpawnLocation = BaseSpawnLocation + (FVector)SpawnParameter.UnitOffset + RingVersatz(i);
 
 		if (bDoGroundTrace)
 		{

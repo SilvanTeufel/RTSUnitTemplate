@@ -44,7 +44,22 @@ protected:
 	
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float ExecutionInterval = 0.1f;
-	
+
+	/**
+	 * Anteil der Angriffsreichweite, bei dem Chase als "angekommen" gilt.
+	 *
+	 * MUSS 1.0 BLEIBEN, solange es keinen zwingenden Grund gibt. Ein Wert < 1 verlangt, dass die
+	 * Einheit NAEHER herangeht als ihre Angriffsreichweite - und das kann physisch unmoeglich sein:
+	 * die Reichweite wird als AttackRange + Radiensumme gerechnet, bei einem Nahkaempfer mit
+	 * Reichweite 200 und Radiensumme 150 fordert 0.9 ganze 35 Einheiten mehr Naehe, die Kollision
+	 * und Separation gar nicht zulassen. Die Einheit jagt dann ewig weiter, ohne je anzukommen -
+	 * gemeldet als "sie sehen den Gegner, laufen aber nie in Angriffsreichweite".
+	 * Das noetige Totband gegen das Hin- und Herkippen sitzt stattdessen auf der Pause-Seite
+	 * (PauseRechaseEpsilon), wo es kein Herankommen erzwingt.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate, meta=(ClampMin="0.1", ClampMax="1.0"))
+	float ChaseArrivalRangeFactor = 1.0f;
+
 private:
 	FMassEntityQuery EntityQuery;
 

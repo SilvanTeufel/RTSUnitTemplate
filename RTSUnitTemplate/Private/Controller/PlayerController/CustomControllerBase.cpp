@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Controller/PlayerController/CustomControllerBase.h"
@@ -15,6 +15,7 @@
 #include "MassCommandBuffer.h"      // Needed for FMassDeferredSetCommand, AddFragmentInstance, PushCommand
 #include "MassCommonFragments.h"
 #include "Mass/UnitNavigationFragments.h"  // For FUnitNavigationPathFragment reset on client prediction
+#include "Core/RTSUnitUtils.h"      // IsEntityUsable - guards the fragment access in RunUnitsAndSetWaypointsMass
 #include "MassReplicationFragments.h" // For FMassNetworkIDFragment
 #include "Mass/Replication/RTSWorldCacheSubsystem.h" // For MarkSkipMoveForNetID
 #include "NavModifierVolume.h"
@@ -807,6 +808,23 @@ void ACustomControllerBase::Batch_KickUnits(const TArray<AUnitBase*>& Units)
 	for (AUnitBase* Unit : Units)
 	{
 		if (!Unit) continue;
+
+		// Ein laufender Cast darf vom Kick NICHT angefasst werden.
+		//
+		// Der Kick entfernt weiter unten bedingungslos FMassStateCastingTag (und setzt fuer bewegliche
+		// Einheiten zusaetzlich Run + ein neues MoveTarget). Er ist dafuer gedacht, frisch replizierte
+		// oder eingefrorene Einheiten anzustossen - eine Einheit mitten im Cast ist weder das eine noch
+		// das andere. Gemessen am 16.08.2026: Casts auf BP_BuildingBase_Singularian_DataCenter_C_1
+		// endeten reihenweise nach 0,86-1,75 s mit cancelled=1 und Zustand bereits 0/6, ohne dass je ein
+		// EndCast kam - der Cast erreichte seine CastTime nie und es entstand keine Einheit.
+		//
+		// Verschaerfend: in UServerReplicationKickProcessor ist in der InitialKickQuery die Zeile
+		// RemoveTag<FMassStateNeedsInitialKickTag> auskommentiert, der Tag bleibt also stehen und die
+		// betroffene Einheit wird bei ExecutionInterval 0,1 s dauerhaft weitergekickt.
+		if (Unit->GetUnitState() == UnitData::Casting)
+		{
+			continue;
+		}
 
 		// On Client, we might be called before IsInitialized is true, but we still want to unfreeze.
 		// However, we MUST have a valid mass entity.
@@ -3056,9 +3074,19 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         Loc = TraceRunLocation(Loc, bNavMod);
         if (bNavMod) continue; 
 
+    	// Not every selected unit has a live Mass entity: buildings, construction units and anything whose
+    	// entity was destroyed between selection and this click hand back a default FMassEntityHandle.
+    	// GetFragmentDataPtr on such a handle walks into a null archetype and trips the
+    	// "Assertion failed: CurrentArchetype" in MassEntityManager - reproduced by a human player simply
+    	// right-clicking a move order. Ask whether the entity is usable BEFORE touching it.
     	FMassEntityHandle MassEntityHandle = U->MassActorBindingComponent ? U->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-    	FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
-    	bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
+    	const bool bEntityUsable = RTSUnitUtils::IsEntityUsable(EntityManager, MassEntityHandle);
+    	FMassCombatStatsFragment* CombatStatsPtr = bEntityUsable
+    		? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle)
+    		: nullptr;
+    	bool bIsAttackingOrPausing = bEntityUsable
+    		&& (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct())
+    		 || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct()));
     	bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
     	
         if (!bIsMovingWhileAttacking) U->RemoveFocusEntityTarget();
@@ -3569,8 +3597,14 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 		}
 
 		FMassEntityHandle MassEntityHandle = Unit->MassActorBindingComponent ? Unit->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
-		FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
-		bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
+		// #130: ein nicht gesetztes oder bereits abgemeldetes Handle laeuft in ein Null-Archetype
+		// und loest "Assertion failed: CurrentArchetype" aus. Reproduziert durch die KI, die diesen
+		// Pfad ueber LeftClickAttackMass benutzt. Gleiche Absicherung wie an der Stelle aus #98.
+		const bool bEntityValid = MassEntityHandle.IsSet() && EntityManager.IsEntityValid(MassEntityHandle);
+		FMassCombatStatsFragment* CombatStatsPtr = bEntityValid
+			? EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle)
+			: nullptr;
+		bool bIsAttackingOrPausing = bEntityValid && (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct()));
 		bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
 
 		float Speed = Unit->Attributes->GetBaseRunSpeed();

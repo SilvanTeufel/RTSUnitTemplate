@@ -365,6 +365,7 @@ void UUnitClientTagSyncProcessor::ApplyStateToActor(AAbilityUnit* AbilityUnit, T
 		return;
 	}
 	const TEnumAsByte<UnitData::EState> OldState = AbilityUnit->GetUnitState();
+
 	if (OldState != NewState)
 	{
 		if (bShowLogs)

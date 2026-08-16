@@ -116,6 +116,33 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FBuildingCost ConstructionCost = FBuildingCost{0, 0, 0, 0, 0, 0};
 
+	/**
+	 * Population cap for ONE unit type, checked in CanActivateAbility.
+	 *
+	 * The rule AI presses a single key for a whole group of production buildings, and every building
+	 * resolves its own ability from that slot - so one press can produce four different units. A cap
+	 * in the rule table would therefore stop all four. Here the cap sits on the ability that spawns
+	 * the unit, so a capped type simply stops while the other units of the same slot keep coming -
+	 * which is what "cap the Vector so the AI builds something else" actually needs.
+	 *
+	 * Set UnitCapClass to the unit this ability spawns. Subclasses count too, so pointing it at a
+	 * parent Blueprint caps a whole family on purpose. MaxUnitsOfType 0 (default) = no cap, and no
+	 * cap is applied while UnitCapClass is unset - existing content keeps its behaviour.
+	 *
+	 * Deliberately NOT in CheckCost: CommitAbility calls that a second time, and Blueprints such as
+	 * GA_BuildUnit_Parent_AH enter the Casting state BEFORE they commit. A refusal at commit would
+	 * strand the unit in Casting, and its own "UnitState == Casting -> EndAbility" gate would then
+	 * block every later press for good.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Cap")
+	TSubclassOf<class AUnitBase> UnitCapClass;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Cap", meta = (ClampMin = "0"))
+	int32 MaxUnitsOfType = 0;
+
+	/** True when the team already holds MaxUnitsOfType units of UnitCapClass. False when no cap is set. */
+	bool IsUnitTypeCapReached(const FGameplayAbilityActorInfo* ActorInfo) const;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString KeyboardKey = "X";
 

@@ -65,6 +65,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RLAgent)
     float AiTransporterClickRadius = 3000.0f;
 
+    /**
+     * Set from the current action's "aim_at_transporter" field just before the click is executed.
+     * Carries the rule's intent to LOAD units, which the agent cannot infer otherwise - the identical
+     * right-click is also an ordinary move order for the workers it always has selected.
+     */
+    bool bActionAimsAtTransporter = false;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bDebug = false;
 

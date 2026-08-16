@@ -318,7 +318,18 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
             }
-            else if ((!PathFrag.HasValidPath() || PathFrag.PathTargetLocation != FinalDestination) && !PathFrag.bIsPathfindingInProgress)
+            // Neu planen nur bei einem WESENTLICH anderen Ziel, nicht bei jedem Float-Unterschied.
+            //
+            // Vorher stand hier `PathTargetLocation != FinalDestination` - ein exakter Vergleich.
+            // Beim Verfolgen eines Gegners bewegt sich das Ziel jeden Takt, der Vergleich ist also
+            // praktisch immer wahr: jede Runde wurde eine neue Pfadsuche gestartet, und solange die
+            // laeuft, setzt der Zweig weiter unten `Steering.DesiredVelocity = ZeroVector`. Die
+            // Einheit stand damit dauerhaft still, obwohl ihr MoveTarget volles Tempo trug, und der
+            // Pfad kam nie ueber zwei Punkte hinaus, weil er sofort wieder verworfen wurde.
+            // Genau das Bild aus der Messung: SollTempo 900, Versatz 0, Pfadpunkte 2.
+            else if ((!PathFrag.HasValidPath()
+                      || FVector::Dist2D(PathFrag.PathTargetLocation, FinalDestination) > PathRetargetTolerance)
+                     && !PathFrag.bIsPathfindingInProgress)
             {
                 // Begin a new path request if we have navigation; otherwise, steer directly.
                 if (bHasNavSystem)
@@ -479,7 +490,18 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
             }
-            else if ((!PathFrag.HasValidPath() || PathFrag.PathTargetLocation != FinalDestination) && !PathFrag.bIsPathfindingInProgress)
+            // Neu planen nur bei einem WESENTLICH anderen Ziel, nicht bei jedem Float-Unterschied.
+            //
+            // Vorher stand hier `PathTargetLocation != FinalDestination` - ein exakter Vergleich.
+            // Beim Verfolgen eines Gegners bewegt sich das Ziel jeden Takt, der Vergleich ist also
+            // praktisch immer wahr: jede Runde wurde eine neue Pfadsuche gestartet, und solange die
+            // laeuft, setzt der Zweig weiter unten `Steering.DesiredVelocity = ZeroVector`. Die
+            // Einheit stand damit dauerhaft still, obwohl ihr MoveTarget volles Tempo trug, und der
+            // Pfad kam nie ueber zwei Punkte hinaus, weil er sofort wieder verworfen wurde.
+            // Genau das Bild aus der Messung: SollTempo 900, Versatz 0, Pfadpunkte 2.
+            else if ((!PathFrag.HasValidPath()
+                      || FVector::Dist2D(PathFrag.PathTargetLocation, FinalDestination) > PathRetargetTolerance)
+                     && !PathFrag.bIsPathfindingInProgress)
             {
                 PathFrag.bIsPathfindingInProgress = true;
                 

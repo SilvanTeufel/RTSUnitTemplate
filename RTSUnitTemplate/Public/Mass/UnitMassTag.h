@@ -442,6 +442,107 @@ struct FMassAIStateFragment : public FMassFragment
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	FVector StoredLocation = FVector::ZeroVector;
 
+	/**
+	 * Fortschrittswaechter fuer Laufbefehle auf UNERREICHBARE Ziele.
+	 * Beide Idle-Ausgaenge im RunStateProcessor verlangen Naehe zum Ziel; steht eine Einheit
+	 * weit entfernt fest, greift keiner davon und der RunTag bleibt fuer immer haengen
+	 * (Laufanimation spielt, Einheit bewegt sich nie wieder). NoProgressTimer misst, wie lange
+	 * sich die Einheit nicht mehr messbar von LastProgressLocation entfernt hat.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float NoProgressTimer = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector LastProgressLocation = FVector::ZeroVector;
+
+	/**
+	 * Reine DIAGNOSE, getrennt von NoProgressTimer oben (das gehoert Run und Chase).
+	 * UMainStateProcessor laeuft ueber ALLE lebenden Einheiten und misst hier, wie lange sich
+	 * eine Einheit nicht mehr bewegt hat - unabhaengig vom Zustand. Damit laesst sich endlich
+	 * beantworten, in WELCHEM Zustand die gemeldeten "laufen auf der Stelle"-Einheiten stecken,
+	 * statt es zu raten: Patrol und PatrolRandom haben naemlich gar keinen Fortschrittswaechter.
+	 */
+	/**
+	 * Kleinste bisher erreichte Distanz zum Verfolgungsziel. Grundlage des Chase-Waechters.
+	 * Der alte Waechter mass die ROHE VERSCHIEBUNG der Einheit - und eine Einheit, die vor dem
+	 * Gegner hin- und herzappelt, verschiebt sich jeden Takt um mehr als die Schwelle und setzt
+	 * den Timer damit staendig zurueck. Er konnte also gar nicht ausloesen. Fortschritt heisst
+	 * NAEHER AM ZIEL, nicht "irgendwie bewegt".
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float BestTargetDistance = TNumericLimits<float>::Max();
+
+	/**
+	 * Das Ziel, auf das sich BestTargetDistance bezieht.
+	 *
+	 * Ohne diesen Bezug misst der Waechter Aepfel gegen Birnen: bekommt eine Einheit einen NEUEN
+	 * Laufbefehl, ohne dass das Run-Signal erneut faellt, gilt die Bestdistanz zum ALTEN Ziel
+	 * weiter. Die Distanz zum neuen Ziel ist dann natuerlich groesser, unterbietet die alte
+	 * Bestmarke nie - und der Waechter meldet Stillstand, obwohl die Einheit voll unterwegs ist.
+	 * Gemessen am 2026-08-14: Meldungen mit Versatz 1300-2900 (die Einheit war weit gelaufen)
+	 * und sogar eine bei DistZiel 21, also direkt am Ziel. Verschiebt sich das Ziel um mehr als
+	 * die uebliche Toleranz, wird die Bestmarke neu gesetzt statt Stillstand zu melden.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector BestTargetRefDestination = FVector::ZeroVector;
+
+	/**
+	 * Eigene Felder fuer den Arbeiter-Weg zur Ressource. Bewusst GETRENNT von BestTargetDistance
+	 * (Run/Chase) und von StallDiagTimer (UMainStateProcessor) - drei Messer im selben Feld haben
+	 * schon einmal zu Falschmeldungen gefuehrt.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float ResStallTimer = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector ResStallLocation = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool bResStallReported = false;
+
+	/**
+	 * Die Ressourcenposition, die dem Arbeiter zuletzt als Bewegungsziel BEFOHLEN wurde.
+	 *
+	 * Gegen dieses Feld wird geprueft, NICHT gegen MoveTarget.Center. Center ist kein stabiler
+	 * Speicher des Befehls: der Server klemmt es in UnitMovementProcessor.cpp:726 selbst auf das
+	 * Ende des gefundenen Pfades (`TargetFrag->Center = PathEndLoc`), sobald der Pfad mehr als
+	 * 10 Einheiten vor dem Ziel endet - und genau das ist bei einem Ressourcenknoten der
+	 * Normalfall, weil er Kollision hat und der Pfad davor endet.
+	 *
+	 * Wer gegen Center prueft, misst deshalb den Abstand zum ERREICHBAREN Punkt und setzt das
+	 * Ziel jeden Takt neu; UpdateMoveTarget ruft CreateNewAction, die Bewegung startet endlos neu
+	 * und der Arbeiter laeuft auf der Stelle. Gemessen am 2026-08-14: [ResourceRetarget] feuerte
+	 * fuer dieselben Ressourcenpositionen in JEDEM Frame (173, 174, ...).
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector LastCommandedResourcePosition = FVector::ZeroVector;
+
+	/**
+	 * Eigener Zaehler fuer den Casting-Zustand (Nutzerpunkt 8: BroodHive haengt im Casting).
+	 *
+	 * Bewusst GETRENNT von StateTimer: genau der ist ja verdaechtig. Waechst dieser Zaehler,
+	 * waehrend StateTimer stehenbleibt, setzt jemand StateTimer zurueck. Wachsen beide ueber
+	 * CastTime hinaus, feuert EndCast wirkungslos. Ist CastTime schlicht riesig, sieht man das
+	 * ebenfalls sofort.
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float CastDiagTimer = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float CastDiagLastStateTimer = -1.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool bCastDiagReported = false;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float StallDiagTimer = 0.f;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	FVector StallDiagLocation = FVector::ZeroVector;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool bStallDiagReported = false;
+
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool SwitchingState = false;
 

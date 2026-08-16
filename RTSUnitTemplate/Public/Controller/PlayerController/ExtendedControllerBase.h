@@ -61,6 +61,38 @@ private:
 public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool LogSelectedTags = false;
+
+	/**
+	 * Minimum 2D distance a dropped WorkArea must keep from ANOTHER WorkArea. Buildings use the larger
+	 * ResourcePlacementDistance-derived reach; work areas only need to be kept from literally
+	 * overlapping, otherwise dense resource fields would block building altogether.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Building")
+	float WorkAreaBlockRadius = 120.f;
+
+	/**
+	 * Floor for the distance a WorkArea must keep from an existing BUILDING. The actual reach is the
+	 * larger of this and the building's own bounds - 120 was far too small, areas landed visually on top
+	 * of buildings (reported for enemy buildings and extension sites).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Building")
+	float MinBuildingClearance = 400.f;
+
+	/**
+	 * How far a WorkArea flagged `bIsDefenseArea` is pushed toward the NEAREST ENEMY BASE when dropped.
+	 * Deliberately the nearest base, not AverageEnemyPosition - that is a unit centroid and points into
+	 * the middle when enemies stand on two sides. 0 disables the push.
+	 *
+	 * Was temporarily 0 while hunting the Xeno collapse. The push turned out to be INNOCENT - the culprit
+	 * was the 60s abandon timer, which killed the far-away areas the push created (a long walk plus a
+	 * short cleanup timer cancel each other out). With that timer off the push is safe again.
+	 *
+	 * 2800 measured as not enough: defence went from -2253/-2399 to -684/-1328 while the rest of the base
+	 * sat at +251 - moved the right way, still behind. They start at the very back (the AI camera sits
+	 * with the workers), so the push has to cover that first.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Building")
+	float DefenseAreaForwardPush = 5000.f;
 	// Set to true when a keyboard ability was just executed; consumed on next left click
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool bUsedKeyboardAbilityBeforeClick = false;
@@ -130,6 +162,31 @@ public:
 	void SetAbilityEnabledByKey(AUnitBase* UnitBase, const FString& Key, bool bEnable);
 	// New variant that operates on a specific unit (no UFUNCTION to avoid UHT overloading conflicts)
 	bool DropWorkAreaForUnit(class AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound);
+
+	/**
+	 * AUS. Der Versuch ist gemessen und GESCHEITERT - nicht wieder einschalten, ohne vorher
+	 * die Ursache unten zu beheben.
+	 *
+	 * Idee war: Bauplaetze ablehnen, zu denen der Arbeiter keinen Weg hat. Die uebrigen
+	 * Platzierungspruefungen betreffen nur den Platz selbst (Navmesh, Steigung, Klippe,
+	 * Sperrzone); ob der Arbeiter hinkommt, fragt keine davon.
+	 *
+	 * Messung mit reiner Logzeile (2026-08-14): Singularianer 30 Bauplaetze, alle 30 voll
+	 * erreichbar. Xeno 36 Bauplaetze, davon 11 ohne jeden Weg. Der Befund ist echt.
+	 *
+	 * Messung MIT Eingriff: Xeno nur noch 6 angenommene Bauplaetze, 165 Ablehnungen, am
+	 * Spielende 0 Xeno-Gebaeude - die Fraktion bricht vollstaendig zusammen. Der Grund steht
+	 * in den Logzeilen: bei JEDER Ablehnung stand der Arbeiter auf derselben Position
+	 * (3818, -6648), die Ziele lagen 2456 bis 5674 entfernt. Nicht die Bauplaetze sind
+	 * unerreichbar - der ARBEITER steht abseits des Navmesh, also schlaegt jede Pfadsuche von
+	 * ihm aus fehl und der Waechter lehnt wahllos alles ab.
+	 *
+	 * Bevor das hier wieder auf true darf: die Startposition erst auf das Navmesh projizieren
+	 * und die Pruefung ueberspringen, wenn der Arbeiter selbst nicht darauf steht. Dann misst
+	 * sie den Bauplatz statt den Arbeiter.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool bCheckBuildSiteReachability = false;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool TryConnectEnergyWall(class AUnitBase* UnitBase, class AWorkArea* DraggedWorkArea, bool bIsSnapped = false);
@@ -495,6 +552,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void StopWorkOnSelectedUnit();
+
+	/**
+	 * True while this worker is on its way to a build site or building. Group orders issued by the AI
+	 * must leave such a worker alone - it selects every worker it owns, so an unguarded group order
+	 * cancels every construction in flight.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsWorkerCommittedToBuild(const AWorkingUnitBase* Worker) const;
 
 	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
 	void StopWork(AWorkingUnitBase* Worker);

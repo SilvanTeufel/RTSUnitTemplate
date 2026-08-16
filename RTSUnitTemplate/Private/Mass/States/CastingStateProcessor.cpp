@@ -10,6 +10,7 @@
 #include "MassEntitySubsystem.h"
 #include "MassEntityManager.h"
 #include "MassCommonFragments.h"
+#include "MassActorSubsystem.h"   // FMassActorFragment - nur fuer die Casting-Haenger-Diagnose
 
 
 UCastingStateProcessor::UCastingStateProcessor(): EntityQuery()
@@ -31,6 +32,9 @@ void UCastingStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite);     // Timer lesen/schreiben
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);   // CastTime lesen
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite);     // Rotate flag setzen/zurücksetzen
+	// Nur fuer die Casting-Haenger-Diagnose (Name und Team der Einheit). Optional, damit die
+	// Query weiterhin jede Entity trifft.
+	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
@@ -257,6 +261,7 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         auto TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
+        const auto ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();   // optional, kann leer sein
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -277,6 +282,49 @@ void UCastingStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
 
             // 3. Increment cast timer. This modification stays here.
             StateFrag.StateTimer += ExecutionInterval;
+
+            // REINE DIAGNOSE, kein Eingriff - Nutzerpunkt 8 (BroodHive haengt im Casting).
+            //
+            // Der Ausstieg unten haengt an `StateTimer >= CastTime`. Drei Dinge koennen das
+            // verhindern, und sie brauchen verschiedene Korrekturen:
+            //   (1) jemand setzt StateTimer zurueck   -> StateTimer bleibt klein, CastDiagTimer waechst
+            //   (2) EndCast feuert, wirkt aber nicht  -> BEIDE wachsen ueber CastTime hinaus
+            //   (3) CastTime ist schlicht zu gross    -> sieht man direkt am geloggten Wert
+            // `CastDiagTimer` ist deshalb bewusst ein EIGENER Zaehler - StateTimer ist ja der
+            // Verdaechtige und taugt nicht als Referenz fuer sich selbst.
+            // Ein Rueckgang von StateTimer gilt als neuer Cast und setzt die Diagnose zurueck.
+            if (StateFrag.CastDiagLastStateTimer >= 0.f
+                && StateFrag.StateTimer < StateFrag.CastDiagLastStateTimer)
+            {
+                StateFrag.CastDiagTimer = 0.f;
+                StateFrag.bCastDiagReported = false;
+            }
+            StateFrag.CastDiagLastStateTimer = StateFrag.StateTimer;
+            StateFrag.CastDiagTimer += ExecutionInterval;
+
+            // Schwelle RELATIV zur eigenen Cast-Zeit, nicht absolut.
+            //
+            // Zuerst stand hier fest 15 s - und genau 15 s ist die regulaere CastTime vieler
+            // Gebaeude. Die Zeile meldete daraufhin 111 "Haenger", die in Wahrheit normale,
+            // gerade fertig gewordene Casts waren (StateTimer=15.0 CastTime=15.0). Eine
+            // absolute Schwelle kann einen Haenger nicht von einem langen Cast unterscheiden.
+            if (StateFrag.CastDiagTimer >= StatsFrag.CastTime + 10.f && !StateFrag.bCastDiagReported)
+            {
+                StateFrag.bCastDiagReported = true;
+                FString Name = TEXT("?");
+                int32 Team = -1;
+                if (ActorList.Num() > i)
+                {
+                    if (const AActor* A = ActorList[i].Get())
+                    {
+                        Name = A->GetName();
+                        if (const AUnitBase* U = Cast<AUnitBase>(A)) Team = U->TeamId;
+                    }
+                }
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[CastHaenger] %s Team=%d StateTimer=%.1f CastTime=%.1f ImCastSeit=%.1f"),
+                    *Name, Team, StateFrag.StateTimer, StatsFrag.CastTime, StateFrag.CastDiagTimer);
+            }
 
             if (SignalSubsystem)
             {

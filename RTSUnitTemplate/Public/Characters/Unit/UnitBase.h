@@ -103,6 +103,15 @@ protected:
 // Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	/**
+	 * Nur fuer die Messung: Gegenstueck zu [EinheitAuf] in BeginPlay.
+	 * Destroyed() feuert garantiert genau EINMAL je Actor - anders als der
+	 * Signalweg ueber UUnitStateProcessor::HandleStartDead, der in Runde 120
+	 * fuer EIN totes Gebaeude ueber tausendmal ausgeloest hat und damit
+	 * Signalaufrufe statt Tode zaehlte. Vorbild ist ABuildingBase::Destroyed.
+	 */
+	virtual void Destroyed() override;
+
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public:	
@@ -566,6 +575,14 @@ public:
 
 	/** Guards against releasing twice - SetHealth can be entered again after death. */
 	bool bSupplyReleased = false;
+
+	/**
+	 * What this unit actually paid in supply, so death gives back exactly that.
+	 * Releasing UnitSpaceNeeded instead was only an estimate and could drive the team's used supply
+	 * negative when the two differ. 0 means "never charged here" (trained units pay through their
+	 * build ability), and then UnitSpaceNeeded is still the best available footprint.
+	 */
+	int32 ChargedSupplyAmount = 0;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ScheduleDelayedNavigationUpdate();

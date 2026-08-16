@@ -58,6 +58,22 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	GENERATED_BODY()
 
 public:
+	/**
+	 * NUR FUER MESSLAEUFE. 0 = aus, jede Partie laeuft mit echtem Zufall wie im Spiel.
+	 * Ein Wert != 0 setzt den globalen Zufall bei JEDEM Partiestart auf diesen Startwert.
+	 *
+	 * Warum das noetig ist: die Engine ruft RandInit/SRandInit genau EINMAL beim
+	 * Prozessstart (LaunchEngineLoop.cpp, FEngineLoop::PreInit). `-FixedSeed` macht
+	 * damit den PROZESS reproduzierbar, aber der zweite PIE-Lauf im selben Editor
+	 * laeuft im Zufallsstrom einfach weiter - zwei Laeufe sind nie vergleichbar.
+	 * Erst ein Startwert pro Partie erlaubt den gepaarten Vergleich: dieselbe Partie
+	 * einmal mit und einmal ohne die zu pruefende Aenderung.
+	 *
+	 * Standard 0, damit das im Spiel garantiert nichts aendert.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Messung")
+	int32 FesterZufallsStartwert = 0;
+
 	// Pawn class to use when spawning AI players for AI PlayerStarts
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|AI")
 	TSubclassOf<ARLAgent> AIPlayerPawnClass;

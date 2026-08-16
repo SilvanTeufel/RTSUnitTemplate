@@ -51,6 +51,22 @@ private:
     UPROPERTY(EditDefaultsOnly, Category = "Movement")
     float PathWaypointAcceptanceRadius = 100.f; // Example value, adjust as needed
 
+    /**
+     * Ab welcher Zielverschiebung ein NEUER Pfad angefordert wird.
+     *
+     * Vorher wurde exakt verglichen (`PathTargetLocation != FinalDestination`). Beim Verfolgen
+     * eines Gegners verschiebt sich das Ziel jeden Takt, der Vergleich war also praktisch immer
+     * wahr - jede Runde neue Pfadsuche, und solange die laeuft, wird die Geschwindigkeit auf null
+     * gesetzt ("kein blindes Vorwaertslaufen"). Die Einheit stand damit dauerhaft still, obwohl
+     * ihr MoveTarget volles Tempo trug: gemessen SollTempo 900 bei Versatz 0, Pfad nie ueber zwei
+     * Punkte hinaus. Das war die Ursache von "Kampfeinheiten laufen auf der Stelle".
+     *
+     * 250 ist bewusst grosszuegig: kleiner als jede sinnvolle Angriffsreichweite der Fernkaempfer
+     * und gross genug, dass ein normal laufender Gegner nicht bei jedem Schritt neu planen laesst.
+     */
+    UPROPERTY(EditDefaultsOnly, Category = "Movement", meta=(ClampMin="0.0"))
+    float PathRetargetTolerance = 250.f;
+
 	UPROPERTY(Transient)
     TObjectPtr<UMassEntitySubsystem> EntitySubsystem;
 

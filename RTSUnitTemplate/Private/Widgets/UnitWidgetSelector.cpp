@@ -1,10 +1,11 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Widgets/UnitWidgetSelector.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Containers/Set.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "Characters/Unit/GASUnit.h"
 #include "AbilitySystemComponent.h"
 
 
@@ -294,7 +295,27 @@ void UUnitWidgetSelector::OnCurrentAbilityButtonClicked()
 	if (!ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)) return;
 
 	AUnitBase* UnitBase = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
-	
+
+	// AbilityCanBeCanceled respektieren. Der Button hat die Freigabe bisher gar nicht geprueft, deshalb
+	// liess sich z.B. GA_Siege_Tank_AH (AbilityCanBeCanceled = false) trotzdem per Klick abbrechen.
+	// AExtendedControllerBase::CancelAbilitiesIfNoBuilding prueft das Flag seit jeher - hier fehlte es.
+	// Geprueft wird am CDO der Ability aus dem CurrentSnapshot; ohne laufende Ability gibt es nichts
+	// abzubrechen und der Aufruf entfaellt ebenfalls.
+	if (AGASUnit* GASUnit = Cast<AGASUnit>(UnitBase))
+	{
+		if (!GASUnit->CurrentSnapshot.AbilityClass)
+		{
+			return;
+		}
+		if (const UGameplayAbilityBase* AbilityCDO = GASUnit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
+		{
+			if (!AbilityCDO->AbilityCanBeCanceled)
+			{
+				return;
+			}
+		}
+	}
+
 	ControllerBase->CancelCurrentAbility(UnitBase);
 }
 

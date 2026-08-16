@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Characters/Unit/MassUnitBase.h"
@@ -1081,6 +1081,7 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 
 
 	FMassAIStateFragment* StateFrag = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
+
 	StateFrag->StateTimer = 0.f;
 	UnitControlTimer = 0.f;
 
@@ -1180,6 +1181,46 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 	    UE_LOG(LogTemp, Warning, TEXT("AMassUnitBase (%s): SwitchEntityTag unhandled tag %s -> Idle fallback."), *GetName(), *GetNameSafe(TagToAdd));
 	    SetUnitState(UnitData::Idle);
 	    EntityManager->Defer().AddTag<FMassStateIdleTag>(EntityHandle);
+	}
+
+	// Die Tag-Aenderungen oben laufen ueber Defer() und werden erst am Ende der Mass-Phase angewandt.
+	// Ausserhalb einer laufenden Phase - und genau von dort kommt der GAS-Pfad - liegt dazwischen
+	// mindestens ein Prozessordurchlauf. UUnitClientTagSyncProcessor leitet den Actor-Zustand aus den
+	// TAGS ab, sieht in diesem Fenster noch den alten Tag und setzt die gerade auf Casting gestellte
+	// Einheit wieder auf Run zurueck. Die naechste Aktivierung haelt sie dann fuer frei, ruft erneut
+	// SwitchEntityTag - und das nullt StateFrag->StateTimer. Ergebnis: der Cast faengt zehnmal pro
+	// Sekunde von vorn an und erreicht seine CastTime nie.
+	//
+	// Belegt am 16.08.2026 durch drei Callstacks am Chokepoint AAbilityUnit::SetUnitState
+	// (12 Treffer "Casting -> Run" aus ApplyStateToActor) und "Timer=0.10/15.00" ueber ganze Laeufe.
+	//
+	// Deshalb: ausserhalb der Mass-Phase die Tags SOFORT anwenden. Die Defer()-Aufrufe oben bleiben
+	// stehen und werden dadurch zu Nullaktionen. Innerhalb einer Phase waere ein sofortiger
+	// Strukturwechsel unzulaessig - dort bleibt es beim bisherigen Verhalten.
+	if (!EntityManager->IsProcessing() && EntityManager->IsEntityValid(EntityHandle))
+	{
+		static const UScriptStruct* ZustandsTags[] = {
+			FMassStateIdleTag::StaticStruct(),        FMassStateChaseTag::StaticStruct(),
+			FMassStateAttackTag::StaticStruct(),      FMassStatePauseTag::StaticStruct(),
+			FMassStateRunTag::StaticStruct(),         FMassStatePatrolRandomTag::StaticStruct(),
+			FMassStatePatrolIdleTag::StaticStruct(),  FMassStateCastingTag::StaticStruct(),
+			FMassStateIsAttackedTag::StaticStruct(),  FMassStateGoToBaseTag::StaticStruct(),
+			FMassStateGoToBuildTag::StaticStruct(),   FMassStateBuildTag::StaticStruct(),
+			FMassStateGoToResourceExtractionTag::StaticStruct(),
+			FMassStateResourceExtractionTag::StaticStruct(),
+		};
+
+		for (const UScriptStruct* Tag : ZustandsTags)
+		{
+			if (Tag != TagToAdd)
+			{
+				EntityManager->RemoveTagFromEntity(EntityHandle, Tag);
+			}
+		}
+		if (TagToAdd)
+		{
+			EntityManager->AddTagToEntity(EntityHandle, TagToAdd);
+		}
 	}
 
 	if (IsWorker)

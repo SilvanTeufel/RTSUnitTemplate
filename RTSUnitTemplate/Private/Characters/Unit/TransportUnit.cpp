@@ -33,22 +33,32 @@ void ATransportUnit::KillLoadedUnits()
 	// KillLoadedUnitsIfDestroyed
 	if (IsATransporter && KillLoadedUnitsIfDestroyed)
 	{
-		for (ATransportUnit* LoadedUnit : LoadedUnits)
+		// Ueber eine KOPIE laufen: SetHealth(0) kann den Todesablauf ausloesen, und der
+		// nimmt die Einheit ihrerseits aus LoadedUnits. Dieselbe Falle wie unten.
+		const TArray<ATransportUnit*> Geladene = LoadedUnits;
+		for (ATransportUnit* LoadedUnit : Geladene)
 		{
 			if (LoadedUnit)
 			{
 				LoadedUnit->SetHealth(0);
-				
+
 			}
 		}
 	}else if (IsATransporter)
 	{
-		for (ATransportUnit* LoadedUnit : LoadedUnits)
+		// UnloadNextUnit() ruft LoadedUnits.RemoveAt(0) - die frueher hier stehende
+		// ranged-for-Schleife lief also ueber ein Array, das sie selbst verkuerzte:
+		//   Ensure condition failed: Array has changed during ranged-for iteration!
+		//   (Array.h:375, ausgeloest aus TransportUnit.cpp:46, gemessen 15.08.2026)
+		// Absicht war "alles sofort ausladen" - der Transporter stirbt gerade, und
+		// UnloadNextUnit setzt sich zwar selbst einen Folgetimer, der aber mit dem
+		// Actor stirbt und die restlichen Einheiten eingeschlossen zuruecklassen wuerde.
+		// Deshalb hier weiter entladen, solange etwas geladen ist. Die Zaehlgrenze
+		// schuetzt gegen eine Endlosschleife, falls ein Eintrag nicht entfernt wird.
+		int32 Sicherung = LoadedUnits.Num();
+		while (LoadedUnits.Num() > 0 && Sicherung-- > 0)
 		{
-			if (LoadedUnit)
-			{
-				UnloadNextUnit();
-			}
+			UnloadNextUnit();
 		}
 	}
 }

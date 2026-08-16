@@ -223,6 +223,54 @@ void ABuildingBase::BeginPlay()
 		FTimerHandle SupplyHandle;
 		GetWorldTimerManager().SetTimer(SupplyHandle, this, &ABuildingBase::ApplySupplyCapacity, 0.5f, false);
 	}
+
+	// Same deferral reason as the supply grant above: TeamId is only set after spawn.
+	if (HasAuthority() && bAutoLoadNearbyWorkers && IsATransporter)
+	{
+		FTimerHandle AutoLoadHandle;
+		GetWorldTimerManager().SetTimer(AutoLoadHandle, this, &ABuildingBase::AutoLoadNearbyWorkers,
+		                                FMath::Max(0.1f, AutoLoadDelaySeconds), false);
+	}
+}
+
+void ABuildingBase::AutoLoadNearbyWorkers()
+{
+	if (!HasAuthority() || !IsATransporter) return;
+	if (CurrentUnitsLoaded >= MaxTransportUnits) return;
+
+	// Nearest first, so the building takes the crew standing next to it rather than pulling workers
+	// across the map away from their resource nodes.
+	TArray<AUnitBase*> Candidates;
+	const FVector Here = GetActorLocation();
+	const float RadiusSq = AutoLoadWorkerRadius * AutoLoadWorkerRadius;
+
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		AUnitBase* Worker = *It;
+		if (!IsValid(Worker) || Worker == this) continue;
+		if (!Worker->IsWorker || !Worker->CanBeTransported) continue;
+		if (Worker->TeamId != TeamId) continue;
+		if (Worker->GetUnitState() == UnitData::Dead) continue;
+		if (FVector::DistSquared(Here, Worker->GetActorLocation()) > RadiusSq) continue;
+		Candidates.Add(Worker);
+	}
+
+	Candidates.Sort([Here](const AUnitBase& A, const AUnitBase& B)
+	{
+		return FVector::DistSquared(Here, A.GetActorLocation()) < FVector::DistSquared(Here, B.GetActorLocation());
+	});
+
+	int32 Loaded = 0;
+	for (AUnitBase* Worker : Candidates)
+	{
+		if (CurrentUnitsLoaded >= MaxTransportUnits) break;
+		const int32 Before = CurrentUnitsLoaded;
+		LoadUnit(Worker);
+		if (CurrentUnitsLoaded > Before) ++Loaded;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[AutoLoad] %s (team %d): candidates=%d loaded=%d now=%d/%d"),
+	       *GetName(), TeamId, Candidates.Num(), Loaded, CurrentUnitsLoaded, MaxTransportUnits);
 }
 
 void ABuildingBase::SetBeaconRange(float NewRange)
@@ -283,6 +331,20 @@ bool ABuildingBase::GetEnergyWallActive() const
 
 void ABuildingBase::Destroyed()
 {
+	// Diagnose: die Podzahl faellt messbar auch dann, wenn im gesamten Basisumkreis
+	// (12000 Einheiten) kein Gegner steht - waehrend der Quelltext keinen Pfad kennt,
+	// der ein Gebaeude ausser durch Kampfschaden entfernt. Einer der beiden Befunde
+	// muss falsch sein, und ohne Zeitstempel + Position ist nicht zu entscheiden welcher.
+	// Reine Protokollzeile, kein Verhalten.
+	if (HasAuthority())
+	{
+		const FVector Where = GetActorLocation();
+		UE_LOG(LogTemp, Warning, TEXT("[BuildingGone] %s team=%d at (%.0f, %.0f) health=%.1f time=%.1f"),
+		       *GetName(), TeamId, Where.X, Where.Y,
+		       Attributes ? Attributes->GetHealth() : -1.f,
+		       GetWorld() ? GetWorld()->GetTimeSeconds() : -1.f);
+	}
+
 	ReleaseSupplyCapacity();
 
 	Super::Destroyed();

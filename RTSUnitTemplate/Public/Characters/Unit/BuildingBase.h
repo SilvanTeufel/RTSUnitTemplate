@@ -130,6 +130,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Supply")
 	void ReleaseSupplyCapacity();
 
+	/**
+	 * Transporter buildings that only produce while staffed (Antimatter, MetabolicSiphon) pull their crew
+	 * in themselves shortly after completion. The AI could never do it reliably: its click lands under its
+	 * camera, and the workers it selects get re-tasked by the next decision tick before they arrive.
+	 * Only fills up to MaxTransportUnits and only takes this team's own workers.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Transport")
+	bool bAutoLoadNearbyWorkers = false;
+
+	/** Search radius for bAutoLoadNearbyWorkers. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Transport",
+	          meta = (EditCondition = "bAutoLoadNearbyWorkers"))
+	float AutoLoadWorkerRadius = 6000.f;
+
+	/** Delay before the auto-load runs; TeamId is only assigned after spawn. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Transport",
+	          meta = (EditCondition = "bAutoLoadNearbyWorkers"))
+	float AutoLoadDelaySeconds = 1.5f;
+
+	/** Loads the nearest own workers until MaxTransportUnits is reached. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Transport")
+	void AutoLoadNearbyWorkers();
+
 protected:
 	/** Grants SupplyCapacityGain once the team id is known. */
 	void ApplySupplyCapacity();

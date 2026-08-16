@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Signals/UnitStateProcessor.h"
 
 // Source: UnitStateProcessor.cpp
@@ -517,7 +517,13 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         else if (SignalName == UnitSignals::Chase)
                         {
                         	if (StateFragment->CanAttack && StateFragment->IsInitialized) EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
-                        	
+
+                        	// Neue Verfolgung, neue Messlatte: sonst zaehlt der Stall-Waechter die
+                        	// Bestdistanz einer FRUEHEREN Jagd weiter und meldet sofort Stillstand.
+                        	StateFragment->BestTargetDistance = TNumericLimits<float>::Max();
+                        	StateFragment->BestTargetRefDestination = FVector::ZeroVector;
+                        	StateFragment->NoProgressTimer = 0.f;
+
 	                        EntityManager.Defer().AddTag<FMassStateChaseTag>(Entity);
                         }
                         else if (SignalName == UnitSignals::Attack)
@@ -607,6 +613,13 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         }
                         else if (SignalName == UnitSignals::Run)
                         {
+                        	// Neuer Laufbefehl, neue Messlatte fuer den Stall-Waechter - sonst
+                        	// zaehlt die Bestdistanz eines FRUEHEREN Ziels weiter und er meldet
+                        	// sofort Stillstand.
+                        	StateFragment->BestTargetDistance = TNumericLimits<float>::Max();
+                        	StateFragment->BestTargetRefDestination = FVector::ZeroVector;
+                        	StateFragment->NoProgressTimer = 0.f;
+
 	                        EntityManager.Defer().AddTag<FMassStateRunTag>(Entity);
                         	StateFragment->PlaceholderSignal = UnitSignals::Run;
                         	UnitBase->UnitStatePlaceholder = UnitData::Run;
@@ -3093,6 +3106,9 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 					AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
 					if (UnitBase )
 					{
+									// Der EINZIGE regulaere Weg, auf dem ein Cast fertig wird. Fehlt die Zeile,
+									// hat der Cast seine CastTime nie erreicht.
+
 									if (UnitBase->ActivatedAbilityInstance)
 									{
 										UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
@@ -3754,6 +3770,10 @@ void UUnitStateProcessor::UpdateUnitMovement(FMassEntityHandle& Entity, AUnitBas
 		{
 			StateFraggPtr->StoredLocation = WorkerStatsFrag->ResourcePosition;
 			UpdateMoveTarget(MoveTarget, WorkerStatsFrag->ResourcePosition, StatsFrag.RunSpeed, World);
+			// Denselben Wert merken, gegen den der GoToResourceExtractionStateProcessor prueft.
+			// Ohne das haelt er den frisch gesetzten Befehl faelschlich fuer veraltet und setzt
+			// ihn sofort noch einmal - ein ueberfluessiges CreateNewAction gleich beim Start.
+			StateFraggPtr->LastCommandedResourcePosition = WorkerStatsFrag->ResourcePosition;
 		}
 		else if (UnitBase->UnitState == UnitData::GoToBase)
 		{

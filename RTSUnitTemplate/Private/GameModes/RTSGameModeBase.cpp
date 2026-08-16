@@ -52,6 +52,16 @@ static void SeedSpawnStoredLocationFromWaypoint(AUnitBase* UnitBase);
 
 void ARTSGameModeBase::BeginPlay()
 {
+	// Ganz vorn, bevor irgendetwas den Zufall zieht - Super::BeginPlay() spawnt bereits.
+	// Siehe Kommentar an FesterZufallsStartwert: ohne das laeuft jeder weitere PIE-Lauf
+	// im selben Editor im Zufallsstrom des vorigen weiter.
+	if (FesterZufallsStartwert != 0)
+	{
+		FMath::RandInit(FesterZufallsStartwert);
+		FMath::SRandInit(FesterZufallsStartwert);
+		UE_LOG(LogTemp, Warning, TEXT("[MessSeed] Partie startet mit festem Zufallsstartwert %d"), FesterZufallsStartwert);
+	}
+
 	Super::BeginPlay();
 
 	TagsDestroyedCountMap.Empty();

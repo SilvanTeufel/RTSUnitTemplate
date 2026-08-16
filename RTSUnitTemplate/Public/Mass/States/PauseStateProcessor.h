@@ -67,6 +67,19 @@ protected:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate, meta = (ClampMin = "1.0"))
 	float AttackRangeHysteresis = 1.15f;
 
+	/**
+	 * Kleiner ABSOLUTER Zuschlag auf die Reichweite, bevor Pause die Einheit wieder losschickt.
+	 *
+	 * Erzeugt das Totband zwischen "Chase ist angekommen" (Dist <= AttackRange) und "Pause
+	 * schickt wieder los" (Dist > AttackRange). Ohne das sind beide Schwellen komplementaer und
+	 * eine Einheit auf der Kante kippt staendig hin und her.
+	 * Bewusst absolut und klein: multiplikativ auf DIESER Seite parkte die Einheiten sichtbar
+	 * auf Abstand (bei Reichweite 900 sind 15 % ganze 135 Einheiten), multiplikativ auf der
+	 * CHASE-Seite verlangte physisch unmoegliche Naehe und liess sie ewig weiterjagen.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate, meta=(ClampMin="0.0"))
+	float PauseRechaseEpsilon = 25.f;
+
 private:
 	void ServerExecute(FMassEntityManager& EntityManager, FMassExecutionContext& Context, 
 		FMassAIStateFragment& StateFrag, const FMassAITargetFragment& TargetFrag, 

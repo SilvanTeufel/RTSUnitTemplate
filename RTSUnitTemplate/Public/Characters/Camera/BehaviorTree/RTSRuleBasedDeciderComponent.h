@@ -103,6 +103,39 @@ struct FRTSRuleRow : public FTableRowBase
 	float MinSecondsBetweenActivations = 0.f;
 
 	/**
+	 * Extra requirement on a STABLE classification tag such as "Buildings.Singularian.Bunker".
+	 * KeyTags cannot be used for buildings: Server_AssignTagToSelectedUnits (the control-group logic)
+	 * strips a KeyTag from every unit of the team that is not in the current selection, so a building's
+	 * KeyTag never survives. Classification tags are never touched by it.
+	 * Leave the tag unset to disable this check.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	FGameplayTag ClassTagRequirement;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	int32 ClassTagMinCount = 0;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	int32 ClassTagMaxCount = 999;
+
+	/**
+	 * Optional PREREQUISITE on a different classification tag - this is how a build ORDER is expressed.
+	 * ClassTagRequirement above is the rule's own cap and is therefore already taken; a chain like
+	 * "BioIntegrator, then MatterForge, then CybernaticFactory, then OrbitalUplink" needs a second,
+	 * independent tag. The CtrlQ unit caps cannot do it: all four production buildings share that
+	 * KeyTag, so a count of two says nothing about WHICH two are standing.
+	 *
+	 * Unlike the cap, this counts FINISHED buildings only. A prerequisite that already accepts a
+	 * construction site would let the successor overtake its predecessor, which is exactly the
+	 * ordering the chain is meant to prevent. Leave the tag unset to disable.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
+	FGameplayTag RequiredClassTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps", meta=(ClampMin="0"))
+	int32 RequiredClassTagMinCount = 0;
+
+	/**
 	 * Which ability array the AbilityAction refers to: 0 = DefaultAbilities, 1 = SecondAbilities,
 	 * 2 = ThirdAbilities, 3 = FourthAbilities.
 	 * The only way to reach a higher array used to be IntermediateAction=ChangeAbilityIndex, which just
@@ -111,6 +144,16 @@ struct FRTSRuleRow : public FTableRowBase
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output", meta=(ClampMin="0", ClampMax="3"))
 	int32 AbilityArrayIndex = 0;
+
+	/**
+	 * Marks this rule as "load the selection into a transporter". The agent's click traces straight
+	 * down from its camera, so a right-click almost never lands on the building - and without knowing
+	 * the intent it cannot re-aim, because the very same click is also an ordinary move order for the
+	 * workers it constantly has selected. This flag travels in the action JSON and is read right
+	 * before the click.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
+	bool bAimAtTransporter = false;
 
 	// Output actions
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
@@ -154,7 +197,15 @@ struct FRTSAttackRuleRow : public FTableRowBase
 	// The frequency of this rule (0-100). Higher values relative to other matching rules increase the chance of selection.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0", ClampMax="100.0"))
 	float Frequency = 100.0f;
-	
+
+	/**
+	 * Minimum seconds between two activations of this rule. 0 = no limit.
+	 * Without this the rule re-issues an attack order every decision tick, and two rules with
+	 * different target positions tear the same units back and forth so they never arrive anywhere.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule", meta=(ClampMin="0.0"))
+	float MinSecondsBetweenActivations = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Output")
 	FVector AttackPosition = FVector::ZeroVector;
 
@@ -359,6 +410,14 @@ public:
 	int32 WanderMinSameDirectionRepeats = 3;
 
 public:
+	/**
+	 * How far an attack waypoint is pulled towards the enemy's centre after the NavMesh projection.
+	 * The projection returns the NEAREST navigable point, which is usually a cliff edge - units sent
+	 * there pile up on the rim instead of engaging. 0 disables the correction.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Attack", meta=(ClampMin="0.0"))
+	float AttackWaypointInwardPull = 900.f;
+
 	// Team id of the owning AI pawn, or -1 while it has no controller yet.
 	// Public because the RL panel has to map "which AI plays for which team" without duplicating this.
 	UFUNCTION(BlueprintCallable, Category = "AI|Rules")
@@ -387,11 +446,20 @@ private:
 	/** True while Row.MinSecondsBetweenActivations has not elapsed since this rule last fired. */
 	bool IsRuleOnCooldown(const FRTSRuleRow& Row, const FName& RowName) const;
 
+	/** Same cooldown check for attack rows; kept on its own clock so row names cannot collide. */
+	bool IsAttackRuleOnCooldown(const FRTSAttackRuleRow& Row, const FName& RowName) const;
+
+	/** Set when an attack row actually issues its orders. */
+	void MarkAttackRuleFired(const FName& RowName) const;
+
 	/** Stamps the activation time used by IsRuleOnCooldown. Call wherever a rule's output is returned. */
 	void MarkRuleFired(const FName& RowName) const;
 
 	// Keyed by DataTable row name, so two rows sharing a RuleName still get separate clocks.
 	mutable TMap<FName, float> LastRuleActivationTime;
+
+	// Same, for the attack rules table.
+	mutable TMap<FName, float> LastAttackRuleActivationTime;
 
 	// Swaps in the team's entries from TeamRulesDataTables / TeamAttackRulesDataTables.
 	// Cheap and idempotent: retries every evaluation until the pawn is possessed and a team id is known.
@@ -425,7 +493,12 @@ private:
 	void PopulateAttackPositions();
 
 	// Compose multiple action indices into a single JSON string. If multiple indices are given, returns a JSON array string.
-	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const;
+	// AbilityArrayIndexOverride >= 0 stamps "ability_array_index" onto every emitted action so the
+	// executing agent can select the array right before pressing, instead of relying on a controller
+	// field that the next decision overwrites first.
+	FString BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference,
+	                                 int32 AbilityArrayIndexOverride = -1,
+	                                 bool bAimAtTransporter = false) const;
 
 	/**
 	 * Hands the decision to URLRecorderSubsystem so a network can be trained to imitate it. This is how the
@@ -453,6 +526,15 @@ private:
 
 	// Location to return the RLAgent to after the attack sequence finishes
 	FVector AttackReturnLocation = FVector::ZeroVector;
+
+	// NUR DIAGNOSE (Nutzerpunkt 6: Einheiten laufen hin und her statt anzugreifen).
+	// Der Angriffsbefehl schickt die Einheiten an die Position, an der der RLAgent im
+	// Befehlsmoment steht. Springt diese Position zwischen zwei Aktivierungen weit, bekommen
+	// dieselben Einheiten laufend neue, weit auseinanderliegende Ziele - das waere das
+	// Hin-und-her. Hier wird die vorige Befehlsposition und der Zeitpunkt gemerkt, um Takt
+	// und Sprungweite messen zu koennen. Kein Eingriff.
+	FVector LetzteAngriffsBefehlPos = FVector::ZeroVector;
+	float LetzteAngriffsBefehlZeit = -1.f;
 
 	// Helper to handle the return move and post-return actions
 	void FinalizeAttackReturn();

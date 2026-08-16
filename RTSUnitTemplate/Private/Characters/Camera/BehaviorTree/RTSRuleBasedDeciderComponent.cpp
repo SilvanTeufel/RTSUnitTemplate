@@ -18,6 +18,8 @@
 #include "GameModes/RTSGameModeBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/BuildingBase.h"
+#include "Actors/WorkArea.h"
 #include "GameplayTagContainer.h"
 #include "Characters/Camera/RL/RLRecorderSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -258,7 +260,9 @@ void URTSRuleBasedDeciderComponent::RecordDecisionForTraining(const TArray<int32
 	}
 }
 
-FString URTSRuleBasedDeciderComponent::BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference) const
+FString URTSRuleBasedDeciderComponent::BuildCompositeActionJSON(const TArray<int32>& Indices, UInferenceComponent* Inference,
+                                                               int32 AbilityArrayIndexOverride,
+                                                               bool bAimAtTransporter) const
 {
 	if (!Inference || Indices.Num() == 0)
 	{
@@ -267,8 +271,24 @@ FString URTSRuleBasedDeciderComponent::BuildCompositeActionJSON(const TArray<int
 
 	RecordDecisionForTraining(Indices);
 
+	if (Indices.Num() == 1 && AbilityArrayIndexOverride < 0 && !bAimAtTransporter)
+	{
+		return Inference->GetActionAsJSON(Indices[0]);
+	}
+
 	if (Indices.Num() == 1)
 	{
+		TSharedRef<TJsonReader<>> SingleReader = TJsonReaderFactory<>::Create(Inference->GetActionAsJSON(Indices[0]));
+		TSharedPtr<FJsonObject> SingleObj;
+		if (FJsonSerializer::Deserialize(SingleReader, SingleObj) && SingleObj.IsValid())
+		{
+			if (AbilityArrayIndexOverride >= 0) SingleObj->SetNumberField(TEXT("ability_array_index"), AbilityArrayIndexOverride);
+			if (bAimAtTransporter) SingleObj->SetBoolField(TEXT("aim_at_transporter"), true);
+			FString SingleOut;
+			auto SingleWriter = TJsonWriterFactory<TCHAR, TCondensedJsonPrintPolicy<TCHAR>>::Create(&SingleOut);
+			FJsonSerializer::Serialize(SingleObj.ToSharedRef(), SingleWriter);
+			return SingleOut;
+		}
 		return Inference->GetActionAsJSON(Indices[0]);
 	}
 
@@ -289,6 +309,14 @@ FString URTSRuleBasedDeciderComponent::BuildCompositeActionJSON(const TArray<int
 		TSharedPtr<FJsonObject> Obj;
 		if (FJsonSerializer::Deserialize(Reader, Obj) && Obj.IsValid())
 		{
+			if (AbilityArrayIndexOverride >= 0)
+			{
+				Obj->SetNumberField(TEXT("ability_array_index"), AbilityArrayIndexOverride);
+			}
+			if (bAimAtTransporter)
+			{
+				Obj->SetBoolField(TEXT("aim_at_transporter"), true);
+			}
 			JsonValues.Add(MakeShared<FJsonValueObject>(Obj));
 		}
 	}
@@ -406,23 +434,64 @@ bool URTSRuleBasedDeciderComponent::TryGetAbilityCostForRule(const FRTSRuleRow& 
 
 	// The rule presses one key for a whole group, and every member resolves its own ability, so the
 	// binding cost is the cheapest member - gating on the priciest one blocks the affordable ones.
+	//
+	// "Cheapest" used to mean PrimaryCost alone, and that was wrong: several Singularian units cost
+	// NOTHING in Primary and pay in Epic/Legendary instead (SalvoDroid 0/150/100, EdgeDancer 0/125/75,
+	// ShardInterceptor 0/150/50). With PrimaryCost 0 those always won the comparison and gated the
+	// whole rule on Epic - a resource the team barely accumulates. Measured in the 16.08. match:
+	// 'Units_A' failed 168 times on "Epic: 0.00 < Thr 150" while the Vector (100 Primary, no Epic) sat
+	// on the very same key and was affordable the whole time. So: prefer an ability the team can
+	// actually pay for, and fall back to the lowest TOTAL cost rather than the lowest Primary.
+	AResourceGameMode* ResourceMode = Cast<AResourceGameMode>(GameMode);
+	auto TotalCost = [](const FBuildingCost& C) -> int32
+	{
+		return C.PrimaryCost + C.SecondaryCost + C.TertiaryCost + C.RareCost + C.EpicCost + C.LegendaryCost;
+	};
+
 	bool bFound = false;
+	bool bFoundAffordable = false;
 	for (AActor* Actor : GameMode->AllUnits)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(Actor);
 		if (!Unit || Unit->TeamId != TeamId) continue;
 		if (!Unit->UnitTags.HasTagExact(KeyTag)) continue;
-		if (!Unit->DefaultAbilities.IsValidIndex(AbilityIndex)) continue;
 
-		const TSubclassOf<UGameplayAbilityBase> AbilityClass = Unit->DefaultAbilities[AbilityIndex];
+		// Follow the rule's own array. Reading DefaultAbilities unconditionally gave array-1 and -2
+		// rules the cost of a completely different building: an Antimatter rule was gated on the Base's
+		// price, passed, pressed - and the ability then failed silently on the real 550/350/300.
+		const TArray<TSubclassOf<UGameplayAbilityBase>>* Arr = nullptr;
+		switch (Row.AbilityArrayIndex)
+		{
+		case 1:  Arr = &Unit->SecondAbilities; break;
+		case 2:  Arr = &Unit->ThirdAbilities;  break;
+		case 3:  Arr = &Unit->FourthAbilities; break;
+		default: Arr = &Unit->DefaultAbilities; break;
+		}
+		if (!Arr || !Arr->IsValidIndex(AbilityIndex)) continue;
+
+		const TSubclassOf<UGameplayAbilityBase> AbilityClass = (*Arr)[AbilityIndex];
 		if (!AbilityClass) continue;
 
 		const UGameplayAbilityBase* CDO = AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 		if (!CDO) continue;
 
-		if (!bFound || CDO->ConstructionCost.PrimaryCost < OutCost.PrimaryCost)
+		const FBuildingCost& Cost = CDO->ConstructionCost;
+		const bool bAffordable = ResourceMode && ResourceMode->CanAffordConstruction(Cost, TeamId);
+
+		if (bAffordable)
 		{
-			OutCost = CDO->ConstructionCost;
+			// An affordable member always beats an unaffordable one, no matter how "cheap" the latter
+			// looks on a single resource column.
+			if (!bFoundAffordable || TotalCost(Cost) < TotalCost(OutCost))
+			{
+				OutCost = Cost;
+				bFound = true;
+				bFoundAffordable = true;
+			}
+		}
+		else if (!bFoundAffordable && (!bFound || TotalCost(Cost) < TotalCost(OutCost)))
+		{
+			OutCost = Cost;
 			bFound = true;
 		}
 	}
@@ -448,26 +517,32 @@ bool URTSRuleBasedDeciderComponent::IsRuleOnCooldown(const FRTSRuleRow& Row, con
 	return (Now - *Last) < Row.MinSecondsBetweenActivations;
 }
 
+bool URTSRuleBasedDeciderComponent::IsAttackRuleOnCooldown(const FRTSAttackRuleRow& Row, const FName& RowName) const
+{
+	if (Row.MinSecondsBetweenActivations <= 0.f) return false;
+
+	const float* Last = LastAttackRuleActivationTime.Find(RowName);
+	if (!Last) return false;
+
+	const UWorld* World = GetWorld();
+	const float Now = World ? World->GetTimeSeconds() : 0.f;
+	return (Now - *Last) < Row.MinSecondsBetweenActivations;
+}
+
+void URTSRuleBasedDeciderComponent::MarkAttackRuleFired(const FName& RowName) const
+{
+	const UWorld* World = GetWorld();
+	LastAttackRuleActivationTime.Add(RowName, World ? World->GetTimeSeconds() : 0.f);
+}
+
 void URTSRuleBasedDeciderComponent::MarkRuleFired(const FName& RowName) const
 {
 	const UWorld* World = GetWorld();
 	LastRuleActivationTime.Add(RowName, World ? World->GetTimeSeconds() : 0.f);
 
-	// Point the controller at the array this rule targets. Doing it here - at the moment the rule
-	// actually wins - keeps it deterministic: the previous mechanism only nudged the index by one and
-	// never reset it, so which array an ability press landed in depended on the run's history.
-	if (!RulesDataTable) return;
-
-	const FRTSRuleRow* Row = RulesDataTable->FindRow<FRTSRuleRow>(RowName, TEXT("RTSRulesArrayIndex"));
-	if (!Row) return;
-
-	if (const APawn* OwnerPawn = Cast<APawn>(GetOwner()))
-	{
-		if (ACameraControllerBase* CB = Cast<ACameraControllerBase>(OwnerPawn->GetController()))
-		{
-			CB->AbilityArrayIndex = FMath::Clamp(Row->AbilityArrayIndex, 0, 3);
-		}
-	}
+	// The ability array is NOT selected here on purpose: this is decision time, the press happens
+	// later, and the next decision would overwrite the controller field before it is read. The index
+	// travels inside the action JSON instead and is applied right before the press.
 }
 
 FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference) const
@@ -582,6 +657,74 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 	if (!CheckResourceMax(GS.LegendaryResource, GS.MaxLegendaryResource, Row.ResourceMaxThresholds.LegendaryCost, EResourceType::Legendary, TEXT("Legendary"))) return TEXT("{}");
 
 	// Caps
+	// Counting by classification tag serves TWO different jobs, and they need opposite answers:
+	// the rule's own cap must SEE construction sites (otherwise a short cooldown queues one too many),
+	// while the build-order prerequisite must NOT (otherwise the successor overtakes its predecessor).
+	auto CountByClassTag = [this](const FGameplayTag& Tag, bool bIncludePendingAreas) -> int32
+	{
+		int32 Count = 0;
+		UWorld* W = GetWorld();
+		if (!W) return Count;
+
+		const int32 MyTeam = ResolveOwningTeamId();
+
+		// Counted live from AllUnits because FGameStateData only carries KeyTag counts - and KeyTags are
+		// useless for buildings (the control-group logic strips them).
+		if (ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(W->GetAuthGameMode()))
+		{
+			for (AActor* A : GM->AllUnits)
+			{
+				AUnitBase* U = Cast<AUnitBase>(A);
+				if (U && U->TeamId == MyTeam && U->UnitTags.HasTagExact(Tag))
+				{
+					++Count;
+				}
+			}
+		}
+
+		// Finished buildings alone UNDERCOUNT for a cap: while a site is still under construction the
+		// building actor does not exist yet - measured, 3 MatterForges at ClassTagMaxCount 2 after the
+		// cooldown went 90 -> 40 s.
+		if (bIncludePendingAreas)
+		{
+			for (TActorIterator<AWorkArea> ItArea(W); ItArea; ++ItArea)
+			{
+				AWorkArea* Area = *ItArea;
+				if (!IsValid(Area) || Area->TeamId != MyTeam || !Area->BuildingClass) continue;
+
+				const ABuildingBase* BuildingCDO = Area->BuildingClass->GetDefaultObject<ABuildingBase>();
+				if (BuildingCDO && BuildingCDO->UnitTags.HasTagExact(Tag))
+				{
+					++Count;
+				}
+			}
+		}
+		return Count;
+	};
+
+	if (Row.ClassTagRequirement.IsValid())
+	{
+		const int32 Count = CountByClassTag(Row.ClassTagRequirement, true);
+		if (Count < Row.ClassTagMinCount || Count >= Row.ClassTagMaxCount)
+		{
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed class tag '%s': count=%d not in [%d, %d)"),
+				*RowLabel, *Row.ClassTagRequirement.ToString(), Count, Row.ClassTagMinCount, Row.ClassTagMaxCount);
+			return TEXT("{}");
+		}
+	}
+
+	// Build order: stay blocked until the predecessor actually STANDS.
+	if (Row.RequiredClassTag.IsValid() && Row.RequiredClassTagMinCount > 0)
+	{
+		const int32 Have = CountByClassTag(Row.RequiredClassTag, false);
+		if (Have < Row.RequiredClassTagMinCount)
+		{
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed prerequisite '%s': %d < %d"),
+				*RowLabel, *Row.RequiredClassTag.ToString(), Have, Row.RequiredClassTagMinCount);
+			return TEXT("{}");
+		}
+	}
+
 	if (!(GS.MyUnitCount < Row.MaxFriendlyUnitCount)) { if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount cap: %d !< %d"), *RowLabel, GS.MyUnitCount, Row.MaxFriendlyUnitCount); return TEXT("{}"); }
 	if (!(GS.MyUnitCount >= Row.MinFriendlyUnitCount)) { if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed MyUnitCount min: %d < %d"), *RowLabel, GS.MyUnitCount, Row.MinFriendlyUnitCount); return TEXT("{}"); }
 
@@ -642,7 +785,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 		ActionIndices.Add((int32)Row.AbilityAction);
 	}
 
-	return BuildCompositeActionJSON(ActionIndices, Inference);
+	return BuildCompositeActionJSON(ActionIndices, Inference, Row.AbilityArrayIndex, Row.bAimAtTransporter);
 }
 
 float URTSRuleBasedDeciderComponent::GetSupplyHeadroom() const
@@ -831,6 +974,11 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, int32 TableRowIndex, const FGameStateData& GS, UInferenceComponent* Inference)
 {
 	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<UnnamedAttack>") : Row.RuleName.ToString();
+	// Both teams evaluate attack rows in the same frames, and the row names are identical in both
+	// tables - without the team id the AttackSel/AttackRow lines cannot be attributed to a faction.
+	// Cost me a wrong conclusion once: I read team 2's 'Harass' selection as the Xeno's, although
+	// the Xeno 'Harass' row is disabled.
+	const int32 LogTeamId = ResolveOwningTeamId();
 	if (!Row.bEnabled)
 	{
 		if (bDebug) UE_LOG(LogTemp, Verbose, TEXT("RuleBasedDecider: AttackRow '%s' is disabled."), *RowLabel);
@@ -856,7 +1004,22 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	for (const FRTSUnitCountCap& Cap : Row.UnitCaps)
 	{
 		const int32 Count = GetTagCount(GS, Cap.Tag);
-		if (Count > 0 && Count >= Cap.MinCount && Count < Cap.MaxCount)
+		const bool bCapQualifies = (Count > 0 && Count >= Cap.MinCount && Count < Cap.MaxCount);
+
+		// Vormessung: dieselbe MinCount entscheidet hier nicht nur, OB angegriffen wird
+		// (das tut die Cap-Logik weiter oben), sondern auch WER mitkommt. Eine Gruppe
+		// unter ihrer eigenen Schwelle wird NIE zu einem Angriff gerufen und bleibt
+		// dauerhaft zu Hause. Ohne diese Zahlen ist nach einer Aenderung nicht belegbar,
+		// wie viele Einheiten davon betroffen waren. Team ueber die AttackPosition der
+		// unmittelbar folgenden 'executing'-Zeile zuordnen.
+		if (bDebug)
+		{
+			UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: [Team %d] AttackSel '%s' Tag=%d Count=%d (Min=%d Max=%d) -> %s"),
+				LogTeamId, *RowLabel, (int32)Cap.Tag, Count, Cap.MinCount, Cap.MaxCount,
+				bCapQualifies ? TEXT("MARSCHIERT") : TEXT("bleibt zuhause"));
+		}
+
+		if (bCapQualifies)
 		{
 			// Map tag to ERTSAIAction
 			switch (Cap.Tag)
@@ -957,6 +1120,27 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 			}
 		}
 		
+		// NavMesh projection snaps to the NEAREST navigable point, which is very often a cliff edge -
+		// units sent there bunch up on the rim and stop moving. Pull the target inwards, towards the
+		// enemy's centre of mass, and keep the pulled point only if it is navigable as well. A point
+		// that survives that test is by construction away from the boundary it came from.
+		if (AttackWaypointInwardPull > 0.f)
+		{
+			if (UNavigationSystemV1* NavSys2 = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+			{
+				const FVector Inward = (GS.AverageEnemyPosition - AdjustedLoc).GetSafeNormal2D();
+				if (!Inward.IsNearlyZero())
+				{
+					FNavLocation PulledNav;
+					if (NavSys2->ProjectPointToNavigation(AdjustedLoc + Inward * AttackWaypointInwardPull,
+					                                      PulledNav, NavMeshProjectionExtent))
+					{
+						AdjustedLoc = PulledNav.Location;
+					}
+				}
+			}
+		}
+
 		return AdjustedLoc;
 	};
 	const FVector AdjustedAttackLoc = ComputeGroundAdjusted(DesiredAttackPos);
@@ -966,7 +1150,37 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 		DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
 
 	const FString Json = BuildCompositeActionJSON(Indices, Inference);
-	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), *RowLabel, Indices.Num(), DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
+	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: [Team %d] AttackRow '%s' executing %d actions at AttackPosition (%.1f, %.1f, %.1f)."), LogTeamId, *RowLabel, Indices.Num(), DesiredAttackPos.X, DesiredAttackPos.Y, DesiredAttackPos.Z);
+
+	// REINE DIAGNOSE, kein Eingriff - Nutzerpunkt 6.
+	//
+	// Die Einheiten werden an den Punkt geschickt, an dem der RLAgent im Befehlsmoment steht
+	// (AdjustedAttackLoc). Bekommen dieselben Einheiten kurz hintereinander Befehle zu weit
+	// auseinanderliegenden Punkten, drehen sie unterwegs um - genau das Bild "laeuft hin und
+	// her statt anzugreifen". Diese Zeile misst beides: den Abstand zum VORIGEN Befehl und die
+	// Zeit dazwischen. Erst danach wird entschieden.
+	//
+	// Anmerkung zur urspruenglichen Vermutung: AttackReturnDelaySeconds /
+	// bAttackReturnBlockActive / AttackReturnLocation betreffen NUR den RLAgent (die
+	// KI-Kamera), die per SetActorLocation versetzt und danach zurueckgeholt wird. Sie
+	// bewegen keine Kampfeinheit und scheiden als Ursache aus.
+	if (UWorld* DiagWorld = GetWorld())
+	{
+		const float Jetzt = DiagWorld->GetTimeSeconds();
+		const float Sprung = (LetzteAngriffsBefehlZeit >= 0.f)
+			? FVector::Dist2D(LetzteAngriffsBefehlPos, AdjustedAttackLoc) : -1.f;
+		const float Abstand = (LetzteAngriffsBefehlZeit >= 0.f)
+			? (Jetzt - LetzteAngriffsBefehlZeit) : -1.f;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("[AttackOrder] Team=%d Regel='%s' Ziel=(%.0f, %.0f) Sprung=%.0f SeitLetztem=%.1fs Einheitengruppen=%d"),
+			LogTeamId, *RowLabel, AdjustedAttackLoc.X, AdjustedAttackLoc.Y,
+			Sprung, Abstand, Indices.Num());
+
+		LetzteAngriffsBefehlPos = AdjustedAttackLoc;
+		LetzteAngriffsBefehlZeit = Jetzt;
+	}
+
 	Inference->ExecuteActionFromJSON(Json);
 
 	// Schedule return to original location after delay
@@ -1107,6 +1321,14 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 			}
 		}
 
+		// An attack order needs time to be carried out. Re-issuing it every tick - worse, from two
+		// rules pointing at different targets - keeps the army oscillating on the spot.
+		if (IsAttackRuleOnCooldown(*Row, Name))
+		{
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: AttackRow '%s' on cooldown (%.0fs)."), *Name.ToString(), Row->MinSecondsBetweenActivations);
+			continue;
+		}
+
 		// Check if the rule is executable (has valid selections)
 		// Note: We need a lightweight way to check this without executing.
 		// For now, let's see if we can refactor ExecuteAttackRuleRow to separate check and execute, 
@@ -1191,7 +1413,8 @@ bool URTSRuleBasedDeciderComponent::EvaluateAttackRulesFromDataTable(const FGame
 
 		if (SelectedMatch && ExecuteAttackRuleRow(*(SelectedMatch->Row), SelectedMatch->OriginalIndex, GS, Inference))
 		{
-			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Attack rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *SelectedMatch->Name.ToString(), SelectedMatch->Frequency, TotalFrequency);
+			MarkAttackRuleFired(SelectedMatch->Name);
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: [Team %d] Attack rule '%s' fired (weighted random, freq=%.1f/%.1f)."), ResolveOwningTeamId(), *SelectedMatch->Name.ToString(), SelectedMatch->Frequency, TotalFrequency);
 			return true;
 		}
 	}
@@ -1302,6 +1525,7 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 	{
 		const FRTSAttackRuleRow* Row = Rows[i];
 		FVector ChosenPos = FVector::ZeroVector;
+		int32 DiagFoundCount = 0;
 
 		if (Row && Row->AttackPositionSourceClasses.Num() > 0)
 		{
@@ -1316,6 +1540,8 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 					PossibleLocations.Append(*Locs);
 				}
 			}
+
+			DiagFoundCount = PossibleLocations.Num();
 
 			if (PossibleLocations.Num() > 0)
 			{
@@ -1332,6 +1558,20 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 		{
 			// No classes specified for this row, use its default position
 			ChosenPos = Row->AttackPosition;
+		}
+
+		// Diagnose: ohne diese Zeile ist nicht unterscheidbar, OB die Zielsuche leer ausgeht
+		// (dann greift der Rueckfall auf die leere Row->AttackPosition und die Armee marschiert
+		// zum Weltursprung) ODER ob ein gefundener Punkt erst durch die Boden-/NavMesh-Korrektur
+		// weiter unten zerstoert wird. Das Log nennt ausserdem endlich das Team - beide
+		// Fraktionen haben Zeilen namens Assault/AllIn, die Zuordnung war bisher geraten.
+		if (bDebug)
+		{
+			UE_LOG(LogTemp, Log,
+				TEXT("RuleBasedDecider: [Team %d] AttackPos row '%s': %d Ziele gefunden, gewaehlt (%.1f, %.1f, %.1f)%s"),
+				MyTeamId, *RowNames[i].ToString(), DiagFoundCount,
+				ChosenPos.X, ChosenPos.Y, ChosenPos.Z,
+				DiagFoundCount == 0 ? TEXT(" <-- RUECKFALL AUF ROW-POSITION") : TEXT(""));
 		}
 
 		// Apply LineTrace to ground and NavMesh correction for the chosen position
@@ -1414,6 +1654,29 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 	if (!bEnableDefence || !World)
 	{
 		return;
+	}
+
+	// Workers pulled into a defence are only ever told to RUN at the threat - there is no way back.
+	// Once the fight is over they stand around at the rally point and the team's income silently
+	// stops. Runs every defence tick, before any new threat is evaluated: anything that is idle,
+	// owns no resource place and is not busy building goes back to work.
+	if (AResourceGameMode* RGM = Cast<AResourceGameMode>(World->GetAuthGameMode()))
+	{
+		const int32 SweepTeam = ResolveOwningTeamId();
+		if (ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(World->GetAuthGameMode()))
+		{
+			for (AActor* A : GM->AllUnits)
+			{
+				AUnitBase* W = Cast<AUnitBase>(A);
+				if (!W || !W->IsWorker || W->TeamId != SweepTeam) continue;
+				if (W->GetUnitState() != UnitData::Idle && W->GetUnitState() != UnitData::Run) continue;
+				if (W->ResourcePlace || W->BuildArea || W->CurrentDraggedWorkArea) continue;
+
+				W->SetUEPathfinding = true;
+				W->SetUnitState(UnitData::GoToResourceExtraction);
+				W->SwitchEntityTagByState(UnitData::GoToResourceExtraction, W->UnitStatePlaceholder);
+			}
+		}
 	}
 
 	const int32 MyTeamId = ResolveOwningTeamId();

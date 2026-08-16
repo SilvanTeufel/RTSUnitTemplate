@@ -227,6 +227,24 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 // if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] NewCameraState: %d"), NewCameraState);
             }
 
+            // Intent flag for the click that follows. Reset every action so it never leaks into the
+            // next decision - a stale "true" would hijack ordinary move orders.
+            bActionAimsAtTransporter = Action->HasField(TEXT("aim_at_transporter"))
+                                       && Action->GetBoolField(TEXT("aim_at_transporter"));
+
+            // Which ability array this action means. It has to be applied HERE, immediately before the
+            // press: setting it on the controller when the rule was chosen let the next decision
+            // overwrite it first, so an "OrbitalUplink" rule ended up pressing array 0 and built a
+            // BioIntegrator instead (measured 16 of them instead of the 2 the cap allows).
+            if (Action->HasField(TEXT("ability_array_index")))
+            {
+                if (ACameraControllerBase* CamCtrl = Cast<ACameraControllerBase>(ExtendedController))
+                {
+                    CamCtrl->AbilityArrayIndex = FMath::Clamp(
+                        static_cast<int32>(Action->GetNumberField(TEXT("ability_array_index"))), 0, 3);
+                }
+            }
+
             /*
             if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Pre-Action State: ActionName=%s, SelectedUnits=%d, IsCtrl=%s, Alt=%s"), 
                 *ActionName, ExtendedController->SelectedUnits.Num(), 
@@ -551,12 +569,24 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
         bool bHasLoadableWorker = false;
         for (AUnitBase* Selected : ExtendedController->SelectedUnits)
         {
-            if (IsValid(Selected) && Selected->IsWorker && Selected->CanBeTransported &&
+            // CanBeTransported is the real condition - requiring IsWorker as well meant the re-aim
+            // only ever worked for workers, so a rule that sends SOLDIERS into a bunker right-clicked
+            // wherever the camera happened to point and nothing was ever loaded.
+            if (IsValid(Selected) && Selected->CanBeTransported &&
                 Selected->GetUnitState() != UnitData::Dead)
             {
                 bHasLoadableWorker = true;
                 break;
             }
+        }
+
+        if (bActionAimsAtTransporter)
+        {
+            // Logged BEFORE the guards, not after - a log inside the block only ever fires on success
+            // and tells nothing about which condition rejected the click.
+            UE_LOG(LogTemp, Warning, TEXT("[Load] aim=1 selected=%d loadable=%d hitActorIsUnit=%d"),
+                   ExtendedController->SelectedUnits.Num(), bHasLoadableWorker ? 1 : 0,
+                   Cast<AUnitBase>(HitResult.GetActor()) ? 1 : 0);
         }
 
         if (bHasLoadableWorker && !Cast<AUnitBase>(HitResult.GetActor()))
@@ -582,11 +612,58 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
                 }
             }
 
-            if (BestTransporter && BestDistSq <= FMath::Square(AiTransporterClickRadius))
+            // A rule that explicitly means "load these units" targets the transporter at any distance.
+            // The radius only guards the accidental case, where the agent happens to right-click near
+            // one while giving an ordinary move order - that ambiguity is exactly what the flag removes.
+            if (bActionAimsAtTransporter)
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Load] transporterFound=%d dist=%.0f"),
+                       BestTransporter ? 1 : 0,
+                       BestTransporter ? FMath::Sqrt(BestDistSq) : -1.0);
+            }
+
+            const float EffectiveRadius = bActionAimsAtTransporter ? TNumericLimits<float>::Max()
+                                                                   : AiTransporterClickRadius;
+            if (BestTransporter && (bActionAimsAtTransporter || BestDistSq <= FMath::Square(EffectiveRadius)))
             {
                 EffectiveHit.Location = BestTransporter->GetActorLocation();
                 EffectiveHit.ImpactPoint = EffectiveHit.Location;
                 EffectiveHit.HitObjectHandle = FActorInstanceHandle(BestTransporter);
+
+                // When the rule explicitly means "load", hand the transporter over DIRECTLY instead of
+                // routing it through the hit result. CheckClickOnTransportUnit relies on
+                // Hit_Pawn.GetActor() casting to AUnitBase, and a hand-built FHitResult does not
+                // reliably reproduce that - the load then fails silently with no log at all. We already
+                // hold the pointer here, so there is nothing to reconstruct.
+                if (bActionAimsAtTransporter)
+                {
+                    // LoadUnits() only loads on the spot within InstantLoadRange - anything further away
+                    // merely gets a run order and loads on arrival. That never completes for the AI: it
+                    // re-decides every few seconds and re-selects the same tag group, so the walking unit
+                    // is pulled away again long before it gets there. Measured result was Bunker [0,0,0]
+                    // although the order itself went through every time. Load directly instead; nothing in
+                    // C++ unloads again except the transporter's death (KillLoadedUnits).
+                    int32 Attempted = 0;
+                    int32 Loaded = 0;
+                    for (AUnitBase* UnitToLoad : ExtendedController->SelectedUnits)
+                    {
+                        if (!IsValid(UnitToLoad) || UnitToLoad == BestTransporter) continue;
+                        if (!UnitToLoad->CanBeTransported) continue;
+                        if (UnitToLoad->GetUnitState() == UnitData::Dead) continue;
+
+                        ++Attempted;
+                        const int32 Before = BestTransporter->CurrentUnitsLoaded;
+                        BestTransporter->LoadUnit(UnitToLoad);
+                        if (BestTransporter->CurrentUnitsLoaded > Before) ++Loaded;
+                    }
+
+                    UE_LOG(LogTemp, Warning,
+                           TEXT("[Load] team %d -> %s: attempted=%d loaded=%d now=%d/%d"),
+                           ExtendedController->SelectableTeamId, *BestTransporter->GetName(),
+                           Attempted, Loaded,
+                           BestTransporter->CurrentUnitsLoaded, BestTransporter->MaxTransportUnits);
+                    return;
+                }
             }
         }
     }

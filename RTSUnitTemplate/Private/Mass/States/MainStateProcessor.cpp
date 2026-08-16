@@ -79,7 +79,19 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
         auto ImpactList = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
         auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
-        
+
+        // DIAGNOSE "laeuft auf der Stelle": der Zustand steckt in Tags, und alle Einheiten eines
+        // Chunks teilen sich den Archetyp - also einmal pro Chunk bestimmen, nicht pro Einheit.
+        // Nur Bewegungszustaende sind interessant; wer idlet oder angreift, SOLL stehen.
+        const TCHAR* StallStateName = nullptr;
+        if      (ChunkContext.DoesArchetypeHaveTag<FMassStateChaseTag>())        StallStateName = TEXT("Chase");
+        else if (ChunkContext.DoesArchetypeHaveTag<FMassStateRunTag>())          StallStateName = TEXT("Run");
+        else if (ChunkContext.DoesArchetypeHaveTag<FMassStatePatrolRandomTag>()) StallStateName = TEXT("PatrolRandom");
+        else if (ChunkContext.DoesArchetypeHaveTag<FMassStatePatrolTag>())       StallStateName = TEXT("Patrol");
+        else if (ChunkContext.DoesArchetypeHaveTag<FMassStateGoToBaseTag>())     StallStateName = TEXT("GoToBase");
+        else if (ChunkContext.DoesArchetypeHaveTag<FMassStateGoToBuildTag>())    StallStateName = TEXT("GoToBuild");
+        else if (ChunkContext.DoesArchetypeHaveTag<FMassStateGoToResourceExtractionTag>()) StallStateName = TEXT("GoToResource");
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -88,6 +100,34 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             const FEffectAreaImpactFragment* ImpactFragPtr = ImpactList.Num() > 0 ? &ImpactList[i] : nullptr;
 
             HandleLoseSightExtension(StateFrag, StatsFrag);
+
+            // DIAGNOSE "laeuft auf der Stelle" - nur protokollieren, kein Eingriff.
+            if (StallStateName)
+            {
+                const FVector Jetzt = TransformList[i].GetTransform().GetLocation();
+                if (FVector::Dist2D(Jetzt, StateFrag.StallDiagLocation) > 40.f)
+                {
+                    StateFrag.StallDiagLocation = Jetzt;
+                    StateFrag.StallDiagTimer = 0.f;
+                    StateFrag.bStallDiagReported = false;
+                }
+                else
+                {
+                    StateFrag.StallDiagTimer += ExecutionInterval;
+                    if (StateFrag.StallDiagTimer >= 8.f && !StateFrag.bStallDiagReported)
+                    {
+                        StateFrag.bStallDiagReported = true;
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[Stall] Einheit steht seit %.0fs im Zustand %s bei (%.0f, %.0f)"),
+                            StateFrag.StallDiagTimer, StallStateName, Jetzt.X, Jetzt.Y);
+                    }
+                }
+            }
+            else
+            {
+                StateFrag.StallDiagTimer = 0.f;
+                StateFrag.bStallDiagReported = false;
+            }
 
             if (StateFrag.BirthTime == TNumericLimits<float>::Max())
             {

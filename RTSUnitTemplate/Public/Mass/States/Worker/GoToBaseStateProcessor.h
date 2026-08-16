@@ -48,6 +48,29 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float CrowdSettleMinStateTime = 1.5f;
 
+	// --- Diagnose #150 (Arbeiter dreht sich mit Ressource auf der Stelle) ---
+	// Der Crowd-Settle oben faengt nur Blockaden IN BASISNAEHE ab. Wer unterwegs stecken bleibt,
+	// hat keinen Ausgang, weil das MoveTarget hier bewusst nicht mehr nachgefuehrt wird (R105).
+	// Diese beiden Werte steuern nur eine Logzeile, sie greifen NICHT ins Verhalten ein.
+	// Vor einer Auslieferung wieder entfernen.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float StuckLogSpeedThreshold = 50.f;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float StuckLogIntervalSeconds = 10.f;
+
+	// --- Pfadende-Settle (Variante b aus #150) ---
+	// Gemessen: ein Arbeiter stand 150 s lang 784 von seiner Basis entfernt, aber nur 12
+	// Einheiten von seinem eigenen MoveTarget.Center. Der Server klemmt Center auf das
+	// Pfadende; reicht der Pfad nicht bis zur Basis, ist die Einheit am Ziel angekommen,
+	// das der Zustandsautomat nie als Ankunft akzeptiert. Ein neues Ziel hilft nicht - der
+	// Server klemmt sofort wieder. Deshalb derselbe Ausgang wie beim Crowd-Settle.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float PathEndSettleRadius = 150.f;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float PathEndSettleMinStateTime = 8.f;
+
 private:
 	FMassEntityQuery EntityQuery;
 

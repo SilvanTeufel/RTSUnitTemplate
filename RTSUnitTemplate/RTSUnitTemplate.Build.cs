@@ -14,6 +14,7 @@ public class RTSUnitTemplate : ModuleRules
         {
             "Core",
             "CoreUObject",
+            "DeveloperSettings",   // URTSUnitTemplateSettings (Project Settings -> Plugins)
             "Engine",
             "NetCore",
             "UMG",
