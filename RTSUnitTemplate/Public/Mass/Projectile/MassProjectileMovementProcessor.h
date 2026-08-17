@@ -23,4 +23,10 @@ protected:
 
 private:
 	FMassEntityQuery EntityQuery;
+
+	// Zaehler fuer [TrailDiag]. Bewusst KEIN static: der lebt so lange wie der Prozess und wuerde
+	// nach acht Schuessen bis zum Editor-Neustart schweigen - derselbe Fehler, der die
+	// Server-Rotation aussetzen liess (siehe MassRotateToMouseProcessor.h). Als Member gehoert er
+	// zur Welt und beginnt mit jeder PIE-Sitzung neu.
+	int32 TrailDiagFlugCount = 0;
 };

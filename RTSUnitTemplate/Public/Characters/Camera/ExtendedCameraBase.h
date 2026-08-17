@@ -126,8 +126,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState);
 
+	// ============================================================================================
+	// LUX-ANPASSUNG (16.08.2026) â€” Linksklick feuert in der Direktsteuerung.
+	// Siehe Input_LeftClick_Pressed/Released in der .cpp. Beim Uebernehmen ins Original-Template
+	// mitnehmen. Bewusst OHNE UFUNCTION/UPROPERTY - reine C++-Member, damit der UHT-Parser
+	// nichts davon einsammelt.
+	// ============================================================================================
+	// true, wenn der Linksklick statt der Klick-Routine die Faehigkeit ausgeloest hat. Wird beim
+	// Loslassen gebraucht, um das Halten sauber zu beenden.
+	bool bLuxLeftClickWasAbility = false;
+
+	// Gemeinsame Bedingung fuer Press und Release: CameraUnit gesetzt, Direktsteuerung aktiv,
+	// folgt nicht der Maus, und Shift ist NICHT gedrueckt (Shift = alte Routine).
+	bool LuxUseLeftClickAsAbility(class ACameraControllerBase* CameraControllerBase) const;
+	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
 	/** Handles Enhanced Keyboard Inputs */
-	
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	

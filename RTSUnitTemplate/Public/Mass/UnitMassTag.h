@@ -44,6 +44,12 @@ USTRUCT() struct FMassStatePauseTag : public FMassTag { GENERATED_BODY() }; // F
 USTRUCT() struct FMassStatePauseKickAppliedTag : public FMassTag { GENERATED_BODY() }; // NEU: Nur lokal auf dem Client
 USTRUCT() struct FMassStateDeadTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateRunTag : public FMassTag { GENERATED_BODY() }; // Generischer Bewegungs-Tag (fr Run/Patrol)
+// LUX-ANPASSUNG (17.08.2026): Einheit wird gerade direkt gesteuert (WASD, CameraUnitMouseFollow=false).
+// Gemessen auf dem Client: bei Direktsteuerung wandert das Laufziel mit der Einheit mit, deshalb galt der
+// Pfad staendig als ueberholt - alle ~40 ms startete eine neue Pfadsuche, und der Bewegungsprozessor setzt
+// die Lenkgeschwindigkeit waehrend einer laufenden Suche auf NULL ("Steer=0 Pfadsuche=1" im Protokoll).
+// Das war die gemeldete Traegheit beim Loslaufen. Traegt eine Einheit diesen Tag, wird direkt gelenkt.
+USTRUCT() struct FMassDirectControlTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateDetectTag : public FMassTag { GENERATED_BODY() };
 USTRUCT() struct FMassStateStopMovementTag : public FMassTag { GENERATED_BODY() };
 // Animation gate: mirrors StopMovement, but skipped for actors that opt in via AUnitBase::CanAnimate.
@@ -118,6 +124,25 @@ struct FMassUnitYawFollowTag : public FMassTag
 
 USTRUCT()
 struct FMassRotateToMouseTag : public FMassTag
+{
+	GENERATED_BODY()
+};
+
+// ================================================================================================
+// LUX-ANPASSUNG (16.08.2026) — "Zielen heisst stillstehen" abloesbar machen.
+// FMassRotateToMouseTag wird an 21 Stellen als Bewegungssperre benutzt
+// (EMassFragmentPresence::None). Dadurch war Schiessen waehrend des Laufens unmoeglich:
+// die Einheit war beim Zielen aus Bewegung UND Actor-Transform-Sync ausgeschlossen.
+//
+// Dieser Tag trennt beides. Er wird ueberall dort mitgesetzt, wo FMassRotateToMouseTag
+// gesetzt wird - AUSSER bei der direkt gesteuerten CameraUnit mit einer Waffe, die
+// bCanFireWhileMoving meldet. Die drei Bewegungs-/Sync-Prozessoren sperren jetzt auf
+// diesen Tag statt auf FMassRotateToMouseTag; fuer alle anderen Einheiten aendert sich
+// dadurch nichts, weil sie beide Tags tragen.
+// Die uebrigen 15 Ausschluesse (Zustandsmaschine) bleiben bewusst unangetastet.
+// ================================================================================================
+USTRUCT()
+struct FMassStopWhileAimingTag : public FMassTag
 {
 	GENERATED_BODY()
 };

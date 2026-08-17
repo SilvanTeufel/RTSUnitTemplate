@@ -728,11 +728,46 @@ void AExtendedCameraBase::ExecuteOnAbilityInputDetected(EGASAbilityInputID Input
 	
 }
 
+// ================================================================================================
+// LUX-ANPASSUNG (16.08.2026) â€” Linksklick feuert, NUR in der Direktsteuerung.
+// Ist eine CameraUnit gesetzt UND folgt sie nicht der Maus (CameraUnitMouseFollow == false),
+// loest der Linksklick dieselbe Faehigkeit aus wie die Taste 1 (AbilityOne = erster Eintrag
+// im aktiven AbilityArray). Die urspruengliche Klick-Routine (LeftClickPressedMass, JumpCamera,
+// MoveToClick) haengt dann an SHIFT + Linksklick.
+// Ohne CameraUnit oder mit CameraUnitMouseFollow == true bleibt alles unveraendert.
+// Gemeinsame Bedingung fuer Press und Release, damit beide nie auseinanderlaufen.
+// ================================================================================================
+bool AExtendedCameraBase::LuxUseLeftClickAsAbility(ACameraControllerBase* CameraControllerBase) const
+{
+	return CameraControllerBase
+		&& CameraControllerBase->CameraUnitWithTag
+		&& CameraControllerBase->bUnitDirectControl
+		&& !CameraControllerBase->CameraUnitMouseFollow
+		&& !CameraControllerBase->IsShiftPressed;
+}
+// ===================== ENDE LUX-ANPASSUNG =======================================================
+
 void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
 {
 	if(BlockControls) return;
-	
+
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+
+	// ============================================================================================
+	// LUX-ANPASSUNG (16.08.2026) â€” siehe LuxUseLeftClickAsAbility() oben.
+	// Original: hier stand direkt der LeftClickPressedMass/JumpCamera-Block.
+	// ============================================================================================
+	if (LuxUseLeftClickAsAbility(CameraControllerBase))
+	{
+		// Identisch zum Tastendruck 1 (HandleState_AbilityOne). Setzt intern auch
+		// SetAbilityInputHeld(AbilityOne, true), damit Dauerfeuer beim Halten laeuft.
+		ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
+		bLuxLeftClickWasAbility = true;
+		return;
+	}
+	bLuxLeftClickWasAbility = false;
+	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
 	if(CameraControllerBase)
 	{
 		CameraControllerBase->LeftClickPressedMass();
@@ -743,14 +778,35 @@ void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& Input
 	{
 		SetCameraState(CameraData::MoveToClick);
 	}
-	
+
 }
 
 void AExtendedCameraBase::Input_LeftClick_Released(const FInputActionValue& InputActionValue, int32 Camstate)
 {
 	if(BlockControls) return;
-	
+
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+
+	// ============================================================================================
+	// LUX-ANPASSUNG (16.08.2026) â€” Gegenstueck zum Press-Zweig.
+	// Wurde der Klick als Faehigkeit gewertet, muss beim Loslassen das Halten beendet werden -
+	// genau wie beim Loslassen der Taste 1 (SwitchControllerStateMachine, case 2121). Sonst
+	// feuert eine Dauerfeuer-Waffe endlos weiter. bLuxLeftClickWasAbility statt einer erneuten
+	// Zustandspruefung, weil Shift oder die CameraUnit sich zwischen Druck und Loslassen
+	// aendern koennen - sonst bliebe der Held-Zustand haengen.
+	// Original: hier stand direkt der LeftClickReleasedMass-Aufruf.
+	// ============================================================================================
+	if (bLuxLeftClickWasAbility)
+	{
+		bLuxLeftClickWasAbility = false;
+		if (AExtendedControllerBase* LuxExtPC = Cast<AExtendedControllerBase>(CameraControllerBase))
+		{
+			LuxExtPC->SetAbilityInputHeld(EGASAbilityInputID::AbilityOne, false);
+		}
+		return;
+	}
+	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
 	if(CameraControllerBase)
 	{
 		CameraControllerBase->LeftClickReleasedMass();

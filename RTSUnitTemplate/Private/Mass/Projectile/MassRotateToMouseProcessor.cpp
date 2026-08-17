@@ -100,9 +100,17 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 		}
 	}
 
-	// Throttling for Server
-	static float LastServerTickTime = 0.0f;
+	// Throttling for Server (LastServerTickTime ist jetzt ein MEMBER, siehe Header)
 	const float CurrentTime = World->GetTimeSeconds();
+
+	// Sicherheitsnetz gegen eine Zeit, die rueckwaerts laeuft (neue Welt, Seamless Travel):
+	// ohne das bliebe die Drosselung dauerhaft geschlossen, weil sie sich nur im Zweig unten
+	// erholen kann. Genau dieser Zustand war der gemeldete Aussetzer.
+	if (CurrentTime < LastServerTickTime)
+	{
+		LastServerTickTime = 0.f;
+	}
+
 	const bool bIsServerTick = (CurrentTime - LastServerTickTime > 0.05f);
 
 	if (bIsServerTick && bHasAuthority) LastServerTickTime = CurrentTime;
@@ -158,6 +166,30 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				}
 			}
 
+
+			// ============================================================================================
+			// DIAGNOSE [RotDiag] (17.08.2026) - Gegenstueck zur Zeile im ClientReplicationProcessor.
+			// Hier steht, WER die Einheit dreht und WOHIN. Zwei Zeilen (SRV und CLI) nebeneinander
+			// zeigen sofort, ob beide Seiten denselben Punkt anpeilen (dann ist es ein Takt-Problem)
+			// oder verschiedene (dann stimmt die uebertragene Mausposition nicht).
+			// Zweig: 1 = lokale Maus, 2 = Server aus ReplicatedMouseLocation, 3 = fremder Spieler
+			// ueber die Bubble, 0 = KEINE Quelle gefunden (dann dreht diese Seite gar nicht).
+			// ============================================================================================
+			if (World->GetTimeSeconds() - LetzteRotDiagZeit > 0.25f)
+			{
+				LetzteRotDiagZeit = World->GetTimeSeconds();
+				const int32 Zweig = !bFoundTarget ? 0
+					: ((RotatorId == LocalPlayerId && bIsLocalUpdateNeeded) ? 1 : (bHasAuthority ? 2 : 3));
+				const FTransform& XfDiag = Transforms[i].GetTransform();
+				FVector DirDiag = TargetLocation - XfDiag.GetLocation();
+				DirDiag.Z = 0.f;
+				UE_LOG(LogTemp, Warning,
+					TEXT("[RotDiag] %s Zweig=%d RotId=%d LokId=%d IstYaw=%.1f ZielYaw=%.1f Ziel=%s"),
+					bHasAuthority ? TEXT("SRV") : TEXT("CLI"), Zweig, RotatorId, LocalPlayerId,
+					XfDiag.GetRotation().Rotator().Yaw,
+					DirDiag.IsNearlyZero() ? -999.f : DirDiag.ToOrientationRotator().Yaw,
+					*TargetLocation.ToCompactString());
+			}
 
 			if (bFoundTarget)
 			{

@@ -393,6 +393,31 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
     }
     ProjectileFragment.TotalDistance = (AdjustedTargetLocation - Transform.GetLocation()).Size();
 
+    // ============================================================================================
+    // SPAWNROTATION = FLUGROTATION (17.08.2026) - Ursache des Niagara-Versatzes beim Spawn.
+    //
+    // MassProjectileMovementProcessor dreht die Entity in JEDEM Takt auf
+    // "Flugrichtung * RotationOffset". Beim Spawn stand hier dagegen die Rotation, die der
+    // SCHUETZE mitgegeben hat. Mesh und Trail haengen beide relativ an der Entity (beim Rifle
+    // 40 bzw. 80 Einheiten hinter dem Ursprung) - eine Winkeldifferenz von wenigen Grad schwenkt
+    // diesen Hebel also sichtbar zur Seite, und zwar nur im ERSTEN Frame. Genau das ist der
+    // gemeldete Versatz: danach sitzt alles richtig.
+    //
+    // Es ist kein Skalierungs- und kein Kompositionsfehler - beides wurde geprueft: Spawn und Flug
+    // rechnen identisch (Relativ * Entity-Transform), und RotationOffset ist beim Rifle 0.
+    // Deshalb wird hier dieselbe Rotation aufgesetzt, die der Prozessor gleich verwenden wird.
+    // Ein Ausblenden des Trails im ersten Frame hilft NICHT: ein verstecktes Niagara-System
+    // simuliert weiter und stoesst seine Partikel trotzdem an der falschen Stelle aus - sie
+    // werden im naechsten Frame nur sichtbar. Die Rotation muss stimmen, nicht die Sichtbarkeit.
+    // ============================================================================================
+    if (!CDO->DisableAnyRotation)
+    {
+        const FQuat FlugQuat =
+            ProjectileFragment.FlightDirection.ToOrientationQuat() * CDO->RotationOffset.Quaternion();
+        ScaledTransform.SetRotation(FlugQuat);
+        TransformFragment.SetTransform(ScaledTransform);
+    }
+
 
 	ProjectileFragment.RotationOffset = CDO->RotationOffset;
 	ProjectileFragment.RotationSpeed = CDO->RotationSpeed;
@@ -582,11 +607,23 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 	{
 		if (CDO->Niagara_A && CDO->Niagara_A->GetAsset())
 		{
+			// ZURUECKGENOMMEN (17.08.2026): kurzzeitig hing der Trail am Mesh-Anker
+			// (VisualRelativeTransform). Das war falsch, weil dieser Transform die MESH-SKALIERUNG
+			// enthaelt - beim Rifle 15 - und eine Komposition A*B die Skalierungen multipliziert.
+			// Ergebnis: 15-fach zu grosse Effekte ("Die NiagaraEffekte sind extrem gross").
+			//
+			// Richtig ist genau diese Komposition: ISM und Niagara sind im Blueprint GESCHWISTER
+			// unter der Wurzel, jedes wird also gegen denselben Entity-Transform gerechnet. Damit
+			// sitzt der Trail relativ zum Mesh so, wie er im Blueprint gesetzt wurde - beides wird
+			// mit derselben Projektilskalierung multipliziert, das Verhaeltnis bleibt erhalten.
 			FTransform InitialTransform = VisualFragment.Niagara_A_RelativeTransform * ScaledTransform;
 			UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAttached(CDO->Niagara_A->GetAsset(), ManagerActor->GetRootComponent(), NAME_None, InitialTransform.GetLocation(), InitialTransform.Rotator(), EAttachLocation::KeepWorldPosition, false);
 			if (NC)
 			{
 				NC->SetWorldTransform(InitialTransform);
+				// ZURUECKGENOMMEN: kurzzeitig war der Trail im ersten Frame ausgeblendet. Das war
+				// wirkungslos - ein verstecktes Niagara-System simuliert weiter und stoesst seine
+				// Partikel trotzdem am falschen Ort aus. Die Rotation wird jetzt oben korrigiert.
 				NC->SetVisibility(!bInitiallyHidden); // Do NOT Deactivate; Movement toggles visibility later
 				VisualFragment.Niagara_A = NC;
 			}
@@ -601,6 +638,33 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 				NC->SetVisibility(!bInitiallyHidden);
 				VisualFragment.Niagara_B = NC;
 			}
+		}
+	}
+
+	// ============================================================================================
+	// DIAGNOSE [TrailDiag] (17.08.2026) - falls der Spawnversatz bleibt, sollen beim naechsten Mal
+	// ZAHLEN dastehen statt einer weiteren Vermutung. Verglichen wird genau das, was man sieht:
+	// Weltort des Mesh-Ankers gegen Weltort des Trails, dazu Rotation und Skalierung, aus denen
+	// beide entstehen. Das Gegenstueck steht im MassProjectileMovementProcessor (erster Flugtakt);
+	// zwei Zeilen nebeneinander zeigen sofort, ob Frame 0 und Frame 1 auseinanderliegen.
+	// Nur die ersten acht Schuesse je Sitzung, danach still.
+	// ============================================================================================
+	{
+		if (TrailDiagSpawnCount < 8)
+		{
+			++TrailDiagSpawnCount;
+			const FVector MeshWelt = (VisualFragment.VisualRelativeTransform * ScaledTransform).GetLocation();
+			const FVector TrailWelt = (VisualFragment.Niagara_A_RelativeTransform * ScaledTransform).GetLocation();
+			UE_LOG(LogTemp, Warning,
+				TEXT("[TrailDiag] SPAWN %s Ursprung=%s Yaw=%.1f Skal=%s | Mesh=%s Trail=%s Abstand=%.1f | RelMesh=%s RelTrail=%s"),
+				ProjectileClass ? *ProjectileClass->GetName() : TEXT("?"),
+				*ScaledTransform.GetLocation().ToCompactString(),
+				ScaledTransform.GetRotation().Rotator().Yaw,
+				*ScaledTransform.GetScale3D().ToCompactString(),
+				*MeshWelt.ToCompactString(), *TrailWelt.ToCompactString(),
+				FVector::Dist(MeshWelt, TrailWelt),
+				*VisualFragment.VisualRelativeTransform.GetLocation().ToCompactString(),
+				*VisualFragment.Niagara_A_RelativeTransform.GetLocation().ToCompactString());
 		}
 	}
 
@@ -669,7 +733,18 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		//
 		// ROTATION stays the entity rotation: that is the aim/flight direction, which is what a muzzle
 		// flash wants to point along. RotateSpawnVFX remains the per-class tweak.
-		FTransform SpawnFXTransform = ScaledTransform;
+		// NUTZERENTSCHEIDUNG (16.08.2026): der Spawn-VFX gehoert dorthin, wo das Projektil-MESH
+		// erscheint - nicht auf den rohen Muzzle. Deshalb wird VisualRelativeTransform genauso
+		// mitkomponiert wie bei der ISM-Instanz weiter unten (FTransform InitialTransform =
+		// VisualFragment.VisualRelativeTransform * ScaledTransform).
+		//
+		// Der umfangreiche Kommentar oben begruendet die frueher gegenteilige Wahl (Muzzle als Anker,
+		// weil VisualRelativeTransform eine MESH-PIVOT-Korrektur ist und den Burst um
+		// Rotation.RotateVector(Scale3D * Pivot) verschiebt - bei BP_Projectile_Rifle (-40,0,0) mal
+		// ProjectileScale). Genau dieser Versatz war das gemeldete Problem: Projektil und Effekt
+		// starteten sichtbar auseinander. Die Begruendung bleibt als Historie stehen, die
+		// Entscheidung ist bewusst umgedreht.
+		FTransform SpawnFXTransform = VisualFragment.VisualRelativeTransform * ScaledTransform;
 
 		bool bSpawnFXOnScreen = RTSViewportUtils::IsLocationOnLocalViewport(this, SpawnFXTransform.GetLocation(), CDO->VisibilityOffset);
 

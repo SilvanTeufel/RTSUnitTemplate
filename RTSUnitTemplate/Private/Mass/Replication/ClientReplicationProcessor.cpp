@@ -710,10 +710,157 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					const bool bIsFollowTarget = FollowList.IsValidIndex(EntityIdx);
 					const bool bHasAITarget = AITargetList.IsValidIndex(EntityIdx) && AITargetList[EntityIdx].bHasValidTarget;
 
-					if (bIsFollowTarget || bHasAITarget || bIsFollowing)
+					// ====================================================================================
+					// LUX-ANPASSUNG (17.08.2026) - Zittern beim Casting/Zielen auf dem Client.
+					//
+					// Dieselbe Begruendung wie eine Zeile darueber, nur fuer den Maus-Zielen-Fall:
+					// die Einheit dreht sich lokal fluessig zur Maus (UMassRotateToMouseProcessor,
+					// Slerp mit 2,5 Grad Totzone), waehrend der Server seine eigene Rotation nur
+					// alle 0,05 s nachfuehrt und sie zurueckrepliziert. Ohne Daempfung zieht die
+					// Replikation in jedem Takt gegen die lokale Drehung - genau das starke Zittern.
+					//
+					// Der vorhandene Schutz greift hier NICHT: er haengt an bIsStationaryAttack, und
+					// das ist per Definition falsch fuer eine Einheit, die im Laufen feuern darf
+					// (die Bedingung endet auf "&& !bCanMoveWhileAttacking"). Fuer genau unsere
+					// direkt gesteuerte CameraUnit war die Rotationskorrektur damit voll aktiv.
+					//
+					// Bewusst daempfen statt abschalten: der Server bleibt autoritativ, die
+					// Korrektur wirkt weiterhin - nur langsam genug, um nicht gegen die Eingabe zu
+					// arbeiten. Beide zielen ohnehin auf denselben Punkt, seit die Mausposition
+					// zuverlaessig beim Server ankommt (CameraControllerBase, LUX-ANPASSUNG 7/7).
+					// ====================================================================================
+					const bool bZieltMitMaus = DoesEntityHaveTag(
+						EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassRotateToMouseTag::StaticStruct());
+
+					// Casting mitgenommen: waehrend eines Casts dreht ausserdem
+					// ActorTransformSyncProcessor::RotateTowardsAbility die Einheit auf das
+					// Ziel der Faehigkeit. Client und Server tun das unabhaengig voneinander und
+					// nicht taktgleich - eine harte Korrektur obendrauf ergibt dasselbe Zittern.
+					const bool bCastet = DoesEntityHaveTag(
+						EntityManager, ChunkCtx.GetEntity(EntityIdx), FMassStateCastingTag::StaticStruct());
+
+					if (bIsFollowTarget || bHasAITarget || bIsFollowing || bZieltMitMaus || bCastet)
 					{
 						FinalKpRot *= 0.1f; // Replikations-Einfluss stark reduzieren
 					}
+
+					// ====================================================================================
+					// LUX-ANPASSUNG (17.08.2026) - Dreht der LOKALE Spieler diese Einheit, korrigiert die
+					// Replikation ihre Rotation GAR NICHT mehr.
+					//
+					// Zwei Messreihen haben gezeigt, dass Daempfen hier grundsaetzlich nicht reicht:
+					// der Server kann die lokale Drehung nicht einholen. Er fuehrt nur mit 20 Hz nach
+					// (UMassRotateToMouseProcessor), rastet den Winkel beim Senden auf 15 Grad
+					// (net.RTS.ServerRep.AngleThresholdDeg) und dreht selbst per Slerp - gemessene
+					// Rueckstaende bis 74 Grad. Jede Korrektur zieht den Client also auf einen
+					// prinzipiell veralteten Winkel; seine Eingabe zieht zurueck. Das ist das Zittern,
+					// und es verschwindet nicht dadurch, dass man langsamer daran zieht.
+					//
+					// Zustaendig ist genau eine Seite: wer die Maus fuehrt, bestimmt die Blickrichtung.
+					// ActiveRotationPlayerId ist dafuer der richtige Schluessel - der Server setzt ihn
+					// bei der Aktivierung, er ist REPLIZIERT, und er benennt den Spieler, dem die
+					// Drehung gehoert. Fremde Einheiten (auch die anderer Spieler) werden weiter
+					// korrigiert, dort ist die Replikation die einzige Quelle.
+					//
+					// Die Position bleibt unberuehrt autoritativ - nur der Blickwinkel folgt lokal.
+					// ====================================================================================
+					bool bLokaleDrehhoheit = false;
+					{
+						const AActor* DrehActor = ActorList[EntityIdx].Get();
+						const APlayerController* LokalerPC = World ? World->GetFirstPlayerController() : nullptr;
+
+						// 1. Die vom lokalen Spieler direkt gesteuerte Einheit: ihre Blickrichtung
+						//    gehoert IMMER dem Spieler - egal ob er zielt, laeuft oder castet.
+						//    GEMESSEN: das erste Kriterium (ActiveRotationPlayerId) allein reichte
+						//    nicht, weil es beim Cast-Start auf -1 zurueckgesetzt wird; genau dort
+						//    lief die Korrektur weiter (KpRot=0.50 bei CastTag=1) und genau dort
+						//    blieb das Zittern uebrig.
+						if (const AControllerBase* SteuerPC = Cast<AControllerBase>(LokalerPC))
+						{
+							if (DrehActor && SteuerPC->CameraUnitWithTag == DrehActor)
+							{
+								bLokaleDrehhoheit = true;
+							}
+						}
+
+						// 2. Sonst: jede Einheit, deren Drehung der lokale Spieler gerade fuehrt
+						//    (Zielen mit der Maus ueber mehrere ausgewaehlte Einheiten).
+						if (!bLokaleDrehhoheit)
+						{
+							if (const ASpawnerUnit* DrehEinheit = Cast<ASpawnerUnit>(DrehActor))
+							{
+								if (DrehEinheit->ActiveRotationPlayerId >= 0)
+								{
+									const int32 LokaleId = (LokalerPC && LokalerPC->PlayerState)
+										? LokalerPC->PlayerState->GetPlayerId() : -2;
+									bLokaleDrehhoheit = (DrehEinheit->ActiveRotationPlayerId == LokaleId);
+								}
+							}
+						}
+					}
+					if (bLokaleDrehhoheit)
+					{
+						FinalKpRot = 0.f;
+					}
+
+					// ====================================================================================
+					// LUX-ANPASSUNG (17.08.2026) - Toleranz darf nicht feiner sein als die Uebertragung.
+					//
+					// GEMESSEN: der replizierte Yaw kommt ausschliesslich in 15-Grad-Stufen an
+					// (120.0 / 60.0 / 15.0 / -60.0 / -135.0 ...), weil der Server ihn vor dem Senden
+					// rastet - net.RTS.ServerRep.AngleThresholdDeg, Vorgabe 15.
+					// Die Korrektur hier setzte aber schon ab MinYawErrorForCorrectionDeg = 2 Grad an.
+					// Damit jagt der Client eine Zahl, die gar nicht genauer uebertragen WIRD: bis zu
+					// +-7,5 Grad Restfehler sind bauartbedingt immer vorhanden, die Korrektur zieht
+					// dauerhaft dagegen, die lokale Drehung zieht zurueck - das ist das Zittern.
+					//
+					// Deshalb: unterhalb der halben Rasterweite wird nicht korrigiert. Das ist keine
+					// Toleranz "auf Verdacht", sondern exakt die Aufloesung, die ankommt.
+					// Wer feiner korrigieren will, muss zuerst feiner senden (CVar kleiner stellen) -
+					// die Regel passt sich dann automatisch an.
+					// ====================================================================================
+					static IConsoleVariable* CVarWinkelRaster =
+						IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.ServerRep.AngleThresholdDeg"));
+					const float Rasterweite = CVarWinkelRaster ? CVarWinkelRaster->GetFloat() : 15.f;
+					const float WirksameToleranz =
+						FMath::Max(MinYawErrorForCorrectionDeg, Rasterweite * 0.5f + 1.f);
+
+					// ====================================================================================
+					// DIAGNOSE [RotDiag] (17.08.2026) - die Daempfung hat das Zittern NICHT behoben.
+					// Also messen statt weiter am Regler drehen. Die Zeile beantwortet drei Fragen:
+					//   1. Traegt die Entity auf dem CLIENT ueberhaupt die Tags, an denen alle
+					//      Schutzregeln haengen? (MausTag/CastTag = 0 hiesse: keine Regel greift.)
+					//   2. Zielen Client und Server auf denselben Punkt? (Fehler klein = ja; dann ist
+					//      es ein Timing-, kein Zielproblem.)
+					//   3. Wie stark korrigiert die Replikation noch? (KpRot, Schritt)
+					// Nur zielende/castende Einheiten, hoechstens vier Zeilen je Sekunde.
+					// ====================================================================================
+					if ((bZieltMitMaus || bCastet) && World
+						&& World->GetTimeSeconds() - LetzteRotDiagZeit > 0.25f)
+					{
+						LetzteRotDiagZeit = World->GetTimeSeconds();
+						const float ClientYaw = ClientXf.GetRotation().Rotator().Yaw;
+						const float ServerYaw = FinalXf.GetRotation().Rotator().Yaw;
+						// FaehZiel/DrehtZuFaeh beantworten den zweiten Befund: waehrend des Casts dreht
+						// der Server auf AbilityTargetLocation, der Client leitet dieselbe Drehung aus
+						// dem REPLIZIERTEN Wert ab (CastingStateProcessor:
+						// bRotateTowardsAbility = !AbilityTargetLocation.IsNearlyZero()).
+						// Steht dort auf dem Client eine Null, dreht er gar nicht mit - das waere die
+						// Erklaerung fuer die gemessenen konstanten 66 Grad Unterschied.
+						const FVector FaehZiel = AITargetList.IsValidIndex(EntityIdx)
+							? AITargetList[EntityIdx].AbilityTargetLocation : FVector::ZeroVector;
+						const bool bDrehtZuFaeh = AITargetList.IsValidIndex(EntityIdx)
+							&& AITargetList[EntityIdx].bRotateTowardsAbility;
+
+						UE_LOG(LogTemp, Warning,
+							TEXT("[RotDiag] KORREKTUR MausTag=%d CastTag=%d StatAngriff=%d Folgt=%d NurYaw=%d | ClientYaw=%.1f ServerYaw=%.1f Fehler=%.1f KpRot=%.2f Toleranz=%.1f | DrehtZuFaeh=%d FaehZiel=%s"),
+							// Hinweis: KpRot=0.00 bei eigener Einheit = lokale Drehhoheit greift.
+							(int32)bZieltMitMaus, (int32)bCastet, (int32)bIsStationaryAttack,
+							(int32)(bIsFollowTarget || bHasAITarget || bIsFollowing), (int32)bRotationYawOnly,
+							ClientYaw, ServerYaw, FRotator::NormalizeAxis(ServerYaw - ClientYaw), FinalKpRot,
+							WirksameToleranz, (int32)bDrehtZuFaeh, *FaehZiel.ToCompactString());
+					}
+
 
 					if (bRotationYawOnly)
 					{
@@ -722,10 +869,10 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						float YawError = FRotator::NormalizeAxis(TargetRotator.Yaw - CurrentRotator.Yaw);
 
  					const float AbsYawError = FMath::Abs(YawError);
- 					if (AbsYawError > ((bIsStationaryAttack && !bIsFollowing) ? 0.1f : MinYawErrorForCorrectionDeg))
+ 					if (AbsYawError > ((bIsStationaryAttack && !bIsFollowing) ? 0.1f : WirksameToleranz))
  					{
  						// NEU: Auch hier fadet die KorrekturstÃƒÂ¤rke sanft ein (auÃƒÅ¸er bei stationÃƒÂ¤rem Angriff fÃƒÂ¼r sofortiges Snapping)
- 						const float RotSoftWeight = (bIsStationaryAttack && !bIsFollowing) ? 1.0f : FMath::Clamp((AbsYawError - MinYawErrorForCorrectionDeg) / MinYawErrorForCorrectionDeg, 0.0f, 1.0f);
+ 						const float RotSoftWeight = (bIsStationaryAttack && !bIsFollowing) ? 1.0f : FMath::Clamp((AbsYawError - WirksameToleranz) / WirksameToleranz, 0.0f, 1.0f);
  						const float FinalKpRotSoft = FinalKpRot * RotSoftWeight;
 
 							// Apply proportional correction limited by MaxRotationCorrectionDegPerSec
@@ -745,7 +892,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						
 						// Angle distance for threshold check
 						const float AngleRad = CurrentRot.AngularDistance(TargetRot);
-						if (FMath::RadiansToDegrees(AngleRad) > MinYawErrorForCorrectionDeg)
+						if (FMath::RadiansToDegrees(AngleRad) > WirksameToleranz) // siehe Rasterweite oben
 						{
 							// We use FinalKpRot * 10.0f to keep it in a similar range as the original logic 
 							// where InterpRate was around 5-10.

@@ -463,6 +463,17 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "DeselectAllUnits", Keywords = "RTSUnitTemplate DeselectAllUnits"), Category = "TopDownRTSTemplate")
 	void DeselectAllUnits();
 
+	// ================================================================================================
+	// LUX-ANPASSUNG (17.08.2026) - jeder Spieler soll nur SEINE CameraUnit selektieren koennen.
+	// Die Zuordnung macht bereits der GameMode ueber "Character.CameraUnit.<Spielerindex>"
+	// (RTSGameModeBase, SetCameraUnitWithTag) - Spieler 1 bekommt .0, Spieler 2 bekommt .1 usw.
+	// Diese Pruefung setzt das in der Auswahl durch: Einheiten mit einem CameraUnit-Tag sind nur
+	// fuer den Spieler waehlbar, dem sie zugewiesen wurden. Alle anderen Einheiten bleiben
+	// unveraendert selektierbar.
+	// ================================================================================================
+	UFUNCTION(BlueprintCallable, Category = "TopDownRTSTemplate")
+	bool IsForeignCameraUnit(const AUnitBase* Unit) const;
+
 	bool IsActorInsideRec(FVector InPoint, FVector CuPoint, FVector ALocation);
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Selection")

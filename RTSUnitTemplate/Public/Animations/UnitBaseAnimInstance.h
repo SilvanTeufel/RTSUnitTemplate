@@ -89,6 +89,31 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	float ContinuousAnimationPosition = 0.0f;
 
+	// ============================================================================================
+	// LUX-ANPASSUNG (16.08.2026) — Mass-Geschwindigkeit fuer den AnimBP verfuegbar machen.
+	// Beim Uebernehmen ins Original-Template mitnehmen.
+	//
+	// Hintergrund: AActor::GetVelocity() ist bei diesen Einheiten IMMER null. Mass bewegt den
+	// Actor per SetActorTransform (ActorTransformSyncProcessor), niemand schreibt die
+	// CharacterMovement-Velocity - eine Volltextsuche danach liefert keinen Treffer. Wer im
+	// AnimBP mit Geschwindigkeit arbeiten will, hatte bisher keine Quelle und musste sie aus
+	// der Positionsdifferenz je Frame selbst ausrechnen.
+	//
+	// Rein additiv: nur neue, lesbare Werte. Es aendert sich kein Verhalten, weder im RTS-
+	// noch im Hero-Modus. Befuellt in NativeUpdateAnimation aus dem FMassVelocityFragment,
+	// genau dort, wo auch die Blendpunkte aus dem Fragment gezogen werden.
+	// ============================================================================================
+
+	// Geschwindigkeit in uu/s in der XY-Ebene (ohne Fallen/Steigen). Fuer Lauf-Blends.
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float MassSpeed = 0.0f;
+
+	// Vollstaendiger Geschwindigkeitsvektor in Weltkoordinaten. Fuer Laufrichtung
+	// (z. B. Strafe-Winkel gegen die Blickrichtung).
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	FVector MassVelocity = FVector::ZeroVector;
+	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ContinuousAttackSpeedMultiplier = 1.0f;
 

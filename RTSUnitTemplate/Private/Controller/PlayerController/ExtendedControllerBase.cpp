@@ -1,7 +1,8 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h" // LUX-ANPASSUNG (16.08.2026): fuer die Direktsteuerungs-Ausnahme bei FMassStopWhileAimingTag
 
 #include "EngineUtils.h"
 #include "GameplayTagsManager.h"
@@ -247,6 +248,27 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 
 					EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
 
+					// LUX-ANPASSUNG (16.08.2026): Bewegungssperre beim Zielen, siehe
+					// FMassStopWhileAimingTag in UnitMassTag.h. Ausnahme nur fuer die direkt
+					// gesteuerte CameraUnit, deren laufende Faehigkeit Bewegung erlaubt.
+					{
+						bool bLuxStopWhileAiming = true;
+						const UGameplayAbilityBase* LuxRunning = Unit ? Unit->ActivatedAbilityInstance : nullptr;
+						if (LuxRunning && !LuxRunning->bStopMovementOnActivation)
+						{
+							const ACameraControllerBase* LuxPC = Cast<ACameraControllerBase>(this);
+							if (LuxPC && LuxPC->bUnitDirectControl && !LuxPC->CameraUnitMouseFollow
+								&& LuxPC->CameraUnitWithTag == Unit)
+							{
+								bLuxStopWhileAiming = false;
+							}
+						}
+						if (bLuxStopWhileAiming)
+						{
+							EntityManager.Defer().AddTag<FMassStopWhileAimingTag>(Entity);
+						}
+					}
+
 					if (bIsContinuous)
 					{
 						if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
@@ -265,7 +287,20 @@ void AExtendedControllerBase::BatchSetRotateToMouseTagLocally(const TArray<AUnit
 					{
 						SpawnerUnit->ActiveRotationPlayerId = -1;
 					}
+
+					// DIAGNOSE [TagDiag] (17.08.2026) - zweiter moeglicher Entferner (siehe unten
+					// ApplyRunAnimationTag und AUnitBase::SetDeselected).
+					if (!HasAuthority()
+						&& DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct()))
+					{
+						UE_LOG(LogTemp, Warning,
+							TEXT("[TagDiag] BatchSetRotateToMouseTagLocally(false) nimmt %s den Maus-Ziel-Tag"),
+							*Unit->GetName());
+					}
+
 					EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+	// LUX-ANPASSUNG (16.08.2026): den Sperr-Tag zusammen mit dem Ziel-Tag entfernen.
+	EntityManager.Defer().RemoveTag<FMassStopWhileAimingTag>(Entity);
 					EntityManager.Defer().RemoveTag<FMassStateContinuousAttackTag>(Entity);
 					EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 				}
@@ -327,8 +362,24 @@ void AExtendedControllerBase::ApplyRunAnimationTag(FMassEntityManager& EntityMan
 {
 	if (!Entity.IsValid()) return;
 
+	// DIAGNOSE [TagDiag] (17.08.2026) - dritter moeglicher Entferner des Maus-Ziel-Tags.
+	// Laeuft dieser Pfad auf dem CLIENT, waehrend der Server den Tag behaelt, drehen beide Seiten
+	// nach verschiedenen Regeln - das ist das gemessene Zittern beim Casting.
+	if (const UWorld* DiagWorld = EntityManager.GetWorld())
+	{
+		if (DiagWorld->GetNetMode() == NM_Client
+			&& DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct()))
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[TagDiag] ApplyRunAnimationTag nimmt den Maus-Ziel-Tag (nur lokal), Zustand=%d"),
+				(int32)State);
+		}
+	}
+
 	// 1. Transition: Remove RotateToMouse
 	EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+	// LUX-ANPASSUNG (16.08.2026): den Sperr-Tag zusammen mit dem Ziel-Tag entfernen.
+	EntityManager.Defer().RemoveTag<FMassStopWhileAimingTag>(Entity);
 	EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 
 	if (FMassActorFragment* ActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(Entity))
@@ -4795,6 +4846,15 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			// available and never go below MinBuildingClearance.
 			float BuildingReach = FMath::Max(MinBuildingClearance,
 			                                 DraggedWorkArea->ResourcePlacementDistance * 0.5f);
+
+			// Ein SNAP legt die Flaeche absichtlich an ein Gebaeude an - genau das ist seine Aufgabe.
+			// Die Reichweitenpruefung unten misst gegen die vollen Gebaeudemasse, also schlaegt sie nach
+			// einem Snap zwangslaeufig an und die Flaeche wurde beim Droppen zerstoert. Ist gesnappt
+			// worden, darf nur noch ein WIRKLICH extremer Overlap ablehnen: die Flaeche mitten im
+			// Grundriss statt an seiner Kante. Ohne Snap bleibt die Pruefung unveraendert streng - die
+			// KI ruft hier immer mit bWorkAreaIsSnapped == false herein.
+			const float SnapUeberlappFaktor = 0.35f;
+			const float ReichweitenFaktor = bWorkAreaIsSnapped ? SnapUeberlappFaktor : 1.f;
 			const AActor* Blocker = nullptr;
 
 			for (TActorIterator<ABuildingBase> ItB(GetWorld()); ItB; ++ItB)
@@ -4809,7 +4869,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				Other->GetActorBounds(true, Origin, Extent);
 				Reach = FMath::Max(Reach, FMath::Max(Extent.X, Extent.Y));
 
-				if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < Reach) { Blocker = Other; break; }
+				if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < Reach * ReichweitenFaktor) { Blocker = Other; break; }
 			}
 
 			if (!Blocker)
@@ -4823,14 +4883,16 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					// to 0-1 and the ratio dropped from 137% to 53%, with
 					// "LarvalPod would sit on BP_WorkArea_ResourcePlace_Primary" in the log).
 					if (Other->Type != WorkAreaData::BuildArea) continue;
-					if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < WorkAreaBlockRadius) { Blocker = Other; break; }
+					// Gleiche Regel fuer das Anlegen an eine andere BuildArea: nach einem Snap zaehlt nur
+					// der extreme Overlap, sonst waere das Snappen an Flaechen genauso unbrauchbar.
+					if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < WorkAreaBlockRadius * ReichweitenFaktor) { Blocker = Other; break; }
 				}
 			}
 
 			if (Blocker)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: rejected, %s would sit on %s."),
-				       *DraggedWorkArea->GetName(), *Blocker->GetName());
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: rejected, %s would sit on %s (gesnappt=%d)."),
+				       *DraggedWorkArea->GetName(), *Blocker->GetName(), bWorkAreaIsSnapped ? 1 : 0);
 				DraggedWorkArea->Destroy();
 				UnitBase->BuildArea = nullptr;
 				UnitBase->CurrentDraggedWorkArea = nullptr;
@@ -6102,7 +6164,9 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->CanBeSelected && Unit->GetUnitState() != UnitData::Dead && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && Unit->TeamId == TeamId)
+		// !IsForeignCameraUnit: eine Kontrollgruppe darf die CameraUnit eines anderen Spielers
+		// nicht mit einsammeln (siehe AControllerBase::IsForeignCameraUnit).
+		if (Unit && Unit->CanBeSelected && Unit->GetUnitState() != UnitData::Dead && !IsForeignCameraUnit(Unit) && Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag)) && Unit->TeamId == TeamId)
 		{
 			NewSelection.Add(Unit);
 		}

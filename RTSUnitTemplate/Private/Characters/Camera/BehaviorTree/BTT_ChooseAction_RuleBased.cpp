@@ -7,7 +7,8 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
-#include "Characters/Camera/RL/InferenceComponent.h" // for FGameStateData
+#include "Characters/Camera/RL/InferenceComponent.h"
+#include "Characters/Camera/RL/RLRecorderSubsystem.h" // for FGameStateData
 
 UBTT_ChooseAction_RuleBased::UBTT_ChooseAction_RuleBased()
 {
@@ -224,6 +225,20 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
     if (BrainComponent && BrainComponent->GetEffectiveBrainMode() == EBrainMode::RL_Model)
     {
         Json = BrainComponent->ChooseJsonAction(GS);
+
+        // Selbstspiel-Aufnahme (16.08.2026): der Aufnahmehaken sass bisher NUR im Regel-Decider
+        // (BuildCompositeActionJSON). Sobald beide Teams das Netz benutzen, entstand deshalb eine
+        // Partie ohne eine einzige Trainingszeile - gemessen: "samples":0. Hier fehlt das
+        // Gegenstueck fuer den Modellpfad.
+        if (URLRecorderSubsystem* Recorder = URLRecorderSubsystem::Get(Pawn))
+        {
+            const int32 ActionIndex = BrainComponent->GetLastChosenActionIndex();
+            if (ActionIndex >= 0)
+            {
+                Recorder->RecordSampleFromGameState(Decider->ResolveOwningTeamId(), GS, ActionIndex,
+                                                   ERLSampleSource::Model);
+            }
+        }
     }
     else
     {

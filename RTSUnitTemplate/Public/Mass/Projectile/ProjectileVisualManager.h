@@ -33,6 +33,11 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
+	// Zaehler fuer [TrailDiag]. Bewusst KEIN static (Begruendung siehe
+	// MassProjectileMovementProcessor.h): als Member des Weltsubsystems beginnt er mit jeder
+	// PIE-Sitzung neu, statt bis zum Editor-Neustart zu schweigen.
+	int32 TrailDiagSpawnCount = 0;
+
 	/** Get or create ISM for a projectile class */
 	UInstancedStaticMeshComponent* GetOrCreateISMComponent(TSubclassOf<AProjectile> ProjectileClass);
 

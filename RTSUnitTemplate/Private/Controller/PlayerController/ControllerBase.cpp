@@ -88,6 +88,34 @@ void AControllerBase::ApplyCustomMouseCursor()
 }
 
 
+bool AControllerBase::IsForeignCameraUnit(const AUnitBase* Unit) const
+{
+	if (!Unit)
+	{
+		return false;
+	}
+
+	// Der Elterntag matcht auch die nummerierten Kinder (Character.CameraUnit.0/.1/...),
+	// deshalb HasTag und nicht HasTagExact.
+	static const FGameplayTag KameraWurzel =
+		FGameplayTag::RequestGameplayTag(FName("Character.CameraUnit"), /*ErrorIfNotFound=*/false);
+	if (!KameraWurzel.IsValid() || !Unit->UnitTags.HasTag(KameraWurzel))
+	{
+		return false; // gar keine CameraUnit -> normale Auswahlregeln, nichts aendert sich
+	}
+
+	// Bewusst gegen die ZUGEWIESENE Einheit pruefen statt den Index erneut aus dem Tag zu lesen:
+	// die Zuweisung macht der GameMode und schickt sie an genau diesen Controller
+	// (ServerSetCameraUnit / ClientSetCameraUnit). So kann die Auswahl nicht von einer zweiten,
+	// eigenstaendigen Tag-Auswertung abweichen.
+	if (!CameraUnitWithTag)
+	{
+		return false; // eigene noch nicht zugewiesen (Ladephase) -> nichts sperren
+	}
+
+	return CameraUnitWithTag != Unit;
+}
+
 void AControllerBase::BeginPlay() {
 
 	Super::BeginPlay();

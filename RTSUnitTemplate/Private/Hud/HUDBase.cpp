@@ -1144,7 +1144,7 @@ void AHUDBase::HandleSelectionRectangle()
 		for (AUnitBase* Unit : NewUnitBases) {
 			if (!Unit) continue;
 			//const ASpeakingUnit* SUnit = Cast<ASpeakingUnit>(Unit);
-			if (Controller && Unit->CanBeSelected && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0)) //  && !SUnit
+			if (Controller && Unit->CanBeSelected && !IsForeignCameraUnit(Unit) && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0)) //  && !SUnit
 			{
 				FVector2D ScreenLocation;
 				if (Controller->ProjectWorldLocationToScreen(Unit->GetActorLocation(), ScreenLocation))
@@ -1379,6 +1379,7 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
         if (AUnitBase* UB = Cast<AUnitBase>(Unit))
         {
             if (!UB->CanBeSelected) continue;
+            if (IsForeignCameraUnit(UB)) continue; // CameraUnit eines anderen Spielers
         }
 
         // Test each instance from VisualInstances in fragment
@@ -1619,8 +1620,46 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 	}
 }
 
+bool AHUDBase::IsForeignCameraUnit(const AUnitBase* Unit) const
+{
+	// Die Regel selbst steht auf dem Controller (AControllerBase::IsForeignCameraUnit) - dort
+	// liegt die Zuweisung. Hier nur weiterreichen, damit alle Auswahlpfade dieselbe benutzen.
+	const AControllerBase* PC = Cast<AControllerBase>(GetOwningPlayerController());
+	return PC ? PC->IsForeignCameraUnit(Unit) : false;
+}
+
 void AHUDBase::SetUnitSelected(AUnitBase* Unit, bool bIsAi)
 {
+	// Fremde CameraUnit: Klick ignorieren statt die Auswahl zu leeren - sonst wuerde ein
+	// Fehlklick die bestehende Auswahl mitnehmen.
+	if (IsForeignCameraUnit(Unit))
+	{
+		return;
+	}
+
+	// ================================================================================================
+	// LUX-ANPASSUNG (17.08.2026) - Zittern beim Casting: Auswahl NICHT neu aufbauen, wenn sie schon
+	// genau so ist.
+	//
+	// GEMESSEN: waehrend eines Casts traegt der SERVER den Maus-Ziel-Tag, der CLIENT nicht
+	// ([RotDiag] MausTag=0 bei SRV Zweig=2). Beide drehen dann nach verschiedenen Regeln - Client
+	// zum Fahigkeitsziel, Server zur Maus - und lagen konstant 66 bzw. 111 Grad auseinander.
+	//
+	// Die Asymmetrie entsteht hier: AUnitBase::SetDeselected() entfernt FMassRotateToMouseTag
+	// NUR LOKAL (ohne Server-RPC, anders als Batch_RemoveRotateToMouseTag darunter). Der
+	// Faehigkeits-Pfad ruft SetUnitSelected bei jeder Aktivierung erneut auf
+	// (ExtendedControllerBase::ActivateAbilitiesByIndex, Rueckfall auf CameraUnitWithTag) - die
+	// Einheit wird also ab- und sofort wieder angewaehlt, und dabei geht dem Client der Tag
+	// verloren, waehrend der Server ihn behaelt.
+	//
+	// Ist die gewuenschte Auswahl bereits genau diese eine Einheit, gibt es nichts abzuwaehlen.
+	// Das ist kein Sonderfall fuer Lux, sondern spart in jedem Spiel unnoetiges Umschalten.
+	// ================================================================================================
+	if (IsValid(Unit) && SelectedUnits.Num() == 1 && SelectedUnits[0] == Unit)
+	{
+		return;
+	}
+
 	if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetOwningPlayerController()))
 	{
 		PC->Batch_RemoveRotateToMouseTag();

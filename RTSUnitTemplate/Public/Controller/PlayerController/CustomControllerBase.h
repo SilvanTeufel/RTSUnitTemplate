@@ -70,9 +70,17 @@ public:
 	/**
 	 * Multi_SetMyTeamUnits selects the whole army once controllers are gathered. Turn this off
 	 * where a pre-selected army is wrong - a recorded battle, a cinematic, a spectator view.
+	 *
+	 * LUX-ANPASSUNG (17.08.2026): Vorgabe jetzt AUS - Silvan: "Ich will dass beim Spielstart
+	 * garkeine Einheit selektiert ist." Das Spiel beginnt damit mit leerer Auswahl.
+	 * Das Schiessen bleibt davon unberuehrt: wird eine Faehigkeit ohne Auswahl ausgeloest,
+	 * greift der vorhandene Rueckfall auf CameraUnitWithTag
+	 * (ExtendedControllerBase::ActivateAbilitiesByIndex, ~Z. 1164) und selektiert die eigene
+	 * Einheit in dem Moment selbst.
+	 * Wer die alte Vorauswahl braucht, setzt den Haken am Controller-Blueprint wieder.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	bool bSelectOwnUnitsOnMatchStart = true;
+	bool bSelectOwnUnitsOnMatchStart = false;
 	AUnitBase* GetUnitFromHitResult(const FHitResult& Hit) const;
 
 	virtual void BeginPlay() override;

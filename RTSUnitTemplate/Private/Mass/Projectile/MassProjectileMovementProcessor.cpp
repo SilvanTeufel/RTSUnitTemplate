@@ -556,7 +556,26 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 				}
 			}
 
+			// [TrailDiag] Gegenstueck zum Spawn-Log im ProjectileVisualManager: erster Flugtakt.
+			// Liegen die beiden Zeilen auseinander, entsteht der Trail woanders als er fliegt.
+			{
+				if (TrailDiagFlugCount < 8 && Projectile.LifeTime <= 0.12f)
+				{
+					++TrailDiagFlugCount;
+					const FVector MeshWelt = (Visual.VisualRelativeTransform * Transform).GetLocation();
+					const FVector TrailWelt = (Visual.Niagara_A_RelativeTransform * Transform).GetLocation();
+					UE_LOG(LogTemp, Warning,
+						TEXT("[TrailDiag] FLUG t=%.3f Ursprung=%s Yaw=%.1f Skal=%s | Mesh=%s Trail=%s Abstand=%.1f"),
+						Projectile.LifeTime, *Transform.GetLocation().ToCompactString(),
+						Transform.GetRotation().Rotator().Yaw, *Transform.GetScale3D().ToCompactString(),
+						*MeshWelt.ToCompactString(), *TrailWelt.ToCompactString(),
+						FVector::Dist(MeshWelt, TrailWelt));
+				}
+			}
+
 			// Update Niagara
+			// Eigener Transform des Trails (siehe Kommentar im ProjectileVisualManager: der
+			// Mesh-Anker haette die Mesh-Skalierung mitgebracht und den Effekt vervielfacht).
 			if (UNiagaraComponent* NC_A = Visual.Niagara_A.Get())
 			{
 				FTransform FinalNiagaraTransform = Visual.Niagara_A_RelativeTransform * Transform;

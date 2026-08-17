@@ -1137,7 +1137,22 @@ void AUnitBase::SetDeselected()
 			if (MassSubsystem)
 			{
 				FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+
+				// DIAGNOSE [TagDiag] (17.08.2026) - diese Entfernung geht NUR lokal (kein Server-RPC).
+				// Genau daraus entstand die gemessene Asymmetrie beim Casting: Server dreht zur Maus,
+				// Client zum Faehigkeitsziel. Die Zeile nennt den Moment beim Namen, falls trotz der
+				// Absicherung in AHUDBase::SetUnitSelected noch ein anderer Pfad hier hereinlaeuft.
+				if (GetNetMode() == NM_Client
+					&& DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct()))
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[TagDiag] SetDeselected nimmt %s den Maus-Ziel-Tag (nur lokal), Zustand=%d"),
+						*GetName(), (int32)GetUnitState());
+				}
+
 				EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+	// LUX-ANPASSUNG (16.08.2026): den Sperr-Tag zusammen mit dem Ziel-Tag entfernen.
+	EntityManager.Defer().RemoveTag<FMassStopWhileAimingTag>(Entity);
 				EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 			}
 		}

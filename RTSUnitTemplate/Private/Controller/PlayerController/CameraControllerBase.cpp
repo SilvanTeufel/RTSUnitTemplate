@@ -13,9 +13,13 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "MassEntityManager.h"
+#include "MassMovementFragments.h" // LUX-ANPASSUNG (16.08.2026): FMassVelocityFragment fuers Auslaufen
 #include "MassEntityTypes.h"
 #include "Mass/UnitMassTag.h"
 #include "GAS/GameplayAbilityBase.h"
+#include "Mass/Signals/MySignals.h" // LUX-ANPASSUNG (16.08.2026): UnitSignals::Run fuer die lokale Vorhersage
+#include "Steering/MassSteeringFragments.h" // FMassSteeringFragment fuer die Startdiagnose
+#include "Mass/UnitNavigationFragments.h" // DIAGNOSE (17.08.2026): Pfadstatus beim Losdruecken
 
 
 void ACameraControllerBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -28,6 +32,303 @@ bool ACameraControllerBase::Server_UpdateCameraUnitMovement_Validate(const FVect
 {
 	return CameraUnitWithTag != nullptr;
 }
+
+// ================================================================================================
+// LUX-ANPASSUNG 1/3 â€” harter Stopp fuer die Direktsteuerung (16.08.2026)
+// Wird beim Loslassen der WASD-Taste gerufen. Server_UpdateCameraUnitMovement taugt dafuer
+// nicht: es ruft UpdateMoveTarget mit voller BaseRunSpeed auf die aktuelle Position auf und
+// setzt den Stopp-Tag nur verzoegert - die Einheit rollte dadurch sichtbar aus (Silvan:
+// "beim Antippen laeuft er mind. 150"). StopMovement() setzt dagegen sofort
+// EMassMovementAction::Stand und DesiredSpeed 0.
+// ================================================================================================
+void ACameraControllerBase::Server_StopCameraUnitDirect_Implementation()
+{
+	if (!CameraUnitWithTag) return;
+
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (!CameraUnitWithTag->GetMassEntityData(EntityManager, EntityHandle) || !EntityManager)
+	{
+		return;
+	}
+
+	const FVector StopLoc = CameraUnitWithTag->GetMassActorLocation();
+
+	// Direktsteuerung beendet -> Tag weg, ab jetzt gilt wieder die normale Pfadsuche.
+	//
+	// MUSS hier oben stehen, nicht am Ende: der Auslauf-Zweig weiter unten kehrt vorzeitig
+	// zurueck (return im Glide-Fall), damit blieb der Tag nach JEDER normalen Bewegung gesetzt.
+	// Folge: der Bewegungsprozessor lenkt die Einheit weiter auf den Auslaufpunkt, ueberschiesst
+	// ihn und pendelt darum - genau das gemeldete Wackeln im Stillstand auf dem Server.
+	// Das Auslaufen selbst braucht den Tag nicht: sein Ziel steht FEST, eine einmalige Pfadsuche
+	// stoert also nicht. Der Tag existiert nur gegen das staendig mitwandernde WASD-Ziel.
+	if (!EntityManager->IsProcessing()
+		&& DoesEntityHaveTag(*EntityManager, EntityHandle, FMassDirectControlTag::StaticStruct()))
+	{
+		EntityManager->Defer().RemoveTag<FMassDirectControlTag>(EntityHandle);
+		EntityManager->FlushCommands();
+	}
+
+	// ============================================================================================
+	// LUX-ANPASSUNG (16.08.2026) â€” kleines Auslaufen statt Vollbremsung.
+	// Silvan: "Jetzt sollten wir der Einheit etwas Moment geben bevor sie stoppt."
+	// Statt sofort auf Tempo 0 zu gehen, bekommt sie ein Ziel ein kurzes Stueck in der
+	// aktuellen Laufrichtung. Die Ankunftslogik von Mass bremst sie dorthin aus - das ergibt
+	// die Traegheit, ohne eine eigene Physik-Kraft einzufuehren.
+	// Richtung kommt aus dem Velocity-Fragment (AActor::GetVelocity() ist bei Mass-Einheiten
+	// immer null). Steht die Einheit schon, faellt es auf den harten Stopp zurueck.
+	// Ueber UnitDirectStopGlide auf 0 gesetzt = altes Verhalten.
+	// ============================================================================================
+	if (HasAuthority() && UnitDirectStopGlide > 1.f)
+	{
+		FVector GlideDir = FVector::ZeroVector;
+		if (const FMassVelocityFragment* VelFrag =
+			EntityManager->GetFragmentDataPtr<FMassVelocityFragment>(EntityHandle))
+		{
+			GlideDir = VelFrag->Value;
+			GlideDir.Z = 0.f;
+			GlideDir = GlideDir.GetSafeNormal();
+		}
+
+		if (!GlideDir.IsNearlyZero() && CameraUnitWithTag->Attributes)
+		{
+			if (FMassMoveTargetFragment* MoveTargetFrag =
+				EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+			{
+				const FVector GlideTarget = StopLoc + GlideDir * UnitDirectStopGlide;
+
+				::UpdateMoveTarget(*MoveTargetFrag, GlideTarget,
+					CameraUnitWithTag->Attributes->GetBaseRunSpeed(), GetWorld());
+
+				// StoredLocation MUSS das Auslaufziel sein, sonst zieht die Idle-Regel
+				// "laufe zurueck zu StoredLocation" die Einheit hinterher wieder zurueck.
+				if (FMassAIStateFragment* AiStateFrag =
+					EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+				{
+					AiStateFrag->StoredLocation = GlideTarget;
+				}
+
+				// Bewusst KEIN AddStopMovementTagToEntity(): der Tag wuerde die Einheit
+				// sofort einfrieren und das Auslaufen wieder zunichtemachen.
+				return;
+			}
+		}
+	}
+	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
+	if (HasAuthority())
+	{
+		if (FMassMoveTargetFragment* MoveTargetFrag =
+			EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+		{
+			// ':: ' ist noetig: AController hat eine eigene StopMovement()-Methode, die die
+			// freie Funktion aus UnitMassTag.h sonst verdeckt (C2660).
+			::StopMovement(*MoveTargetFrag, GetWorld());
+
+			// StopMovement() setzt nur Stand + Speed 0 und laesst Center bewusst stehen.
+			// Center ist hier aber noch der Vorhalte-Punkt (UnitDirectMoveLookAhead voraus),
+			// den Server_UpdateCameraUnitMovement gesetzt hat - also mitziehen.
+			MoveTargetFrag->Center = StopLoc;
+		}
+
+		// Silvan: "Wenn der Character stoppt dann stoppt er nur kurz und bewegt sich danach
+		// wieder ein Stueck." Ursache: der IdleStateProcessor hat eine generische Regel
+		// "laufe zurueck zu StoredLocation" (IdleStateProcessor.cpp ~Z.405). StoredLocation
+		// wird von Server_UpdateCameraUnitMovement auf den Vorhalte-Punkt gesetzt
+		// (CustomControllerBase.cpp ~Z.965). Nach dem harten Stopp geht die Einheit auf Idle,
+		// findet dort den alten Punkt weit genug entfernt - und laeuft den Rest ab.
+		// Deshalb den gespeicherten Ort ebenfalls auf die aktuelle Position ziehen.
+		if (FMassAIStateFragment* AiStateFrag =
+			EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+		{
+			AiStateFrag->StoredLocation = StopLoc;
+		}
+	}
+	else if (FMassClientPredictionFragment* PredFrag =
+		EntityManager->GetFragmentDataPtr<FMassClientPredictionFragment>(EntityHandle))
+	{
+		// Client-Prediction ebenfalls stoppen, sonst zuckt die Einheit zurueck.
+		PredFrag->Location = StopLoc;
+		PredFrag->PredDesiredSpeed = 0.f;
+		PredFrag->bHasData = true;
+	}
+
+	CameraUnitWithTag->AddStopMovementTagToEntity();
+}
+// ===================== ENDE LUX-ANPASSUNG 1/3 ===================================================
+
+// ================================================================================================
+// LUX-ANPASSUNG 5/5 - lokale Vorhersage fuer die WASD-Direktsteuerung (16.08.2026)
+// Setzt auf dem steuernden Client dasselbe FMassClientPredictionFragment, das auch der
+// Rechtsklick-Befehl setzt (ApplyMovePredictionToUnit). Der UnitMovementProcessor bewegt die
+// Einheit auf dem Client dann sofort auf Pred.Location zu, statt auf die replizierte
+// Server-Position zu warten. Der Server bleibt autoritativ - die Reconciliation zieht die
+// Einheit weiterhin auf die Serverposition, was hier nur eine kleine Korrektur ist, weil
+// beide dasselbe Ziel mit derselben Geschwindigkeit anlaufen.
+// bStopping: beim Loslassen wird das Auslaufziel vorhergesagt (dieselbe Strecke, die der
+// Server in Server_StopCameraUnitDirect nimmt), damit Client und Server gleich ausrollen.
+// ================================================================================================
+// Schalter zum Gegenmessen/Abschalten: rts.lux.directpredict 0 = alte Fassung (nur Server-RPC).
+// Zur Laufzeit in der Konsole umschaltbar, damit man den Unterschied direkt vergleichen kann.
+static TAutoConsoleVariable<int32> CVarLuxDirectPredict(
+	TEXT("rts.lux.directpredict"),
+	1,
+	TEXT("1 = WASD-Direktsteuerung sagt auf dem Client lokal vorher (responsiv), 0 = nur Server-RPC."),
+	ECVF_Default);
+
+void ACameraControllerBase::ApplyDirectMovePredictionLocally(const FVector& Target, bool bStopping, bool bStartingMove)
+{
+	if (CVarLuxDirectPredict.GetValueOnGameThread() == 0) return;
+
+	if (!CameraUnitWithTag || !CameraUnitWithTag->Attributes) return;
+
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (!CameraUnitWithTag->GetMassEntityData(EntityManager, EntityHandle) || !EntityManager) return;
+	if (!EntityManager->IsEntityValid(EntityHandle)) return;
+
+	FMassClientPredictionFragment* Pred =
+		EntityManager->GetFragmentDataPtr<FMassClientPredictionFragment>(EntityHandle);
+	if (!Pred) return;
+
+	UWorld* World = GetWorld();
+
+	if (FMassAIStateFragment* AiState = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+	{
+		// Ohne das ueberspringen mehrere Client-Prozessoren die Einheit ("if (SwitchingState) continue;")
+		// und die Vorhersage wuerde erst einen Tick spaeter greifen.
+		AiState->SwitchingState = false;
+		AiState->SwitchingStateClient = false;
+		// StoredLocation mitziehen: die Idle-Regel "laufe zurueck zu StoredLocation" wuerde die
+		// Einheit sonst nach dem Anhalten wieder an den alten Punkt ziehen.
+		AiState->StoredLocation = Target;
+	}
+
+	// Die Ankunftslogik im UnitMovementProcessor braucht eine Geschwindigkeit > 0, auch beim
+	// Ausrollen - gestoppt wird ueber das Erreichen des (nahen) Auslaufziels, nicht ueber Tempo 0.
+	Pred->Location = Target;
+	Pred->PredDesiredSpeed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
+	Pred->PredAcceptanceRadius = CameraUnitWithTag->MovementAcceptanceRadius > 0.f
+		? CameraUnitWithTag->MovementAcceptanceRadius
+		: 50.f;
+	Pred->bHasData = true;
+	Pred->CommandPredictTime = World ? World->GetTimeSeconds() : 0.f;
+
+	// ============================================================================================
+	// LUX-ANPASSUNG 6/6 (17.08.2026) - Animationstempo: NICHT hier schreiben.
+	//
+	// Erster Versuch war, FMassVelocityFragment in der Vorhersage selbst zu setzen, weil der AnimBP
+	// sein Tempo daraus liest (UnitBaseAnimInstance -> MassSpeed) und es auf dem Client 0 blieb.
+	// Das war falsch: das Fragment ist zugleich der INTEGRATIONSZUSTAND der Bewegung.
+	// UUnitApplyMassMovementProcessor beschleunigt von Velocity in Richtung DesiredVelocity - wer
+	// Velocity jeden Frame ueberschreibt, setzt diesen Aufbau staendig zurueck. Gemessen: Lenkung
+	// konstant 800, tatsaechliche Geschwindigkeit pendelnd 290-518, in 0,22 s nur 74 statt ~176
+	// Einheiten Weg. Genau die gemeldete Traegheit auf dem Client.
+	//
+	// Die eigentliche Ursache der 0 war ein FEHLENDER Zustands-Tag: ohne FMassStateRunTag
+	// ueberspringt der Applier die Entity und aktualisiert ihre Velocity gar nicht. Der Tag wird
+	// unten gesetzt - damit pflegt der Applier das Fragment selbst, und die Animation stimmt ohne
+	// jeden Eingriff von hier.
+	// ============================================================================================
+
+	// ============================================================================================
+	// DIAGNOSE (17.08.2026) - wo genau entsteht die Traegheit beim Losdruecken?
+	// Silvan: "Beim loslaufen ist es immernoch sehr traege auf dem Client".
+	// Kandidaten sind Pfadsuche (der Prozessor setzt DesiredVelocity waehrenddessen auf NULL),
+	// eine Bewegungssperre, oder ein Zustand, in dem der Client-Mover die Einheit ueberspringt.
+	// Nur die erste Sekunde je Bewegung, nur Client - danach still.
+	// ============================================================================================
+	if (bStartingMove)
+	{
+		DiagnoseStartZeit = World ? World->GetTimeSeconds() : 0.f;
+		DiagnoseStartOrt = CameraUnitWithTag->GetMassActorLocation();
+	}
+	if (!bStopping && DiagnoseStartZeit > 0.f && World && World->GetTimeSeconds() - DiagnoseStartZeit < 1.0f)
+	{
+		const FMassSteeringFragment* St = EntityManager->GetFragmentDataPtr<FMassSteeringFragment>(EntityHandle);
+		const FMassVelocityFragment* Ve = EntityManager->GetFragmentDataPtr<FMassVelocityFragment>(EntityHandle);
+		const FUnitNavigationPathFragment* Pf = EntityManager->GetFragmentDataPtr<FUnitNavigationPathFragment>(EntityHandle);
+		const FMassAIStateFragment* Ai = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle);
+		UE_LOG(LogTemp, Warning,
+			TEXT("[StartDiag] t=%.3f Strecke=%.0f Steer=%.0f Vel=%.0f Pfadsuche=%d Pfad=%d RunTag=%d Sperre=%d CanMove=%d Zustand=%d"),
+			World->GetTimeSeconds() - DiagnoseStartZeit,
+			FVector::Dist2D(CameraUnitWithTag->GetMassActorLocation(), DiagnoseStartOrt),
+			St ? St->DesiredVelocity.Size2D() : -1.f,
+			Ve ? Ve->Value.Size2D() : -1.f,
+			Pf ? (int32)Pf->bIsPathfindingInProgress : -1,
+			Pf ? (int32)Pf->HasValidPath() : -1,
+			(int32)DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStateRunTag::StaticStruct()),
+			(int32)DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStopWhileAimingTag::StaticStruct()),
+			Ai ? (int32)Ai->CanMove : -1,
+			(int32)CameraUnitWithTag->GetUnitState());
+	}
+
+	// ============================================================================================
+	// Direktsteuerungs-Tag auch auf dem CLIENT fuehren - Gegenstueck zum Server.
+	//
+	// Diese Zeilen waren beim Entfernen des Velocity-Blocks versehentlich mit herausgefallen; im
+	// Log stand danach wieder "Pfadsuche=1 Steer=0" und [ApplierDiag] blieb stumm. Ohne den Tag
+	// sucht der Client bei jedem Takt einen neuen Pfad (das WASD-Ziel wandert mit der Einheit
+	// mit) und der Prozessor setzt waehrend der Suche die Lenkung auf null - das ist die
+	// Traegheit beim Losllaufen und zugleich der Grund fuer Tempo 0 in der Animation.
+	// Beim Anhalten wieder entfernen: sonst wuerde ein spaeterer Rechtsklick-Befehl die Einheit
+	// geradeaus schicken statt um Hindernisse herum.
+	// ============================================================================================
+	if (!EntityManager->IsProcessing())
+	{
+		const bool bHatTag =
+			DoesEntityHaveTag(*EntityManager, EntityHandle, FMassDirectControlTag::StaticStruct());
+		if (bStopping && bHatTag)
+		{
+			EntityManager->Defer().RemoveTag<FMassDirectControlTag>(EntityHandle);
+			EntityManager->FlushCommands();
+		}
+		else if (bStartingMove && !bHatTag)
+		{
+			EntityManager->Defer().AddTag<FMassDirectControlTag>(EntityHandle);
+			EntityManager->FlushCommands();
+		}
+	}
+
+	if (!bStartingMove)
+	{
+		return;
+	}
+
+	// Auf den ENTITY-Tag pruefen, NICHT auf CameraUnitWithTag->GetUnitState().
+	//
+	// Der Actor-Zustand ist auf dem Client der replizierte Wert und sagt laengst "Run" - die
+	// Bedingung war damit auf dem Client praktisch immer falsch, der Tag wurde nie gesetzt, und
+	// ohne Tag ueberspringt UUnitApplyMassMovementProcessor die Entity (siehe oben). Der Tag ist
+	// das, worauf es ankommt, also wird er auch abgefragt.
+	// Weiterhin nur beim Wechsel setzen: SetUnitState schreibt Tags um und wuerde bei 60 Hz sonst
+	// dauernd Zustaende neu schalten.
+	if (!DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStateRunTag::StaticStruct()))
+	{
+		const FMassCombatStatsFragment* Stats =
+			EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle);
+		const bool bAttackingOrPausing =
+			DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStateAttackTag::StaticStruct()) ||
+			DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStatePauseTag::StaticStruct());
+
+		// Schiessen im Laufen: dann NICHT auf Run schalten, sonst bricht der Angriffszyklus ab.
+		// Die Vorhersage oben bewegt die Einheit trotzdem.
+		if (!(Stats && Stats->bCanMoveWhileAttacking && bAttackingOrPausing))
+		{
+			if (FMassAIStateFragment* AiState = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
+			{
+				AiState->PlaceholderSignal = UnitSignals::Run;
+			}
+			CameraUnitWithTag->SetUnitState(UnitData::Run);
+			if (!EntityManager->IsProcessing())
+			{
+				EntityManager->Defer().AddTag<FMassStateRunTag>(EntityHandle);
+				EntityManager->FlushCommands();
+			}
+		}
+	}
+}
+
 
 void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const FVector& TargetLocation)
 {
@@ -60,9 +361,36 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 			return;
 		}
 
-		if (CameraUnitWithTag->GetUnitState() == UnitData::Casting || CameraUnitWithTag->ActivatedAbilityInstance != nullptr)
+		// ============================================================================
+		// LUX-ANPASSUNG 2/3 (Serverseite) â€” Ausnahme NUR fuer die Direktsteuerung.
+		// Sonst gilt die Original-Regel unveraendert. In der Direktsteuerung haelt nur
+		// ein echter Cast an; eine bloss laufende Faehigkeit (Schiessen) nicht, sonst
+		// wird jede Bewegungsanforderung waehrend des Feuerns verworfen.
+		// Original: if (GetUnitState() == UnitData::Casting || ActivatedAbilityInstance != nullptr)
+		// ============================================================================
+		const bool bDirectCtrl = bUnitDirectControl && !CameraUnitMouseFollow;
+		const bool bBlocked = bDirectCtrl
+			? (CameraUnitWithTag->GetUnitState() == UnitData::Casting)
+			: (CameraUnitWithTag->GetUnitState() == UnitData::Casting
+			   || CameraUnitWithTag->ActivatedAbilityInstance != nullptr);
+		if (bBlocked)
 		{
 			return;
+		}
+		// ===================== ENDE LUX-ANPASSUNG 2/3 ===============================
+
+		// Serverseitig denselben Tag fuehren wie der Client, sonst laeuft der Server mit Pfadsuche
+		// und der Client ohne - die Reconciliation korrigiert dann dauernd gegeneinander.
+		if (bDirectCtrl)
+		{
+			FMassEntityManager* EM = nullptr;
+			FMassEntityHandle EH;
+			if (CameraUnitWithTag->GetMassEntityData(EM, EH) && EM && !EM->IsProcessing()
+				&& !DoesEntityHaveTag(*EM, EH, FMassDirectControlTag::StaticStruct()))
+			{
+				EM->Defer().AddTag<FMassDirectControlTag>(EH);
+				EM->FlushCommands();
+			}
 		}
 
 		bool bNavMod = false;
@@ -1820,19 +2148,47 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         		bHasCastingTag = DoesEntityHaveTag(*EntityManager, EntityHandle, FMassStateCastingTag::StaticStruct());
         	}
 
-        	if (bHasCastingTag || 
+        	// ORIGINAL, unveraendert: gilt weiterhin fuer den Maus-Folgen-Betrieb.
+        	if (bHasCastingTag ||
 				CameraUnitWithTag->GetUnitState() == UnitData::Casting ||
 				CameraUnitWithTag->ActivatedAbilityInstance != nullptr ||
 				CurrentDraggedAbilityIndicator != nullptr)
         	{
         		bCanMove = false;
         	}
+
+        	// ====================================================================================
+        	// LUX-ANPASSUNG 2/3 â€” eigene Sperr-Regel NUR fuer die Direktsteuerung (16.08.2026)
+        	// Greift ausschliesslich bei CameraUnit + CameraUnitMouseFollow == false; das
+        	// Verhalten aller anderen Modi bleibt unangetastet (`bCanMove` oben unveraendert).
+        	// Unterschied: hier haelt NUR ein echter Cast an. Eine bloss laufende Faehigkeit
+        	// (Schiessen) oder ein gezogener Indikator duerfen die Bewegung nicht stoppen.
+        	// ====================================================================================
+        	const bool bCanMoveDirect = !bIsCameraMovementHaltedByUI
+        		&& !bHasCastingTag
+        		&& CameraUnitWithTag->GetUnitState() != UnitData::Casting;
+        	// ===================== ENDE LUX-ANPASSUNG 2/3 =======================================
         	
         	// Calculate movement direction based on input states
         	// Only add direction when state is 1 (active press), not 2 (decelerate)
         	FVector MoveDirection = FVector::ZeroVector;
 
-        	if(bCanMove)
+        	// ====================================================================================
+        	// LUX-ANPASSUNG 2b/3 â€” die Sperre, die das Schiessen im Laufen verhindert hat.
+        	// Diese Klammer baut den Richtungsvektor. Sie hing am ORIGINALEN bCanMove, und das
+        	// enthaelt "ActivatedAbilityInstance != nullptr" - waehrend des Schusses war die
+        	// Richtung damit immer null, egal was weiter unten steht. Gemessen: WTaste=1 (Taste
+        	// erkannt), aber Eingabe=0 (Richtung leer) und 0 Aufrufe von
+        	// Server_UpdateCameraUnitMovement.
+        	// In der Direktsteuerung gilt deshalb bCanMoveDirect (nur ein echter Cast sperrt),
+        	// in jedem anderen Modus unveraendert bCanMove.
+        	// Original: if(bCanMove)
+        	// ====================================================================================
+        	const bool bCanBuildDirection = (bUnitDirectControl && !CameraUnitMouseFollow)
+        		? bCanMoveDirect
+        		: bCanMove;
+
+        	if(bCanBuildDirection)
         	{
 	        	if(WIsPressedState == 1)
 	        	{
@@ -1852,16 +2208,27 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
 	        	}
         	}
 
+        	// ====================================================================================
+        	// LUX-ANPASSUNG 1/3 â€” Schalter fuer die Direktsteuerung (16.08.2026)
+        	// Eine CameraUnit ist gesetzt und sie folgt NICHT der Maus: dann bewegt WASD die
+        	// Einheit selbst, und die Kamera bleibt ueber ihr stehen - ein Kamera-Schwenk waere
+        	// hier falsch, weil die Kamera der Einheit folgen soll.
+        	// ====================================================================================
+        	const bool bDirectUnitControl = bUnitDirectControl && !CameraUnitMouseFollow;
+
         	// When locked over the CameraUnit (Ctrl+G toggles LockCameraToCharacter), keep the camera centered
         	// on the unit instead of WASD-panning, so the unit can keep following the mouse while the camera stays
         	// above it. We deliberately stay in CameraData::LockOnCharacterWithTag (see ToggleLockCamToCharacter).
-        	if (LockCameraToCharacter)
+        	if (LockCameraToCharacter || bDirectUnitControl)
         	{
         		if (IsLocalController() && CameraBase)
         		{
         			const FVector UnitLoc = CameraUnitWithTag->GetActorLocation();
         			const FVector DesiredCamLoc = FVector(UnitLoc.X, UnitLoc.Y, CameraBase->GetActorLocation().Z);
-        			const FVector NewCamLoc = FMath::VInterpTo(CameraBase->GetActorLocation(), DesiredCamLoc, DeltaTime, 5.0f);
+        			// Bei Direktsteuerung zieht die Kamera straffer nach, sonst haengt sie der
+        			// selbst gesteuerten Einheit sichtbar hinterher.
+        			const float FollowSpeed = bDirectUnitControl ? UnitDirectCamFollowSpeed : 5.0f;
+        			const FVector NewCamLoc = FMath::VInterpTo(CameraBase->GetActorLocation(), DesiredCamLoc, DeltaTime, FollowSpeed);
         			CameraBase->SetActorLocation(NewCamLoc);
 
         			// Keep the server in sync (client-only); mirrors the WASD-pan sync below.
@@ -1892,12 +2259,158 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         		}
         	}
 
-        	APawn* ControlledPawn = GetPawn();
-        	if (ControlledPawn)
+        	if (bDirectUnitControl)
+        	{
+        		// ================================================================================
+        		// LUX-ANPASSUNG 3/3 â€” WASD bewegt die Einheit (16.08.2026)
+        		// Statt einer Physik-Kraft wird das Mass-Laufziel ein Stueck VOR die Einheit
+        		// gesetzt und laufend nachgefuehrt. Das ist derselbe Pfad, den auch das
+        		// Maus-Folgen nutzt (Server_UpdateCameraUnitMovement -> MoveTargetFragment auf
+        		// dem Server, ClientPredictionFragment auf dem Client), damit Navigation,
+        		// Ausweichen und Replikation unveraendert weiterarbeiten. Eine direkte Kraft
+        		// wuerde beides umgehen und auf Clients auseinanderlaufen.
+        		// ================================================================================
+        		UnitDirectMoveTimer -= DeltaTime;
+
+        		// ================================================================================
+        		// LUX-ANPASSUNG 7/7 (17.08.2026) - Zielrichtung muss beim Server ankommen.
+        		// Silvan: "Wenn ich auf dem Client spiele kommt die Rotation nicht beim Server an."
+        		//
+        		// Die Einheit dreht sich zur Maus; die dafuer noetige Mausposition schickt bisher
+        		// AUSSCHLIESSLICH UMassRotateToMouseProcessor::Execute an den Server - und der
+        		// steigt in Zeile 1 wieder aus:
+        		//     if (EntityQuery.GetNumMatchingEntities() == 0) return;
+        		// Die Query verlangt FMassRotateToMouseTag. Solange auf dem CLIENT keine Entity
+        		// diesen Tag traegt, wird UpdateMouseLocationWithThrottling nie aufgerufen, der
+        		// Server behaelt eine veraltete ReplicatedMouseLocation und dreht die Einheit
+        		// woanders hin. Der Client dreht lokal richtig - beide ziehen gegeneinander, das
+        		// ist das Wackeln beim Laufen und Schiessen.
+        		//
+        		// Die Mausposition haengt hier nicht mehr am Tag: wer eine Einheit direkt steuert,
+        		// zielt. Der Versand bleibt gedrosselt (20 Hz bzw. >15 Einheiten Bewegung), es
+        		// entsteht also kein zusaetzlicher Netzverkehr gegenueber dem alten Pfad.
+        		// ================================================================================
+        		if (!HasAuthority() && IsLocalController())
+        		{
+        			FHitResult MausTreffer;
+        			if (GetHitResultUnderCursor(ECC_Visibility, false, MausTreffer))
+        			{
+        				UpdateMouseLocationWithThrottling(MausTreffer.Location);
+        			}
+        		}
+
+        		const FVector UnitLoc = CameraUnitWithTag->GetMassActorLocation();
+
+
+        		// ================================================================================
+        		// LUX-ANPASSUNG 4/4 â€” Bewegungssperre beim Zielen fuer DIESE Einheit aufheben.
+        		// FMassStopWhileAimingTag wird an zwei Stellen gesetzt: in GameplayAbilityBase
+        		// (dort greift die Ausnahme korrekt) und in
+        		// AExtendedControllerBase::BatchSetRotateToMouseTagLocally - dem lokalen Spiegel,
+        		// der die Faehigkeit noch gar nicht kennt (gemessen: "Ctrl: setzeSperre=1
+        		// Instanz=0"). Statt dort zu raten, wird die Sperre hier wieder entfernt,
+        		// solange die laufende Faehigkeit Bewegung ausdruecklich erlaubt. Das deckt
+        		// beide Pfade ab und bleibt auf die direkt gesteuerte CameraUnit begrenzt.
+        		// ================================================================================
+        		{
+        			const UGameplayAbilityBase* LuxRunning = CameraUnitWithTag->ActivatedAbilityInstance
+        				? CameraUnitWithTag->ActivatedAbilityInstance
+        				: (CameraUnitWithTag->CurrentSnapshot.AbilityClass
+        					? CameraUnitWithTag->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>()
+        					: nullptr);
+
+        			if (LuxRunning && !LuxRunning->bStopMovementOnActivation)
+        			{
+        				FMassEntityManager* EM = nullptr;
+        				FMassEntityHandle EH;
+        				if (CameraUnitWithTag->GetMassEntityData(EM, EH) && EM
+        					&& DoesEntityHaveTag(*EM, EH, FMassStopWhileAimingTag::StaticStruct()))
+        				{
+        					EM->Defer().RemoveTag<FMassStopWhileAimingTag>(EH);
+        				}
+        			}
+        		}
+        		// ===================== ENDE LUX-ANPASSUNG 4/4 ===================================
+        		// bCanMoveDirect statt bCanMove: nur hier gilt die gelockerte Sperr-Regel.
+        		const bool bHasInput = bCanMoveDirect && !MoveDirection.IsNearlyZero();
+
+        		if (bHasInput && IsLocalController() && CameraBase)
+        		{
+        			// Eingabe in Weltkoordinaten drehen - exakt wie ACameraBase::MoveInDirection,
+        			// damit sich WASD bei gedrehter Kamera identisch anfuehlt.
+        			FVector Dir = MoveDirection.GetSafeNormal();
+        			const float YawRad = CameraBase->SpringArmRotator.Yaw * PI / 180.f;
+        			const float CosYaw = FMath::Cos(YawRad);
+        			const float SinYaw = FMath::Sin(YawRad);
+
+        			FVector WorldDir;
+        			WorldDir.X = Dir.X * CosYaw - Dir.Y * SinYaw;
+        			WorldDir.Y = Dir.X * SinYaw + Dir.Y * CosYaw;
+        			WorldDir.Z = 0.f;
+
+        			// Das Ziel MUSS deutlich weiter weg liegen als die Einheit zwischen zwei
+        			// Updates schafft (~700 uu/s * Intervall) und als ihr Akzeptanzradius
+        			// (MovementAcceptanceRadius, 50). Sonst erreicht sie das Ziel, haelt wegen
+        			// IntentAtGoal = Stand an und laeuft beim naechsten Update wieder los -
+        			// genau das fuehlte sich "laggy" an. Eine Rampe auf kleine Werte stand
+        			// hier zuerst und war die Ursache; das Antippen loest stattdessen der
+        			// harte Stopp beim Loslassen (Server_StopCameraUnitDirect).
+        			UnitDirectHoldTime += DeltaTime;
+        			const FVector Target = UnitLoc + WorldDir * UnitDirectMoveLookAhead;
+        			LastUnitDirectWorldDir = WorldDir; // fuers Auslaufen beim Loslassen
+
+        			// LUX-ANPASSUNG 5/5 - JEDEN Frame lokal vorhersagen, nicht nur im RPC-Takt.
+        			// Der RPC bleibt gedrosselt (Bandbreite), die lokale Reaktion darf es nicht sein:
+        			// sonst haengt die Einheit auf dem Client an Roundtrip + Replikation.
+        			if (!HasAuthority())
+        			{
+        				// !bUnitDirectWasMoving == erster Takt dieser Bewegung.
+        				ApplyDirectMovePredictionLocally(Target, false, !bUnitDirectWasMoving);
+        			}
+
+        			if (UnitDirectMoveTimer <= 0.f)
+        			{
+        				LastCameraUnitMovementLocation = Target;
+        				Server_UpdateCameraUnitMovement(Target);
+        				UnitDirectMoveTimer = UnitDirectMoveUpdateInterval;
+        			}
+        			bUnitDirectWasMoving = true;
+        		}
+        		else if (bUnitDirectWasMoving)
+        		{
+        			// Taste losgelassen: HART anhalten (Stand + Speed 0). Der Umweg ueber
+        			// Server_UpdateCameraUnitMovement(UnitLoc) liess die Einheit ausrollen,
+        			// weil dort UpdateMoveTarget mit voller BaseRunSpeed gesetzt wird.
+        			LastCameraUnitMovementLocation = UnitLoc;
+
+        			// LUX-ANPASSUNG 5/5 - dasselbe Auslaufziel lokal vorhersagen, das der Server
+        			// gleich setzt. Ohne das haelt die Einheit auf dem Client erst an, wenn der
+        			// Stopp vom Server zurueckkommt - sie schoesse sichtbar ueber.
+        			if (!HasAuthority())
+        			{
+        				const FVector GlideTarget =
+        					(UnitDirectStopGlide > 1.f && !LastUnitDirectWorldDir.IsNearlyZero())
+        						? UnitLoc + LastUnitDirectWorldDir * UnitDirectStopGlide
+        						: UnitLoc;
+        				ApplyDirectMovePredictionLocally(GlideTarget, true);
+        			}
+
+        			Server_StopCameraUnitDirect();
+        			UnitDirectMoveTimer = 0.f;
+        			UnitDirectHoldTime = 0.f;
+        			bUnitDirectWasMoving = false;
+        		}
+        		else
+        		{
+        			UnitDirectHoldTime = 0.f;
+        		}
+        		// ===================== ENDE LUX-ANPASSUNG 3/3 ===================================
+        	}
+        	else if (APawn* ControlledPawn = GetPawn())
         	{
         		const bool bIsLocal = IsLocalController();
         		FVector MoveTargetLocation;
-        		
+
         		if (bCanMove)
         		{
         			MoveTargetLocation = ControlledPawn->GetActorLocation();

@@ -194,6 +194,25 @@ private:
 	void FlushBuffer();
 	void RegisterConsoleCommands();
 
+	// ============================================================================================
+	// Selbstspiel-Betrieb (16.08.2026): eine Partie soll ohne Editor, ohne Zuschauer und ohne
+	// Prozess-Abschuss enden. Ein hartes Kill mitten im Schreiben wuerde die letzte Zeile
+	// zerreissen UND die Ergebniszeile verschlucken - beides macht die Aufnahme fuer das
+	// Training wertlos. Deshalb: Zeitlimit in SPIELzeit (der Timer laeuft dilatiert, bei 6x
+	// sind 1800 s Spielzeit also 300 s Echtzeit), danach sauber stoppen und beenden.
+	// ============================================================================================
+	/** Haengt das Spielzeitlimit an eine frisch initialisierte Spielwelt. */
+	void ScheduleMatchLimit(UWorld* World, const UWorld::InitializationValues);
+
+	/** Limit erreicht: Ergebnis schreiben, Datei schliessen, Prozess beenden. */
+	void OnMatchTimeUp();
+
+	/** Schreibt eine Abschlusszeile {"ep":"end",...} mit Spielzeit und lebenden Einheiten je Team. */
+	void WriteEpisodeSummary();
+
+	FTimerHandle MatchLimitTimer;
+	TWeakObjectPtr<UWorld> MatchWorld;
+
 	/** Applies the rts.ai.timescale speed-up once a game world exists. */
 	void ApplyTimeScaleToWorld(UWorld* World, const UWorld::InitializationValues);
 

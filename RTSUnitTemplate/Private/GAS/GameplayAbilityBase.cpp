@@ -24,6 +24,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h" // LUX-ANPASSUNG (16.08.2026): fuer die Direktsteuerungs-Ausnahme bei FMassStopWhileAimingTag
 #include "Characters/Unit/SpawnerUnit.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Characters/Unit/GASUnit.h"
@@ -192,6 +193,38 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 
 							// Ensure the tag and fragment for the processor are present
 							EntityManager.Defer().AddTag<FMassRotateToMouseTag>(Entity);
+
+							// ================================================================
+							// LUX-ANPASSUNG (16.08.2026) â€” Bewegungssperre beim Zielen.
+							// Frueher war FMassRotateToMouseTag selbst die Sperre. Jetzt traegt
+							// jede Einheit zusaetzlich FMassStopWhileAimingTag - ausser der
+							// direkt gesteuerten CameraUnit, deren Faehigkeit Bewegung erlaubt
+							// (bStopMovementOnActivation, bei der Waffe aus
+							// FWeaponData::bCanFireWhileMoving). Fuer alle anderen bleibt das
+							// Verhalten damit exakt wie vorher.
+							// ================================================================
+							bool bLuxStopWhileAiming = true;
+							if (!bStopMovementOnActivation)
+							{
+								if (UWorld* LuxWorld = Unit->GetWorld())
+								{
+									for (FConstPlayerControllerIterator It = LuxWorld->GetPlayerControllerIterator(); It; ++It)
+									{
+										const ACameraControllerBase* LuxPC = Cast<ACameraControllerBase>(It->Get());
+										if (LuxPC && LuxPC->bUnitDirectControl && !LuxPC->CameraUnitMouseFollow
+											&& LuxPC->CameraUnitWithTag == Unit)
+										{
+											bLuxStopWhileAiming = false;
+											break;
+										}
+									}
+								}
+							}
+							if (bLuxStopWhileAiming)
+							{
+								EntityManager.Defer().AddTag<FMassStopWhileAimingTag>(Entity);
+							}
+							// ===================== ENDE LUX-ANPASSUNG =======================
 							if (bIsContinuousAbility)
 							{
 								if (FMassAIStateFragment* StateFrag = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
@@ -464,6 +497,8 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 	
 							// Ensure the tag and fragment for the processor are removed
 							EntityManager.Defer().RemoveTag<FMassRotateToMouseTag>(Entity);
+	// LUX-ANPASSUNG (16.08.2026): den Sperr-Tag zusammen mit dem Ziel-Tag entfernen.
+	EntityManager.Defer().RemoveTag<FMassStopWhileAimingTag>(Entity);
 							EntityManager.Defer().RemoveTag<FMassStateContinuousAttackTag>(Entity);
 							EntityManager.Defer().RemoveFragment<FMassRotateToMouseFragment>(Entity);
 

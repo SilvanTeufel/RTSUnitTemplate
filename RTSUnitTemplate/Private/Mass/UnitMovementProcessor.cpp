@@ -110,7 +110,11 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-    EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+    // LUX-ANPASSUNG (16.08.2026): sperrt auf FMassStopWhileAimingTag statt auf
+    // FMassRotateToMouseTag, damit die direkt gesteuerte CameraUnit beim Zielen laufen
+    // darf. Alle anderen Einheiten tragen beide Tags -> Verhalten unveraendert.
+    // Original: AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+    EntityQuery.AddTagRequirement<FMassStopWhileAimingTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
     
     EntityQuery.RegisterWithProcessor(*this);
@@ -152,7 +156,11 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
     ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
     ClientEntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
     ClientEntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-    ClientEntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+    // LUX-ANPASSUNG (16.08.2026): sperrt auf FMassStopWhileAimingTag statt auf
+    // FMassRotateToMouseTag, damit die direkt gesteuerte CameraUnit beim Zielen laufen
+    // darf. Alle anderen Einheiten tragen beide Tags -> Verhalten unveraendert.
+    // Original: AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+    ClientEntityQuery.AddTagRequirement<FMassStopWhileAimingTag>(EMassFragmentPresence::None);
     ClientEntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
     
 	ClientEntityQuery.RegisterWithProcessor(*this);
@@ -302,6 +310,30 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
                     Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
                 }
+                continue;
+            }
+
+            // ============================================================================
+            // Direktsteuerung (WASD): ohne Pfadsuche direkt lenken.
+            //
+            // Bei Direktsteuerung liegt das Ziel eine feste Strecke VOR der Einheit und wandert
+            // jeden Frame mit. Der Pfad galt dadurch staendig als ueberholt: gemessen startete
+            // alle ~40 ms eine neue Suche, und waehrend einer Suche setzt der Code unten
+            // DesiredVelocity auf null - im Protokoll als Wechsel "Steer=797 / Steer=0" sichtbar.
+            // Genau das war das zaehe Losllaufen. Der Spieler steuert hier ohnehin auf Sicht,
+            // also ist Direktlenkung das richtige Verhalten und nicht bloss eine Abkuerzung.
+            // ============================================================================
+            if (DoesEntityHaveTag(EntityManager, Entity, FMassDirectControlTag::StaticStruct()))
+            {
+                // Am Ziel NICHT weiterlenken: sonst schiesst die Einheit darueber hinaus, dreht um
+                // und pendelt um den Punkt - sichtbar als Wackeln im Stillstand.
+                const FVector ZumZiel = FinalDestination - CurrentLocation;
+                Steering.DesiredVelocity =
+                    (ZumZiel.SizeSquared2D() <= FMath::Square(AcceptanceRadiusUsed))
+                        ? FVector::ZeroVector
+                        : ZumZiel.GetSafeNormal2D() * DesiredSpeedUsed;
+                PathFrag.ResetPath();
+                PathFrag.bIsPathfindingInProgress = false;
                 continue;
             }
             
@@ -476,7 +508,24 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 }
                 continue; 
             }
-            
+
+            // Direktsteuerung (WASD) - dieselbe Begruendung wie im Client-Zweig oben: das Ziel
+            // wandert mit der Einheit mit, jede Pfadsuche nullt zwischendurch die Lenkung. Auch auf
+            // dem Server gesetzt, damit Server und Client dasselbe Bewegungsprofil fahren; sonst
+            // korrigiert die Reconciliation staendig gegen einen anders laufenden Server.
+            if (DoesEntityHaveTag(EntityManager, Entity, FMassDirectControlTag::StaticStruct()))
+            {
+                // Ankunft beachten - siehe Client-Zweig oben (Wackeln im Stillstand).
+                const FVector ZumZiel = FinalDestination - CurrentLocation;
+                Steering.DesiredVelocity =
+                    (ZumZiel.SizeSquared2D() <= FMath::Square(AcceptanceRadius))
+                        ? FVector::ZeroVector
+                        : ZumZiel.GetSafeNormal2D() * DesiredSpeed;
+                PathFrag.ResetPath();
+                PathFrag.bIsPathfindingInProgress = false;
+                continue;
+            }
+
             if (const AUnitBase* UnitBase = Cast<AUnitBase>( ActorList[i].Get()))
             {
                 if (const UCapsuleComponent* Capsule = UnitBase->GetCapsuleComponent())

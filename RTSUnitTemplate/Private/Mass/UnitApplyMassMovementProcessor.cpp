@@ -71,7 +71,11 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-	EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+	// LUX-ANPASSUNG (16.08.2026): sperrt auf FMassStopWhileAimingTag statt auf
+	// FMassRotateToMouseTag, damit die direkt gesteuerte CameraUnit beim Zielen laufen
+	// darf. Alle anderen Einheiten tragen beide Tags -> Verhalten unveraendert.
+	// Original: AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+	EntityQuery.AddTagRequirement<FMassStopWhileAimingTag>(EMassFragmentPresence::None);
 	EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 	
 	EntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
@@ -114,7 +118,11 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	ClientEntityQuery.AddTagRequirement<FMassStateIsAttackedTag>(EMassFragmentPresence::None);
 	ClientEntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::None);
 	ClientEntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-	ClientEntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+	// LUX-ANPASSUNG (16.08.2026): sperrt auf FMassStopWhileAimingTag statt auf
+	// FMassRotateToMouseTag, damit die direkt gesteuerte CameraUnit beim Zielen laufen
+	// darf. Alle anderen Einheiten tragen beide Tags -> Verhalten unveraendert.
+	// Original: AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+	ClientEntityQuery.AddTagRequirement<FMassStopWhileAimingTag>(EMassFragmentPresence::None);
 	ClientEntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 	
 	ClientEntityQuery.RegisterWithProcessor(*this);
@@ -145,7 +153,7 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
 {
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
 
-    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime](FMassExecutionContext& LocalContext)
+    ClientEntityQuery.ForEachEntityChunk(Context, [this, DeltaTime, &EntityManager](FMassExecutionContext& LocalContext)
     {
         const int32 NumEntities = LocalContext.GetNumEntities();
         if (NumEntities == 0) return;
@@ -185,6 +193,26 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
                         UE_LOG(LogTemp, Warning, TEXT("[DEBUG_LOG] UnitApplyMassMovementProcessor Client: %s - Velocity: %s, Steering: %s, Force: %s"), 
                             *Actor->GetName(), *Velocity.Value.ToString(), *Steering.DesiredVelocity.ToString(), *Force.Value.ToString());
                      }
+                }
+            }
+
+            // DIAGNOSE (17.08.2026): laeuft dieser Applier auf dem Client fuer die direkt gesteuerte
+            // Einheit ueberhaupt? Silvan meldet nach dem Entfernen meines Velocity-Schreibens wieder
+            // "Schlittschuhe", also Velocity=0 - das waere nur erklaerbar, wenn dieser Zweig die
+            // Entity nicht erreicht oder sie hier ausgebremst wird. Nur die direkt gesteuerte
+            // Einheit, hoechstens dreimal pro Sekunde.
+            if (DoesEntityHaveTag(EntityManager, LocalContext.GetEntity(EntityIndex),
+                                  FMassDirectControlTag::StaticStruct()))
+            {
+                static double LetzteAusgabe = 0.0;
+                const double Jetzt = FPlatformTime::Seconds();
+                if (Jetzt - LetzteAusgabe > 0.33)
+                {
+                    LetzteAusgabe = Jetzt;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[ApplierDiag] CLIENT laeuft: Vel=%.0f Desired=%.0f Force=%.0f MaxSpeed=%.0f Accel=%.0f CanMove=%d"),
+                        Velocity.Value.Size2D(), Steering.DesiredVelocity.Size2D(), Force.Value.Size2D(),
+                        MovementParams.MaxSpeed, MovementParams.MaxAcceleration, (int32)AIState.CanMove);
                 }
             }
 

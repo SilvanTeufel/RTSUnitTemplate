@@ -289,6 +289,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	FString ChooseJsonAction(const FGameStateData& GameState);
 
+	/**
+	 * Aktionsindex der letzten Netz-Entscheidung, -1 solange keine gefallen ist.
+	 * Gebraucht fuer die Aufnahme im Selbstspiel: ohne den Index kann eine vom Netz gespielte
+	 * Partie nicht als Trainingsdaten zurueckfliessen (die Regel-KI hat ihren eigenen Haken im
+	 * Decider, der Modellpfad hatte keinen).
+	 */
+	UFUNCTION(BlueprintPure, Category = "AI|RL")
+	int32 GetLastChosenActionIndex() const { return LastChosenActionIndex; }
+
 	// Expose for BT task to fetch JSON for an index
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	FString GetActionAsJSON(int32 ActionIndex);

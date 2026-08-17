@@ -90,7 +90,11 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None);
         EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
         EntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-        EntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+        // LUX-ANPASSUNG (16.08.2026): sperrt auf FMassStopWhileAimingTag statt auf
+        // FMassRotateToMouseTag, damit die direkt gesteuerte CameraUnit beim Zielen laufen
+        // darf. Alle anderen Einheiten tragen beide Tags -> Verhalten unveraendert.
+        // Original: AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+        EntityQuery.AddTagRequirement<FMassStopWhileAimingTag>(EMassFragmentPresence::None);
         EntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 
 		EntityQuery.RegisterWithProcessor(*this);
@@ -133,7 +137,11 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
         ClientEntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::None); 
         ClientEntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None); 
         ClientEntityQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
-        ClientEntityQuery.AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+        // LUX-ANPASSUNG (16.08.2026): sperrt auf FMassStopWhileAimingTag statt auf
+        // FMassRotateToMouseTag, damit die direkt gesteuerte CameraUnit beim Zielen laufen
+        // darf. Alle anderen Einheiten tragen beide Tags -> Verhalten unveraendert.
+        // Original: AddTagRequirement<FMassRotateToMouseTag>(EMassFragmentPresence::None);
+        ClientEntityQuery.AddTagRequirement<FMassStopWhileAimingTag>(EMassFragmentPresence::None);
         ClientEntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
     /*
 		ClientEntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
@@ -759,7 +767,21 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
             
             const bool bIsWorking = bIsBuilding || bIsRepairing || bIsExtracting;
-            if (bIsDead || (bIsYawFollowing && !bIsWorking))
+
+            // ============================================================================
+            // LUX-ANPASSUNG (16.08.2026) â€” beim Zielen gehoert der Yaw der Maus.
+            // Vor der Aenderung war eine zielende Einheit komplett aus diesem Prozessor
+            // ausgeschlossen (Tag-Sperre, siehe ConfigureQueries). Jetzt laeuft sie hier
+            // mit, damit die POSITION weiter synchronisiert wird - die ROTATION muss aber
+            // beim UMassRotateToMouseProcessor bleiben, sonst dreht sich die Einheit in
+            // Bewegungsrichtung statt in Schussrichtung.
+            // Greift nur bei der direkt gesteuerten CameraUnit: jede andere Einheit traegt
+            // zusaetzlich FMassStopWhileAimingTag und ist weiter ganz ausgeschlossen.
+            // Original: if (bIsDead || (bIsYawFollowing && !bIsWorking))
+            // ============================================================================
+            const bool bLuxAimingAtMouse = DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct());
+
+            if (bIsDead || (bIsYawFollowing && !bIsWorking) || bLuxAimingAtMouse)
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)
                 // or while UUnitRotateToTargetProcessor owns the yaw (FMassUnitYawFollowTag).
@@ -774,7 +796,16 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting && !bIsIdle) || (bRotatesToMovementWhileAttacking && bIsMoving))
+            // LUX-ANPASSUNG (17.08.2026) - waehrend eines Casts darf die LAUFRICHTUNG die Drehung
+            // nicht uebernehmen. GEMESSEN: der Client sprang beim Casten im Laufen um bis zu 150 Grad
+            // hin und her (ClientYaw 67.4 / -87.3 / 67.4 / -20.8 ...), obwohl die Replikationskorrektur
+            // bereits aus war - es waren also zwei LOKALE Quellen. Der Zweig darueber
+            // (bRotateTowardsAbility) loescht sein Flag, sobald die Drehung "erreicht" ist,
+            // CastingStateProcessor setzt es im naechsten Takt wieder - und genau in den Frames
+            // dazwischen drehte dieser Zweig hierher auf die Laufrichtung.
+            // Die erste Haelfte der Bedingung schliesst Casting schon aus; der zweiten
+            // (bRotatesToMovementWhileAttacking) fehlte dieselbe Ausnahme.
+            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting && !bIsIdle) || (bRotatesToMovementWhileAttacking && bIsMoving && UnitBase->GetUnitState() != UnitData::Casting))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], FinalLocation, ActualDeltaTime, MassTransform);
             }
@@ -983,7 +1014,21 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
             
             const bool bIsWorking = bIsBuilding || bIsRepairing || bIsExtracting;
-            if (bIsDead || (bIsYawFollowing && !bIsWorking))
+
+            // ============================================================================
+            // LUX-ANPASSUNG (16.08.2026) â€” beim Zielen gehoert der Yaw der Maus.
+            // Vor der Aenderung war eine zielende Einheit komplett aus diesem Prozessor
+            // ausgeschlossen (Tag-Sperre, siehe ConfigureQueries). Jetzt laeuft sie hier
+            // mit, damit die POSITION weiter synchronisiert wird - die ROTATION muss aber
+            // beim UMassRotateToMouseProcessor bleiben, sonst dreht sich die Einheit in
+            // Bewegungsrichtung statt in Schussrichtung.
+            // Greift nur bei der direkt gesteuerten CameraUnit: jede andere Einheit traegt
+            // zusaetzlich FMassStopWhileAimingTag und ist weiter ganz ausgeschlossen.
+            // Original: if (bIsDead || (bIsYawFollowing && !bIsWorking))
+            // ============================================================================
+            const bool bLuxAimingAtMouse = DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct());
+
+            if (bIsDead || (bIsYawFollowing && !bIsWorking) || bLuxAimingAtMouse)
             {
                 // Regular rotation updates are skipped for dead units (Death spin is handled in HandleGroundAndHeight)
                 // or while UUnitRotateToTargetProcessor owns the yaw (FMassUnitYawFollowTag).
@@ -999,7 +1044,16 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                     TargetList[i].bRotateTowardsAbility = false;
                 }
             }
-            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting && !bIsIdle) || (bRotatesToMovementWhileAttacking && bIsMoving))
+            // LUX-ANPASSUNG (17.08.2026) - waehrend eines Casts darf die LAUFRICHTUNG die Drehung
+            // nicht uebernehmen. GEMESSEN: der Client sprang beim Casten im Laufen um bis zu 150 Grad
+            // hin und her (ClientYaw 67.4 / -87.3 / 67.4 / -20.8 ...), obwohl die Replikationskorrektur
+            // bereits aus war - es waren also zwei LOKALE Quellen. Der Zweig darueber
+            // (bRotateTowardsAbility) loescht sein Flag, sobald die Drehung "erreicht" ist,
+            // CastingStateProcessor setzt es im naechsten Takt wieder - und genau in den Frames
+            // dazwischen drehte dieser Zweig hierher auf die Laufrichtung.
+            // Die erste Haelfte der Bedingung schliesst Casting schon aus; der zweiten
+            // (bRotatesToMovementWhileAttacking) fehlte dieselbe Ausnahme.
+            else if ((!bShouldRotateToTarget && UnitBase->GetUnitState() != UnitData::Casting && !bIsIdle) || (bRotatesToMovementWhileAttacking && bIsMoving && UnitBase->GetUnitState() != UnitData::Casting))
             {
                 RotateTowardsMovement(UnitBase, VelocityList[i].Value, StatsList[i], CharList[i], StateList[i], CurrentActorLocation, ActualDeltaTime, MassTransform);
             }

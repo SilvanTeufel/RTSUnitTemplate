@@ -55,7 +55,10 @@ void UInferenceComponent::BeginPlay()
     Super::BeginPlay();
 
     // Only initialize the RL model when running in RL mode. In BT mode we skip this to avoid noise and unnecessary setup.
-    if (BrainMode != EBrainMode::RL_Model)
+    // GetEffectiveBrainMode statt BrainMode: sonst meldet die Zeile "Behavior_Tree", obwohl ein
+    // Team-Override oder der Kommandozeilenschalter laengst auf das Netz zeigt - das hat beim
+    // Selbstspiel-Aufbau eine Fehlersuche gekostet. Gebaut wird das Modell ohnehin erst spaeter.
+    if (GetEffectiveBrainMode() != EBrainMode::RL_Model)
     {
         UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Skipping RL model init (BrainMode is Behavior_Tree)."));
         return;
@@ -65,9 +68,75 @@ void UInferenceComponent::BeginPlay()
     // pick a per-team model is not known yet.
 }
 
+namespace
+{
+    /**
+     * Hirnmodus je Team per Kommandozeile - fuer den unbeaufsichtigten Selbstspiel-Lauf
+     * (16.08.2026). Format: "1:1,2:0" (TeamId:Modus, 1 = trainiertes Netz, 0 = Regel-KI).
+     *
+     * Warum ein CVar und nicht das vorhandene rts.rl.brain-Kommando: -ExecCmds laeuft ERST NACH
+     * dem Laden der Karte. Zu dem Zeitpunkt hat die InferenceComponent ihr Modell schon
+     * uebersprungen ("Skipping RL model init (BrainMode is Behavior_Tree)") und die KI-Pawns
+     * existierten beim Ausfuehren teils noch gar nicht ("Team 1 - no AI"). Ueber -dpcvars=
+     * steht der Wert dagegen vor jeder Weltinitialisierung fest.
+     */
+    static FString GRLBrainOverrides;
+    static FAutoConsoleVariableRef CVarRLBrainOverrides(
+        TEXT("rts.rl.brain.teams"),
+        GRLBrainOverrides,
+        TEXT("Hirnmodus je Team, z.B. \"1:1,2:0\" (1 = trainiertes Netz, 0 = Regel-KI)."),
+        ECVF_Default);
+
+    /** Liefert true und den Modus, wenn fuer dieses Team ein Override gesetzt ist. */
+    bool FindBrainOverride(int32 TeamId, EBrainMode& OutMode)
+    {
+        if (GRLBrainOverrides.IsEmpty() || TeamId < 0)
+        {
+            return false;
+        }
+        // '|' ebenfalls als Trenner zulassen: -dpcvars= trennt seine eigenen Eintraege mit Komma,
+        // ein Komma IM Wert kaeme also gar nicht erst hier an.
+        FString Normalisiert = GRLBrainOverrides.Replace(TEXT("|"), TEXT(","));
+        TArray<FString> Pairs;
+        Normalisiert.ParseIntoArray(Pairs, TEXT(","), true);
+        for (const FString& Pair : Pairs)
+        {
+            FString Left, Right;
+            if (!Pair.Split(TEXT(":"), &Left, &Right))
+            {
+                continue;
+            }
+            if (FCString::Atoi(*Left.TrimStartAndEnd()) == TeamId)
+            {
+                OutMode = FCString::Atoi(*Right.TrimStartAndEnd()) != 0
+                    ? EBrainMode::RL_Model : EBrainMode::Behavior_Tree;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 EBrainMode UInferenceComponent::GetEffectiveBrainMode() const
 {
     const int32 TeamId = ResolveOwningTeamId();
+
+    // DIAGNOSE (16.08.2026): einmal je Komponente ausgeben, was hier ankommt - ohne das laesst sich
+    // nicht unterscheiden, ob der Override leer ist oder das Team noch unbekannt.
+    static TSet<const UInferenceComponent*> Gemeldet;
+    if (!Gemeldet.Contains(this))
+    {
+        Gemeldet.Add(this);
+        UE_LOG(LogTemp, Warning, TEXT("[BrainDiag] TeamId=%d Override='%s' TeamMapNum=%d Default=%d"),
+               TeamId, *GRLBrainOverrides, TeamBrainMode.Num(), (int32)BrainMode);
+    }
+
+    EBrainMode Override = EBrainMode::Behavior_Tree;
+    if (FindBrainOverride(TeamId, Override))
+    {
+        return Override;
+    }
+
     if (TeamId >= 0)
     {
         if (const EBrainMode* Found = TeamBrainMode.Find(TeamId))

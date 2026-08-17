@@ -2,6 +2,9 @@
 
 
 #include "Controller/PlayerController/CustomControllerBase.h"
+// LUX-ANPASSUNG (16.08.2026): fuer die eng gefasste Direktsteuerungs-Ausnahme in
+// CorrectSetUnitMoveTarget_Implementation (Schiessen waehrend des Laufens).
+#include "Controller/PlayerController/CameraControllerBase.h"
 
 #include "EngineUtils.h"
 #include "Landscape.h"
@@ -88,7 +91,10 @@ void ACustomControllerBase::Multi_SetMyTeamUnits_Implementation(const TArray<AAc
 	for (int32 i = 0; i < AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(AllUnits[i]);
-		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId)
+		// !IsForeignCameraUnit: die Startauswahl nimmt sonst die CameraUnits der Mitspieler mit,
+		// weil sie im selben Team stehen (siehe AControllerBase::IsForeignCameraUnit).
+		if (Unit && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == SelectableTeamId
+			&& !IsForeignCameraUnit(Unit))
 		{
 			// Direkt zum HUD-Array hinzufügen, da SetUnitSelected die Liste leeren würde
 			HUDBase->SelectedUnits.AddUnique(Unit);
@@ -192,12 +198,51 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 		
 	if (Unit->CurrentSnapshot.AbilityClass)
 	{
+		// ============================================================================================
+		// LUX-ANPASSUNG (16.08.2026) â€” Schiessen waehrend des Laufens.
+		// Bisher brach JEDER Laufbefehl die laufende Faehigkeit ab (bzw. wurde bei
+		// AbilityCanBeCanceled == false ganz verworfen). Die WASD-Direktsteuerung schickt alle
+		// UnitDirectMoveUpdateInterval (0,03 s) ein Update - der Dauerfeuer-Schuss wurde also
+		// ~33x pro Sekunde gecancelt und kam nie zustande.
+		//
+		// AUSNAHME ist bewusst eng gefasst (Silvans Vorgabe: Aenderungen im RTSUnitTemplate nur
+		// fuer die CameraUnit mit MouseFollow == false):
+		//   - nur dieser Controller ist ein ACameraControllerBase in Direktsteuerung,
+		//   - nur fuer genau dessen CameraUnitWithTag,
+		//   - und nur wenn die laufende Faehigkeit Bewegung ausdruecklich erlaubt.
+		// Letzteres kommt bei der Waffe aus FWeaponData::bCanFireWhileMoving, das
+		// UShootAbility::ActivateAbility auf bStopMovementOnActivation der INSTANZ uebertraegt -
+		// deshalb wird die Instanz bevorzugt vor dem CDO gelesen. Alle anderen Units und der
+		// Maus-Folgen-Modus laufen unveraendert durch den Original-Zweig.
+		//
+		// Original:
+		//   UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+		//   if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+		//   CancelCurrentAbility(Unit);
+		// ============================================================================================
+		bool bLuxKeepAbilityWhileMoving = false;
+		if (const ACameraControllerBase* LuxDirectPC = Cast<ACameraControllerBase>(this))
+		{
+			if (LuxDirectPC->bUnitDirectControl && !LuxDirectPC->CameraUnitMouseFollow
+				&& LuxDirectPC->CameraUnitWithTag == Unit)
+			{
+				const UGameplayAbilityBase* RunningAbility = Unit->ActivatedAbilityInstance
+					? Unit->ActivatedAbilityInstance
+					: Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
 
-		UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
-		
-		if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+				bLuxKeepAbilityWhileMoving = RunningAbility && !RunningAbility->bStopMovementOnActivation;
+			}
+		}
 
-		CancelCurrentAbility(Unit);
+		if (!bLuxKeepAbilityWhileMoving)
+		{
+			UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+
+			if (AbilityCDO && !AbilityCDO->AbilityCanBeCanceled) return;
+
+			CancelCurrentAbility(Unit);
+		}
+		// ===================== ENDE LUX-ANPASSUNG ===================================================
 	}
 
 	Unit->bHoldPosition = false;

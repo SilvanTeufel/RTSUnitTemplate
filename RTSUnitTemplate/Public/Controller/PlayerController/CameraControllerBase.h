@@ -351,7 +351,80 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CameraUnitMouseFollow = true;
-	
+
+	// ============================================================================================
+	// LUX-ANPASSUNG 1/3 â€” WASD steuert die CameraUnit (16.08.2026)
+	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
+	// ============================================================================================
+	// Greift, wenn eine CameraUnit gesetzt ist UND CameraUnitMouseFollow == false.
+	// Dann steuert WASD die EINHEIT (statt die Kamera zu schwenken) und die Kamera bleibt
+	// ueber ihr stehen. Die Bewegung laeuft ueber dasselbe MoveTarget/Client-Prediction-
+	// Fragment wie das Maus-Folgen, damit Navigation und Replikation unveraendert greifen.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Lux Direktsteuerung")
+	bool bUnitDirectControl = true;
+
+	// Wie weit vor der Einheit das Laufziel liegt.
+	// NICHT zu klein waehlen: erreicht die Einheit ihr Ziel, haelt sie wegen
+	// IntentAtGoal = Stand an und laeuft erst beim naechsten Update weiter - das ruckelt.
+	// Der Wert muss > MovementAcceptanceRadius (50) und > Strecke pro Update sein
+	// (BaseRunSpeed * UnitDirectMoveUpdateInterval, also ~700*0.03 = 21 uu).
+	// Kurzes Antippen bleibt trotzdem kurz, weil beim Loslassen hart gestoppt wird.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Lux Direktsteuerung")
+	float UnitDirectMoveLookAhead = 500.f;
+
+	// Eigenes, kuerzeres Intervall als CameraUnitUpdateInterval: beim Maus-Folgen wandert das
+	// Ziel langsam, bei WASD muss es jede Richtungsaenderung zeitnah nachfuehren.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Lux Direktsteuerung")
+	float UnitDirectMoveUpdateInterval = 0.03f;
+
+	// Wie schnell die Kamera der Einheit nachzieht (VInterpTo-Speed).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Lux Direktsteuerung")
+	float UnitDirectCamFollowSpeed = 8.f;
+
+	// Auslaufstrecke beim Loslassen der Taste, in uu. Die Einheit bekommt ein Ziel so weit
+	// voraus und wird von der Mass-Ankunftslogik dorthin ausgebremst - das gibt ihr etwas
+	// Traegheit, statt schlagartig zu stehen. 0 = harter Stopp wie zuvor.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Lux Direktsteuerung")
+	float UnitDirectStopGlide = 90.f;
+
+	// Haelt die Einheit HART an (Stand + Speed 0) statt sie zum aktuellen Standort
+	// "laufen" zu lassen. Ohne das rollte sie nach dem Loslassen weiter aus, weil
+	// Server_UpdateCameraUnitMovement intern UpdateMoveTarget mit voller BaseRunSpeed
+	// aufruft und der StopMovement-Tag nur verzoegert (Defer) greift.
+	UFUNCTION(Server, Reliable)
+	void Server_StopCameraUnitDirect();
+
+	float UnitDirectMoveTimer = 0.f;
+	float UnitDirectHoldTime = 0.f;
+	bool bUnitDirectWasMoving = false;
+
+	// ============================================================================================
+	// LUX-ANPASSUNG 5/5 - Client-Vorhersage fuer die Direktsteuerung (16.08.2026)
+	// Silvan: "Die Bewegung der CameraUnit (W,A,S,D) bei MouseFollow = false, ist auf dem
+	// Clienten EXTREM laggy ... Auf dem Server ist es gut."
+	// Ursache: der WASD-Pfad schickte NUR Server_UpdateCameraUnitMovement. Auf dem Client
+	// bewegte sich die Einheit damit erst, nachdem der Server den MoveTarget gesetzt UND die
+	// neue Position zurueckrepliziert hatte - also volle Roundtrip- plus Replikationszeit pro
+	// Richtungsaenderung. Der normale Rechtsklick-Befehl hat dieses Problem nicht, weil er in
+	// ACustomControllerBase::ApplyMovePredictionToUnit zusaetzlich lokal vorhersagt
+	// (FMassClientPredictionFragment). Genau das holt diese Funktion fuer WASD nach.
+	// ============================================================================================
+	// bStartingMove: nur im ERSTEN Takt einer Bewegung true. Das Setzen von Laufzustand und
+	// Mass-Tag gehoert dorthin - jeden Frame ausgefuehrt macht es die Steuerung traege.
+	void ApplyDirectMovePredictionLocally(const FVector& Target, bool bStopping, bool bStartingMove = false);
+
+	// Letzte WASD-Laufrichtung in Weltkoordinaten - fuer das lokale Auslaufen beim Loslassen.
+	FVector LastUnitDirectWorldDir = FVector::ZeroVector;
+
+	// Fuer das gemessene Tempo der Client-Animation (siehe ApplyDirectMovePredictionLocally).
+	FVector LetzterVorhersageOrt = FVector::ZeroVector;
+	float LetzteVorhersageZeit = 0.f;
+
+	// Nur fuer die Startdiagnose (siehe [StartDiag] in der .cpp).
+	float DiagnoseStartZeit = 0.f;
+	FVector DiagnoseStartOrt = FVector::ZeroVector;
+	// ===================== ENDE LUX-ANPASSUNG 1/3 ===============================================
+
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CamIsRotatingRight", Keywords = "TopDownRTSCamLib CamIsRotatingRight"), Category = RTSUnitTemplate)
 	bool CamIsRotatingRight = false;
 

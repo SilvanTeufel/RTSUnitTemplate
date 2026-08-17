@@ -136,6 +136,17 @@ public:
 	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* CameraUnitWithTag;
 
+	// ================================================================================================
+	// LUX-ANPASSUNG (17.08.2026) - jeder Spieler soll nur SEINE CameraUnit selektieren koennen.
+	// Die Zuweisung macht bereits der GameMode ueber "Character.CameraUnit.<Spielerindex>"
+	// (RTSGameModeBase -> SetCameraUnitWithTag): Spieler 1 bekommt .0, Spieler 2 bekommt .1 usw.
+	// Diese Pruefung setzt das in der AUSWAHL durch. Sie liegt bewusst hier und nicht im HUD,
+	// damit Klick-, Rahmen- und Kontrollgruppenauswahl dieselbe eine Regel benutzen.
+	// true = die Einheit gehoert einem anderen Spieler und ist fuer diesen hier tabu.
+	// ================================================================================================
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool IsForeignCameraUnit(const AUnitBase* Unit) const;
+
 	UPROPERTY(EditAnywhere,BlueprintReadWrite, Category = RTSUnitTemplate)
 	float RunSoundDelayTime = 3.0f;
 

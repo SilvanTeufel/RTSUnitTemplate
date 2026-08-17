@@ -9,6 +9,7 @@
 #include "Core/UnitData.h"
 #include "Net/UnrealNetwork.h"
 #include "MassEntitySubsystem.h"
+#include "MassMovementFragments.h" // LUX-ANPASSUNG (16.08.2026): FMassVelocityFragment fuer MassSpeed
 #include "Mass/MassActorBindingComponent.h"
 #include "Animations/UnitAnimationProcessor.h"
 #include "MassExecutionContext.h"
@@ -70,6 +71,27 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 								Sound = AnimFrag->Sound;
 								ContinuousPlayRate = AnimFrag->PlayRate;
 								ContinuousAnimationPosition = AnimFrag->AnimationPosition;
+
+								// ============================================================
+								// LUX-ANPASSUNG (16.08.2026) â€” Mass-Geschwindigkeit fuer den
+								// AnimBP. Siehe Kommentar an MassSpeed in der .h.
+								//
+								// Bewusst HIER und nicht im UnitAnimationProcessor: dessen
+								// AnimInstance-Zugriff steht in einem Zweig, der nur bei
+								// ZUSTANDSWECHSELN laeuft (LastProcessedState != CurrentState).
+								// Gemessen blieb MassSpeed dort auf 0, obwohl die Einheit lief.
+								// Pro Frame ginge es dort nur mit einem zusaetzlichen
+								// GetAnimInstance() + Cast je Entity - teurer als der eine
+								// Fragment-Lookup hier, der zudem nur fuer sichtbare Einheiten
+								// laeuft (IsOnViewport). Rein additiv.
+								// ============================================================
+								if (const FMassVelocityFragment* VelFrag =
+									EntityManager.GetFragmentDataPtr<FMassVelocityFragment>(Entity))
+								{
+									MassVelocity = VelFrag->Value;
+									MassSpeed = MassVelocity.Size2D();
+								}
+								// ===================== ENDE LUX-ANPASSUNG ===================
 
 								/*
 								if (World && World->GetNetMode() == NM_Client)

@@ -5,6 +5,7 @@
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Core/RTSUnitTemplateSettings.h"   // AITimeScale from Project Settings
+#include "GameModes/RTSGameModeBase.h"   // CountAliveUnitsForTeam fuer die Ergebniszeile
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "HAL/PlatformFileManager.h"
@@ -32,6 +33,21 @@ namespace
 		TEXT("rts.rl.record.autostart"),
 		GRLRecordAutoStart,
 		TEXT("1 = start RL recording automatically when the game instance initialises."),
+		ECVF_Default);
+
+	/**
+	 * Laenge einer Partie in SPIELsekunden; danach beendet sich der Prozess selbst.
+	 * Fuer den unbeaufsichtigten Selbstspiel-Lauf: das Skript muss den Prozess dann nicht
+	 * abschiessen, und die Aufnahme wird sauber geschlossen (letzte Zeile vollstaendig,
+	 * Ergebniszeile vorhanden). 0 = aus.
+	 * Der Timer laeuft in dilatierter Zeit, 1800 hier sind bei rts.ai.timescale 6 also
+	 * 5 Minuten Echtzeit.
+	 */
+	static float GRLMatchSeconds = 0.f;
+	static FAutoConsoleVariableRef CVarRLMatchSeconds(
+		TEXT("rts.rl.match.seconds"),
+		GRLMatchSeconds,
+		TEXT("Spieldauer in Spielsekunden, danach Aufnahme schliessen und beenden. 0 = aus."),
 		ECVF_Default);
 
 	/**
@@ -114,6 +130,92 @@ void URLRecorderSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	{
 		FWorldDelegates::OnPostWorldInitialization.AddUObject(this, &URLRecorderSubsystem::ApplyTimeScaleToWorld);
 	}
+
+	// Getrennt vom Zeitraffer registriert: ein Zeitlimit ist auch bei 1x sinnvoll.
+	// BEDINGUNGSLOS anhaengen und den Wert erst bei der Weltinitialisierung pruefen: die Subsystem-
+	// Initialisierung laeuft frueher als -ExecCmds, ein hier abgefragter Wert waere also immer 0.
+	// (Sauber setzen laesst er sich per -dpcvars=... oder [SystemSettings].)
+	FWorldDelegates::OnPostWorldInitialization.AddUObject(this, &URLRecorderSubsystem::ScheduleMatchLimit);
+}
+
+void URLRecorderSubsystem::ScheduleMatchLimit(UWorld* World, const UWorld::InitializationValues)
+{
+	// Nur die eine echte Spielwelt; Editor- und Vorschauwelten wuerden das Limit sonst mehrfach setzen.
+	if (!World || !World->IsGameWorld() || GRLMatchSeconds <= 0.f)
+	{
+		return;
+	}
+	if (MatchWorld.IsValid())
+	{
+		return;
+	}
+
+	MatchWorld = World;
+	World->GetTimerManager().SetTimer(MatchLimitTimer, FTimerDelegate::CreateUObject(
+		this, &URLRecorderSubsystem::OnMatchTimeUp), GRLMatchSeconds, false);
+
+	UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] Partie endet nach %.0f s Spielzeit ('%s')."),
+	       GRLMatchSeconds, *World->GetName());
+}
+
+void URLRecorderSubsystem::OnMatchTimeUp()
+{
+	UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] Spielzeitlimit erreicht - Aufnahme wird geschlossen."));
+	StopRecording();
+	FPlatformMisc::RequestExit(false);
+}
+
+void URLRecorderSubsystem::WriteEpisodeSummary()
+{
+	UWorld* World = MatchWorld.Get();
+	if (!World)
+	{
+		// Ohne Weltbezug (z.B. Limit aus) trotzdem versuchen: die erste Spielwelt der Engine.
+		if (GEngine)
+		{
+			for (const FWorldContext& Ctx : GEngine->GetWorldContexts())
+			{
+				if (Ctx.World() && Ctx.World()->IsGameWorld())
+				{
+					World = Ctx.World();
+					break;
+				}
+			}
+		}
+	}
+	if (!World)
+	{
+		return;
+	}
+
+	ARTSGameModeBase* GameMode = World->GetAuthGameMode<ARTSGameModeBase>();
+	if (!GameMode)
+	{
+		return;
+	}
+
+	// Lebende Einheiten je Team sind das einzige Mass, das hier ohne weitere Annahmen zu haben ist
+	// (CountAliveUnitsForTeam zaehlt auch handplatzierte Einheiten). Wer daraus einen Sieger macht,
+	// entscheidet der Trainer - hier wird nur gemessen, nicht bewertet.
+	TArray<int32> Teams = GetAITeamIds();
+	Teams.Sort();
+
+	FString TeamJson;
+	for (int32 i = 0; i < Teams.Num(); ++i)
+	{
+		TeamJson += FString::Printf(TEXT("%s\"%d\":%d"), i == 0 ? TEXT("") : TEXT(","),
+			Teams[i], GameMode->CountAliveUnitsForTeam(Teams[i], false));
+	}
+
+	const FString Line = FString::Printf(
+		TEXT("{\"ep\":\"end\",\"t\":%.2f,\"samples\":%d,\"alive\":{%s}}"),
+		World->GetTimeSeconds(), SampleCount, *TeamJson);
+
+	{
+		FScopeLock Lock(&BufferLock);
+		PendingLines.Add(Line);
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] Ergebnis: %s"), *Line);
 }
 
 void URLRecorderSubsystem::ApplyTimeScaleToWorld(UWorld* World, const UWorld::InitializationValues)
@@ -393,6 +495,28 @@ void URLRecorderSubsystem::RegisterConsoleCommands()
 		ECVF_Default)));
 	}
 
+	// Der Selbstspiel-Lauf braucht den Hirnmodus als Startargument (-ExecCmds), sonst muesste fuer
+	// jede Paarung das Blueprint-CDO umgeschrieben und gespeichert werden.
+	if (!IConsoleManager::Get().FindConsoleObject(TEXT("rts.rl.brain")))
+	{
+		Claim(TEXT("rts.rl.brain"), (IConsoleManager::Get().RegisterConsoleCommand(
+		TEXT("rts.rl.brain"),
+		TEXT("rts.rl.brain <TeamId> <0|1>  - 0 = Regel-KI/Behavior Tree, 1 = trainiertes Netz."),
+		FConsoleCommandWithArgsDelegate::CreateWeakLambda(this, [this](const TArray<FString>& Args)
+		{
+			if (Args.Num() < 2)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] rts.rl.brain <TeamId> <0|1>"));
+				return;
+			}
+			const int32 TeamId = FCString::Atoi(*Args[0]);
+			const bool bModel = FCString::Atoi(*Args[1]) != 0;
+			SetTeamBrainMode(TeamId, bModel ? EBrainMode::RL_Model : EBrainMode::Behavior_Tree);
+			UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] Team %d -> %s"), TeamId, *DescribeTeamAI(TeamId));
+		}),
+		ECVF_Default)));
+	}
+
 	if (!IConsoleManager::Get().FindConsoleObject(TEXT("rts.rl.record.status")))
 	{
 		Claim(TEXT("rts.rl.record.status"), (IConsoleManager::Get().RegisterConsoleCommand(
@@ -448,6 +572,8 @@ void URLRecorderSubsystem::StopRecording()
 		return;
 	}
 
+	// Ergebnis ZUERST einreihen, dann flushen - sonst steht die Abschlusszeile nie in der Datei.
+	WriteEpisodeSummary();
 	FlushBuffer();
 	bIsRecording = false;
 
