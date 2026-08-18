@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -425,6 +425,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AllowAddingWorkers = true;
+
+	/**
+	 * Nur Diagnose: hoechste je gleichzeitig eingetragene Arbeiterzahl und der Zeitpunkt der
+	 * Entstehung. Beim Abraeumen der Flaeche wird daraus eine Zeile, die beantwortet, ob eine nie
+	 * fertig gewordene Baustelle ueberhaupt je einen Arbeiter gesehen hat.
+	 */
+	int32 DiagMaxWorkers = 0;
+	float DiagGeburtszeit = -1.f;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsExtensionArea = false;

@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 // WorkingUnitBase.h (Corresponding Header)
 #include "Characters/Unit/WorkingUnitBase.h"
 
@@ -333,6 +333,14 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 	
  // && !CurrentDraggedWorkArea
 	if (CurrentDraggedWorkArea){
+		// [Bauwahl] Hier stirbt die vorige Baustelle DIESES Arbeiters, damit die neue an ihre Stelle
+		// tritt. Wenn die KI oefter Bauauftraege erteilt, als ein Arbeiter laufen und bauen kann,
+		// loescht jeder neue Auftrag die Baustelle, zu der der Arbeiter gerade unterwegs ist - und
+		// zwar quer ueber alle Gebaeudeklassen. Diese Zeile zeigt, WER wen verdraengt.
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Bauwahl] Team=%d VERDRAENGT: %s wird geloescht fuer %s"),
+			TeamId, *GetNameSafe(CurrentDraggedWorkArea->GetClass()), *GetNameSafe(WorkAreaClass));
+
 		CurrentDraggedWorkArea->PlannedBuilding = true;
 		CurrentDraggedWorkArea->ControlTimer = 0.f;
 		CurrentDraggedWorkArea->RemoveAreaFromGroup();
@@ -540,8 +548,27 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 				}
 			}
 			
+			// [Bauweg] Stufe 2 von 3: die Flaeche steht. Ohne diese Zeile ist nicht zu unterscheiden,
+			// ob ein Bauauftrag schon an der Platzierung scheitert oder erst am Bauabschluss.
+			// Der Abstand ist der Kern der Frage: die Flaeche wird von DIESEM Arbeiter gesetzt, also
+			// ist das genau der Weg, den er danach zuruecklegen muss. Platzierungen, die immer
+			// weiter nach aussen wandern, werden hier sichtbar - und zwar je Gebaeudeklasse.
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Bauweg] Team=%d WorkArea GESETZT: %s bei (%.0f, %.0f) Abstand=%.0f IsPaid=%d Ext=%d"),
+				TeamId, *GetNameSafe(WorkAreaClass), TargetLocation.X, TargetLocation.Y,
+				FVector::Dist2D(GetActorLocation(), TargetLocation),
+				IsPaid ? 1 : 0, IsExtensionArea ? 1 : 0);
+
 			return CurrentDraggedWorkArea;
 		}
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Bauweg] Team=%d WorkArea SPAWN FEHLGESCHLAGEN: %s bei (%.0f, %.0f)"),
+			TeamId, *GetNameSafe(WorkAreaClass), TargetLocation.X, TargetLocation.Y);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Bauweg] Team=%d WorkArea OHNE KLASSE angefordert."), TeamId);
 	}
 
 	return nullptr;

@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/WorkArea.h"
 
@@ -74,6 +74,10 @@ AWorkArea::AWorkArea()
 void AWorkArea::BeginPlay()
 {
 	Super::BeginPlay();
+	if (const UWorld* W = GetWorld())
+	{
+		DiagGeburtszeit = W->GetTimeSeconds();
+	}
 	MaxAvailableResourceAmount = AvailableResourceAmount;
 	OriginalActorScale = GetActorScale3D();
 	SetReplicateMovement(false);
@@ -681,6 +685,21 @@ bool AWorkArea::SwitchBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 	}
 
 	AWorkArea* SelectedArea = ResourceGameMode->GetRandomClosestWorkArea(BuildAreas);
+
+	// [Bauwahl] Der Arbeiter sieht nur die drei naechstgelegenen Flaechen und wuerfelt darunter.
+	// Genau hier entscheidet sich, ob eine Gebaeudeklasse je gebaut wird - eine Flaeche, die nie
+	// unter die ersten drei kommt, bekommt nie einen Arbeiter, egal wie oft sie gesetzt wird.
+	{
+		FString Kandidaten;
+		for (const AWorkArea* K : BuildAreas)
+		{
+			Kandidaten += FString::Printf(TEXT("%s "), K ? *K->GetClass()->GetName() : TEXT("<leer>"));
+		}
+		UE_LOG(LogTemp, Warning, TEXT("[Bauwahl] Team=%d Kandidaten=[%s] gewaehlt=%s"),
+			Worker->TeamId, *Kandidaten,
+			SelectedArea ? *SelectedArea->GetClass()->GetName() : TEXT("<keine>"));
+	}
+
 	if (!SelectedArea || SelectedArea->IsExtensionArea)
 	{
 		Worker->BuildArea = nullptr;
@@ -930,6 +949,20 @@ void AWorkArea::SetupMID()
 
 void AWorkArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// [Bauweg] Stufe 2.5: Bilanz je Baustelle. Eine Flaeche, die ohne Gebaeude verschwindet, hat
+	// entweder nie einen Arbeiter gesehen (dann liegt es an der Zuweisung) oder doch (dann am Weg
+	// oder am Abbruch). Nur mit dieser Unterscheidung ist die 9-Prozent-Quote zu erklaeren.
+	if (HasAuthority() && ConstructionCost.PrimaryCost + ConstructionCost.SecondaryCost > 0.f)
+	{
+		const UWorld* W = GetWorld();
+		const float Lebensdauer = (W && DiagGeburtszeit >= 0.f) ? (W->GetTimeSeconds() - DiagGeburtszeit) : -1.f;
+
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Bauweg] Team=%d Flaeche ENDE: %s fertig=%d ArbeiterMax=%d ArbeiterJetzt=%d Lebensdauer=%.0fs Grund=%d"),
+			TeamId, *GetName(), bFinalBuildingSpawned ? 1 : 0, DiagMaxWorkers, Workers.Num(),
+			Lebensdauer, (int32)EndPlayReason);
+	}
+
 	Super::EndPlay(EndPlayReason);
 	if (UWorld* World = GetWorld())
 	{
@@ -949,6 +982,7 @@ void AWorkArea::AddWorkerToArray(AWorkingUnitBase* Worker)
 	}
 
 	Workers.Add(Worker);
+	DiagMaxWorkers = FMath::Max(DiagMaxWorkers, Workers.Num());
 	CurrentWorkers = Workers.Num(); // replicated -> drives the HUD N/Max display
 	// Timer runs independently (looping). No immediate action needed here.
 }

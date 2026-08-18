@@ -17,3 +17,33 @@ bool URTSBeaconSubsystem::IsLocationInBeaconRange(const FVector& Location) const
 	}
 	return false;
 }
+
+bool URTSBeaconSubsystem::GetNearestBeacon(const FVector& Location, FVector& OutBeaconLocation, float& OutRange) const
+{
+	const FRTSBeaconInfo* Best = nullptr;
+	float BestDistSq = TNumericLimits<float>::Max();
+
+	for (const FRTSBeaconInfo& Beacon : ActiveBeacons)
+	{
+		if (Beacon.Range <= 0.f)
+		{
+			continue;
+		}
+
+		const float DistSq = FVector::DistSquared2D(Beacon.Location, Location);
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			Best = &Beacon;
+		}
+	}
+
+	if (!Best)
+	{
+		return false;
+	}
+
+	OutBeaconLocation = Best->Location;
+	OutRange = Best->Range;
+	return true;
+}

@@ -2507,6 +2507,15 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
    			   				{
    			   							// Mark as spawned to prevent duplicate spawns from multiple workers
    								UnitBase->BuildArea->bFinalBuildingSpawned = true;
+
+								// [Bauweg] Stufe 3 von 3: aus der Flaeche wird ein Gebaeude. Zusammen mit Stufe 2
+								// zeigt das, ob Auftraege an der Platzierung oder erst am Bauabschluss verloren gehen.
+								UE_LOG(LogTemp, Warning,
+									TEXT("[Bauweg] Team=%d GEBAEUDE FERTIG: %s bei (%.0f, %.0f)"),
+									UnitBase->TeamId,
+									*GetNameSafe(UnitBase->BuildArea->BuildingClass),
+									UnitBase->BuildArea->GetActorLocation().X,
+									UnitBase->BuildArea->GetActorLocation().Y);
    			   							// If a construction site exists, remove it now
    								float SavedHealth = 0.f;
    								float SavedShield = 0.f;

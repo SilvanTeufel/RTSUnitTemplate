@@ -17,6 +17,7 @@
 #include "GAS/GameplayAbilityBase.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Actors/WorkArea.h"
@@ -971,6 +972,153 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 	return TEXT("{}");
 }
 
+FGameplayTag URTSRuleBasedDeciderComponent::KeyTagForUnitTag(ERTSUnitTag Tag)
+{
+	const TCHAR* Name = nullptr;
+	switch (Tag)
+	{
+	case ERTSUnitTag::Alt1:  Name = TEXT("KeyTag.Alt1");  break;
+	case ERTSUnitTag::Alt2:  Name = TEXT("KeyTag.Alt2");  break;
+	case ERTSUnitTag::Alt3:  Name = TEXT("KeyTag.Alt3");  break;
+	case ERTSUnitTag::Alt4:  Name = TEXT("KeyTag.Alt4");  break;
+	case ERTSUnitTag::Alt5:  Name = TEXT("KeyTag.Alt5");  break;
+	case ERTSUnitTag::Alt6:  Name = TEXT("KeyTag.Alt6");  break;
+	case ERTSUnitTag::Ctrl1: Name = TEXT("KeyTag.Ctrl1"); break;
+	case ERTSUnitTag::Ctrl2: Name = TEXT("KeyTag.Ctrl2"); break;
+	case ERTSUnitTag::Ctrl3: Name = TEXT("KeyTag.Ctrl3"); break;
+	case ERTSUnitTag::Ctrl4: Name = TEXT("KeyTag.Ctrl4"); break;
+	case ERTSUnitTag::Ctrl5: Name = TEXT("KeyTag.Ctrl5"); break;
+	case ERTSUnitTag::Ctrl6: Name = TEXT("KeyTag.Ctrl6"); break;
+	case ERTSUnitTag::CtrlQ: Name = TEXT("KeyTag.CtrlQ"); break;
+	case ERTSUnitTag::CtrlW: Name = TEXT("KeyTag.CtrlW"); break;
+	case ERTSUnitTag::CtrlE: Name = TEXT("KeyTag.CtrlE"); break;
+	case ERTSUnitTag::CtrlR: Name = TEXT("KeyTag.CtrlR"); break;
+	default: return FGameplayTag();
+	}
+
+	return FGameplayTag::RequestGameplayTag(FName(Name), /*ErrorIfNotFound*/ false);
+}
+
+bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitTag>& Tags,
+	const FVector& Target, const FString& RowLabel, int32 LogTeamId)
+{
+	UWorld* World = GetWorld();
+	if (!World || Tags.Num() == 0)
+	{
+		return false;
+	}
+
+	APawn* OwnerPawn = Cast<APawn>(GetOwner());
+	ACustomControllerBase* Controller = OwnerPawn ? Cast<ACustomControllerBase>(OwnerPawn->GetController()) : nullptr;
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+	if (!Controller || !GameMode)
+	{
+		return false;
+	}
+
+	FGameplayTagContainer Wanted;
+	for (const ERTSUnitTag Tag : Tags)
+	{
+		const FGameplayTag Key = KeyTagForUnitTag(Tag);
+		if (Key.IsValid())
+		{
+			Wanted.AddTag(Key);
+		}
+	}
+	if (Wanted.IsEmpty())
+	{
+		return false;
+	}
+
+	TArray<AUnitBase*> Units;
+	Units.Reserve(32);
+
+	// Counted separately on purpose. A key tag shared between a producer and its products is the
+	// known trap here: the rule qualifies on a tag count that is really a count of BUILDINGS, and
+	// then nothing marches. Without these two numbers the empty result looks like a broken gather.
+	int32 GebaeudeMitTag = 0;
+	int32 ToteMitTag = 0;
+
+	for (AActor* Actor : GameMode->AllUnits)
+	{
+		AUnitBase* Unit = Cast<AUnitBase>(Actor);
+		if (!Unit || Unit->TeamId != LogTeamId)
+		{
+			continue;
+		}
+		if (!Unit->UnitTags.HasAny(Wanted))
+		{
+			continue;
+		}
+		if (Unit->GetUnitState() == UnitData::Dead)
+		{
+			++ToteMitTag;
+			continue;
+		}
+		// A building carries the same key tag as the units it produces, and marching a factory into
+		// the enemy base is not the intent.
+		if (Cast<ABuildingBase>(Unit))
+		{
+			++GebaeudeMitTag;
+			continue;
+		}
+		if (!Unit->CanBeSelected)
+		{
+			continue;
+		}
+		Units.Add(Unit);
+	}
+
+	if (Units.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[AttackOrder] Team=%d Regel='%s' KEINE beweglichen Traeger: Gebaeude=%d Tote=%d Tags=%s"),
+			LogTeamId, *RowLabel, GebaeudeMitTag, ToteMitTag, *Wanted.ToStringSimple());
+		return false;
+	}
+
+	// Arrival formation. Sending everyone to the identical point makes them shove each other onto
+	// whatever geometry is nearby, and a unit standing on a ledge fails every path request after.
+	const int32 Columns = FMath::Max(1, FMath::CeilToInt(FMath::Sqrt((float)Units.Num())));
+	TArray<FVector> Targets;
+	TArray<float> Speeds;
+	TArray<float> Radii;
+	Targets.Reserve(Units.Num());
+	Speeds.Reserve(Units.Num());
+	Radii.Reserve(Units.Num());
+
+	for (int32 i = 0; i < Units.Num(); ++i)
+	{
+		const int32 Col = i % Columns;
+		const int32 Row = i / Columns;
+		const float OffsetX = (Col - (Columns - 1) * 0.5f) * AttackFormationSpacing;
+		const float OffsetY = (Row - (Units.Num() / Columns) * 0.5f) * AttackFormationSpacing;
+		Targets.Add(Target + FVector(OffsetX, OffsetY, 0.f));
+
+		float Speed = 300.f;
+		if (Units[i]->Attributes)
+		{
+			Speed = Units[i]->Attributes->GetBaseRunSpeed();
+		}
+		Speeds.Add(Speed);
+		Radii.Add(Units[i]->MovementAcceptanceRadius);
+	}
+
+	// Slots off the navmesh are the other way a unit ends up running on the spot: it is given a
+	// destination it can never reach and re-plans every tick.
+	Targets = Controller->AdjustBatchTargetsForNav(Units, Targets);
+
+	Controller->Server_Batch_CorrectSetUnitMoveTargets(World, Units, Targets, Speeds, Radii,
+		/*AttackT*/ true, /*bResetHoldPosition*/ true, /*bResetFollowTarget*/ true,
+		/*bOriginatorPredictsLocally*/ false);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[AttackOrder] Team=%d Regel='%s' DIREKT Ziel=(%.0f, %.0f) Einheiten=%d Spalten=%d"),
+		LogTeamId, *RowLabel, Target.X, Target.Y, Units.Num(), Columns);
+
+	return true;
+}
+
 bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, int32 TableRowIndex, const FGameStateData& GS, UInferenceComponent* Inference)
 {
 	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<UnnamedAttack>") : Row.RuleName.ToString();
@@ -991,6 +1139,12 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 
 	TArray<int32> Indices;
 	Indices.Reserve(32);
+
+	// Same set as Indices, but as unit tags: the direct batch path needs to know WHICH groups
+	// qualified, not which key presses would have selected them.
+	TArray<ERTSUnitTag> QualifyingTags;
+	QualifyingTags.Reserve(8);
+
 	auto AddPair = [&Indices](ERTSAIAction Action)
 	{
 		if (Action != ERTSAIAction::None)
@@ -1021,6 +1175,8 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 
 		if (bCapQualifies)
 		{
+			QualifyingTags.AddUnique(Cap.Tag);
+
 			// Map tag to ERTSAIAction
 			switch (Cap.Tag)
 			{
@@ -1143,7 +1299,43 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 
 		return AdjustedLoc;
 	};
-	const FVector AdjustedAttackLoc = ComputeGroundAdjusted(DesiredAttackPos);
+	FVector AdjustedAttackLoc = ComputeGroundAdjusted(DesiredAttackPos);
+
+	// Commit window: an army that is still walking keeps the destination it was given. Without this
+	// the rules re-aim the same units every time they fire and the march never completes.
+	if (AttackCommitSeconds > 0.f && LetzteAngriffsBefehlZeit >= 0.f)
+	{
+		if (const UWorld* CommitWorld = GetWorld())
+		{
+			const float SeitLetztem = CommitWorld->GetTimeSeconds() - LetzteAngriffsBefehlZeit;
+			const float Sprung = FVector::Dist2D(LetzteAngriffsBefehlPos, AdjustedAttackLoc);
+
+			if (SeitLetztem < AttackCommitSeconds && Sprung > AttackRetargetMinDistance)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[AttackOrder] Team=%d Regel='%s' GEBUNDEN: Sprung=%.0f nach %.1fs -> behalte Ziel=(%.0f, %.0f)"),
+					LogTeamId, *RowLabel, Sprung, SeitLetztem,
+					LetzteAngriffsBefehlPos.X, LetzteAngriffsBefehlPos.Y);
+
+				AdjustedAttackLoc = LetzteAngriffsBefehlPos;
+			}
+		}
+	}
+
+	// Direct route: hand the target to the units in one batched order. Nothing is teleported, so
+	// there is no agent position for a later rule to contradict, and no return timer to wait out.
+	if (bUseDirectBatchAttackMove && IssueDirectAttackMove(QualifyingTags, AdjustedAttackLoc, RowLabel, LogTeamId))
+	{
+		// The [AttackOrder] diagnosis stays on: it is what made the jump-and-turn pattern visible
+		// in the first place, and it is the only way to tell the two paths apart in a log.
+		if (UWorld* DiagWorld = GetWorld())
+		{
+			LetzteAngriffsBefehlPos = AdjustedAttackLoc;
+			LetzteAngriffsBefehlZeit = DiagWorld->GetTimeSeconds();
+		}
+		return true;
+	}
+
 	RLAgent->SetActorLocation(AdjustedAttackLoc);
 	if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Adjusted attack move to (%.1f, %.1f, %.1f) from desired (%.1f, %.1f, %.1f)"),
 		AdjustedAttackLoc.X, AdjustedAttackLoc.Y, AdjustedAttackLoc.Z,
@@ -1867,6 +2059,51 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 			FinalizeAttackReturn();
 
 			// Fall through to evaluate rules normally now that we are supposedly back
+		}
+	}
+
+	// Bestandsmeldung - reine Diagnose, greift in nichts ein.
+	if (BestandsmeldungIntervallSekunden > 0.f)
+	{
+		if (const UWorld* BestandWorld = GetWorld())
+		{
+			const float Jetzt = BestandWorld->GetTimeSeconds();
+			if (LetzteBestandsmeldung < 0.f || Jetzt - LetzteBestandsmeldung >= BestandsmeldungIntervallSekunden)
+			{
+				LetzteBestandsmeldung = Jetzt;
+
+				const int32 Kampf = GameState.Ctrl1TagFriendlyUnitCount
+					+ GameState.Ctrl2TagFriendlyUnitCount + GameState.Ctrl3TagFriendlyUnitCount;
+
+				// Die TATSAECHLICHE Zahl der Gebaeude und Einheiten, unabhaengig von jedem Tag.
+				// Grund: Ctrl5 faellt bei den Xeno von 9 auf 0, und zwar Minuten BEVOR der Gegner
+				// den ersten Angriffsbefehl gibt. Entweder verschwinden die Gebaeude wirklich - oder
+				// nur ihr KeyTag, und dann ist die ganze Kette ein Tagging-Fehler. Diese beiden
+				// Zahlen nebeneinander entscheiden das in einer einzigen Partie.
+				int32 EchteGebaeude = 0;
+				int32 EchteEinheiten = 0;
+				if (const ARTSGameModeBase* BestandGM = Cast<ARTSGameModeBase>(BestandWorld->GetAuthGameMode()))
+				{
+					const int32 MeinTeam = ResolveOwningTeamId();
+					for (AActor* Actor : BestandGM->AllUnits)
+					{
+						const AUnitBase* U = Cast<AUnitBase>(Actor);
+						if (!U || U->TeamId != MeinTeam || U->GetUnitState() == UnitData::Dead)
+						{
+							continue;
+						}
+						if (Cast<ABuildingBase>(U)) { ++EchteGebaeude; } else { ++EchteEinheiten; }
+					}
+				}
+
+				UE_LOG(LogTemp, Warning,
+					TEXT("[Bestand] t=%.0f Team=%d Ctrl1=%d Ctrl2=%d Ctrl3=%d (Kampf=%d) Ctrl5=%d CtrlQ=%d CtrlW=%d | ECHT Gebaeude=%d Einheiten=%d"),
+					Jetzt, ResolveOwningTeamId(),
+					GameState.Ctrl1TagFriendlyUnitCount, GameState.Ctrl2TagFriendlyUnitCount,
+					GameState.Ctrl3TagFriendlyUnitCount, Kampf,
+					GameState.Ctrl5TagFriendlyUnitCount, GameState.CtrlQTagFriendlyUnitCount,
+					GameState.CtrlWTagFriendlyUnitCount, EchteGebaeude, EchteEinheiten);
+			}
 		}
 	}
 

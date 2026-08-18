@@ -487,7 +487,55 @@ private:
 
 	// Evaluates attack rules and executes them if conditions are met.
 	bool EvaluateAttackRulesFromDataTable(const FGameStateData& GS, UInferenceComponent* Inference);
+
+public:
+	/**
+	 * Send the attack order straight to the units instead of simulating the player's hands.
+	 *
+	 * The old path teleports the RLAgent to the attack position, presses a control group, presses
+	 * attack-move, and teleports the agent back on a timer. Two rules firing shortly after one
+	 * another therefore aim at two different agent positions and the same units turn round
+	 * mid-march - the "runs back and forth instead of attacking" picture. A batch move carries the
+	 * target in the call, so a second order can only ever refine the first one.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
+	bool bUseDirectBatchAttackMove = true;
+
+	/**
+	 * Seconds an army stays committed to the target it was last sent to.
+	 *
+	 * The attack rules re-evaluate long before the march is over, and each evaluation picks whatever
+	 * enemy position currently wins - measured jumps of 1900 and 12000 cm between two consecutive
+	 * orders. The units obey every one of them and spend the match turning round. Inside the commit
+	 * window a new order keeps the OLD target, so a march is allowed to finish. 0 disables it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0", ClampMax="300.0"))
+	float AttackCommitSeconds = 25.f;
+
+	/**
+	 * How far a new target has to be from the current one before the commit window applies, in cm.
+	 * A small correction towards the same fight is always allowed through - it is the long jump to a
+	 * different fight that turns the army around.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0", ClampMax="20000.0"))
+	float AttackRetargetMinDistance = 1500.f;
+
+	/** Spacing of the arrival formation, in cm. 0 sends every unit to the identical point. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable", meta=(ClampMin="0.0", ClampMax="2000.0"))
+	float AttackFormationSpacing = 220.f;
+
+private:
 	bool ExecuteAttackRuleRow(const FRTSAttackRuleRow& Row, int32 TableRowIndex, const FGameStateData& GS, UInferenceComponent* Inference);
+
+	/**
+	 * Gathers this team's units carrying any of the given key tags and gives them one batched
+	 * attack-move. Returns false when nothing qualified, so the caller can fall back.
+	 */
+	bool IssueDirectAttackMove(const TArray<ERTSUnitTag>& Tags, const FVector& Target,
+		const FString& RowLabel, int32 LogTeamId);
+
+	/** ERTSUnitTag -> the KeyTag.* gameplay tag the units actually carry. */
+	static FGameplayTag KeyTagForUnitTag(ERTSUnitTag Tag);
 
 	// Refreshes the cached AttackPositions by searching for actors of classes specified in the DataTable rows.
 	void PopulateAttackPositions();
@@ -533,6 +581,19 @@ private:
 	// dieselben Einheiten laufend neue, weit auseinanderliegende Ziele - das waere das
 	// Hin-und-her. Hier wird die vorige Befehlsposition und der Zeitpunkt gemerkt, um Takt
 	// und Sprungweite messen zu koennen. Kein Eingriff.
+	/**
+	 * Bestandsmeldung: alle N Sekunden die Truppenstaerke je Kontrollgruppe ins Log.
+	 *
+	 * Grund: die Endzahl "lebende Einheiten" ist bei einer Fraktion, die jede Partie auf 0 endet,
+	 * als Messgroesse unbrauchbar - sie kann eine Teilverbesserung nicht anzeigen. Diese Zeile
+	 * zeigt den HOECHSTSTAND und den Zeitpunkt des Einbruchs, und erst daran ist zu erkennen, ob
+	 * eine Aenderung ueberhaupt etwas bewirkt hat.
+	 */
+	UPROPERTY(EditAnywhere, Category="AI|Diagnose", meta=(ClampMin="0.0", ClampMax="300.0"))
+	float BestandsmeldungIntervallSekunden = 30.f;
+
+	float LetzteBestandsmeldung = -1.f;
+
 	FVector LetzteAngriffsBefehlPos = FVector::ZeroVector;
 	float LetzteAngriffsBefehlZeit = -1.f;
 

@@ -34,6 +34,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "RTS|Beacon")
 	bool IsLocationInBeaconRange(const FVector& Location) const;
 
+	/**
+	 * Position und Reichweite des naechstgelegenen Beacons. Fuer die KI-Platzierung: eine Flaeche mit
+	 * NeedsBeacon wird abgewiesen, wenn kein Beacon in Reichweite ist, und die Umkreissuche der KI
+	 * kreist um den urspruenglichen Punkt - liegt dort keines, scheitert jeder Kandidat. Mit dieser
+	 * Abfrage kann die Suche stattdessen um das Beacon kreisen.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTS|Beacon")
+	bool GetNearestBeacon(const FVector& Location, FVector& OutBeaconLocation, float& OutRange) const;
+
 private:
 	UPROPERTY()
 	TArray<FRTSBeaconInfo> ActiveBeacons;

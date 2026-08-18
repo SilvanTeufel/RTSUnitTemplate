@@ -2,6 +2,7 @@
 
 
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "System/RTSBeaconSubsystem.h"
 #include "Controller/PlayerController/CameraControllerBase.h" // LUX-ANPASSUNG (16.08.2026): fuer die Direktsteuerungs-Ausnahme bei FMassStopWhileAimingTag
 
 #include "EngineUtils.h"
@@ -5362,6 +5363,54 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 						bPlacementValid = EvaluatePlacement() && HeightRuleOk(DraggedWorkArea->GetActorLocation());
 					}
 					if (bPlacementValid) break;
+				}
+
+				// Zweiter Anlauf um das naechste Beacon.
+				//
+				// Der Umkreis oben dreht sich um den Punkt, den die Regel vorgeschlagen hat. Verlangt die
+				// Flaeche ein Beacon und liegt dort keines, ist JEDER Kandidat ungueltig - gemessen: die
+				// Xeno-Produktionsflaechen (LarvalPod, CarapacePod, TitanPod, AerialPod ...) wurden 15-mal
+				// je Partie mit "beacon required but out of range" abgewiesen und kein einziges dieser
+				// Gebaeude entstand je. Ohne Produktionsgebaeude ist die gesamte Einheiten-Produktion
+				// gesperrt, und die Fraktion verliert jede Partie 0:100.
+				//
+				// Nur fuer die KI und nur, wenn die Flaeche das Beacon ueberhaupt braucht: der Spieler
+				// bekommt weiterhin die Ablehnung, damit die Bauregel fuer ihn bestehen bleibt.
+				if (!bPlacementValid && DraggedWorkArea->NeedsBeacon)
+				{
+					if (URTSBeaconSubsystem* Beacons = GetWorld()->GetSubsystem<URTSBeaconSubsystem>())
+					{
+						FVector BeaconLoc = FVector::ZeroVector;
+						float BeaconRange = 0.f;
+						if (Beacons->GetNearestBeacon(Origin, BeaconLoc, BeaconRange))
+						{
+							// Innerhalb der Reichweite bleiben, aber nicht mitten auf das Beacon setzen -
+							// dort steht das Gebaeude selbst.
+							const float Innen = FMath::Max(200.f, BeaconRange * 0.45f);
+							const float Aussen = FMath::Max(Innen + 100.f, BeaconRange * 0.85f);
+							const float BeaconRadien[2] = { Innen, Aussen };
+
+							for (int32 RingIndex = 0; RingIndex < 2 && !bPlacementValid; ++RingIndex)
+							{
+								for (int32 Step = 0; Step < 12 && !bPlacementValid; ++Step)
+								{
+									const float Angle = FMath::DegreesToRadians(30.f * Step);
+									const FVector Candidate = BeaconLoc + FVector(
+										FMath::Cos(Angle) * BeaconRadien[RingIndex],
+										FMath::Sin(Angle) * BeaconRadien[RingIndex], 0.f);
+									DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Candidate));
+									PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+									bPlacementValid = EvaluatePlacement() && HeightRuleOk(DraggedWorkArea->GetActorLocation());
+								}
+							}
+
+							UE_LOG(LogTemp, Warning,
+								TEXT("[Bauwahl] Team=%d Beacon-Suche fuer %s um (%.0f, %.0f) R=%.0f -> %s"),
+								UnitBase->TeamId, *GetNameSafe(DraggedWorkArea->GetClass()),
+								BeaconLoc.X, BeaconLoc.Y, BeaconRange,
+								bPlacementValid ? TEXT("Platz gefunden") : TEXT("nichts frei"));
+						}
+					}
 				}
 				}
 
