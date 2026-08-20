@@ -72,6 +72,8 @@ void UEffectAreaSpawnSignalProcessor::SignalEntities(FMassEntityManager& EntityM
 							NewArea->BaseRadius = ImpactList[i].BaseRadius;
 							NewArea->StartRadius = ImpactList[i].StartRadius;
 							NewArea->EndRadius = ImpactList[i].EndRadius;
+							// Sonst verliert eine duplizierte Flaeche ihre feste Sichtgroesse.
+							NewArea->ScaleMesh = ImpactList[i].bScaleMesh;
 						}
 						NewArea->DuplicationRadius = DuplicateFrag.DuplicationRadius;
 						NewArea->DuplicationTime = DuplicateFrag.DuplicationTime;

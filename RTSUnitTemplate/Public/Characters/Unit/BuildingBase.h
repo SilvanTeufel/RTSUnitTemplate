@@ -149,9 +149,55 @@ public:
 	          meta = (EditCondition = "bAutoLoadNearbyWorkers"))
 	float AutoLoadDelaySeconds = 1.5f;
 
-	/** Loads the nearest own workers until MaxTransportUnits is reached. */
+	/**
+	 * How long into a match the auto-load keeps re-asking who owns this team before settling on
+	 * "human player".
+	 *
+	 * Controllers are not all in place during the first seconds: a building placed in the level starts
+	 * its timer before the AI controller for its team exists. Measured in Level_AITest_Xeno_AH - at
+	 * 1.5 s team 2 answers "player", twenty seconds later the same team answers "AI". A building the AI
+	 * actually constructs is finished long after that and answers correctly on the first try, so this
+	 * only costs level-placed transporters a few seconds.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Transport",
+	          meta = (EditCondition = "bAutoLoadNearbyWorkers"))
+	float AutoLoadOwnerResolveSeconds = 10.f;
+
+	/**
+	 * The worker that finished this building, handed over by the build-completion path.
+	 *
+	 * Only used for the human player's auto-load: a player who places a reactor expects the one worker
+	 * they sent to walk in, not four of them pulled off their resource nodes without being asked. Weak,
+	 * because that worker may well be dead by the time the load timer fires.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|Transport")
+	TWeakObjectPtr<AUnitBase> BuilderWorker;
+
+	/**
+	 * Everyone who worked on this building's site, handed over at completion.
+	 *
+	 * A site can have several workers, and a player who sent three of them expects all three to walk
+	 * in - not one, with the rest wandering back to the nearest ore. BuilderWorker (the one who
+	 * finished it) stays as the fallback for sites that never registered a worker list.
+	 */
+	// Ohne BlueprintReadOnly: UHT laesst TArray<TWeakObjectPtr<>> nicht ins Blueprint durch
+	// ("is not supported by blueprint"). Als reines UPROPERTY bleibt es fuer die Serialisierung
+	// sichtbar, und gebraucht wird es ohnehin nur im C++-Ladeweg.
+	UPROPERTY()
+	TArray<TWeakObjectPtr<AUnitBase>> BuilderWorkers;
+
+	/**
+	 * Loads own workers once the building is up.
+	 *
+	 * AI teams get filled to MaxTransportUnits - see bAutoLoadNearbyWorkers for why they cannot do it by
+	 * hand. Human teams only get BuilderWorker, because for them this is a convenience, not a crutch.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Transport")
 	void AutoLoadNearbyWorkers();
+
+	/** True if the controller owning this building's team is flagged bIsAi. Twin of AWorkArea::IsOwnedByAiTeam. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Transport")
+	bool IsOwnedByAiTeam() const;
 
 protected:
 	/** Grants SupplyCapacityGain once the team id is known. */
@@ -196,6 +242,35 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	EExtensionSnapMethod ExtensionSnapMethod = EExtensionSnapMethod::Snap4Way;
+
+	/**
+	 * Extra yaw for extensions of THIS building, on top of the snap direction.
+	 *
+	 * The snap turns an extension so its local +X faces away from the host. Some buildings want it
+	 * turned across that instead - the BioIntegrator attaches on its short, angular end, where the
+	 * extension only sits flush when it is rotated 90 degrees. This rotates the facing only; the
+	 * extension stays on the side the snap picked. The work area carries its own rotation over into
+	 * ServerMeshRotationBuilding, so the finished building turns with the preview - one value, both.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ExtensionRotationOffset = 0.f;
+
+	/**
+	 * Derive the extension distance from the two footprints instead of the length of ExtensionOffset.
+	 *
+	 * A single fixed offset per host cannot be right when one building constructs extensions of very
+	 * different size - the CybernaticFactory places a 177 and a 623 unit wide one on the same edge,
+	 * so any single value leaves one of them either buried or floating. With this on, ExtensionOffset
+	 * only says WHICH axis and direction to use (and keeps its Z); the distance comes from the real
+	 * meshes. Off by default so existing projects keep their hand-tuned values.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bExtensionAutoDistance = false;
+
+	/** Clearance between host and extension when bExtensionAutoDistance is on. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate,
+	          meta = (EditCondition = "bExtensionAutoDistance"))
+	float ExtensionGap = 20.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ExtensionMovementAllowed = false;

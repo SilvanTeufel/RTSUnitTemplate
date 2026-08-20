@@ -23,14 +23,21 @@ struct FMeshMaterialKey
     UPROPERTY()
     bool bCastShadow = true;
 
+    // Teil des Schluessels, weil zwei Vorlagen mit gleichem Mesh und Material sich hierin
+    // unterscheiden duerfen - sonst erbte die zweite stillschweigend die Einstellung der ersten.
+    UPROPERTY()
+    bool bReceivesDecals = true;
+
     bool operator==(const FMeshMaterialKey& Other) const
     {
-        return Mesh == Other.Mesh && Material == Other.Material && bCastShadow == Other.bCastShadow;
+        return Mesh == Other.Mesh && Material == Other.Material && bCastShadow == Other.bCastShadow
+            && bReceivesDecals == Other.bReceivesDecals;
     }
 
     friend uint32 GetTypeHash(const FMeshMaterialKey& Key)
     {
-        return HashCombine(HashCombine(GetTypeHash(Key.Mesh), GetTypeHash(Key.Material)), GetTypeHash(Key.bCastShadow));
+        return HashCombine(HashCombine(HashCombine(GetTypeHash(Key.Mesh), GetTypeHash(Key.Material)),
+            GetTypeHash(Key.bCastShadow)), GetTypeHash(Key.bReceivesDecals));
     }
 };
 

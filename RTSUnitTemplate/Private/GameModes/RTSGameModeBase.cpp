@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "GameModes/RTSGameModeBase.h"
@@ -2005,7 +2005,31 @@ static void SeedSpawnStoredLocationFromWaypoint(AUnitBase* UnitBase)
 	// sqrt keeps the points evenly spread over the disc instead of bunching in the middle.
 	const float Angle = FMath::FRandRange(0.f, 2.f * PI);
 	const float R = Radius * FMath::Sqrt(FMath::FRand());
-	MassUnit->SpawnStoredLocation = WaypointLocation + FVector(R * FMath::Cos(Angle), R * FMath::Sin(Angle), 0.f);
+	const FVector Gestreut = WaypointLocation + FVector(R * FMath::Cos(Angle), R * FMath::Sin(Angle), 0.f);
+
+	// Auf das Navigationsnetz ziehen. Zweite Kopie derselben Streuformel - die erste steht in
+	// GetPatrolHomeLocation und wurde am 19.08. bereits projiziert. Diese hier blieb zunaechst
+	// unberuehrt, weshalb nach dem ersten Eingriff weiterhin 200-500 Fehlanfragen je Partie uebrig
+	// blieben, alle mit einem Ankerpunkt ausserhalb des NavMeshBoundsVolume.
+	//
+	// Der Wegpunkt im Testlevel liegt bei (-10191, 8512), das Volumen endet bei X=-12455: bei einem
+	// PatrolCloseOffset von rund 10000 (Radius 5000) landet ein Teil der Anker draussen. Jeder
+	// Rueckweg dorthin scheitert und wird jeden Takt wiederholt.
+	//
+	// Hier ist keine Determinismus-Zusage einzuhalten (die Streuung nutzt ohnehin FRand), die
+	// Projektion darf also frei verschieben. Schlaegt sie fehl, bleibt es beim gestreuten Punkt.
+	MassUnit->SpawnStoredLocation = Gestreut;
+	if (UWorld* Welt = UnitBase->GetWorld())
+	{
+		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(Welt))
+		{
+			FNavLocation Projiziert;
+			if (NavSys->ProjectPointToNavigation(Gestreut, Projiziert, FVector(Radius, Radius, 1000.f)))
+			{
+				MassUnit->SpawnStoredLocation = Projiziert.Location;
+			}
+		}
+	}
 }
 
 void ARTSGameModeBase::AssignWaypointToUnit(AUnitBase* UnitBase, const FString& WaypointTag)

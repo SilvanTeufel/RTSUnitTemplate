@@ -114,12 +114,37 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 			{
 				if (bShouldShow)
 				{
-					float LocalRadius = Visual.BaseMeshRadius;
-					float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
-
-
 					FTransform VisualTransform = Visual.VisualRelativeTransform * BaseTransform;
-					VisualTransform.SetScale3D(FVector(ScaleFactor));
+
+					// Hier wurde die Sichtgroesse bisher BEDINGUNGSLOS auf den Wirkradius gezogen -
+					// Optik und Wirkbereich waren damit zwangslaeufig dieselbe Zahl, und ein
+					// groesserer Ausloeseradius liess den Mesh mitwachsen. Das Flag dafuer gab es
+					// laengst (AEffectArea::ScaleMesh), es wurde nur nie ausgewertet.
+					//
+					// Steht es auf false, bleibt die Skalierung stehen, die aus
+					// VisualRelativeTransform kommt - und das ist der Relativtransform der
+					// ISM-Komponente, also genau der Maszstab, den man im Blueprint sieht.
+					if (Impact.bScaleMesh)
+					{
+						const float LocalRadius = Visual.BaseMeshRadius;
+						const float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
+						VisualTransform.SetScale3D(FVector(ScaleFactor));
+					}
+
+					// [FlaecheGroesse] Einmal je Flaeche: sagt, welche Skalierung wirklich angewandt
+					// wurde und woher sie kommt. Ohne das bleibt "sieht zu gross aus" eine Vermutung -
+					// die Zahl unterscheidet sauber zwischen "Flag kommt nicht an" (mitskaliert
+					// obwohl es aus sein soll), "Mesh im Blueprint zu gross" (Skalierung stimmt, Bild
+					// nicht) und "alte Instanz aus einer frueheren Sitzung".
+					if (!Impact.bGroesseGemeldet)
+					{
+						Impact.bGroesseGemeldet = true;
+						UE_LOG(LogTemp, Warning,
+							TEXT("[FlaecheGroesse] %s: mitskalieren=%d angewandt=%.2f MeshRadius=%.0f Radius=%.0f (%.0f->%.0f)"),
+							*GetNameSafe(AreaActor), Impact.bScaleMesh ? 1 : 0,
+							VisualTransform.GetScale3D().X, Visual.BaseMeshRadius,
+							Impact.CurrentRadius, Impact.StartRadius, Impact.EndRadius);
+					}
 					
 					Visual.ISMComponent->UpdateInstanceTransform(Visual.InstanceIndex, VisualTransform, true, true, true);
 				}

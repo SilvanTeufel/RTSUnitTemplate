@@ -498,6 +498,21 @@ public:
 	 * mid-march - the "runs back and forth instead of attacking" picture. A batch move carries the
 	 * target in the call, so a second order can only ever refine the first one.
 	 */
+		/**
+	 * Angriffsziel: naechstgelegenes gegnerisches Ziel statt eines zufaelligen.
+	 *
+	 * Vorher waehlte die Zielsuche per FMath::RandRange irgendeinen Gegner aus der Liste - die Armee
+	 * lief dadurch regelmaessig quer ueber die Karte an einem naeheren Ziel vorbei, und ein Gegner,
+	 * der gerade die eigene Basis angriff, wurde genauso wahrscheinlich ignoriert wie irgendein
+	 * Aussenposten. Naechstgelegen zu waehlen heisst deshalb zugleich: Angriffe auf die eigene Basis
+	 * werden bevorzugt beantwortet, ohne dass es dafuer eine eigene Verteidigungsregel braucht.
+	 *
+	 * Bezugspunkt ist der Schwerpunkt der EIGENEN Gebaeude; gibt es keine, faellt es auf die Position
+	 * des Agenten zurueck. Auf false gesetzt verhaelt sich die Auswahl wieder wie zuvor.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate|AI")
+	bool bAttackNearestTarget = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	bool bUseDirectBatchAttackMove = true;
 

@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/MassActorBindingComponent.h"
 
 
@@ -1397,8 +1397,36 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     {
 		if (UnitOwner)
 		{
+			float KolliderRadius = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius();
+
+			// Bei GEBAEUDEN ist der Kapselradius das falsche Mass.
+			//
+			// Gebaeude erben von AUnitBase und bekommen ihren Ausweich-Kollider bisher aus der Kapsel -
+			// die ist aber deutlich kleiner als das Gebaeude selbst (gemessen beim BioIntegrator: Kapsel
+			// 102 gegen 248 tatsaechliche Halbbreite). Andere Einheiten weichen dann einem Kreis aus, der
+			// halb im Gebaeude steckt, laufen bis an die echte Wand und bleiben dort haengen - besonders
+			// Arbeiter, die zwischen Gebaeude und anderen Einheiten durch muessen.
+			//
+			// Das sichtbare Mesh sitzt in der ISM-Komponente; deren Ausdehnung mal Skalierung ist das
+			// Mass, das auch die Extension-Platzierung verwendet. Groesserer der beiden Werte gewinnt,
+			// damit ein Gebaeude ohne ISM nichts verliert.
+			if (UnitOwner->IsA(ABuildingBase::StaticClass()))
+			{
+				if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(UnitOwner))
+				{
+					if (MassUnit->ISMComponent && MassUnit->ISMComponent->GetStaticMesh())
+					{
+						const FBoxSphereBounds MeshBounds = MassUnit->ISMComponent->GetStaticMesh()->GetBounds();
+						const FVector Skalierung = MassUnit->ISMComponent->GetComponentScale();
+						const float HalbX = MeshBounds.BoxExtent.X * FMath::Abs(Skalierung.X);
+						const float HalbY = MeshBounds.BoxExtent.Y * FMath::Abs(Skalierung.Y);
+						KolliderRadius = FMath::Max(KolliderRadius, FMath::Max(HalbX, HalbY));
+					}
+				}
+			}
+
 			// Make sure collider type matches expectations (Circle assumed here)
-			*AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius() + AdditionalCapsuleRadius));
+			*AvoidanceFrag = FMassAvoidanceColliderFragment(FMassCircleCollider(KolliderRadius + AdditionalCapsuleRadius));
 		}
     }
 

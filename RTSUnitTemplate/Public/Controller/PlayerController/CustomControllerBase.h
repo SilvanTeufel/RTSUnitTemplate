@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -62,6 +62,18 @@ protected:
 	// Handles follow command on right-click. Returns true if a follow action was issued (and should early return)
 	bool TryHandleFollowOnRightClick(const FHitResult& HitPawn);
 
+	/**
+	 * Loest die ausgewaehlten Einheiten von ihrem Wegpunkt, bevor ein Marschbefehl ergeht.
+	 *
+	 * IdleStateProcessor schreibt StoredLocation in JEDEM Idle-Takt auf den Wegpunkt zurueck,
+	 * sobald FMassPatrolFragment::TargetWaypointLocation gesetzt ist - und die Regel direkt
+	 * darunter laesst die Einheit zu StoredLocation zurueck laufen. Der Marschbefehl setzt
+	 * StoredLocation zwar korrekt, wird aber im naechsten Takt ueberschrieben: die Einheit
+	 * kehrte deshalb IMMER an ihre Ursprungsposition zurueck. Wer von Hand befehligt wird,
+	 * verliert seinen Wegpunkt.
+	 */
+	void ClearWaypointForManualOrder(const TArray<AUnitBase*>& Units);
+
 	// Tries to cancel active abilities for selected units. Returns true if any ability was canceled.
 	bool TryCancelActiveAbilities();
 
@@ -107,6 +119,13 @@ public:
 	UFUNCTION(Client, Reliable)
 	void AgentInit();
 	
+	// Zaehler fuer die Diagnose in CorrectSetUnitMoveTarget: wie oft ein Bewegungsziel ausserhalb des
+	// Navigationsnetzes gesetzt wurde. Kein static - der Zaehler soll pro Controller und damit pro
+	// PIE-Sitzung neu beginnen. Bewusst OHNE UPROPERTY und ausserhalb jeder Makro-Zeile: direkt hinter
+	// einem UFUNCTION() haelt der Header-Parser die Variable fuer eine Funktion (Error C: "Found '='
+	// when expecting '('").
+	int32 ZielAusserhalbZaehler = 0;
+
 	UFUNCTION(Server, Reliable, BlueprintCallable,  Category = RTSUnitTemplate)
 	void CorrectSetUnitMoveTarget(
 		UObject* WorldContextObject,
@@ -315,6 +334,14 @@ public:
 	/** True while the player is holding the button down after a valid drag start. */
 	UPROPERTY(BlueprintReadOnly, Category = "Formation Settings")
 	bool bFormationLineDragActive = false;
+
+	/**
+	 * Hoehe der waagerechten Ebene, auf der die Formationslinie gezogen wird.
+	 *
+	 * Wird beim Beginn der Geste aus dem Startpunkt uebernommen. Ohne diese feste Ebene folgte die
+	 * Linie der Gelaendehoehe unter dem Zeiger und verschob sich beim Ziehen ueber Huegel.
+	 */
+	float FormationLinePlaneZ = 0.f;
 
 	/**
 	 * AttackToggled as captured at press time. HandleAttackMovePressed clears AttackToggled at the

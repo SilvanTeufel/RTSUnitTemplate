@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "GameModes/ResourceGameMode.h"
@@ -416,7 +416,6 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 	
 	// Filter work places based on worker distribution settings and find the one with fewest workers
 	AWorkArea* BestWorkPlace = nullptr;
-	int32 LowestWorkerCount = INT_MAX;
 	
 	// Get the closest resource's distance as reference for threshold
 	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base)) 
@@ -463,13 +462,13 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 			continue;
 		}
 
-		// Prefer work places with fewer workers for even distribution
-		const int32 WorkerCount = WorkPlace->Workers.Num();
-		if (WorkerCount < LowestWorkerCount)
-		{
-			LowestWorkerCount = WorkerCount;
-			BestWorkPlace = WorkPlace;
-		}
+		// Naechstes FREIES Feld gewinnt. WorkPlaces ist nach Entfernung zur Basis sortiert; die
+		// vorherige Wahl "wenigste Arbeiter" hat diese Sortierung ignoriert und schickte Arbeiter
+		// an ein leeres Feld quer ueber die Karte, obwohl direkt nebenan noch ein Platz frei war.
+		// Volle Felder sind oben schon aussortiert, weiter weg wird also nur gelaufen, wenn in der
+		// Naehe wirklich nichts frei ist.
+		BestWorkPlace = WorkPlace;
+		break;
 	}
 
 	// Fallback: if no suitable place found with distribution constraints, try without constraints
@@ -494,12 +493,9 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 				continue;
 			}
 
-			const int32 WorkerCount = WorkPlace->Workers.Num();
-			if (WorkerCount < LowestWorkerCount)
-			{
-				LowestWorkerCount = WorkerCount;
-				BestWorkPlace = WorkPlace;
-			}
+			// Auch hier: das naechste freie Feld, nicht das am wenigsten ausgelastete.
+			BestWorkPlace = WorkPlace;
+			break;
 		}
 	}
 
@@ -940,7 +936,6 @@ AWorkArea* AResourceGameMode::GetNearestAvailableResourceOfTypeWithin(AWorkingUn
 AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas)
 {
 	AWorkArea* BestWorkArea = nullptr;
-	int32 LowestWorkerCount = INT_MAX;
 	const bool bDistributionSet = IsWorkerDistributionSet(TeamId);
 
 	// Check if there is space for the worker in any WorkArea based on ResourceType
@@ -975,12 +970,15 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 				return WorkArea;
 			}
 
-			const int32 WorkerCount = WorkArea->Workers.Num();
-			if (WorkerCount < LowestWorkerCount)
-			{
-				LowestWorkerCount = WorkerCount;
-				BestWorkArea = WorkArea;
-			}
+			// Ohne eingestellte Verteilung entscheidet die ENTFERNUNG, nicht die Auslastung.
+			//
+			// Hier stand vorher "nimm das Feld mit den wenigsten Arbeitern". WorkAreas ist nach
+			// Entfernung zur Basis sortiert, diese Wahl hat die Sortierung aber komplett ignoriert:
+			// ein leeres Feld am anderen Ende der Karte schlug ein halbvolles direkt vor der Tuer,
+			// und die Arbeiter liefen dauernd quer ueber die Karte. Volle Felder fallen schon oben
+			// durch HasFreeMiningSlotFor heraus - der erste Treffer ist also das naechste FREIE
+			// Feld, und weiter weg wird nur gelaufen, wenn in der Naehe wirklich nichts frei ist.
+			return WorkArea;
 		}
 	}
 
@@ -993,12 +991,9 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 		{
 			if (WorkArea && AWorkArea::HasFreeMiningSlotFor(WorkArea, nullptr))
 			{
-				const int32 WorkerCount = WorkArea->Workers.Num();
-				if (WorkerCount < LowestWorkerCount)
-				{
-					LowestWorkerCount = WorkerCount;
-					BestWorkArea = WorkArea;
-				}
+				// Naechstes freies Feld, die Liste ist nach Entfernung sortiert.
+				BestWorkArea = WorkArea;
+				break;
 			}
 		}
 	}

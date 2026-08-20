@@ -49,7 +49,7 @@ AEffectArea::AEffectArea()
 	StartRadius = 100.f;
 	EndRadius = 500.f;
 	TimeToEndRadius = 5.f;
-	ScaleMesh = false;
+	ScaleMesh = true;
 	bIsRadiusScaling = true;
 	BaseRadius = 100.f;
 	BaseDamage = 0.f;

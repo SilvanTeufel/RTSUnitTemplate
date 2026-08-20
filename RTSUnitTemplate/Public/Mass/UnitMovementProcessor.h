@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -40,6 +40,13 @@ protected:
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;
     
+    // Zaehler fuer die Diagnose in RequestPathfindingAsync: wie oft ein brauchbarer Teilpfad
+    // verworfen wird, weil die Einheit nicht in einer Energiewand steht. Bewusst KEIN static -
+    // ein prozesslanger Zaehler ueberlebt den Wechsel der PIE-Sitzung und verfaelscht die Messung.
+    // Geteilter Zeiger, weil die Pfadsuche auf einem Hintergrund-Thread laeuft: die Lambda erfasst
+    // eine Kopie des Zeigers und haelt den Zaehler am Leben, ohne `this` einzufangen.
+    TSharedPtr<FThreadSafeCounter, ESPMode::ThreadSafe> AusweichVerwurfZaehler;
+
     void RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation);
     void ResetPathfindingFlagDeferred(FMassEntityHandle Entity);
 

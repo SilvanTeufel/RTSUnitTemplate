@@ -163,6 +163,39 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bUseCastingFallbackProcessor = false;
+
+	/**
+	 * True zwischen AddCastingFallback und dem Ende der Ability.
+	 *
+	 * Laufzeitwert, keine Einstellung - deshalb Transient und nicht EditAnywhere.
+	 */
+	UPROPERTY(BlueprintReadOnly, Transient, Category = RTSUnitTemplate)
+	bool bBlueprintCastActive = false;
+
+	/**
+	 * Meldet dem Cast-Waechter, dass AB JETZT ein echter Cast dieser Ability laeuft.
+	 *
+	 * Gedacht fuer Abilities, die ihren Cast SELBST im Blueprint starten - typischerweise erst
+	 * laufen, dann casten (GA_Mine_AH). Ohne diese Meldung sieht AGASUnit::EnforceCastingInvariant
+	 * eine Einheit im Casting-Zustand ohne zugehoerige Cast-Ability, wertet das als verwaisten Cast
+	 * und loest ihn nach zwei Takten (~0,5 s) wieder auf - der Cast starb reproduzierbar bei rund
+	 * 20 Prozent.
+	 *
+	 * Warum nicht einfach bUseCastingFallbackProcessor setzen: dieses Flag wird schon bei der
+	 * AKTIVIERUNG ausgewertet und laesst die Ability sofort casten, statt die Einheit erst laufen zu
+	 * lassen. Es ist eine Einstellung fuer den ganzen Ablauf, nicht fuer einen Zeitpunkt. Und die
+	 * Ability-Instanz ueberlebt bei InstancedPerActor die Aktivierung, ein dauerhaft gesetztes Flag
+	 * wuerde also ab dem zweiten Einsatz genau dieses Sofort-Casten ausloesen.
+	 *
+	 * Wird beim Ende der Ability automatisch zurueckgenommen. RemoveCastingFallback gibt es fuer den
+	 * Fall, dass das Blueprint den Cast vorzeitig selbst abbricht.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddCastingFallback();
+
+	/** Gegenstueck zu AddCastingFallback - der Cast dieser Ability laeuft nicht mehr. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RemoveCastingFallback();
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float Range = 0.f;

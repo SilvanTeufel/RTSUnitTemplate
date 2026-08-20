@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Abilitys/EffectAreaVisualManager.h"
 #include "MassEntityManager.h"
 #include "MassEntitySubsystem.h"
@@ -38,7 +38,7 @@ AActor* UEffectAreaVisualManager::GetOrCreateManagerActor()
     return ManagerActor;
 }
 
-UInstancedStaticMeshComponent* UEffectAreaVisualManager::GetOrCreatePooledISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow)
+UInstancedStaticMeshComponent* UEffectAreaVisualManager::GetOrCreatePooledISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow, bool bReceivesDecals)
 {
     if (!Mesh) return nullptr;
 
@@ -46,6 +46,7 @@ UInstancedStaticMeshComponent* UEffectAreaVisualManager::GetOrCreatePooledISM(US
     Key.Mesh = Mesh;
     Key.Material = Material ? Material : Mesh->GetMaterial(0);
     Key.bCastShadow = bCastShadow;
+    Key.bReceivesDecals = bReceivesDecals;
 
     if (ISMPool.Contains(Key))
     {
@@ -62,6 +63,10 @@ UInstancedStaticMeshComponent* UEffectAreaVisualManager::GetOrCreatePooledISM(US
         ISM->SetMaterial(0, Material);
     }
     ISM->SetCastShadow(bCastShadow);
+    // Vom Vorlagen-ISM uebernehmen. Bisher wurden nur Mesh und Material(0) kopiert: die
+    // Einstellung am Bauplan blieb wirkungslos, weil das SICHTBARE Mesh aus dieser gepoolten
+    // Komponente kommt - deshalb malte das Creep-Decal weiter auf den Cocoon.
+    ISM->SetReceivesDecals(bReceivesDecals);
     ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     ISM->RegisterComponent();
 
@@ -82,11 +87,13 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
 
     UStaticMesh* Mesh = nullptr;
     UMaterialInterface* Material = nullptr;
+    bool bDecalsErlaubt = true;
 
     if (EffectAreaActor->ISMTemplate)
     {
         Mesh = EffectAreaActor->ISMTemplate->GetStaticMesh();
         Material = EffectAreaActor->ISMTemplate->GetMaterial(0);
+        bDecalsErlaubt = EffectAreaActor->ISMTemplate->bReceivesDecals;
     }
 
     if (!Mesh)
@@ -95,7 +102,7 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
         return;
     }
 
-    UInstancedStaticMeshComponent* ISM = GetOrCreatePooledISM(Mesh, Material, false);
+    UInstancedStaticMeshComponent* ISM = GetOrCreatePooledISM(Mesh, Material, false, bDecalsErlaubt);
     if (!ISM)
     {
         UE_LOG(LogTemp, Error, TEXT("AddVisualInstance: Failed to get or create pooled ISM for %s"), *EffectAreaActor->GetName());
@@ -106,6 +113,7 @@ void UEffectAreaVisualManager::AddVisualInstance(FMassEntityHandle EntityHandle,
     Key.Mesh = Mesh;
     Key.Material = Material ? Material : Mesh->GetMaterial(0);
     Key.bCastShadow = false; // AddVisualInstance sets bCastShadow to false in GetOrCreatePooledISM call
+    Key.bReceivesDecals = bDecalsErlaubt;
 
     VisualFrag->ISMComponent = ISM;
     

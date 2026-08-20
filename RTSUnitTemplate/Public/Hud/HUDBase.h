@@ -365,6 +365,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation", meta = (ClampMin = "2", ClampMax = "1024"))
 	int32 FormationPathMaxSegments = 256;
 
+	/**
+	 * Zeichnet die gestrichelte Linie entlang der gezogenen Formation.
+	 *
+	 * Aus, weil die Punkte je Einheit bereits zeigen, wohin marschiert wird - die Linie war nur
+	 * zusaetzliches Gekritzel. Die Punkte bleiben davon unberuehrt.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bDrawFormationPathLine = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Formation")
 	FColor FormationLineColor = FColor(60, 220, 90, 255);
 

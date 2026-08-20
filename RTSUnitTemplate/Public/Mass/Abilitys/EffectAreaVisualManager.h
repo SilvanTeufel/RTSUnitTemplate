@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -24,7 +24,7 @@ public:
 	virtual void Deinitialize() override;
 
     /** Helper for pooled ISMs */
-    UInstancedStaticMeshComponent* GetOrCreatePooledISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow);
+    UInstancedStaticMeshComponent* GetOrCreatePooledISM(UStaticMesh* Mesh, UMaterialInterface* Material, bool bCastShadow, bool bReceivesDecals = true);
 
 	/** Helper to find or create a central manager actor */
 	AActor* GetOrCreateManagerActor();

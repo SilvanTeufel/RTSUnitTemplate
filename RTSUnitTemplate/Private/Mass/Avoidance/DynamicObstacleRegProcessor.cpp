@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/Avoidance/DynamicObstacleRegProcessor.h"
 
 #include "MassCommonFragments.h"
@@ -111,6 +111,11 @@ void UDynamicObstacleRegProcessor::CollectAndProcessObstacles(FMassExecutionCont
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(Context.GetWorld());
     if (!NavSystem) return;
 
+    // Zaehler fuer die Belegzeile weiter unten. Lokal, also pro Durchlauf - die Zahl sagt,
+    // wie viele Objekte in DIESEM Takt nicht als Ausweichhindernis eingetragen werden konnten.
+    int32 UebersprungeneHindernisse = 0;
+    int32 EingetrageneHindernisse = 0;
+
     Query.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
@@ -123,19 +128,51 @@ void UDynamicObstacleRegProcessor::CollectAndProcessObstacles(FMassExecutionCont
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
             const FVector Location = CharList[i].PositionedTransform.GetLocation();
-            
-            FNavLocation NavLoc;
-            if (!NavSystem->ProjectPointToNavigation(Location, NavLoc, FVector(100.f, 100.f, 300.f)))
-            {
-                continue;
-            }
 
             const float Radius = Colliders[i].GetCircleCollider().Radius;
+
+            // Suchbox mit der tatsaechlichen Groesse skalieren statt fester 100 Einheiten.
+            //
+            // Der Test soll aussortieren, was gar nicht im begehbaren Bereich liegt (Leichen unter der
+            // Welt, Platzhalter). Mit fester Box von 100 fielen aber GEBAEUDE durch: sie stanzen ein
+            // Loch ins Navigationsnetz, ihre Mitte liegt also mitten im Loch, und bei einem grossen
+            // Gebaeude ist der naechste begehbare Punkt weiter als 100 entfernt. Ein Gebaeude, das die
+            // Pruefung nicht besteht, wird NIE als Ausweichhindernis eingetragen - Einheiten weichen
+            // ihm dann nicht aus, und Arbeiter bleiben zwischen Gebaeude und anderen Einheiten haengen.
+            //
+            // Der Radius des eigenen Kolliders ist genau das richtige Mass: er sagt, wie weit das
+            // Objekt selbst reicht, also wie weit der naechste begehbare Punkt entfernt sein darf.
+            const FVector SuchBox(FMath::Max(100.f, Radius + 200.f),
+                                  FMath::Max(100.f, Radius + 200.f), 300.f);
+            FNavLocation NavLoc;
+            if (!NavSystem->ProjectPointToNavigation(Location, NavLoc, SuchBox))
+            {
+                // Belegzeile fuer die Boxvergroesserung: wer hier durchfaellt, wird NICHT als
+                // Ausweichhindernis eingetragen und kann von anderen Einheiten nicht umgangen werden.
+                // Vor der Aenderung war die Box fest 100 - bei grossen Gebaeuden zu klein.
+                ++UebersprungeneHindernisse;
+                continue;
+            }
+            ++EingetrageneHindernisse;
             
             // Stationary units should always be obstacles
             AddSingleObstacleToGrid(NavSys, Entity, Location, Radius);
         }
     });
+
+    // Nur melden, wenn tatsaechlich etwas durchgefallen ist - und hoechstens jede Sekunde.
+    if (UebersprungeneHindernisse > 0)
+    {
+        static thread_local double LetzteMeldung = 0.0;
+        const double Jetzt = Context.GetWorld() ? Context.GetWorld()->GetTimeSeconds() : 0.0;
+        if (Jetzt - LetzteMeldung > 1.0 || Jetzt < LetzteMeldung)
+        {
+            LetzteMeldung = Jetzt;
+            UE_LOG(LogTemp, Warning,
+                TEXT("[Hindernis] %d Objekte nicht als Ausweichhindernis eingetragen (Projektion gescheitert), %d eingetragen"),
+                UebersprungeneHindernisse, EingetrageneHindernisse);
+        }
+    }
 }
 
 

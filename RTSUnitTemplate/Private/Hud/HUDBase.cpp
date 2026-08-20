@@ -1,4 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 // HUDBase.h (Corresponding Header)
@@ -1332,7 +1332,9 @@ void AHUDBase::DrawFormationLinePreview()
 	// every other loop in this file is - the point array comes from gameplay code and a runaway
 	// count here would mean thousands of Canvas draws per frame.
 	const int32 MaxSegments = FMath::Clamp(FormationPathMaxSegments, 2, 1024);
-	const int32 NumSegments = FMath::Min(FormationPathPoints.Num() - 1, MaxSegments);
+	const int32 NumSegments = bDrawFormationPathLine
+		? FMath::Min(FormationPathPoints.Num() - 1, MaxSegments)
+		: 0;
 	for (int32 i = 0; i < NumSegments; ++i)
 	{
 		const FVector& A = FormationPathPoints[i];

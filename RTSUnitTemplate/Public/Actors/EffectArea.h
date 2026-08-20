@@ -89,8 +89,24 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
 	float TimeToEndRadius = 5.f;
 
+	/**
+	 * Waechst der Sichtkoerper mit dem Wirkradius mit?
+	 *
+	 * true (Standard): der Mesh wird jeden Takt auf CurrentRadius skaliert - Optik und Wirkbereich
+	 * sind dieselbe Groesse. Das ist das Verhalten, das alle Flaechen bisher hatten.
+	 *
+	 * false: der Mesh behaelt die Skalierung, die im Blueprint an der ISM-Komponente eingestellt ist,
+	 * und bleibt konstant - waehrend StartRadius/EndRadius weiter nur den Wirkbereich bestimmen. Fuer
+	 * die Mine gedacht: klein aussehen, aus groesserer Entfernung ausloesen.
+	 *
+	 * Historie: das Flag existierte samt Replikation und zwei Kopien ins Mass-Fragment, wurde aber
+	 * NIRGENDS gelesen (nachgezaehlt: sechs Vorkommen, alle schreibend). Der Standard stand deshalb
+	 * auf false, obwohl sich alle Flaechen wie true verhielten - und BP_EffectArea_Nuke_AH hatte
+	 * bereits true gesetzt, ohne Wirkung. Beim Anschliessen wurde der Standard auf true gedreht,
+	 * damit genau das erhalten bleibt, was man vorher sah.
+	 */
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
-	bool ScaleMesh = false;
+	bool ScaleMesh = true;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (EditCondition = "bUseEffectAreaImpactProcessor"))
 	bool bIsRadiusScaling = true;

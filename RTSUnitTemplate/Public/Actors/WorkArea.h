@@ -51,6 +51,32 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	FVector ScaleConstructionUnit = FVector(1.f, 1.f, 1.f);
 
+	/**
+	 * Verkleinert die BLOCKIERENDE Kapsel der ConstructionUnit, ohne ihr Modell zu verkleinern.
+	 *
+	 * Die ConstructionUnit wird auf die Grundflaeche der Baustelle skaliert (Faktor bis ueber 7),
+	 * ihre Kapsel waechst dabei mit: aus Radius 50 werden schnell 350 und mehr. Der Ankunftsabstand
+	 * beim Bauen ist dagegen ein fester Wert (5 x MovementAcceptanceRadius, also 250 bei Vorgabe) -
+	 * ist die Kapsel groesser als dieser Abstand, kommt der Arbeiter nie nah genug heran und bleibt
+	 * davor stehen. Genau das Bild "laeuft hin, kann aber nicht".
+	 *
+	 * 1.0 laesst alles wie bisher. Kleinere Werte schrumpfen nur die Kollision, nicht die Optik.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float ConstructionUnitCollisionScale = 0.25f;
+
+	/**
+	 * Wie stark die Ausdehnung dessen, was auf der Baustelle steht, den Ankunftsabstand vergroessert.
+	 *
+	 * Beim Reparieren zaehlen die Kapselradien beider Seiten mit, beim Bauen bisher nicht - deshalb
+	 * gilt dort ein fester Abstand zur MITTE, unabhaengig davon wie gross das Ziel ist. 1.0 rechnet
+	 * den Radius der ConstructionUnit voll dazu, 0 stellt das alte Verhalten wieder her.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.0", ClampMax = "2.0"))
+	// 0 = altes Verhalten: der Arbeiter laeuft bis auf BuildAreaArrivalDistance an den Mittelpunkt.
+	// Hochdrehen laesst ihn frueher stehenbleiben, skaliert mit der Grundflaeche der Baustelle.
+	float ConstructionUnitReachFactor = 0.f;
+
 	// --- Per-build-site vertical tuning for DroneBehavior construction sites ---
 	// Shifts the drone's whole vertical band up(+)/down(-) in world units, on top of the mesh-base
 	// anchor. Use a negative value when the drone hovers too high for a particular building. (Too
@@ -432,6 +458,9 @@ public:
 	 * fertig gewordene Baustelle ueberhaupt je einen Arbeiter gesehen hat.
 	 */
 	int32 DiagMaxWorkers = 0;
+
+	/** Nur fuer die [Bauplatz]-Diagnose: eine Meldung je 5 Sekunden und Flaeche. */
+	float PlatzDiagTimer = 0.f;
 	float DiagGeburtszeit = -1.f;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)

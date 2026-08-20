@@ -1,9 +1,11 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/MainStateProcessor.h"
 
 #include "MassExecutionContext.h"
 #include "MassSignalSubsystem.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/UnitNavigationFragments.h"  // nur fuer die Stall-Diagnose
+#include "NavigationSystem.h"  // nur fuer die Stall-Diagnose: liegt die Einheit auf dem Navmesh?
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
 #include "Characters/Unit/UnitBase.h"
@@ -26,6 +28,11 @@ void UMainStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadWrite); // Eigene Stats lesen/schreiben
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    // Nur fuer die [Stall]-Diagnose: Soll-Tempo, Restweg und Pfadzustand. Optional, damit die
+    // Abfrage dieselben Entitaeten trifft wie bisher - eine Pflichtangabe wuerde den Prozessor
+    // stillschweigend auf einen Teil der Einheiten einschraenken.
+    EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassStateFrozenTag>(EMassFragmentPresence::None);
     //EntityQuery.AddTagRequirement<FMassStopUnitDetectionTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::None);
@@ -79,6 +86,8 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
         auto StateList = ChunkContext.GetMutableFragmentView<FMassAIStateFragment>(); // Mutable needed
         auto ImpactList = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
         auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
+        const auto MoveList = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+        const auto NavList  = ChunkContext.GetFragmentView<FUnitNavigationPathFragment>();
 
         // DIAGNOSE "laeuft auf der Stelle": der Zustand steckt in Tags, und alle Einheiten eines
         // Chunks teilen sich den Archetyp - also einmal pro Chunk bestimmen, nicht pro Einheit.
@@ -117,9 +126,54 @@ void UMainStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                     if (StateFrag.StallDiagTimer >= 8.f && !StateFrag.bStallDiagReported)
                     {
                         StateFrag.bStallDiagReported = true;
-                        UE_LOG(LogTemp, Warning,
-                            TEXT("[Stall] Einheit steht seit %.0fs im Zustand %s bei (%.0f, %.0f)"),
-                            StateFrag.StallDiagTimer, StallStateName, Jetzt.X, Jetzt.Y);
+                            // Scheitert die Projektion der EIGENEN Position, ist die Einheit neben dem
+                            // Navigationsnetz gelandet - dann setzt UnitMovementProcessor Tempo 0 und
+                            // verwirft den Pfad, und im naechsten Takt genau dasselbe. Sie muesste sich
+                            // bewegen, um zurueckzukommen, bewegt sich aber ohne Pfad nicht. Diese Zahl
+                            // trennt "steht selbst falsch" von "Ziel nicht erreichbar".
+                            // Zwei Projektionen: die eigene Position UND das Ziel. Die erste hat sich
+                            // erledigt (2 von 116 lagen daneben) - die Einheit steht richtig, die
+                            // Startprojektion gelingt, die Pfadanfrage geht raus und scheitert. Bleibt
+                            // die Frage, ob das ZIEL ueberhaupt auf dem Netz liegt; dann waere die
+                            // Baustelle an einer unerreichbaren Stelle gesetzt worden.
+                            int32 AufNetz = -1, ZielAufNetz = -1;
+                            if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+                            {
+                                FNavLocation Projiziert;
+                                AufNetz = NavSys->ProjectPointToNavigation(
+                                    Jetzt, Projiziert, FVector(500.f, 500.f, 500.f)) ? 1 : 0;
+                                if (MoveList.Num() > 0)
+                                {
+                                    FNavLocation ZielProjiziert;
+                                    ZielAufNetz = NavSys->ProjectPointToNavigation(
+                                        MoveList[i].Center, ZielProjiziert, FVector(500.f, 500.f, 500.f)) ? 1 : 0;
+                                }
+                            }
+                            float SollTempo = -1.f, RestWeg = -1.f;
+                            int32 PfadPunkte = -1, PfadIndex = -1, Sucht = -1;
+                            if (MoveList.Num() > 0)
+                            {
+                                SollTempo = MoveList[i].DesiredSpeed.Get();
+                                RestWeg = MoveList[i].DistanceToGoal;
+                            }
+                            if (NavList.Num() > 0)
+                            {
+                                const FUnitNavigationPathFragment& Nav = NavList[i];
+                                Sucht = Nav.bIsPathfindingInProgress ? 1 : 0;
+                                PfadIndex = Nav.CurrentPathPointIndex;
+                                PfadPunkte = Nav.CurrentPath.IsValid() ? Nav.CurrentPath->GetPathPoints().Num() : 0;
+                            }
+                        // SwitchingState mitloggen: GoToBuildStateProcessor haengt BEIDE Ausgaenge (Abbruch und
+                            // Ankunft) an !SwitchingState, und der Wachhund
+                            // RTSUnitUtils::TickSwitchingStateWatchdog laeuft nur in Attack/Chase/Pause.
+                            // Steht das Flag, ist der Arbeiter dauerhaft eingefroren. Ohne diese Angabe
+                            // laesst sich die Vermutung nicht von "steht nur im Weg" unterscheiden.
+                            UE_LOG(LogTemp, Warning,
+                            TEXT("[Stall] Team=%d Einheit steht seit %.0fs im Zustand %s bei (%.0f, %.0f) Wechselt=%d "
+                                 "SollTempo=%.0f RestWeg=%.0f Pfadpunkte=%d Index=%d Sucht=%d AufNetz=%d ZielAufNetz=%d"),
+                            StatsFrag.TeamId, StateFrag.StallDiagTimer, StallStateName, Jetzt.X, Jetzt.Y,
+                            StateFrag.SwitchingState ? 1 : 0,
+                            SollTempo, RestWeg, PfadPunkte, PfadIndex, Sucht, AufNetz, ZielAufNetz);
                     }
                 }
             }

@@ -2586,6 +2586,28 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 
 								// After InitializeAttributes() inside SpawnSingleUnit, apply preserved stats to the spawned building
    								ABuildingBase* SpawnedBuilding = Cast<ABuildingBase>(NewUnit);
+
+								// UnitBase IS the worker that just finished this building. Hand it over before the
+								// building's auto-load timer fires (BeginPlay, >=0.1s), so a player's reactor knows
+								// which workers to take in instead of grabbing the four nearest ones. Die ganze
+								// Mannschaft der Baustelle wird mitgegeben, nicht nur der letzte - wer drei
+								// Arbeiter hinschickt, erwartet drei drin.
+								if (SpawnedBuilding)
+								{
+									SpawnedBuilding->BuilderWorker = UnitBase;
+									SpawnedBuilding->BuilderWorkers.Reset();
+									if (UnitBase->BuildArea)
+									{
+										for (AWorkingUnitBase* Bauarbeiter : UnitBase->BuildArea->Workers)
+										{
+											if (AUnitBase* AlsUnit = Cast<AUnitBase>(Bauarbeiter))
+											{
+												SpawnedBuilding->BuilderWorkers.AddUnique(AlsUnit);
+											}
+										}
+									}
+									SpawnedBuilding->BuilderWorkers.AddUnique(UnitBase);
+								}
    									
 								if (bHasSavedStats && NewUnit && SpawnedBuilding)
 								{
@@ -4211,6 +4233,40 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 							}
 						}
 						NewConstruction->SetActorScale3D(NewScale * 2.f * UnitBase->BuildArea->ScaleConstructionUnit);
+
+						// Blockierende Kapsel getrennt von der Optik verkleinern.
+						//
+						// Die Skalierung oben vergroessert die Kapsel mit: aus Radius 50 werden bei
+						// Faktor 7 schon 350. Der Ankunftsabstand beim Bauen ist aber ein fester Wert
+						// (5 x MovementAcceptanceRadius = 250 bei Vorgabe) - ist die Kapsel groesser,
+						// steht der Arbeiter davor und kommt nie nah genug heran. GoToBuildStateProcessor
+						// rechnet den Radius jetzt zwar auf den Ankunftsabstand drauf, aber ein Bauplatz,
+						// der halb so gross ist wie sein Sperrkreis, bleibt trotzdem unschoen.
+						// Dieser Regler schrumpft NUR die Kollision, nicht das Modell.
+						if (UCapsuleComponent* CUKapsel = NewConstruction->GetCapsuleComponent())
+						{
+							// Die Kollision waechst NICHT mehr voll mit der Optik.
+							//
+							// Gemessen: die ConstructionUnit wird auf die Grundflaeche skaliert (Faktor
+							// bis 7,2), ihre Kapsel waechst mit - aus Radius 50 werden 420. Der
+							// Ankunftsabstand beim Bauen liegt aber bei 125. Ein Hindernis, das groesser
+							// ist als der Abstand, den der Arbeiter unterschreiten muss, macht das Bauen
+							// unmoeglich: er laeuft hin, stoesst an und bleibt stehen. Genau das Bild.
+							//
+							// ConstructionUnitCollisionScale sagt jetzt, welcher ANTEIL des Groessen-
+							// zuwachses auf die Kollision durchschlaegt. 0 = Kapsel bleibt bei ihrem
+							// Grundmass, 1 = alles wie zuvor. Bei 0,25 und Skalierung 7,2 ergibt sich
+							// ein Weltradius von rund 127 - knapp unter dem Ankunftsabstand, die
+							// ConstructionUnit bleibt also ein spuerbares Hindernis, ohne zu sperren.
+							const float Anteil = FMath::Clamp(UnitBase->BuildArea->ConstructionUnitCollisionScale, 0.f, 1.f);
+							const float Skalierung = FMath::Max(0.01f, NewConstruction->GetActorScale3D().X);
+							const float Grundradius = CUKapsel->GetUnscaledCapsuleRadius();
+							const float Grundhoehe = CUKapsel->GetUnscaledCapsuleHalfHeight();
+							const float ZielWeltRadius = Grundradius * (1.f + (Skalierung - 1.f) * Anteil);
+							const float ZielWeltHoehe = Grundhoehe * (1.f + (Skalierung - 1.f) * Anteil);
+							CUKapsel->SetCapsuleRadius(ZielWeltRadius / Skalierung, false);
+							CUKapsel->SetCapsuleHalfHeight(ZielWeltHoehe / Skalierung, false);
+						}
 					}
 					else if (bIsDrone && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
 					{

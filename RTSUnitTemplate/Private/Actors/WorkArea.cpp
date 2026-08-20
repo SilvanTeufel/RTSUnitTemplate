@@ -110,13 +110,17 @@ bool AWorkArea::IsOwnedByAiTeam() const
 	const UWorld* World = GetWorld();
 	if (!World) return false;
 
+	// A team can carry MORE than one controller - the AI test level spectates team 2 with a human
+	// camera controller while an RLAgent plays it. Returning the first match answered "player" for an
+	// AI team, which silently disabled the orphan cleanup below for exactly that team. The team counts
+	// as AI if ANY of its controllers is one.
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 	{
 		if (const AControllerBase* PC = Cast<AControllerBase>(It->Get()))
 		{
-			if (PC->SelectableTeamId == TeamId)
+			if (PC->SelectableTeamId == TeamId && PC->bIsAi)
 			{
-				return PC->bIsAi;
+				return true;
 			}
 		}
 	}
@@ -356,6 +360,7 @@ void AWorkArea::RemoveAreaFromGroup_Implementation()
 void AWorkArea::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
+
 	
 	if(Building && Building->GetUnitState() == UnitData::Dead)
 	{
@@ -961,6 +966,27 @@ void AWorkArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			TEXT("[Bauweg] Team=%d Flaeche ENDE: %s fertig=%d ArbeiterMax=%d ArbeiterJetzt=%d Lebensdauer=%.0fs Grund=%d"),
 			TeamId, *GetName(), bFinalBuildingSpawned ? 1 : 0, DiagMaxWorkers, Workers.Num(),
 			Lebensdauer, (int32)EndPlayReason);
+
+		// [Bauweg] WER zerstoert eine Flaeche, die gerade erst entstanden ist?
+		//
+		// Gemessen am 18.08.: von 32 gefeuerten LaravalPod-Regeln wurden nur 20 zu einem Bauplatz, und
+		// JEDE gescheiterte Flaeche trug dieselbe Signatur - ArbeiterMax=0, Lebensdauer≈0s, Grund=0
+		// (Destroyed). Sie stirbt also im selben Takt, in dem sie entsteht, bevor ihr ein Arbeiter
+		// zugewiesen werden kann. Alle bekannten Wege sind einzeln ausgeschlossen: Drop-Ablehnung (0
+		// fuer Pods), Verdraengung ([Bauwahl] VERDRAENGT: 0), Regelablehnung (die Regel feuerte),
+		// Ability-Aktivierung (0 Ablehnungen bei diesem Team). Damit ist der Aufrufer die einzige
+		// verbliebene Unbekannte - und die Zeile allein kann ihn nicht nennen.
+		//
+		// Eng gefasst, damit es kein Dauerfeuer wird: nur Flaechen ohne Gebaeude, ohne je einen
+		// Arbeiter und mit unter einer Sekunde Lebensdauer. Das sind nach der Messung rund 16 bis 20
+		// je Partie. Diagnose - vor der Auslieferung raus.
+		if (EndPlayReason == EEndPlayReason::Destroyed
+			&& !bFinalBuildingSpawned
+			&& DiagMaxWorkers == 0
+			&& Lebensdauer >= 0.f && Lebensdauer < 1.f)
+		{
+			FDebug::DumpStackTraceToLog(TEXT("[Bauweg] Flaeche STARB SOFORT - Aufrufer:"), ELogVerbosity::Warning);
+		}
 	}
 
 	Super::EndPlay(EndPlayReason);

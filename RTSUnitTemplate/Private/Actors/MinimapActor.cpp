@@ -549,6 +549,10 @@ void AMinimapActor::CaptureMapTopography()
         }
     }
 
+    // Vor dem Upload sichern: ab hier lebt Pixels nur noch auf der GPU, und das ReplayModule
+    // braucht denselben Untergrund als CPU-Daten (siehe GetTopographyPixels).
+    TopographyPixels = Pixels;
+
     // --- Pass 3: Safe Texture Update (Async Copy) ---
     if (!TopographyTexture)
     {

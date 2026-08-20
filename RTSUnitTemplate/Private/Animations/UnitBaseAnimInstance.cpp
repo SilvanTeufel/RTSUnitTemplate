@@ -1,4 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Animations/UnitBaseAnimInstance.h"
@@ -39,6 +39,8 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 	if(ControlTimer < UpdateTime) return;
 	ControlTimer = 0.f;
 	*/
+	bMassSpeedValid = false;
+
 	AActor* OwningActor = GetOwningActor();
 
 	if (OwningActor != nullptr) {
@@ -90,6 +92,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 								{
 									MassVelocity = VelFrag->Value;
 									MassSpeed = MassVelocity.Size2D();
+									bMassSpeedValid = true;
 								}
 								// ===================== ENDE LUX-ANPASSUNG ===================
 
@@ -110,6 +113,30 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			}
 
 			CharAnimState = UnitBase->GetUnitState();
+
+			// Steht die Einheit, sieht sie auch stehend aus - selbst wenn ihr Zustand Laufen sagt.
+			//
+			// Run/Chase/PatrolRandom und die GoTo-Zustaende bleiben aktiv, waehrend die Einheit
+			// stillsteht: die Pfadsuche laeuft, das Ziel ist erreicht, oder der Weg ist versperrt.
+			// Das AnimBP zeigte trotzdem die Laufanimation - Laufen auf der Stelle. Geaendert wird
+			// nur die an das AnimBP gemeldete Anzeige, der Zustand der Einheit bleibt unberuehrt.
+			if (bMassSpeedValid && MassSpeed <= IdleAnimSpeedThreshold)
+			{
+				switch (CharAnimState.GetValue())
+				{
+				case UnitData::Run:
+				case UnitData::Chase:
+				case UnitData::Patrol:
+				case UnitData::PatrolRandom:
+				case UnitData::GoToBase:
+				case UnitData::GoToBuild:
+				case UnitData::GoToResourceExtraction:
+					CharAnimState = UnitData::Idle;
+					break;
+				default:
+					break;
+				}
+			}
 			// SetBlendPoints(UnitBase, Deltaseconds); // Processor übernimmt das jetzt
 
 			if(LastAnimState != CharAnimState)

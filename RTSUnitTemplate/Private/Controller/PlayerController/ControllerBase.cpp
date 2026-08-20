@@ -1,4 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Controller/PlayerController/ControllerBase.h"
@@ -801,8 +801,33 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, AUnitBase* Ow
 {
 	UWorld* World = GetWorld();
 
+	// DIAGNOSE (19.08.): Wegpunkte entstehen bei jedem Klick neu, obwohl der Aufrufer sie versetzen
+	// sollte. Zwei Vermutungen lagen daneben - diese Zeile nennt den Verursacher statt zu raten.
+	UE_LOG(LogTemp, Warning, TEXT("[WP] CreateAWaypoint fuer %s (hat schon: %s, Zuweisungen: %d)"),
+		*GetNameSafe(OwnerUnit),
+		OwnerUnit ? *GetNameSafe(OwnerUnit->NextWaypoint) : TEXT("-"),
+		(OwnerUnit && IsValid(OwnerUnit->NextWaypoint)) ? OwnerUnit->NextWaypoint->GetAssignedUnitCount() : -1);
+
 	if (World && WaypointClass && OwnerUnit)
 	{
+		// Ist schon ein Wegpunkt da, wird er VERSETZT statt ein zweiter erzeugt.
+		//
+		// Jedes Versetzen des Sammelpunkts am Gebaeude legte bisher einen neuen Wegpunkt an; die
+		// alten blieben als unsichtbarer Muell in der Welt stehen und zogen weiterhin Einheiten an,
+		// die noch auf sie zeigten. Nur wenn sich MEHRERE Einheiten denselben Wegpunkt teilen, waere
+		// das Verschieben ein Eingriff bei den anderen - dann bleibt es beim Neuanlegen.
+		if (AWaypoint* Vorhanden = OwnerUnit->NextWaypoint)
+		{
+			if (IsValid(Vorhanden) && Vorhanden->GetAssignedUnitCount() <= 1)
+			{
+				Vorhanden->SetActorLocation(NewWPLocation);
+				// Erneut zuweisen: das haelt die Buchfuehrung des Wegpunkts konsistent, falls der
+				// Aufrufer den Zeiger zwischendurch getauscht hat.
+				OwnerUnit->SetWaypoint(Vorhanden);
+				return Vorhanden;
+			}
+		}
+
 		// Define the spawn parameters
 		FActorSpawnParameters SpawnParams;
 		SpawnParams.Owner = this;
@@ -921,24 +946,43 @@ void AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 	{
 		NewWPLocation.Z += RelocateWaypointZOffset;
 		
-		if (!BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
-		{
-			if (BuildingBase->NextWaypoint) UnregisterWaypointFromBuilding(BuildingBase);
+		// BuildingWaypoint ist ein AUSGABEparameter, kein Zwischenspeicher: Server_SetBuildingWaypoint
+		// uebergibt bei JEDEM Klick nullptr. Der alte Zweig "!BuildingWaypoint && ungleich NextWaypoint"
+		// traf damit immer zu, zerstoerte ueber UnregisterWaypointFromBuilding den vorhandenen Wegpunkt
+		// und legte einen neuen an - bei jedem einzelnen Klick. Nur die Sammelfahrt
+		// (Server_Batch_SetBuildingWaypoints) reicht hier absichtlich einen gemeinsamen Wegpunkt durch.
+		UE_LOG(LogTemp, Warning,
+			TEXT("[WP] SetBuildingWaypoint: Gebaeude=%s Uebergeben=%s Vorhanden=%s Zuweisungen=%d"),
+			*GetNameSafe(BuildingBase), *GetNameSafe(BuildingWaypoint),
+			*GetNameSafe(BuildingBase->NextWaypoint),
+			IsValid(BuildingBase->NextWaypoint) ? BuildingBase->NextWaypoint->GetAssignedUnitCount() : -1);
 
-			BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
+		if (!BuildingWaypoint)
+		{
+			// Eigener, mit niemandem geteilter Wegpunkt: versetzen.
+			if (IsValid(BuildingBase->NextWaypoint) && BuildingBase->NextWaypoint->GetAssignedUnitCount() <= 1)
+			{
+				BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
+				BuildingWaypoint = BuildingBase->NextWaypoint;
+			}
+			else
+			{
+				// Geteilt oder gar keiner da - dann darf er nicht verschoben werden.
+				if (BuildingBase->NextWaypoint) UnregisterWaypointFromBuilding(BuildingBase);
+
+				BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
+			}
 		}
-		else if (BuildingWaypoint && BuildingWaypoint != BuildingBase->NextWaypoint)
+		else if (BuildingWaypoint != BuildingBase->NextWaypoint)
 		{
 			if (BuildingBase->NextWaypoint) UnregisterWaypointFromBuilding(BuildingBase);
 
 			BuildingBase->NextWaypoint = BuildingWaypoint;
 			BuildingWaypoint->AddAssignedUnit(BuildingBase);
-				
 		}
-		else if( BuildingBase->NextWaypoint) BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
-		else 
+		else
 		{
-			BuildingWaypoint = CreateAWaypoint(NewWPLocation, BuildingBase);
+			BuildingBase->NextWaypoint->SetActorLocation(NewWPLocation);
 		}
 					
 		Multi_SetBuildingWaypoint(NewWPLocation, Unit, BuildingWaypoint, PlayWaypointSound);

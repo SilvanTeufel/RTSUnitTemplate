@@ -1,5 +1,9 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/Worker/GoToBuildStateProcessor.h" // Adjust path
+#include "Actors/WorkArea.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/CapsuleComponent.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 
 // Engine & Mass includes
 #include "MassCommonFragments.h"
@@ -142,6 +146,8 @@ void UGoToBuildStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, 
         const TArrayView<FMassAIStateFragment> AIStateList = Context.GetMutableFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassCombatStatsFragment> StatsList = Context.GetFragmentView<FMassCombatStatsFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        // Optional: nur fuer die Groesse dessen, was auf der Baustelle steht (siehe unten).
+        const TConstArrayView<FMassActorFragment> ActorList = Context.GetFragmentView<FMassActorFragment>();
  
         const int32 NumEntities = Context.GetNumEntities();
             
@@ -169,8 +175,69 @@ void UGoToBuildStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, 
             
             const float DistanceToTargetCenter = FVector::Dist2D(CurrentTransform.GetLocation(), WorkerStats.BuildAreaPosition);
 
-            MoveTarget.DistanceToGoal = DistanceToTargetCenter - WorkerStats.BuildAreaArrivalDistance; // Update distance
-            if (DistanceToTargetCenter <= WorkerStats.BuildAreaArrivalDistance && !AIState.SwitchingState)
+            // Groesse dessen, was auf der Baustelle steht, mitrechnen - wie es das Reparieren laengst
+            // tut (FollowRadius + beide Kapselradien). Beim Bauen galt bisher ein FESTER Abstand zur
+            // Mitte (5 x MovementAcceptanceRadius = 250 bei Vorgabe). Die ConstructionUnit wird aber
+            // auf die Grundflaeche skaliert; ihre Kapsel erreicht dabei 350 und mehr. Ist sie groesser
+            // als der Ankunftsabstand, kann der Arbeiter die Bedingung NIE erfuellen - er steht davor
+            // und wartet. Deshalb kommt ihr Radius jetzt oben drauf.
+            float Ankunftsabstand = WorkerStats.BuildAreaArrivalDistance;
+            if (!ActorList.IsEmpty())
+            {
+                if (const AWorkingUnitBase* Arbeiter = Cast<AWorkingUnitBase>(ActorList[i].Get()))
+                {
+                    if (const AWorkArea* Flaeche = Arbeiter->BuildArea)
+                    {
+                        // Bezug ist die GRUNDFLAECHE der Baustelle, nicht die ConstructionUnit.
+                        //
+                        // Erster Versuch hing am Zeiger Flaeche->ConstructionUnit - der ist beim
+                        // wartenden Arbeiter oft null (gemessen: CUDa=0 in praktisch allen Zeilen),
+                        // dann blieb der Aufschlag aus und die Schwelle stand weiter bei 125, waehrend
+                        // das Hindernis auf dem Platz mehrere hundert Einheiten misst. Die Flaeche
+                        // selbst ist dagegen immer da, und die ConstructionUnit wird ohnehin auf genau
+                        // diese Grundflaeche skaliert - sie ist also das richtige Mass.
+                        float Belegt = 0.f;
+                        if (const UStaticMeshComponent* FlaechenMesh = Flaeche->Mesh)
+                        {
+                            const FVector Ausdehnung = FlaechenMesh->Bounds.BoxExtent;
+                            Belegt = FMath::Max(Ausdehnung.X, Ausdehnung.Y);
+                        }
+                        // Falls die ConstructionUnit doch greifbar ist und groesser misst, gewinnt sie.
+                        if (const AUnitBase* Belegend = Flaeche->ConstructionUnit)
+                        {
+                            if (const UCapsuleComponent* Kapsel = Belegend->GetCapsuleComponent())
+                            {
+                                Belegt = FMath::Max(Belegt, Kapsel->GetScaledCapsuleRadius());
+                            }
+                        }
+                        Ankunftsabstand += Belegt * Flaeche->ConstructionUnitReachFactor;
+                    }
+                }
+            }
+
+            // Marschbefehl nachfassen, wenn der Arbeiter unterwegs stehenbleibt.
+            //
+            // Gemessen am 19.08.: Arbeiter standen mit Abstand 4005 zur Baustelle und SollTempo 0 im
+            // Zustand GoToBuild - dauerhaft. Dieser Prozessor erteilt naemlich SELBST keinen Laufbefehl;
+            // er prueft nur Ankunft und Abbruch. Der Befehl kommt einmalig beim Zustandswechsel aus
+            // UpdateUnitMovement. Faellt das Tempo danach auf 0 (Pfad zu Ende, Ziel verschoben,
+            // Ankunft am alten Zielpunkt), steht der Arbeiter fuer immer und niemand schickt ihn los.
+            //
+            // Nur nachfassen, wenn er wirklich steht ODER das Ziel deutlich abweicht - jeden Takt neu
+            // zu befehlen wuerde die Pfadsuche staendig neu starten und ihn erst recht anhalten
+            // (derselbe Fehler wie beim Verfolgen bewegter Ziele).
+            if (DistanceToTargetCenter > Ankunftsabstand && !AIState.SwitchingState)
+            {
+                const bool bStehtStill = MoveTarget.DesiredSpeed.Get() <= KINDA_SMALL_NUMBER;
+                const bool bZielWeit = FVector::Dist2D(MoveTarget.Center, WorkerStats.BuildAreaPosition) > 250.f;
+                if (bStehtStill || bZielWeit)
+                {
+                    UpdateMoveTarget(MoveTarget, WorkerStats.BuildAreaPosition, Stats.RunSpeed, World);
+                }
+            }
+
+            MoveTarget.DistanceToGoal = DistanceToTargetCenter - Ankunftsabstand; // Update distance
+            if (DistanceToTargetCenter <= Ankunftsabstand && !AIState.SwitchingState)
             {
                 AIState.SwitchingState = true;
                 // Stop movement immediately and mirror to all clients

@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/PatrolIdleStateProcessor.h" // Passe Pfad an
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
@@ -110,7 +110,7 @@ void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMass
             const FVector CurrentLocation = TransformFrag.GetTransform().GetLocation();
             StateFrag.StoredLocation = PatrolFrag.TargetWaypointLocation.IsNearlyZero()
                 ? CurrentLocation
-                : GetPatrolHomeLocation(Entity, PatrolFrag.TargetWaypointLocation, PatrolFrag.RandomPatrolRadius);
+                : GetPatrolHomeLocation(Entity, PatrolFrag.TargetWaypointLocation, PatrolFrag.RandomPatrolRadius, World);
 
             // --- Stop Movement & Update Timer ---
             Velocity.Value = FVector::ZeroVector; // Modification stays here

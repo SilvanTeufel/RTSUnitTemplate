@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/IdleStateProcessor.h" // Dein Prozessor-Header
 
 // Andere notwendige Includes...
@@ -135,7 +135,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             if (PatrolFrag && !PatrolFrag->TargetWaypointLocation.IsNearlyZero())
             {
                 StateFrag.StoredLocation = GetPatrolHomeLocation(
-                    Entity, PatrolFrag->TargetWaypointLocation, PatrolFrag->RandomPatrolRadius);
+                    Entity, PatrolFrag->TargetWaypointLocation, PatrolFrag->RandomPatrolRadius, World);
             }
 
             const bool bPathActive = PathFrag && PathFrag->Waypoints.Num() > PathFrag->CurrentIndex;
@@ -213,7 +213,10 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             {
                 const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
                 const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                const float Threshold = MoveTarget.SlackRadius * TresholdAcceptanceMultiplier;
+                // Hysterese: die Rueckkehr kostet mehr Abstand als das Ankommen (siehe
+                // IdleReturnHysteresis). Ohne sie schiebt die Vermeidung die ruhende Einheit
+                // ueber dieselbe Schwelle, die sie zum Zurueck laufen bringt - und wieder.
+                const float Threshold = MoveTarget.SlackRadius * TresholdAcceptanceMultiplier * IdleReturnHysteresis;
 
                 if (Dist2D > Threshold)
                 {
@@ -374,7 +377,7 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             if (PatrolFrag && !PatrolFrag->TargetWaypointLocation.IsNearlyZero())
             {
                 StateFrag.StoredLocation = GetPatrolHomeLocation(
-                    Entity, PatrolFrag->TargetWaypointLocation, PatrolFrag->RandomPatrolRadius);
+                    Entity, PatrolFrag->TargetWaypointLocation, PatrolFrag->RandomPatrolRadius, World);
             }
 
             if (PatrolFrag)
@@ -398,7 +401,10 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             {
                 const float Dist2D = FVector::Dist2D(Transform.GetLocation(), StateFrag.StoredLocation);
                 const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
-                const float Threshold = MoveTarget.SlackRadius * TresholdAcceptanceMultiplier;
+                // Hysterese: die Rueckkehr kostet mehr Abstand als das Ankommen (siehe
+                // IdleReturnHysteresis). Ohne sie schiebt die Vermeidung die ruhende Einheit
+                // ueber dieselbe Schwelle, die sie zum Zurueck laufen bringt - und wieder.
+                const float Threshold = MoveTarget.SlackRadius * TresholdAcceptanceMultiplier * IdleReturnHysteresis;
 
                 if (Dist2D > Threshold)
                 {

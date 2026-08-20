@@ -336,10 +336,26 @@ void AGASUnit::EnforceCastingInvariant()
 	AMassUnitBase* MassSelf = Cast<AMassUnitBase>(this);
 	if (!SelfUnit || !MassSelf) return;
 
+	// bBlueprintCastActive zaehlt gleichwertig: Abilities, die ihren Cast selbst im Blueprint starten
+	// (erst laufen, dann casten), melden sich ueber AddCastingFallback genau in dem Moment an, in dem
+	// der Cast beginnt. Ohne das galt ihr Cast als verwaist und wurde nach zwei Takten geloest -
+	// GA_Mine_AH starb dadurch reproduzierbar bei etwa 20 Prozent der Cast-Zeit.
 	const bool bCastAbilityActive =
 		ActivatedAbilityInstance
-		&& ActivatedAbilityInstance->bUseCastingFallbackProcessor
+		&& (ActivatedAbilityInstance->bUseCastingFallbackProcessor
+			|| ActivatedAbilityInstance->bBlueprintCastActive)
 		&& ActivatedAbilityInstance->IsActive();
+
+	// Tote Einheiten sind ausgenommen. Ohne diese Pruefung wird eine Ability, die den Tod ihres
+	// Traegers ueberlebt, alle 0,5 s erneut "nachgezogen": SwitchEntityTag(Casting) auf einem toten
+	// Aktor. Gemessen am 19.08. an einem einzelnen Singularianer-DataCenter - 4094 Korrekturen in
+	// EINER Partie, alle mit Zustand=36 (Dead), waehrend andere Partien bei 50 lagen. Der Zustand in
+	// der Logzeile war der Hinweis; ohne ihn sah es nach Rauschen aus.
+	if (SelfUnit->GetUnitState() == UnitData::Dead)
+	{
+		CastInvariantStrikes = 0;
+		return;
+	}
 
 	const bool bImCasting = (SelfUnit->GetUnitState() == UnitData::Casting);
 
@@ -397,8 +413,15 @@ bool AGASUnit::ActivateAbilityByInputID(
 	APlayerController* InstigatorPC)
 {
 	
+	// [AbilityAktivierung] Diese Funktion hatte fuenf stille Ausstiege. Gemessen am 18.08.: von 32
+	// gefeuerten LaravalPod-Regeln wurden in einer Verlustpartie nur 20 zu einem Bauplatz, in der
+	// Siegpartie alle 34 - die Differenz verschwand genau hier, ohne eine einzige Logzeile. Der
+	// Kommentar weiter unten ("Name it instead of failing silently") zeigt, dass die Zeilen
+	// vorgesehen waren; geschrieben wurden sie nie.
 	if (!AbilitySystemComponent)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT: kein AbilitySystemComponent"),
+			*GetName(), TeamId, (int32)InputID);
 		return false;
 	}
 
@@ -408,6 +431,8 @@ bool AGASUnit::ActivateAbilityByInputID(
 
 	if (!AbilityToActivate)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT: kein Eintrag an diesem Index (Array=%d)"),
+			*GetName(), TeamId, (int32)InputID, AbilitiesArray.Num());
 		return false;
 	}
 	
@@ -418,6 +443,8 @@ bool AGASUnit::ActivateAbilityByInputID(
 		Ability = AbilityB;
 	else
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT: %s ist keine UGameplayAbilityBase"),
+			*GetName(), TeamId, (int32)InputID, *GetNameSafe(AbilityToActivate));
 		return false;
 	}
 	
@@ -437,6 +464,11 @@ bool AGASUnit::ActivateAbilityByInputID(
 		}
 		// A stale ActivatedAbilityInstance locks the unit out of EVERY ability, which looks exactly like
 		// "casting does not start any more". Name it instead of failing silently.
+		const AUnitBase* AlsUnitBusy = Cast<AUnitBase>(this);
+		UE_LOG(LogTemp, Warning,
+			TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT: '%s' laeuft noch (Zustand=%d, Warteschlange=%d/%d)"),
+			*GetName(), TeamId, (int32)InputID, *GetNameSafe(ActivatedAbilityInstance),
+			AlsUnitBusy ? (int32)AlsUnitBusy->GetUnitState() : -1, AbilityQueueSize, MaxAbilityQueueSize);
 		return false;
 	}
 	else
@@ -447,6 +479,15 @@ bool AGASUnit::ActivateAbilityByInputID(
 		bool bIsActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
 		if (!bIsActivated)
 		{
+			// GAS nennt keinen Grund. Der Zustand ist der aussagekraeftigste Hinweis, den es hier
+			// gibt: steht er auf Casting (7), war es der Riegel in
+			// UGameplayAbilityBase::CanActivateAbility, der waehrend eines laufenden Casts JEDE
+			// weitere Aktivierung dieser Einheit ablehnt. Sonst bleiben Kosten und Abklingzeit.
+			const AUnitBase* AlsUnitGas = Cast<AUnitBase>(this);
+			UE_LOG(LogTemp, Warning,
+				TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT von GAS: %s (Zustand=%d)"),
+				*GetName(), TeamId, (int32)InputID, *GetNameSafe(AbilityToActivate),
+				AlsUnitGas ? (int32)AlsUnitGas->GetUnitState() : -1);
 		}
 		if (bIsActivated && ActivatedAbilityInstance)
 		{

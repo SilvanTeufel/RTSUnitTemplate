@@ -25,6 +25,22 @@ struct FUnitNavigationPathFragment : public FMassFragment
 	UPROPERTY() 
 	bool bIsPathfindingInProgress = false;
 
+	/**
+	 * Weltzeit, ab der fuer diese Entitaet wieder eine Pfadsuche gestartet werden darf.
+	 *
+	 * Hintergrund (19.08.): laesst sich das ZIEL nicht auf das Navigationsnetz projizieren, scheitert
+	 * FindPathSync mit einem gueltigen Pfadobjekt und NULL Punkten. Der Rueckruf uebernimmt nichts,
+	 * die Einheit bleibt ohne Pfad - und im naechsten Takt geht dieselbe Anfrage wieder raus. Zwei
+	 * unerreichbare Expansionsmarker im Testlevel kosteten so ~28500 Anfragen je Partie, waehrend die
+	 * betroffenen Arbeiter mit vollem Wunschtempo stillstanden.
+	 *
+	 * Bewusst eine ZEITLICHE Sperre und keine dauerhafte: das Netz aendert sich, wenn Gebaeude fallen
+	 * oder eine Energiewand verschwindet - ein einmal unerreichbares Ziel kann spaeter erreichbar sein.
+	 * Weltzeit und nicht `static`, damit die Sperre pro Welt gilt und einen PIE-Wechsel nicht ueberlebt.
+	 */
+	UPROPERTY()
+	float NaechsteSucheFruehestens = 0.f;
+
 	/** Reset path data */
 	void ResetPath()
 	{

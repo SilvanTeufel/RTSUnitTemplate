@@ -1,4 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Actors/Waypoint.h"
@@ -158,7 +158,16 @@ void AWaypoint::OnPlayerEnter(UPrimitiveComponent* OverlapComponent,
 			ActualCharacter->UnitState != UnitData::Pause &&
 			ActualCharacter->UnitState != UnitData::Run
 			) {
-			if(PatrolCloseToWaypoint)
+			// Nur Einheiten, die in der Spawn-Tabelle dafuer markiert sind (bPreventIdling),
+			// werden hier auf Patrouille geschickt.
+			//
+			// Vorher genuegte das Betreten des Bereichs. Idle steht nicht in der Ausschlussliste
+			// oben, also wurde JEDE herumstehende Einheit im Auslösebereich nach PatrolRandom
+			// geschoben - und weil Idle-Einheiten zu StoredLocation zurücklaufen, verliessen und
+			// betraten sie den Bereich staendig neu. Es traf auch Spielereinheiten, die nur
+			// zufaellig an einem Wegpunkt vorbeiliefen. Der Haken sitzt an der Spawn-Zeile, damit
+			// pro Trupp entschieden werden kann, wer patrouillieren soll.
+			if(PatrolCloseToWaypoint && ActualCharacter->bPreventIdling)
 			{
 				//SetupTimerFunction();
 				RandomTime = FMath::FRandRange(PatrolCloseMinInterval, PatrolCloseMaxInterval);

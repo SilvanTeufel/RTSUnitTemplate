@@ -55,6 +55,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState);
 
+	/**
+	 * True while this unit must not receive ANY new order.
+	 *
+	 * Declared here and not on the transport class because SetUnitState (this class) and
+	 * SwitchEntityTagByState (AMassUnitBase) are the two chokepoints every order-giving path runs
+	 * through - and both sit ABOVE ATransportUnit in the hierarchy, so they cannot see its flag.
+	 * ATransportUnit overrides this for loaded cargo.
+	 */
+	virtual bool IsOrderLocked() const { return false; }
+
 	//FTimerHandle CollisionTimerHandle;
 	
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)

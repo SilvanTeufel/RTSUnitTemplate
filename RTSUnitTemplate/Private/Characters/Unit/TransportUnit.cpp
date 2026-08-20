@@ -282,6 +282,7 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 			}
 		}
 	}
+	LoadedUnit->IsInsideTransport = false;
 	LoadedUnit->CanAttack = true;
 	LoadedUnit->IsInitialized = true;
 	LoadedUnit->CanActivateAbilities = true;
@@ -331,7 +332,19 @@ void ATransportUnit::MulticastApplyLoadEffects_Implementation(AUnitBase* UnitToL
 	UnitToLoad->SetTranslationLocation(TransporterLocation);
 	UnitToLoad->UpdatePredictionFragment(TransporterLocation, 0.f);
 	UnitToLoad->StopMassMovement();
-	UnitToLoad->SwitchEntityTagByState(UnitData::Idle, UnitToLoad->UnitStatePlaceholder);
+
+	// Platzhalter ebenfalls auf Idle - NICHT den alten weiterreichen. Der Platzhalter ist die
+	// Antwort auf "was macht die Einheit, wenn sie hier fertig ist", und ein eingeladener Arbeiter
+	// trug darin noch seinen Ressourcenauftrag. Genau daraus hat ihn der Idle-Zweig wieder
+	// herausgeholt: unsichtbar, aber wieder bei der Arbeit.
+	UnitToLoad->SwitchEntityTagByState(UnitData::Idle, UnitData::Idle);
+	UnitToLoad->UnitStatePlaceholder = UnitData::Idle;
+
 	UnitToLoad->EnableDynamicObstacle(false);
 	UnitToLoad->EditUnitDetectable(false);
+
+	// GANZ zum Schluss: ab hier ist die Einheit Fracht und nimmt keinen Auftrag mehr an - auch die
+	// Zeilen oben nicht, wenn sie andersherum stuenden (IsOrderLocked sperrt SetUnitState und
+	// SwitchEntityTagByState). Deshalb wird das Kennzeichen erst gesetzt, wenn alles gewirkt hat.
+	UnitToLoad->IsInsideTransport = true;
 }

@@ -1,6 +1,7 @@
 ﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "GAS/GameplayAbilityBase.h"
+#include "Controller/PlayerController/ControllerBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "System/StoryTriggerQueueSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -408,6 +409,31 @@ bool UGameplayAbilityBase::IsUnitTypeCapReached(const FGameplayAbilityActorInfo*
 		return false;
 	}
 
+	// Die Obergrenze je Einheitentyp ist ein BALANCE-Werkzeug FUER DIE KI und darf den Menschen
+	// nicht einschraenken - der hat mit dem Versorgungsdeckel und den Ressourcen bereits Grenzen.
+	// Ohne diese Pruefung konnte der Spieler z. B. keine 12 Vector mehr bauen.
+	//
+	// Ein Team kann MEHRERE Controller haben (im KI-Testlevel haelt Team 2 eine menschliche Kamera
+	// UND einen RLAgent). Es zaehlt daher als KI, sobald EINER seiner Controller bIsAi ist - dasselbe
+	// Verfahren wie ABuildingBase::IsOwnedByAiTeam und AWorkArea::IsOwnedByAiTeam.
+	bool bTeamIstKI = false;
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (const AControllerBase* PC = Cast<AControllerBase>(It->Get()))
+		{
+			if (PC->SelectableTeamId == Owner->TeamId && PC->bIsAi)
+			{
+				bTeamIstKI = true;
+				break;
+			}
+		}
+	}
+
+	if (!bTeamIstKI)
+	{
+		return false;
+	}
+
 	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
 	if (!GameMode)
 	{
@@ -440,8 +466,38 @@ void UGameplayAbilityBase::ApplyCost(const FGameplayAbilitySpecHandle Handle, co
 	}
 }
 
+void UGameplayAbilityBase::AddCastingFallback()
+{
+	bBlueprintCastActive = true;
+
+	// Angesammelte Treffer des Waechters verwerfen: der Zustandswechsel, den das Blueprint gerade
+	// vollzieht, ist genau das Umschaltfenster, fuer das die Zwei-Treffer-Regel gedacht ist.
+	if (const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo())
+	{
+		AGASUnit* Unit = Cast<AGASUnit>(Info->OwnerActor.Get());
+		if (!Unit)
+		{
+			Unit = Cast<AGASUnit>(Info->AvatarActor.Get());
+		}
+		if (Unit)
+		{
+			Unit->ResetCastInvariantStrikes();
+		}
+	}
+}
+
+void UGameplayAbilityBase::RemoveCastingFallback()
+{
+	bBlueprintCastActive = false;
+}
+
 void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	// Zurueckgenommen, sobald die Ability endet. Sonst meldete die Instanz (InstancedPerActor
+	// ueberlebt die Aktivierung) beim naechsten Mal einen laufenden Cast, den es nicht gibt - und der
+	// Waechter wuerde die Einheit stattdessen INS Casting zwingen (Regel 1).
+	bBlueprintCastActive = false;
+
 	// Eine Cast-Ability muss ihren Zustand beim Beenden selbst aufraeumen.
 	//
 	// Es gibt zwei saubere Ausstiege - EndCast -> SwitchState(PlaceholderSignal) fuer den

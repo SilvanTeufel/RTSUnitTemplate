@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/RunStateProcessor.h"
 
 #include "MassExecutionContext.h"
@@ -386,8 +386,8 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                             else { PfadPunkte = 0; }
                         }
                         UE_LOG(LogTemp, Warning,
-                            TEXT("[RunStall] bei (%.0f, %.0f) DistZiel=%.0f SollTempo=%.0f Versatz=%.0f Pfadpunkte=%d Index=%d NaechsterWP=%.0f Sucht=%d"),
-                            CurrentLocation.X, CurrentLocation.Y, DistToDest,
+                            TEXT("[RunStall] Team=%d bei (%.0f, %.0f) DistZiel=%.0f SollTempo=%.0f Versatz=%.0f Pfadpunkte=%d Index=%d NaechsterWP=%.0f Sucht=%d"),
+                            Stats.TeamId, CurrentLocation.X, CurrentLocation.Y, DistToDest,
                             MoveTarget.DesiredSpeed.Get(),
                             FVector::Dist2D(CurrentLocation, StateFrag.LastProgressLocation),
                             PfadPunkte, PfadIndex, NaechsterWP, SuchtGerade);

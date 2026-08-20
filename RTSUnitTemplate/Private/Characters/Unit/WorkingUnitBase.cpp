@@ -17,12 +17,69 @@
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Net/UnrealNetwork.h"
 #include "Subsystems/ResourceVisualManager.h"
 #include "MassEntityTypes.h"
 #include "MassActorSubsystem.h"
+
+namespace
+{
+	/**
+	 * Halbe Grundflaeche eines Gebaeudes in XY, aus dem ISM-Mesh und dessen Skalierung.
+	 *
+	 * Bewusst NICHT ueber GetActorBounds: dort zaehlen Kapsel, Healthbar-Widget und Niagara mit, und
+	 * genau die Kapsel ist bei diesen Gebaeuden das falsche Mass (BioIntegrator: Kapselradius 102
+	 * gegen 248 echte Halbbreite). Der sichtbare Koerper haengt am ISM.
+	 *
+	 * Der Ursprung der Mesh-Bounds wird mitgerechnet, weil ein Mesh nicht um seinen Mittelpunkt
+	 * modelliert sein muss - sonst faellt die Haelfte der Grundflaeche unter den Tisch.
+	 */
+	bool GebaeudeGrundflaeche(const AActor* Actor, FVector2D& Aus)
+	{
+		const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Actor);
+		if (!MassUnit || !MassUnit->ISMComponent)
+		{
+			return false;
+		}
+
+		const UStaticMesh* Mesh = MassUnit->ISMComponent->GetStaticMesh();
+		if (!Mesh)
+		{
+			return false;
+		}
+
+		const FBoxSphereBounds Bounds = Mesh->GetBounds();
+		const FVector Skalierung = MassUnit->ISMComponent->GetRelativeScale3D();
+
+		Aus.X = FMath::Max(FMath::Abs(Bounds.Origin.X - Bounds.BoxExtent.X),
+		                   FMath::Abs(Bounds.Origin.X + Bounds.BoxExtent.X)) * FMath::Abs(Skalierung.X);
+		Aus.Y = FMath::Max(FMath::Abs(Bounds.Origin.Y - Bounds.BoxExtent.Y),
+		                   FMath::Abs(Bounds.Origin.Y + Bounds.BoxExtent.Y)) * FMath::Abs(Skalierung.Y);
+
+		return Aus.X > 1.f && Aus.Y > 1.f;
+	}
+
+	/** Dasselbe fuer das Gebaeude, das aus dieser Baustellenklasse einmal entstehen wird. */
+	bool ExtensionGrundflaeche(TSubclassOf<AWorkArea> WorkAreaClass, FVector2D& Aus)
+	{
+		if (!WorkAreaClass)
+		{
+			return false;
+		}
+
+		const AWorkArea* AreaCDO = WorkAreaClass->GetDefaultObject<AWorkArea>();
+		if (!AreaCDO || !AreaCDO->BuildingClass)
+		{
+			return false;
+		}
+
+		return GebaeudeGrundflaeche(AreaCDO->BuildingClass->GetDefaultObject<AActor>(), Aus);
+	}
+}
 
 void AWorkingUnitBase::BeginPlay()
 {
@@ -374,8 +431,50 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 					UnitExtentBounds.Z = Capsule->GetScaledCapsuleHalfHeight();
 				}
 
-				const float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
-				const float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+				float AbsX = Unit->ExtensionOffset.X + UnitExtentBounds.X;
+				float AbsY = Unit->ExtensionOffset.Y + UnitExtentBounds.Y;
+
+				// Der Kapselradius ist ein schlechtes Mass fuer die sichtbare Grundflaeche: beim
+				// BioIntegrator sind es 102 gegen 248 echte Halbbreite, weshalb seine Extension bisher
+				// IM Gebaeude stand. Und ein fester Offset je Wirt kann ohnehin nicht stimmen, wenn
+				// dasselbe Gebaeude zwei verschieden grosse Extensions baut - die CybernaticFactory
+				// setzt eine 177 und eine 623 Einheiten breite an dieselbe Kante.
+				//
+				// Aus den echten Meshmassen gerechnet passt jede Paarung von selbst. Gegenprobe an der
+				// MatterForge, deren Extensions der Nutzer als richtig sitzend bezeichnet:
+				// 177,5 (Wirt) + 88,9 (Extension) + 20 = 286,4 gegen die dort von Hand gepflegten 285,8.
+				if (Unit->bExtensionAutoDistance)
+				{
+					FVector2D WirtHalb, ExtHalb;
+					if (GebaeudeGrundflaeche(Unit, WirtHalb) && ExtensionGrundflaeche(WorkAreaClass, ExtHalb))
+					{
+						// Der Snap dreht die Extension so, dass ihr lokales +X vom Wirt weg zeigt. Bei
+						// einem Rotationsversatz um 90 Grad zeigt stattdessen ihr lokales Y nach aussen,
+						// also zaehlt dann diese Halbbreite fuer den Abstand.
+						const float Versatz = FMath::Abs(FRotator::NormalizeAxis(Unit->ExtensionRotationOffset));
+						const bool bQuergestellt = (Versatz > 45.f && Versatz < 135.f);
+						const float ExtLaengs = bQuergestellt ? ExtHalb.Y : ExtHalb.X;
+
+						AbsX = WirtHalb.X + ExtLaengs + Unit->ExtensionGap;
+						AbsY = WirtHalb.Y + ExtLaengs + Unit->ExtensionGap;
+
+						// [Extension] Ohne diese Zeile laesst sich nicht unterscheiden, ob der Abstand
+						// gerechnet wurde oder ob eine der beiden Grundflaechen still auf den alten
+						// ExtensionOffset zurueckgefallen ist.
+						UE_LOG(LogTemp, Warning,
+							TEXT("[Extension] %s -> %s: Wirt(%.0f/%.0f) + Ext %.0f (%s) + Luft %.0f => X=%.0f Y=%.0f"),
+							*GetName(), *GetNameSafe(WorkAreaClass),
+							WirtHalb.X, WirtHalb.Y, ExtLaengs,
+							bQuergestellt ? TEXT("quer") : TEXT("laengs"),
+							Unit->ExtensionGap, AbsX, AbsY);
+					}
+					else
+					{
+						UE_LOG(LogTemp, Warning,
+							TEXT("[Extension] %s -> %s: Grundflaeche nicht ermittelbar, alter ExtensionOffset gilt."),
+							*GetName(), *GetNameSafe(WorkAreaClass));
+					}
+				}
 				const FVector2D Delta2D(SpawnLocation.X - UnitLoc.X, SpawnLocation.Y - UnitLoc.Y);
 				const float MouseDist = Delta2D.Size();
 
@@ -443,6 +542,12 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 						break;
 				}
 				TargetLocation += Offset;
+
+				// Dreht nur die Ausrichtung, nicht die Position: die Extension bleibt an der Seite, die
+				// der Snap gewaehlt hat, und wird dort quergestellt. Weil die Baustelle ihre Drehung
+				// unten als ServerMeshRotationBuilding weiterreicht, dreht sich das fertige Gebaeude
+				// mit - ein Wert fuer Vorschau und Ergebnis.
+				DesiredYaw += Unit->ExtensionRotationOffset;
 				TargetRotation = FRotator(0.f, DesiredYaw, 0.f);
 
 				if (Unit->ExtensionGroundTrace)
@@ -523,6 +628,12 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 			{
 				SpawnedWorkArea->AllowAddingWorkers = false;
 				SpawnedWorkArea->ServerMeshRotationBuilding = TargetRotation;
+
+				// Den Wirt HIER festhalten und nicht erst weiter unten: dort haengt es an einer
+				// gesetzten ConstructionUnitClass, und ohne die kannte weder die Flaeche noch die
+				// spaetere Extension ihr Ursprungsgebaeude. Die Abstandspruefung beim Droppen braucht
+				// das aber, um Geschwister-Extensions desselben Gebaeudes durchzulassen.
+				SpawnedWorkArea->Origin = this;
 			}
 			
 			CurrentDraggedWorkArea = SpawnedWorkArea;

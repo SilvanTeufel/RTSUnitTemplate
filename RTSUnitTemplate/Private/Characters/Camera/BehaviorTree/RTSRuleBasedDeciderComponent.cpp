@@ -548,7 +548,14 @@ void URTSRuleBasedDeciderComponent::MarkRuleFired(const FName& RowName) const
 
 FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, const FGameStateData& GS, UInferenceComponent* Inference) const
 {
-	const FString RowLabel = Row.RuleName.IsNone() ? TEXT("<Unnamed>") : Row.RuleName.ToString();
+	// Team MIT in das Label: beide Fraktionen schreiben in DIESELBE Logdatei, und die Zeilen
+	// darunter nannten nur den Regelnamen. Beim Auswerten der Grundlinie am 18.08. hat mich das
+	// dreimal in die Irre gefuehrt - zuletzt zaehlte ich 202 Ladeaktionen als Leerlaufschleife der
+	// Xeno, obwohl es die der Singularianer waren. Eine Zaehlung ohne Zuordnung ist wertlos, und das
+	// Label ist die einzige Stelle, an der man alle Meldungen dieser Funktion auf einmal erreicht.
+	const FString RowLabel = FString::Printf(TEXT("T%d:%s"),
+		ResolveOwningTeamId(),
+		Row.RuleName.IsNone() ? TEXT("<Unnamed>") : *Row.RuleName.ToString());
 	if (bDebug && !Row.bEnabled)
 	{
 		UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' is disabled."), *RowLabel);
@@ -941,7 +948,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 				}
 			}
 
-			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (deterministic, freq=%.1f)."), *Best->Name.ToString(), Best->Frequency);
+			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: T%d DataTable rule '%s' fired (deterministic, freq=%.1f)."), ResolveOwningTeamId(), *Best->Name.ToString(), Best->Frequency);
 			MarkRuleFired(Best->Name);
 			return Best->Output;
 		}
@@ -955,7 +962,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 				CumulativeFrequency += Match.Frequency;
 				if (RandomValue <= CumulativeFrequency)
 				{
-					if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (weighted random, freq=%.1f/%.1f)."), *Match.Name.ToString(), Match.Frequency, TotalFrequency);
+					if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: T%d DataTable rule '%s' fired (weighted random, freq=%.1f/%.1f)."), ResolveOwningTeamId(), *Match.Name.ToString(), Match.Frequency, TotalFrequency);
 					MarkRuleFired(Match.Name);
 					return Match.Output;
 				}
@@ -963,7 +970,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 		}
 		
 		// Fallback to first matching if total frequency is 0
-		if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: DataTable rule '%s' fired (fallback to first, total frequency was 0)."), *MatchingRules[0].Name.ToString());
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: T%d DataTable rule '%s' fired (fallback to first, total frequency was 0)."), ResolveOwningTeamId(), *MatchingRules[0].Name.ToString());
 		MarkRuleFired(MatchingRules[0].Name);
 		return MatchingRules[0].Output;
 	}
@@ -1676,8 +1683,14 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 		}
 	}
 
+	// Bezugspunkt fuer bAttackNearestTarget. Deklaration bewusst AUSSERHALB des
+	// UniqueClasses-Blocks: gelesen wird sie erst in der Zeilenschleife weiter unten.
+	FVector EigenerSchwerpunkt = FVector::ZeroVector;
+	int32 EigeneGebaeudeZahl = 0;
+
 	if (UniqueClasses.Num() > 0)
 	{
+
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
 			AActor* Actor = *It;
@@ -1691,6 +1704,21 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 					if (Unit->TeamId == MyTeamId)
 					{
 						continue;
+					}
+				}
+			}
+
+			// Schwerpunkt der EIGENEN Gebaeude als Bezugspunkt fuer die Zielwahl mitfuehren
+			// (siehe bAttackNearestTarget). Kostet nichts extra - die Schleife laeuft ohnehin
+			// ueber alle Aktoren.
+			if (MyTeamId != -1)
+			{
+				if (const ABuildingBase* EigenesGebaeude = Cast<ABuildingBase>(Actor))
+				{
+					if (EigenesGebaeude->TeamId == MyTeamId)
+					{
+						EigenerSchwerpunkt += Actor->GetActorLocation();
+						++EigeneGebaeudeZahl;
 					}
 				}
 			}
@@ -1737,8 +1765,33 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 
 			if (PossibleLocations.Num() > 0)
 			{
-				const int32 RandIdx = FMath::RandRange(0, PossibleLocations.Num() - 1);
-				ChosenPos = PossibleLocations[RandIdx];
+				if (bAttackNearestTarget)
+				{
+					// Naechstgelegenes Ziel zum eigenen Schwerpunkt. Das ersetzt die Zufallswahl und
+					// beantwortet zugleich Angriffe auf die eigene Basis: was uns angreift, ist per
+					// Definition das naechste Ziel.
+					// Bezugspunkt: Schwerpunkt der eigenen Gebaeude. Ohne eigene Gebaeude faellt es auf
+					// den Traeger der Komponente zurueck (RLAgent gibt es in dieser Funktion nicht).
+					const FVector Bezug = (EigeneGebaeudeZahl > 0)
+						? (EigenerSchwerpunkt / (float)EigeneGebaeudeZahl)
+						: (OwnerPawn ? OwnerPawn->GetActorLocation() : FVector::ZeroVector);
+
+					double BesteDistSq = TNumericLimits<double>::Max();
+					for (const FVector& Kandidat : PossibleLocations)
+					{
+						const double DistSq = FVector::DistSquared2D(Kandidat, Bezug);
+						if (DistSq < BesteDistSq)
+						{
+							BesteDistSq = DistSq;
+							ChosenPos = Kandidat;
+						}
+					}
+				}
+				else
+				{
+					const int32 RandIdx = FMath::RandRange(0, PossibleLocations.Num() - 1);
+					ChosenPos = PossibleLocations[RandIdx];
+				}
 			}
 			else
 			{
@@ -1861,6 +1914,10 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 			{
 				AUnitBase* W = Cast<AUnitBase>(A);
 				if (!W || !W->IsWorker || W->TeamId != SweepTeam) continue;
+				// A worker sitting in a transporter matches every condition below - it is Idle, owns no
+				// resource place and is not building - so this sweep marched the reactor crew back out
+				// while they were still hidden. Cargo is not idle.
+				if (W->IsInsideTransport) continue;
 				if (W->GetUnitState() != UnitData::Idle && W->GetUnitState() != UnitData::Run) continue;
 				if (W->ResourcePlace || W->BuildArea || W->CurrentDraggedWorkArea) continue;
 

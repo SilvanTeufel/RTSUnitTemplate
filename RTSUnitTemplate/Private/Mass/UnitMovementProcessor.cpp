@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/UnitMovementProcessor.h"
 
 // ... other includes ...
@@ -361,7 +361,8 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             // Genau das Bild aus der Messung: SollTempo 900, Versatz 0, Pfadpunkte 2.
             else if ((!PathFrag.HasValidPath()
                       || FVector::Dist2D(PathFrag.PathTargetLocation, FinalDestination) > PathRetargetTolerance)
-                     && !PathFrag.bIsPathfindingInProgress)
+                     && !PathFrag.bIsPathfindingInProgress
+                     && World->GetTimeSeconds() >= PathFrag.NaechsteSucheFruehestens)
             {
                 // Begin a new path request if we have navigation; otherwise, steer directly.
                 if (bHasNavSystem)
@@ -550,7 +551,8 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
             // Genau das Bild aus der Messung: SollTempo 900, Versatz 0, Pfadpunkte 2.
             else if ((!PathFrag.HasValidPath()
                       || FVector::Dist2D(PathFrag.PathTargetLocation, FinalDestination) > PathRetargetTolerance)
-                     && !PathFrag.bIsPathfindingInProgress)
+                     && !PathFrag.bIsPathfindingInProgress
+                     && World->GetTimeSeconds() >= PathFrag.NaechsteSucheFruehestens)
             {
                 PathFrag.bIsPathfindingInProgress = true;
                 
@@ -644,14 +646,49 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         CachedStrictFilter = NewFilter;
     }
     
+    if (!AusweichVerwurfZaehler.IsValid())
+    {
+        AusweichVerwurfZaehler = MakeShared<FThreadSafeCounter, ESPMode::ThreadSafe>();
+    }
+
     AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
-        [NavSystem, NavData, Entity, StartLocation, EndLocation, World, bClientWorld, StrictFilter = CachedStrictFilter] () mutable
+        [NavSystem, NavData, Entity, StartLocation, EndLocation, World, bClientWorld, StrictFilter = CachedStrictFilter, Zaehler = AusweichVerwurfZaehler] () mutable
     {
         // --- 1. STRICT MODE: Exklusion hartcodieren ---
         // Wir nutzen den gecachten Filter
         
-        FPathFindingQuery Query(nullptr, *NavData, StartLocation, EndLocation, StrictFilter);
-        
+        // ZIEL PROJIZIEREN - der eigentliche Fix (19.08.).
+        //
+        // Der Start wurde an der Aufrufstelle laengst projiziert uebergeben, das Ziel nicht
+        // ("Wir uebergeben FinalDestination direkt an den Pathfinder!"). Gemessen: von den
+        // gescheiterten Anfragen lagen 85 % der Ziele ueberhaupt nicht auf dem Netz, die restlichen
+        // 15 % im Mittel 498 Einheiten daneben. Ein nicht projizierbares Ziel laesst die GANZE
+        // Abfrage scheitern - auch mit SetAllowPartialPaths(true) - und liefert ein gueltiges
+        // Pfadobjekt mit null Punkten. Der Bewegungsprozessor fordert daraufhin im naechsten Takt
+        // erneut an: ~48500 Fehlanfragen je Partie, und Arbeiter, die vor einer Baustelle stehen
+        // bleiben, obwohl ihr MoveTarget volles Tempo trug.
+        //
+        // Scheitert auch die Projektion, wird das Rohziel uebergeben wie bisher - dann ist nichts
+        // gewonnen, aber auch nichts verloren.
+        int32 ZielProjOk = -1;
+        float ZielVersatz = -1.f;
+        FVector ZielFuerSuche = EndLocation;
+        {
+            FNavLocation ZielProj;
+            if (NavSystem->ProjectPointToNavigation(EndLocation, ZielProj, FVector(200.f, 200.f, 500.f)))
+            {
+                ZielProjOk = 1;
+                ZielVersatz = FVector::Dist(EndLocation, ZielProj.Location);
+                ZielFuerSuche = ZielProj.Location;
+            }
+            else
+            {
+                ZielProjOk = 0;
+            }
+        }
+
+        FPathFindingQuery Query(nullptr, *NavData, StartLocation, ZielFuerSuche, StrictFilter);
+
         // Erlaubt Partial Paths: Er plant bis zum Ufer, weil die Insel jetzt mathematisch "unendlich" weit weg ist.
         Query.SetAllowPartialPaths(true); 
 
@@ -663,7 +700,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
             // Inline Escape Filter (Erlaubt alles wieder)
             FSharedConstNavQueryFilter EscapeFilter = NavData->GetDefaultQueryFilter();
             
-            FPathFindingQuery EscapeQuery(nullptr, *NavData, StartLocation, EndLocation, EscapeFilter);
+            FPathFindingQuery EscapeQuery(nullptr, *NavData, StartLocation, ZielFuerSuche, EscapeFilter);
             EscapeQuery.SetAllowPartialPaths(true);
 
             PathResult = NavSystem->FindPathSync(EscapeQuery, EPathFindingMode::Regular);
@@ -688,6 +725,22 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
 
                 if (!bStartsInWall)
                 {
+                    // DIAGNOSE (18.08.): Hier wird ein bereits gefundener Teilpfad weggeworfen, wenn die
+                    // Einheit nicht in einer Energiewand steckt. Danach hat sie GAR keinen Pfad, und der
+                    // Bewegungsprozessor fordert im naechsten Takt erneut an - eine Dauerschleife. Gemessen
+                    // wurden 47 stehende Bauarbeiter je Partie mit gueltigem Start UND gueltigem Ziel.
+                    // Gezaehlt wird, wie oft dabei ein BRAUCHBARER Pfad (>1 Punkt) verworfen wird; jede
+                    // hundertste Verwerfung wird gemeldet, damit das Log nicht zulaeuft.
+                    if (PathPoints.Num() > 1)
+                    {
+                        const int32 Nummer = Zaehler.IsValid() ? Zaehler->Increment() : 0;
+                        if (Nummer % 100 == 1)
+                        {
+                            UE_LOG(LogTemp, Warning,
+                                TEXT("[Ausweichpfad] Teilpfad mit %d Punkten verworfen (nicht in Energiewand) - Verwerfung Nr. %d"),
+                                PathPoints.Num(), Nummer);
+                        }
+                    }
                     PathResult.Result = ENavigationQueryResult::Fail;
                     PathResult.Path->ResetForRepath();
                 }
@@ -727,7 +780,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         }
         
         AsyncTask(ENamedThreads::GameThread,
-            [Entity, PathResult, World, EndLocation, bClientWorld]() mutable
+            [Entity, PathResult, World, EndLocation, bClientWorld, Zaehler, ZielProjOk, ZielVersatz]() mutable
         {
             if (!World) return;
 
@@ -739,16 +792,121 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
             if (!EntityManager.IsEntityValid(Entity)) return;
 
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
-                [Entity, PathResult, EndLocation, bClientWorld, World](FMassEntityManager& System)
+                [Entity, PathResult, EndLocation, bClientWorld, World, Zaehler, ZielProjOk, ZielVersatz](FMassEntityManager& System)
                 {
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
                     {
                         PathFrag->bIsPathfindingInProgress = false;
 
+                        // Ziel nicht auf dem Netz: kurze Sperre, sonst wiederholt sich diese Anfrage
+                        // jeden Takt bis zum Spielende (siehe Kommentar an NaechsteSucheFruehestens).
+                        if (ZielProjOk == 0 && World)
+                        {
+                            PathFrag->NaechsteSucheFruehestens = World->GetTimeSeconds() + 2.f;
+                        }
+
                         const bool bTargetChanged = FVector::DistSquared2D(PathFrag->PathTargetLocation, EndLocation) > FMath::Square(10.f);
                         if (bTargetChanged)
                         {
+                            // DIAGNOSE: Ziel hat sich waehrend der Suche bewegt - Ergebnis verfaellt.
+                            if (Zaehler.IsValid())
+                            {
+                                const int32 Nr = Zaehler->Increment();
+                                if (Nr % 100 == 1)
+                                {
+                                    UE_LOG(LogTemp, Warning,
+                                        TEXT("[Pfadabgelehnt] Grund=ZielBewegt Nr=%d"), Nr);
+                                }
+                            }
                             return;
+                        }
+
+                        // DIAGNOSE: Warum wird ein Ergebnis nicht uebernommen? Die Annahme verlangt
+                        // MEHR ALS EINEN Pfadpunkt - ein Teilpfad einer eingekesselten Einheit hat genau
+                        // einen. Dann bleibt die Einheit ohne Pfad stehen und fordert im naechsten Takt
+                        // erneut an. Genau das Bild der stehenden Bauarbeiter (Pfadpunkte=0, Sucht=0).
+                        if (Zaehler.IsValid()
+                            && !(PathResult.IsSuccessful() && PathResult.Path.IsValid()
+                                 && PathResult.Path->GetPathPoints().Num() > 1))
+                        {
+                            const int32 Nr = Zaehler->Increment();
+                            if (Nr % 100 == 1)
+                            {
+                                const int32 Punkte = PathResult.Path.IsValid()
+                                    ? PathResult.Path->GetPathPoints().Num() : -1;
+                                // Team mitloggen. Ohne die Angabe ist die Zeile nicht auswertbar:
+                                // beide Fraktionen schreiben in dieselbe Datei. Am 19.08. blieben
+                                // 700-900 Fehlanfragen je Partie uebrig, die auf eine Region westlich
+                                // hinter der Sing-Basis zeigen - ohne Teamangabe laesst sich nicht
+                                // sagen, wessen Einheiten sie stellen.
+                                int32 TeamId = -1;
+                                if (const FMassCombatStatsFragment* TeamStats =
+                                        System.GetFragmentDataPtr<FMassCombatStatsFragment>(Entity))
+                                {
+                                    TeamId = TeamStats->TeamId;
+                                }
+                                // Zustand mitloggen. Verdacht: die Restfehler zielen auf
+                                // GetPatrolHomeLocation - der Heimatpunkt wird REIN RECHNERISCH aus
+                                // Wegpunkt + Streuversatz gebildet, ohne Netzpruefung (das Gegenstueck
+                                // SetNewRandomPatrolTarget nutzt GetRandomReachablePointInRadius). Liegt
+                                // ein Wegpunkt nah am Kartenrand, landet der Heimatpunkt draussen.
+                                // Kommen die Ablehnungen aus Patrol-/Idle-Zustaenden, ist das der Beleg.
+                                // StoredLocation ist der Heimatpunkt aus GetPatrolHomeLocation:
+                                // Wegpunkt + Streuversatz, REIN RECHNERISCH, ohne Netzpruefung (das
+                                // Gegenstueck SetNewRandomPatrolTarget nutzt
+                                // GetRandomReachablePointInRadius). Deckt sich der Heimatpunkt mit dem
+                                // abgelehnten Ziel, ist er die Quelle der Restfehler.
+                                FVector Heim = FVector::ZeroVector;
+                                if (const FMassAIStateFragment* ZState =
+                                        System.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+                                {
+                                    Heim = ZState->StoredLocation;
+                                }
+
+                                // Welcher Zustand treibt den Marsch? "Heim = Ziel" heisst, ein
+                                // Zustandsprozessor bildet den Befehl aus StoredLocation - der Zustand
+                                // benennt, welcher. Der Befehlsweg ueber den Controller ist bereits
+                                // ausgeschlossen (4 Partien, 0 Callstack-Treffer), also muss es einer
+                                // dieser Prozessoren sein.
+                                const TCHAR* ZustandName = TEXT("?");
+                                if (System.GetFragmentDataPtr<FMassAIStateFragment>(Entity))
+                                {
+                                    struct FTagProbe { const UScriptStruct* Typ; const TCHAR* Name; };
+                                    const FTagProbe Proben[] = {
+                                        { FMassStateRunTag::StaticStruct(),           TEXT("Run") },
+                                        { FMassStateChaseTag::StaticStruct(),         TEXT("Chase") },
+                                        { FMassStatePatrolRandomTag::StaticStruct(),  TEXT("PatrolRandom") },
+                                        { FMassStatePatrolIdleTag::StaticStruct(),    TEXT("PatrolIdle") },
+                                        { FMassStateIdleTag::StaticStruct(),          TEXT("Idle") },
+                                        { FMassStateGoToBaseTag::StaticStruct(),      TEXT("GoToBase") },
+                                        { FMassStateGoToBuildTag::StaticStruct(),     TEXT("GoToBuild") },
+                                        { FMassStateGoToResourceExtractionTag::StaticStruct(), TEXT("GoToResource") },
+                                    };
+                                    for (const FTagProbe& Probe : Proben)
+                                    {
+                                        if (DoesEntityHaveTag(System, Entity, Probe.Typ))
+                                        {
+                                            ZustandName = Probe.Name;
+                                            break;
+                                        }
+                                    }
+                                }
+                                // Das Ziel selbst mitloggen. Nachdem die Projektion des Ziels den
+                                // Fehler NICHT behoben hat (100 % der verbleibenden Fehlschlaege haben
+                                // gar kein Navigationsnetz im Umkreis 200/200/500), ist die Frage nicht
+                                // mehr, warum die Suche scheitert, sondern WO diese Ziele liegen.
+                                UE_LOG(LogTemp, Warning,
+                                    TEXT("[Pfadabgelehnt] Team=%d Client=%d Zustand=%s Grund=%s Punkte=%d ZielProj=%d ZielVersatz=%.0f Ziel=(%.0f, %.0f, %.0f) Heim=(%.0f, %.0f) Nr=%d"),
+                                    // Client oder Server? Beide Callstack-Versuche (Befehlsweg und
+                                    // UpdateMoveTarget) sassen serverseitig und blieben leer - wenn die
+                                    // Fehlanfragen vom CLIENT kommen, erklaert das beides auf einmal.
+                                    // bClientWorld ist hier ohnehin schon bekannt.
+                                    TeamId, bClientWorld ? 1 : 0, ZustandName,
+                                    PathResult.IsSuccessful() ? TEXT("ZuWenigPunkte") : TEXT("SucheGescheitert"),
+                                    Punkte, ZielProjOk, ZielVersatz,
+                                    EndLocation.X, EndLocation.Y, EndLocation.Z,
+                                    Heim.X, Heim.Y, Nr);
+                            }
                         }
 
                         if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->GetPathPoints().Num() > 1)

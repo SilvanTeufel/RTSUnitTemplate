@@ -53,6 +53,20 @@ public:
     UFUNCTION(BlueprintPure, Category = "Minimap")
     UTexture2D* GetTopographyTexture() const { return TopographyTexture; } // CPU-generierte Topographie
 
+    /**
+     * CPU-Kopie der Topographie, damit sie jemand anders weiterverwenden kann.
+     *
+     * TopographyTexture ist transient und liegt nach dem Upload nur noch auf der GPU - von dort
+     * zurueckzulesen ist teuer und asynchron. Das ReplayModule braucht denselben Untergrund, den der
+     * Spieler die ganze Partie gesehen hat, und zwar als Pixel: eine transiente Textur laesst sich
+     * nicht in einen SaveGame-Slot schreiben, ein FColor-Array schon. Leer, solange
+     * CaptureMapTopography noch nicht gelaufen ist (DelayTime, standardmaessig 2 s).
+     */
+    const TArray<FColor>& GetTopographyPixels() const { return TopographyPixels; }
+
+    /** Kantenlaenge der Topographie in Pixeln; 0 solange keine aufgenommen wurde. */
+    int32 GetTopographyPixelSize() const { return TopographyPixels.Num() > 0 ? MinimapTexSize : 0; }
+
     /** The team this minimap belongs to. Only this team's fog will be revealed. */
     UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "Minimap")
     int32 TeamId = 0;
@@ -306,6 +320,10 @@ private:
     /** The raw pixel data for the minimap texture. */
     UPROPERTY()
     TArray<FColor> MinimapPixels;
+
+    /** CPU-Kopie der zuletzt aufgenommenen Topographie; siehe GetTopographyPixels. */
+    UPROPERTY()
+    TArray<FColor> TopographyPixels;
 
     FTimerHandle CaptureTimerHandle;
 };

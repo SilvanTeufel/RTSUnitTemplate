@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/States/PatrolRandomStateProcessor.h"
 #include "MassExecutionContext.h"
 #include "MassEntityManager.h"
@@ -131,7 +131,7 @@ void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMa
                     // a unit that is still TRAVELLING to its waypoint turn around after a
                     // fight. Its home is the waypoint, so store that instead.
                     StateFrag.StoredLocation = bHasWaypoint
-                        ? GetPatrolHomeLocation(Entity, PatrolFrag.TargetWaypointLocation, PatrolFrag.RandomPatrolRadius)
+                        ? GetPatrolHomeLocation(Entity, PatrolFrag.TargetWaypointLocation, PatrolFrag.RandomPatrolRadius, World)
                         : CurrentLocation;
 
                     // Idling between patrol legs is only allowed near the waypoint

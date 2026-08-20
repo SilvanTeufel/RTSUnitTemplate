@@ -1,4 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -107,6 +107,27 @@ public:
 	// Geschwindigkeit in uu/s in der XY-Ebene (ohne Fallen/Steigen). Fuer Lauf-Blends.
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	float MassSpeed = 0.0f;
+
+	/**
+	 * True, solange MassSpeed in DIESEM Frame aus dem Velocity-Fragment gelesen wurde.
+	 *
+	 * Ohne diese Pruefung wuerde eine Einheit ohne Mass-Entity (Hero-Modus, gerade zerstoerte
+	 * Entity) mit dem alten MassSpeed-Wert weiterrechnen und dauerhaft idle aussehen.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bMassSpeedValid = false;
+
+	/**
+	 * Unterhalb dieser Geschwindigkeit meldet CharAnimState Idle, obwohl die Einheit in einem
+	 * Laufzustand steht.
+	 *
+	 * Verhindert das Laufen auf der Stelle: Run, Chase, PatrolRandom und die GoTo-Zustaende
+	 * behalten ihre Laufanimation, solange sich die Einheit auch wirklich bewegt. Steht sie
+	 * (Pfadsuche laeuft, Ziel erreicht, blockiert), sieht sie stehend aus. Der ZUSTAND selbst
+	 * bleibt unangetastet - das hier ist rein optisch.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.0"))
+	float IdleAnimSpeedThreshold = 5.0f;
 
 	// Vollstaendiger Geschwindigkeitsvektor in Weltkoordinaten. Fuer Laufrichtung
 	// (z. B. Strafe-Winkel gegen die Blickrichtung).

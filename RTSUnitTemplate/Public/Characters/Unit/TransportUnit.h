@@ -83,6 +83,21 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Replicated, Category = Transport)
 	bool RdyForTransport = false;
+
+	/**
+	 * True while this unit sits inside a transporter.
+	 *
+	 * Loading hides the unit and parks it in Idle without a ResourcePlace or a BuildArea - which is
+	 * exactly the signature the AI's "send idle workers back to work" sweep looks for. It kept picking
+	 * loaded workers out of the reactor and marching them off invisibly. Anything that hands out new
+	 * orders has to skip units carrying this flag. Set in MulticastApplyLoadEffects, cleared in
+	 * MulticastApplyUnloadEffects, so server and clients agree without an extra replication entry.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = Transport)
+	bool IsInsideTransport = false;
+
+	/** Fracht nimmt keine Auftraege an - siehe AAbilityUnit::IsOrderLocked. */
+	virtual bool IsOrderLocked() const override { return IsInsideTransport; }
 	
 	UPROPERTY(BlueprintReadWrite, Replicated, EditAnywhere, Category = Transport)
 	float InstantLoadRange = 300.f;

@@ -2,6 +2,7 @@
 
 
 #include "Characters/Unit/MassUnitBase.h"
+#include "NavigationSystem.h"
 
 #include "MassSignalSubsystem.h"
 #include "Characters/Unit/UnitBase.h"
@@ -454,6 +455,14 @@ bool AMassUnitBase::AddStopGameplayEffectTagToEntity()
 
 bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState, TEnumAsByte<UnitData::EState> UStatePlaceholder)
 {
+	// [Fracht] Zweiter Engpass, gleiche Begruendung wie in AAbilityUnit::SetUnitState. Ohne diesen
+	// Riegel bekaeme die Entity das Lauf-Tag, waehrend der Actor-Zustand blockiert bleibt - eine
+	// halbe Zustandsaenderung, die schlimmer ist als gar keine. Dead bleibt erlaubt.
+	if (IsOrderLocked() && UState != UnitData::Dead)
+	{
+		return false;
+	}
+
 	FMassEntityManager* EntityManager;
 	FMassEntityHandle EntityHandle;
 
@@ -687,10 +696,40 @@ bool AMassUnitBase::UpdateEntityStateOnUnload(const FVector& UnloadLocation)
 				return false;
 			}
 	
+				// Ausladepunkt auf das Navigationsnetz ziehen (19.08.).
+				//
+				// Diese Stelle setzt StoredLocation UND MoveTarget.Center direkt - am Trichter
+				// UpdateMoveTarget und am Befehlsweg vorbei. Genau das erklaert die Messung: die
+				// abgelehnten Pfadziele hatten exakt "Heim == Ziel" (beide bekommen hier denselben
+				// Wert), lagen serverseitig an, und beide Aufrufer-Callstacks blieben leer.
+				//
+				// Der Ausladepunkt wird um den Transporter herum berechnet; steht der nah am Rand,
+				// liegt er ausserhalb des NavMeshBoundsVolume - dann scheitert jede Pfadanfrage
+				// dorthin und wird bis zum Spielende wiederholt, waehrend die ausgeladene Einheit
+				// mit vollem Wunschtempo stillsteht.
+				FVector ZielPunkt = UnloadLocation;
+				if (UWorld* Welt = GetWorld())
+				{
+					if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(Welt))
+					{
+						FNavLocation Projiziert;
+						if (NavSys->ProjectPointToNavigation(UnloadLocation, Projiziert, FVector(500.f, 500.f, 1000.f)))
+						{
+							ZielPunkt = Projiziert.Location;
+						}
+						else
+						{
+							UE_LOG(LogTemp, Warning,
+								TEXT("[Ausladepunkt] (%.0f, %.0f, %.0f) liegt nicht auf dem Navigationsnetz - unveraendert uebernommen"),
+								UnloadLocation.X, UnloadLocation.Y, UnloadLocation.Z);
+						}
+					}
+				}
+
 				// Update the AI's stored location
 				if (FMassAIStateFragment* AiStatePtr = EntityManager->GetFragmentDataPtr<FMassAIStateFragment>(EntityHandle))
 				{
-					AiStatePtr->StoredLocation = UnloadLocation;
+					AiStatePtr->StoredLocation = ZielPunkt;
 				}
 				else
 				{
@@ -700,7 +739,7 @@ bool AMassUnitBase::UpdateEntityStateOnUnload(const FVector& UnloadLocation)
 				// Update the movement target
 				if (FMassMoveTargetFragment* MoveTargetFrag = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
 				{
-					MoveTargetFrag->Center = UnloadLocation;
+					MoveTargetFrag->Center = ZielPunkt;
 				}
                 
 				// Allow the entity to move again by removing the stop tag

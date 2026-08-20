@@ -357,6 +357,20 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		return;
 	}
 
+	// [Fracht] Ein eingeladener Arbeiter darf keinen neuen Zustand bekommen. Er ist unsichtbar und
+	// steht im Transporter - wer ihm hier einen Auftrag gibt, schickt einen Geist ueber die Karte.
+	// Das Kennzeichen allein reichte nicht: es gab MEHRERE Wege, die Arbeiter neu verplanen
+	// (der Rueckkehr-Durchlauf der KI, die Ressourcen-Neuzuweisung in ABuildingBase, die WorkArea
+	// selbst), und jeden einzeln abzudichten ist ein Wettlauf, den man nicht gewinnt. Deshalb hier,
+	// am einzigen Punkt, durch den sie alle muessen.
+	//
+	// Dead bleibt erlaubt: Fracht stirbt mit ihrem Transporter (KillLoadedUnits). Der Entladeweg
+	// loescht das Kennzeichen, BEVOR er den Zustand zuruecksetzt, und kommt deshalb durch.
+	if (IsOrderLocked() && NewUnitState != UnitData::Dead)
+	{
+		return;
+	}
+
 	if (NewUnitState == UnitData::Run ||
 		NewUnitState == UnitData::Chase ||
 		NewUnitState == UnitData::Patrol ||

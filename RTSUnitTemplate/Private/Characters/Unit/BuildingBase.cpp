@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/BuildingBase.h"
 #include "Actors/EnergyWall.h"
@@ -202,6 +202,14 @@ void ABuildingBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// Gebaeude sperren Einheiten nicht mehr physisch - das Umlaufen regelt das Navigationsnetz.
+	// Anklicken laeuft ueber ECC_Visibility und bleibt davon unberuehrt.
+	if (UCapsuleComponent* Kapsel = GetCapsuleComponent())
+	{
+		Kapsel->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+	}
+
+
 	if (EnergyWallClass && Origin)
 	{
 		SpawnEnergyWall(EnergyWallClass, Origin);
@@ -233,10 +241,82 @@ void ABuildingBase::BeginPlay()
 	}
 }
 
+bool ABuildingBase::IsOwnedByAiTeam() const
+{
+	// Twin of AWorkArea::IsOwnedByAiTeam - kept local rather than shared, because the only common base
+	// of the two classes is AActor and neither header can reasonably pull in the other.
+	//
+	// A team can carry MORE than one controller. In the AI test level team 2 has both a human camera
+	// controller (bIsAi=false) and an RLAgent that actually plays it (bIsAi=true). Returning the first
+	// match therefore answered "player" for an AI team - measured, not guessed. The team counts as AI
+	// if ANY of its controllers is one; a genuine human team simply has no AI controller.
+	const UWorld* World = GetWorld();
+	if (!World) return false;
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (const AControllerBase* PC = Cast<AControllerBase>(It->Get()))
+		{
+			if (PC->SelectableTeamId == TeamId && PC->bIsAi)
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 void ABuildingBase::AutoLoadNearbyWorkers()
 {
 	if (!HasAuthority() || !IsATransporter) return;
 	if (CurrentUnitsLoaded >= MaxTransportUnits) return;
+
+	// "No AI controller for this team" means "not yet" as much as it means "human" during the opening
+	// seconds - see AutoLoadOwnerResolveSeconds. Keep asking rather than guessing wrong once.
+	const UWorld* Welt = GetWorld();
+	const float Jetzt = Welt ? Welt->GetTimeSeconds() : 0.f;
+	if (!IsOwnedByAiTeam() && Jetzt < AutoLoadOwnerResolveSeconds)
+	{
+		FTimerHandle ErneutHandle;
+		GetWorldTimerManager().SetTimer(ErneutHandle, this, &ABuildingBase::AutoLoadNearbyWorkers, 1.f, false);
+		return;
+	}
+
+	// The human player gets exactly the worker they sent. Grabbing the four nearest workers off their
+	// resource nodes is what the AI needs (it cannot click them in reliably), but for a player it is an
+	// unasked-for order that silently stalls their income the moment a reactor finishes.
+	if (!IsOwnedByAiTeam())
+	{
+		// Alle Arbeiter der Baustelle, nicht nur den, der den letzten Schlag gesetzt hat.
+		TArray<AUnitBase*> Bauleute;
+		for (const TWeakObjectPtr<AUnitBase>& Schwach : BuilderWorkers)
+		{
+			if (AUnitBase* W = Schwach.Get())
+			{
+				Bauleute.AddUnique(W);
+			}
+		}
+		if (AUnitBase* Letzter = BuilderWorker.Get())
+		{
+			Bauleute.AddUnique(Letzter);
+		}
+
+		int32 Geladen = 0;
+		for (AUnitBase* Worker : Bauleute)
+		{
+			if (CurrentUnitsLoaded >= MaxTransportUnits) break;
+			if (!IsValid(Worker) || !Worker->IsWorker || !Worker->CanBeTransported) continue;
+			if (Worker->TeamId != TeamId || Worker->GetUnitState() == UnitData::Dead) continue;
+
+			const int32 Vorher = CurrentUnitsLoaded;
+			LoadUnit(Worker);
+			if (CurrentUnitsLoaded > Vorher) ++Geladen;
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("[AutoLoad] %s (team %d, Spieler): Bauleute=%d geladen=%d now=%d/%d"),
+		       *GetName(), TeamId, Bauleute.Num(), Geladen, CurrentUnitsLoaded, MaxTransportUnits);
+		return;
+	}
 
 	// Nearest first, so the building takes the crew standing next to it rather than pulling workers
 	// across the map away from their resource nodes.
@@ -269,7 +349,7 @@ void ABuildingBase::AutoLoadNearbyWorkers()
 		if (CurrentUnitsLoaded > Before) ++Loaded;
 	}
 
-	UE_LOG(LogTemp, Warning, TEXT("[AutoLoad] %s (team %d): candidates=%d loaded=%d now=%d/%d"),
+	UE_LOG(LogTemp, Warning, TEXT("[AutoLoad] %s (team %d, KI): candidates=%d loaded=%d now=%d/%d"),
 	       *GetName(), TeamId, Candidates.Num(), Loaded, CurrentUnitsLoaded, MaxTransportUnits);
 }
 

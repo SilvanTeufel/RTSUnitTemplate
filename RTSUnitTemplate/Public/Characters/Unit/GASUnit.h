@@ -231,6 +231,12 @@ public:
 	float CastInvariantTimer = 0.f;
 	int32 CastInvariantStrikes = 0;
 
+	// Kein eigener public/private-Abschnitt hier: der umgebende Bereich ist bereits oeffentlich, und
+	// ein eingeschobenes 'private:' hat beim ersten Versuch alles Nachfolgende mit abgeriegelt
+	// (LastMouseHitRequestTime, AbilityReactivationThrottle und weitere - 10 Zugriffsfehler).
+	/** Verwirft angesammelte Treffer des Cast-Waechters - siehe UGameplayAbilityBase::AddCastingFallback. */
+	void ResetCastInvariantStrikes() { CastInvariantStrikes = 0; }
+
 	UPROPERTY()
 	float LastAbilityRequestTime = 0.f;
 

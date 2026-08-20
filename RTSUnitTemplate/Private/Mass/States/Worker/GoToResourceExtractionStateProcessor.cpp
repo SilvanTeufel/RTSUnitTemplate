@@ -1,5 +1,8 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
-#include "Mass/States/Worker/GoToResourceExtractionStateProcessor.h" // Header for this processor
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+#include "Mass/States/Worker/GoToResourceExtractionStateProcessor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Actors/WorkArea.h"
+#include "Characters/Unit/WorkingUnitBase.h" // Header for this processor
 #include "MassExecutionContext.h"
 #include "MassCommonFragments.h"     // For FTransformFragment
 #include "MassMovementFragments.h"   // For FMassMoveTargetFragment, FMassVelocityFragment (optional but good practice)
@@ -160,6 +163,8 @@ void UGoToResourceExtractionStateProcessor::ExecuteServer(FMassEntityManager& En
         const auto CombatStatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         // Optional - kann leer sein, deshalb vor jedem Zugriff auf Num() pruefen.
         const auto PathList = ChunkContext.GetFragmentView<FUnitNavigationPathFragment>();
+        // Optional: nur fuer die Groesse der Lagerstaette (siehe Ankunftsrechnung unten).
+        const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {

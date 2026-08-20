@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -304,12 +304,37 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapGap = 50.f;
 
+	/**
+	 * Zusaetzliche Reichweite, ab der eine gezogene Baustelle an einem Gebaeude einrastet.
+	 *
+	 * Zaehlt zu SnapGap und den halben Ausmassen beider Koerper dazu, ist also schon groessenabhaengig.
+	 * Von 100 auf 180 angehoben: ein eingerastetes Snap senkt beim Loslassen die Sperrweite auf 35
+	 * Prozent, ohne Snap gilt die volle MinBuildingClearance von 400 - und genau daran scheiterte das
+	 * Anlegen eines Reaktors neben ein bestehendes Gebaeude. Frueher einrasten heisst hier also nicht
+	 * nur bequemer, sondern weniger Fehlalarm beim Droppen. SnapReleaseDistance (400) bleibt deutlich
+	 * groesser, die Hysterese zum Wieder-Loesen bleibt damit erhalten.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
-	float SnapDistance = 100.f;
+	float SnapDistance = 180.f;
 	
 	// Distance threshold between mouse and snapped actor to release the snap
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float SnapReleaseDistance = 400.f;
+
+	/**
+	 * Wie tief eine Baustelle in ein Gebaeude oder eine andere Baustelle hineinragen darf, bevor die
+	 * Platzierung abgelehnt wird - in cm.
+	 *
+	 * Vorher zaehlte JEDE Beruehrung als Ueberlappung: GetOverlappingActors meldet auch einen Kontakt
+	 * von wenigen Millimetern, und damit wurde eine Baustelle dicht neben einem Gebaeude verworfen,
+	 * obwohl sie sichtbar frei stand. Gemessen wird jetzt die tatsaechliche Durchdringung der beiden
+	 * Grundflaechen in XY; erst oberhalb dieses Wertes blockiert sie. 0 stellt das alte, strenge
+	 * Verhalten wieder her.
+	 *
+	 * Gilt NICHT fuer No-Build-Zonen - dort ist absichtlich schon der Rand die Grenze.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap, meta = (ClampMin = "0.0", ClampMax = "500.0"))
+	float PlacementOverlapTolerance = 60.f;
 
 	/** Maximum Z difference (base-to-base) allowed for two buildings to connect with an energy wall. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
@@ -394,9 +419,16 @@ public:
 	 * agent kept starting new ones every decision and ended up with 38 open sites, 17 pods against a cap
 	 * of 6, its workers morphed away to 5 and every resource spent - so it never afforded a single combat
 	 * unit. Only the AI is bounded here; a player opens sites by hand and needs no limit.
+ *
+ * Raised 3 -> 6 on 18.08. after measuring it: at 3 the Xeno threw away 143 of 195 and 161 of 211
+ * build orders in two matches (73-76%, against the Singularians' 38%) while the three slots sat
+ * idle roughly two thirds of the time. The cap was not limiting throughput, only clipping bursts -
+ * and every clipped order is destroyed outright, so the rule has to win the weighted draw again.
+ * 6 is still far below the 38 that caused the runaway above. Counted per class, the Xeno lost 31
+ * LarvalPod orders in a single match this way.
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI", meta=(ClampMin="1"))
-	int32 AIMaxConcurrentBuildSites = 3;
+	int32 AIMaxConcurrentBuildSites = 6;
 
 	/**
 	 * AI placement only. Largest height difference tolerated across a candidate building's footprint.
@@ -418,6 +450,20 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI Placement", meta=(ClampMin="0.0"))
 	float ExpansionClaimedRadius = 3500.f;
+
+	/**
+	 * Duerfen Basen NUR auf handgesetzten AIExpansionSite-Markern entstehen?
+	 *
+	 * True (Vorgabe): kein fuer dieses Team freigegebener Marker, keine Expansion. Das ist die
+	 * gewuenschte Kontrolle - verlangt aber, dass jedes Level Marker mitbringt. Gemessen am
+	 * 19.08.: Level_2_Survive hat keinen einzigen, dort expandiert die KI damit gar nicht mehr.
+	 *
+	 * False: hat ein Level fuer dieses Team keinen Marker, greift wieder die alte Suche nach der
+	 * naechsten unbeanspruchten Lagerstaette. Level MIT Markern bleiben in beiden Faellen streng
+	 * auf diese begrenzt.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bRequireExpansionSiteMarkers = true;
 
 	void SetAbilityInputHeld(EGASAbilityInputID InputID, bool bIsHeld);
 
@@ -465,6 +511,13 @@ public:
 
 	// Internal helpers to simplify MoveWorkArea_Local logic (non-UFUNCTION)
 	bool TraceMouseToGround(FVector& OutMouseGround, FHitResult& OutHit) const;
+
+	/**
+	 * Schnittpunkt des Mausstrahls mit der waagerechten Ebene auf Hoehe PlaneZ.
+	 *
+	 * Fuer alles, was nicht der Gelaendehoehe folgen soll - etwa die gezogene Formationslinie.
+	 */
+	bool TraceMouseToHorizontalPlane(float PlaneZ, FVector& OutPoint) const;
 	bool MaintainOrReleaseCurrentSnap(AWorkArea* DraggedWorkArea, const FVector& MouseGround, bool bHit);
 	bool TrySnapViaOverlap(AWorkArea* DraggedWorkArea, const FVector& MouseGround, const FHitResult& HitResult);
 	bool TrySnapViaProximity(AWorkArea* DraggedWorkArea, const FVector& MouseGround);

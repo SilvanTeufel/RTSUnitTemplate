@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -65,6 +65,23 @@ private:
 	float TimeSinceLastRun = 0.0f;
 	float FollowAcceptanceMultiplier = 6.f;
 	float TresholdAcceptanceMultiplier = 6.f;
+
+	/**
+	 * Aufschlag auf die Rueckkehrschwelle waehrend des Ruhens (Hysterese).
+	 *
+	 * Ein- und Ausstiegsschwelle waren identisch: sobald eine ruhende Einheit weiter als
+	 * SlackRadius * TresholdAcceptanceMultiplier von ihrem Heimatpunkt entfernt lag, lief sie zurueck.
+	 * Genau so weit schiebt die Vermeidung sie aber, wenn Einheiten dicht beieinander oder an einem
+	 * Gebaeude stehen - die Einheit lief zurueck, wurde erneut geschoben, lief zurueck: das
+	 * beobachtete Schwingen. Waehrend UnitMovingAvoidanceProcessor ruhende Einheiten (Action=Stand)
+	 * ueberspringt, gilt das fuer die zurueck laufende Einheit nicht mehr, sie wird also weiter
+	 * geschoben.
+	 *
+	 * Mit dem Aufschlag muss die Verschiebung deutlich groesser sein als die Ankunftstoleranz, bevor
+	 * ueberhaupt zurueck gelaufen wird. 1.0 stellt das alte Verhalten wieder her.
+	 */
+	UPROPERTY(EditDefaultsOnly, Category = "AI")
+	float IdleReturnHysteresis = 2.5f;
 	// --- Konfigurationswerte ---
 	// Besser: Diese Werte aus einem Shared Fragment lesen (z.B. FMassAIConfigSharedFragment)
 	UPROPERTY(EditDefaultsOnly, Category = "AI")

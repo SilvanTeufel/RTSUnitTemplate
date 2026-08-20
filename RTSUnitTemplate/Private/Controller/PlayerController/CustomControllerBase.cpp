@@ -1290,6 +1290,32 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
    		return;
    	}
 	
+   	// DIAGNOSE (19.08.): Wer setzt ein Ziel weit ausserhalb der Karte?
+   	//
+   	// Gemessen: in einer von vier Partien stellen Team-2-Einheiten ~2800 Pfadanfragen auf Punkte bei
+   	// X -16 000 bis -17 300 - das NavMeshBoundsVolume endet bei X=-12 455. Der Zielpunkt steckt in
+   	// StateFrag.StoredLocation, und das Feld wird an ueber einem Dutzend Stellen geschrieben; welche
+   	// davon es ist, war durch Lesen nicht zu entscheiden (ein Versuch traf per Teilstring sogar das
+   	// falsche Feld). Der Callstack sagt es direkt - dieselbe Methode, die den Bauplatz-Deckel fand.
+   	//
+   	// Nur die ersten drei Faelle je Controller, sonst laeuft das Log zu.
+   	if (UWorld* Welt = GetWorld())
+   	{
+   		if (UNavigationSystemV1* DiagNavSys = UNavigationSystemV1::GetCurrent(Welt))
+   		{
+   			FNavLocation Projiziert;
+   			if (!DiagNavSys->ProjectPointToNavigation(NewTargetLocation, Projiziert, FVector(500.f, 500.f, 1000.f))
+   				&& ZielAusserhalbZaehler < 3)
+   			{
+   				++ZielAusserhalbZaehler;
+   				UE_LOG(LogTemp, Warning,
+   					TEXT("[ZielAusserhalb] SetUnitMoveTarget auf (%.0f, %.0f, %.0f) - nicht auf dem Navigationsnetz (Fall %d)"),
+   					NewTargetLocation.X, NewTargetLocation.Y, NewTargetLocation.Z, ZielAusserhalbZaehler);
+   				FDebug::DumpStackTraceToLog(TEXT("[ZielAusserhalb] Aufrufer:"), ELogVerbosity::Warning);
+   			}
+   		}
+   	}
+
    	AiStatePtr->StoredLocation = NewTargetLocation;
 	
 	bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
@@ -2094,11 +2120,33 @@ void ACustomControllerBase::RightClickPressedMass()
 
 	FHitResult HitPawn;
 	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-	
 
+	// Zielt der Klick auf einen Bauplatz, hat der Folgen-Zweig hier nichts zu suchen.
+	//
+	// Die beiden Spuren laufen auf verschiedenen Kanaelen: Folgen auf ECC_Pawn, der Bauplatz auf
+	// ECC_Visibility. Die ConstructionUnit blockt bewusst NUR Visibility (Einheiten sollen durch sie
+	// hindurchlaufen koennen), also geht die Pawn-Spur durch sie hindurch und trifft den Arbeiter,
+	// der dahinter schon baut. Der ist verbuendet -> Folgen-Befehl -> return, und CheckClickOnWorkArea
+	// wurde nie erreicht. Die Ausnahme fuer die ConstructionUnit weiter unten greift nicht, weil sie
+	// den Pawn-Treffer prueft und der eben nicht mehr die ConstructionUnit ist.
+	bool bZieltAufBauplatz = false;
+	{
+		FHitResult SichtTreffer;
+		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, SichtTreffer);
+		AActor* SichtAktor = SichtTreffer.GetActor();
 
+		const AWorkArea* Getroffen = Cast<AWorkArea>(SichtAktor);
+		if (!Getroffen)
+		{
+			if (const AConstructionUnit* CU = Cast<AConstructionUnit>(SichtAktor))
+			{
+				Getroffen = CU->WorkArea;
+			}
+		}
+		bZieltAufBauplatz = (Getroffen != nullptr) && !Getroffen->IsNoBuildZone;
+	}
 
-	if (TryHandleFollowOnRightClick(HitPawn))
+	if (!bZieltAufBauplatz && TryHandleFollowOnRightClick(HitPawn))
 	{
 		return;
 	}
@@ -3033,11 +3081,66 @@ void ACustomControllerBase::SetHoldPositionOnUnit_Implementation(AUnitBase* Unit
 	Unit->bHoldPosition = true;
 }
 
+void ACustomControllerBase::ClearWaypointForManualOrder(const TArray<AUnitBase*>& Units)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	UMassEntitySubsystem* MassSubsystem = GetWorld() ? GetWorld()->GetSubsystem<UMassEntitySubsystem>() : nullptr;
+	FMassEntityManager* EntityManager = MassSubsystem ? &MassSubsystem->GetMutableEntityManager() : nullptr;
+
+	for (AUnitBase* Unit : Units)
+	{
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		// Gebaeude und Baustellen sind ausgenommen: deren NextWaypoint ist der SAMMELPUNKT, kein
+		// Patrouillenziel. Ohne diese Ausnahme loeschte der Marschbefehl den Sammelpunkt des
+		// gerade ausgewaehlten Gebaeudes - und weil danach ein neuer angelegt wurde, entstand bei
+		// JEDEM Klick ein zusaetzlicher Wegpunkt. Im Log gut zu sehen: erster Aufruf "Vorhanden=None"
+		// (frisch geloescht) legt an, der zweite versetzt korrekt, der naechste Klick loescht wieder.
+		if (Unit->bIsBuilding || Cast<AConstructionUnit>(Unit))
+		{
+			continue;
+		}
+
+		// Der Actor haelt den Wegpunkt, das Fragment die daraus abgeleitete Position. BEIDE muessen
+		// weg - das Fragment wird nur beim Binden aus dem Actor befuellt, ein spaeteres Nullen des
+		// Actors allein bliebe also wirkungslos.
+		Unit->NextWaypoint = nullptr;
+
+		if (!EntityManager || !Unit->MassActorBindingComponent)
+		{
+			continue;
+		}
+
+		const FMassEntityHandle Handle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+		if (!EntityManager->IsEntityValid(Handle))
+		{
+			continue;
+		}
+
+		if (FMassPatrolFragment* PatrolFrag = EntityManager->GetFragmentDataPtr<FMassPatrolFragment>(Handle))
+		{
+			PatrolFrag->TargetWaypointLocation = FVector::ZeroVector;
+			PatrolFrag->CurrentWaypointIndex = INDEX_NONE;
+		}
+	}
+}
+
 void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 {
 	
     // 1. Setup
     if (SelectedUnits.Num() == 0) return;
+
+	// Vom Wegpunkt loesen, BEVOR der Befehl ergeht - sonst holt der naechste Idle-Takt die
+	// Einheit ueber StoredLocation wieder nach Hause.
+	ClearWaypointForManualOrder(SelectedUnits);
 
 	UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem) return;
@@ -3848,9 +3951,11 @@ void ACustomControllerBase::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Bewusst NICHT TraceMouseToGround: der Strahl gegen die Landschaft trifft auf erhoehtem Boden
+	// frueher, wodurch der Punkt zur Kamera wandert und die gezeichnete Linie sich mit der
+	// Gelaendehoehe verschiebt. Die Ebene auf Starthoehe haelt die Linie genau unter dem Zeiger.
 	FVector MouseGround;
-	FHitResult MouseHit;
-	if (TraceMouseToGround(MouseGround, MouseHit))
+	if (TraceMouseToHorizontalPlane(FormationLinePlaneZ, MouseGround))
 	{
 		UpdateFormationLineDrag(MouseGround);
 	}
@@ -4013,6 +4118,7 @@ void ACustomControllerBase::BeginFormationLineDrag(const FVector& StartWorld, bo
 	}
 
 	bFormationLineDragActive = true;
+	FormationLinePlaneZ = StartWorld.Z;
 	bFormationLineDragIsAttackMove = bAttackMove;
 	bFormationLineDragFromRightMouse = bFromRightMouse;
 	FormationLineStartWorld = StartWorld;
@@ -4211,6 +4317,22 @@ bool ACustomControllerBase::BuildFormationLineOrder(TArray<AUnitBase*>& OutUnits
 	});
 
 	OutSlots = DistributeAlongPath(OutPath, OutUnits.Num());
+
+	// Die Linie liegt auf einer waagerechten Ebene; fuer den Marschbefehl braucht jeder Platz aber
+	// eine sinnvolle Hoehe. Nur die Z-Komponente kommt vom Navigationsnetz, X und Y bleiben exakt
+	// so, wie gezeichnet - sonst waere die Gelaendeabhaengigkeit hier wieder drin.
+	if (const UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+	{
+		for (FVector& Platz : OutSlots)
+		{
+			FNavLocation Projiziert;
+			if (NavSys->ProjectPointToNavigation(Platz, Projiziert, FVector(150.f, 150.f, 5000.f)))
+			{
+				Platz.Z = Projiziert.Location.Z;
+			}
+		}
+	}
+
 	return OutSlots.Num() == OutUnits.Num();
 }
 
@@ -4725,6 +4847,9 @@ void ACustomControllerBase::HandleAttackMovePressed()
         AttackToggled = false;
         return;
     }
+
+	// Wie beim Marschbefehl: ein Angriffsbefehl loest die Einheit von ihrem Wegpunkt.
+	ClearWaypointForManualOrder(SelectedUnits);
 
     // Consistency: Sort units by radius so that formation validation and assignment match Move logic
     TArray<AUnitBase*> UnitsToProcess = SelectedUnits;

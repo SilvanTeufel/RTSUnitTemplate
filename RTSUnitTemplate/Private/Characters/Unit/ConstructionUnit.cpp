@@ -43,6 +43,41 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 void AConstructionUnit::BeginPlay()
 {
 	Super::BeginPlay();
+
+
+	// Und KEIN Loch im Navigationsnetz waehrend des Baus.
+	//
+	// Die projekteigene Kennung CanManipulateNavMesh steht auf der ConstructionUnit auf false, sie
+	// ruft also Multicast_RegisterBuildingAsObstacle nicht auf. Das genuegt aber nicht: in Unreal
+	// traegt JEDE Primitivkomponente mit Kollision sich ins Navigations-Octree ein, solange
+	// bCanEverAffectNavigation gesetzt ist - und das ist die Vorgabe. Die ConstructionUnit stanzt
+	// deshalb trotzdem ein Loch, sichtbar als DirtyArea in dem Moment, in dem sie erscheint.
+	//
+	// Genau dieses Loch sperrt die Arbeiter aus: sie sollen ja AUF die Baustelle, und die Wegfindung
+	// fuehrt sie darum herum. Waehrend des Baus darf hier nichts gecarvt werden; das fertige Gebaeude
+	// uebernimmt das anschliessend selbst.
+	TInlineComponentArray<UPrimitiveComponent*> Primitive(this);
+	for (UPrimitiveComponent* Komponente : Primitive)
+	{
+		if (Komponente && Komponente->CanEverAffectNavigation())
+		{
+			Komponente->SetCanEverAffectNavigation(false);
+		}
+	}
+	// Keine physische Sperre fuer Einheiten - das Umlaufen regelt das Navigationsnetz.
+	//
+	// ECC_Visibility muss dagegen BLOCKEN: der Bauplatz-Klick wird ueber diesen Kanal ermittelt
+	// (CustomControllerBase -> CheckClickOnWorkArea). Ohne Sperre ging die Spur senkrecht durch den
+	// Bauplatzhalter hindurch und traf die Landschaft; die Aufloesung fand keine WorkArea, und weil
+	// CheckClickOnWorkArea ganz oben schon StopWorkOnSelectedUnit() ruft, blieben die angeklickten
+	// Arbeiter mit einem blossen Laufbefehl vor der Baustelle stehen.
+	if (UCapsuleComponent* Kapsel = GetCapsuleComponent())
+	{
+		Kapsel->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		Kapsel->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+		Kapsel->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	}
+
 	OpenHealthWidget = true;
 	bShowLevelOnly = false;
 }

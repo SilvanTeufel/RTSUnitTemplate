@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -1241,6 +1241,42 @@ inline void UpdateMoveTarget(FMassMoveTargetFragment& MoveTarget, const FVector&
 	}
 
 	ensureMsgf(World->GetNetMode() != NM_Client, TEXT("UpdateMoveTarget should only be called on the authority (File: %s, Line: %d)"), TEXT(__FILE__), __LINE__);
+
+	// DIAGNOSE (19.08.): Wer setzt ein Marschziel ausserhalb des Navigationsnetzes?
+	//
+	// Diese Funktion ist der Trichter - alle Zustandsprozessoren erteilen ihre Marschbefehle hier.
+	// Statt an vierzehn Schreibstellen von StoredLocation zu raten (drei Versuche, drei Korrekturen),
+	// meldet sich der Aufrufer hier selbst. Gemessen: Einheiten im Zustand Run marschieren auf Punkte
+	// bei (2956..4328, -13710..-14960), 1700-2900 ausserhalb des NavMeshBoundsVolume; jede Pfadanfrage
+	// dorthin scheitert und wird bis zum Spielende wiederholt.
+	//
+	// Nur die ersten drei Faelle je Welt, sonst laeuft das Log zu. Der Zaehler haengt an der Welt
+	// (GetTimeSeconds-freier Weltzustand waere aufwaendiger; ein static waere ueber PIE-Sitzungen
+	// kumulativ und damit wertlos - siehe die Falle in static-vs-world-time-latch).
+	{
+		static thread_local const UWorld* LetzteWelt = nullptr;
+		static thread_local int32 GemeldetInWelt = 0;
+		if (LetzteWelt != World)
+		{
+			LetzteWelt = World;
+			GemeldetInWelt = 0;
+		}
+		if (GemeldetInWelt < 3)
+		{
+			if (UNavigationSystemV1* DiagNav = UNavigationSystemV1::GetCurrent(World))
+			{
+				FNavLocation DiagProj;
+				if (!DiagNav->ProjectPointToNavigation(TargetLocation, DiagProj, FVector(500.f, 500.f, 1000.f)))
+				{
+					++GemeldetInWelt;
+					UE_LOG(LogTemp, Warning,
+						TEXT("[MarschAusserhalb] UpdateMoveTarget auf (%.0f, %.0f, %.0f) - nicht auf dem Navigationsnetz (Fall %d)"),
+						TargetLocation.X, TargetLocation.Y, TargetLocation.Z, GemeldetInWelt);
+					FDebug::DumpStackTraceToLog(TEXT("[MarschAusserhalb] Aufrufer:"), ELogVerbosity::Warning);
+				}
+			}
+		}
+	}
     
 	// --- Modify the Fragment ---
 	MoveTarget.CreateNewAction(EMassMovementAction::Move, *World); // Wichtig: Aktion neu erstellen!
@@ -1331,7 +1367,7 @@ inline void PredictWorkerStop(
  * spread evenly over the disc instead of bunching in the middle (same idea as
  * CalculateChaseOffset in ChaseStateProcessor).
  */
-inline FVector GetPatrolHomeLocation(const FMassEntityHandle& Entity, const FVector& WaypointLocation, float Radius)
+inline FVector GetPatrolHomeLocation(const FMassEntityHandle& Entity, const FVector& WaypointLocation, float Radius, UWorld* World = nullptr)
 {
 	if (!Entity.IsSet() || Radius <= KINDA_SMALL_NUMBER)
 	{
@@ -1342,7 +1378,32 @@ inline FVector GetPatrolHomeLocation(const FMassEntityHandle& Entity, const FVec
 	const float AngleRad = FMath::DegreesToRadians(FMath::Fmod(Index * 137.50776405f, 360.0f));
 	const float R = Radius * FMath::Sqrt(FMath::Frac(Index * 0.61803398875f));
 
-	return WaypointLocation + FVector(R * FMath::Cos(AngleRad), R * FMath::Sin(AngleRad), 0.0f);
+	const FVector Gestreut = WaypointLocation + FVector(R * FMath::Cos(AngleRad), R * FMath::Sin(AngleRad), 0.0f);
+
+	// Auf das Navigationsnetz ziehen, wenn eine Welt bekannt ist.
+	//
+	// Der gestreute Punkt war reine Rechnung: liegt der Wegpunkt nah am Kartenrand, landet der
+	// Heimatpunkt AUSSERHALB des NavMeshBoundsVolume. Jeder Rueckweg zum Posten zielt dann auf einen
+	// Punkt, zu dem es keinen Pfad gibt - die Suche scheitert (gueltiges Pfadobjekt, null Punkte) und
+	// wird jeden Takt wiederholt, bis das Spiel endet. Gemessen am 19.08.: in 6 von 9 Stichproben war
+	// der abgelehnte Zielpunkt EXAKT dieser Heimatpunkt, bei beiden Fraktionen.
+	//
+	// Die Projektion ist deterministisch, die Zusage aus dem Kommentar oben bleibt also erhalten:
+	// stabil ueber die Zeit UND auf Client und Server identisch. Schlaegt sie fehl, bleibt es beim
+	// gestreuten Punkt - dann ist nichts gewonnen, aber auch nichts verloren.
+	if (World)
+	{
+		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
+		{
+			FNavLocation Projiziert;
+			if (NavSys->ProjectPointToNavigation(Gestreut, Projiziert, FVector(Radius, Radius, 1000.f)))
+			{
+				return Projiziert.Location;
+			}
+		}
+	}
+
+	return Gestreut;
 }
 
 inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveTargetFragment& MoveTarget, FMassAIStateFragment* StateFragPtr, UNavigationSystemV1* NavSys, UWorld* World, float Speed, const FMassEntityHandle& Entity = FMassEntityHandle())
@@ -1747,7 +1808,11 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	float TimeToEndRadius = 0.f;
 	float CurrentRadius = 0.f;
 	float ElapsedTime = 0.f;
-	bool bScaleMesh = false;
+	bool bScaleMesh = true;
+
+	/** Diagnose: die Groessenmeldung wurde fuer diese Flaeche schon abgesetzt. */
+	UPROPERTY()
+	bool bGroesseGemeldet = false;
 	bool bIsRadiusScaling = true;
 	float BaseRadius = 100.f;
 
