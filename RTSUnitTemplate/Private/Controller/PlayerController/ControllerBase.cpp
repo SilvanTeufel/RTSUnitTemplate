@@ -801,12 +801,6 @@ AWaypoint* AControllerBase::CreateAWaypoint(FVector NewWPLocation, AUnitBase* Ow
 {
 	UWorld* World = GetWorld();
 
-	// DIAGNOSE (19.08.): Wegpunkte entstehen bei jedem Klick neu, obwohl der Aufrufer sie versetzen
-	// sollte. Zwei Vermutungen lagen daneben - diese Zeile nennt den Verursacher statt zu raten.
-	UE_LOG(LogTemp, Warning, TEXT("[WP] CreateAWaypoint fuer %s (hat schon: %s, Zuweisungen: %d)"),
-		*GetNameSafe(OwnerUnit),
-		OwnerUnit ? *GetNameSafe(OwnerUnit->NextWaypoint) : TEXT("-"),
-		(OwnerUnit && IsValid(OwnerUnit->NextWaypoint)) ? OwnerUnit->NextWaypoint->GetAssignedUnitCount() : -1);
 
 	if (World && WaypointClass && OwnerUnit)
 	{
@@ -951,12 +945,6 @@ void AControllerBase::SetBuildingWaypoint(FVector NewWPLocation, AUnitBase* Unit
 		// traf damit immer zu, zerstoerte ueber UnregisterWaypointFromBuilding den vorhandenen Wegpunkt
 		// und legte einen neuen an - bei jedem einzelnen Klick. Nur die Sammelfahrt
 		// (Server_Batch_SetBuildingWaypoints) reicht hier absichtlich einen gemeinsamen Wegpunkt durch.
-		UE_LOG(LogTemp, Warning,
-			TEXT("[WP] SetBuildingWaypoint: Gebaeude=%s Uebergeben=%s Vorhanden=%s Zuweisungen=%d"),
-			*GetNameSafe(BuildingBase), *GetNameSafe(BuildingWaypoint),
-			*GetNameSafe(BuildingBase->NextWaypoint),
-			IsValid(BuildingBase->NextWaypoint) ? BuildingBase->NextWaypoint->GetAssignedUnitCount() : -1);
-
 		if (!BuildingWaypoint)
 		{
 			// Eigener, mit niemandem geteilter Wegpunkt: versetzen.

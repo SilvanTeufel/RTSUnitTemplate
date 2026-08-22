@@ -321,10 +321,50 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
                             // (e.g. it flies out over a void).
                             if (UWorld* HitWorld = EntityManager.GetWorld())
                             {
-                                FHitResult GroundResult;
                                 FCollisionQueryParams GroundParams;
                                 GroundParams.bTraceComplex = false;
-                                if (HitWorld->LineTraceSingleByChannel(GroundResult, CurrentLocation, NewLocation, ECC_WorldStatic, GroundParams))
+
+                                // KORREKTUR (22.08.2026): Einheiten duerfen diesen Bodentest nicht ausloesen.
+                                //
+                                // Die ISMComponent der Einheiten traegt das Profil BlockAllDynamic und blockiert
+                                // damit auch ECC_WorldStatic - ein einfacher LineTraceSingle schlaegt hier also
+                                // am GEGNER an statt am Boden, setzt NewLocation auf dessen Oberflaeche und
+                                // beendet das Projektil ueber LifeTime = MaxLifeTime. Die Kollisionskapsel der
+                                // Einheiten ignoriert WorldStatic ausdruecklich; nur die ISM tut es nicht.
+                                //
+                                // Statt an den Kollisionseinstellungen aller Einheiten zu drehen (die auch
+                                // Auswahl und Pfadsuche tragen), wird mehrfach getrastet und der erste Treffer
+                                // genommen, der KEINE Einheit ist. Findet sich keiner, fliegt das Projektil
+                                // weiter und die Trefferpruefung behaelt das letzte Wort.
+                                //
+                                // WICHTIG zur Einordnung: dieser Zweig gilt NUR fuer Bogenschuesse
+                                // (ArcHeight > 0). Die Schiffswaffen in /Game/RTSUnits/WeaponModule/Projectiles
+                                // haben ArcHeight = 0 UND bEnableLandscapeHit = false - fuer sie laeuft weder
+                                // dieser Block noch GroundHit. Ihr "trifft sichtbar, macht aber keinen Schaden"
+                                // hatte eine andere Ursache: die Trefferpruefung mass in 3D, und der
+                                // Hoehenversatz zwischen dem hoeher schwebenden Schiff und den Bodenzielen
+                                // (Median 152 uu bei nur 30-60 uu Zielradius) frass den Radius auf. Behoben im
+                                // MassProjectileImpactProcessor durch Pruefung in der Ebene.
+                                TArray<FHitResult> GroundHits;
+                                FHitResult GroundResult;
+                                bool bEchterBoden = false;
+                                if (HitWorld->LineTraceMultiByChannel(GroundHits, CurrentLocation, NewLocation, ECC_WorldStatic, GroundParams))
+                                {
+                                    for (const FHitResult& Kandidat : GroundHits)
+                                    {
+                                        AActor* Getroffen = Kandidat.GetActor();
+                                        if (Getroffen && Getroffen->IsA(AUnitBase::StaticClass()))
+                                        {
+                                            continue; // eine Einheit ist kein Boden
+                                        }
+
+                                        GroundResult = Kandidat;
+                                        bEchterBoden = true;
+                                        break;
+                                    }
+                                }
+
+                                if (bEchterBoden)
                                 {
                                     NewLocation = GroundResult.ImpactPoint;
 

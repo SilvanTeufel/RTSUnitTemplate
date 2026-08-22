@@ -2,6 +2,8 @@
 
 
 #include "Characters/Unit/MassUnitBase.h"
+#include "Characters/Unit/GASUnit.h"
+#include "GAS/GameplayAbilityBase.h"
 #include "NavigationSystem.h"
 
 #include "MassSignalSubsystem.h"
@@ -618,6 +620,20 @@ bool AMassUnitBase::SwitchEntityTagByState(TEnumAsByte<UnitData::EState> UState,
 	
 	    case UnitData::Casting:
 	        Defer.AddTag<FMassStateCastingTag>(EntityHandle);
+	        // Zielen endet mit dem Cast-Beginn: die Einheit bleibt in der zuletzt eingeschlagenen
+	        // Richtung stehen. Abschaltbar je Ability ueber bStopRotateToMouseWhileCasting.
+	        //
+	        // Das ist zugleich der Grund, warum die Cast-Leiste vorher unsichtbar blieb:
+	        // UnitClientTagSyncProcessor prueft FMassRotateToMouseTag VOR dem Casting-Tag und leitete
+	        // deshalb dauerhaft Aim ab, was den Casting-Zustand am Actor jeden Takt ueberschrieb.
+	        {
+	            const AGASUnit* GasSelf = Cast<AGASUnit>(this);
+	            const UGameplayAbilityBase* LaufendeAbility = GasSelf ? GasSelf->ActivatedAbilityInstance : nullptr;
+	            if (!LaufendeAbility || LaufendeAbility->bStopRotateToMouseWhileCasting)
+	            {
+	                Defer.RemoveTag<FMassRotateToMouseTag>(EntityHandle);
+	            }
+	        }
 	        break;
 	
 	    case UnitData::IsAttacked:
@@ -1180,6 +1196,20 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 	{
 	    SetUnitState(UnitData::Casting);
 	    EntityManager->Defer().AddTag<FMassStateCastingTag>(EntityHandle);
+
+	    // Zielen endet mit dem Cast-Beginn - siehe bStopRotateToMouseWhileCasting.
+	    //
+	    // DIESER Weg ist der, den die Blueprints benutzen ("Switch TO Casting"). Der Haken stand
+	    // zuerst nur in SwitchEntityTagByState und blieb deshalb wirkungslos: im Prueflauf feuerte
+	    // die dortige Diagnose kein einziges Mal, waehrend die Einheit durchgehend in Aim blieb.
+	    {
+	        const AGASUnit* GasSelf = Cast<AGASUnit>(this);
+	        const UGameplayAbilityBase* LaufendeAbility = GasSelf ? GasSelf->ActivatedAbilityInstance : nullptr;
+	        if (!LaufendeAbility || LaufendeAbility->bStopRotateToMouseWhileCasting)
+	        {
+	            EntityManager->Defer().RemoveTag<FMassRotateToMouseTag>(EntityHandle);
+	        }
+	    }
 	}
 	else if (TagToAdd == FMassStateIsAttackedTag::StaticStruct())
 	{

@@ -1137,6 +1137,8 @@ void AProjectile::Impact(AActor* ImpactTarget)
 			UnitToHit->SetHealth_Implementation(UnitToHit->Attributes->GetHealth()-NewDamage);
 		else
 			UnitToHit->SetShield_Implementation(UnitToHit->Attributes->GetShield()-NewDamage);
+
+
 			//UnitToHit->Attributes->SetAttributeShield(UnitToHit->Attributes->GetShield()-NewDamage);
 
 

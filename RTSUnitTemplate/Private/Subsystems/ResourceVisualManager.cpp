@@ -150,7 +150,7 @@ void UResourceVisualManager::AssignResource(FMassEntityHandle Entity, EResourceT
     FMeshMaterialKey Key;
     Key.Mesh = SelectedMesh;
     Key.Material = SelectedMaterial;
-    Key.bCastShadow = true; // Resource ISMs use default shadow setting
+    Key.bCastShadow = false; // muss zum Vorgabewert von GetOrCreateISM passen, sonst greift der FreeIndexPool nicht
 
     int32 NewIndex = INDEX_NONE;
     if (FreeIndexPool.Contains(Key) && FreeIndexPool[Key].Num() > 0)

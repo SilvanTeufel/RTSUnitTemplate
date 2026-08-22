@@ -54,7 +54,10 @@ public:
     UFUNCTION(Category = "RTS|Resources")
     void RemoveResource(FMassEntityHandle Entity);
 
-    UInstancedStaticMeshComponent* GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material = nullptr, bool bCastShadow = true);
+    // Ressourcen werfen KEINEN echten Schatten mehr: Schatten kommen ueber
+    // MaterialDrivenShadows (ein Draw-Call fuer alles). Ein echter Schlagschatten nur an der
+    // getragenen Ressource sah aus, als wuerfe die Ressource Schatten und die Einheit nicht.
+    UInstancedStaticMeshComponent* GetOrCreateISM(UStaticMesh* Mesh, UMaterialInterface* Material = nullptr, bool bCastShadow = false);
 
 protected:
     UPROPERTY()

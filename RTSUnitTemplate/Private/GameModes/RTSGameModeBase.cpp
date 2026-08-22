@@ -1749,7 +1749,7 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 		}
 
 		UnitBase->CanBeSelected = SpawnParameter.CanBeSelected;
-		
+
 		UGameplayStatics::FinishSpawningActor(UnitBase, EnemyTransform);
 		
 		if(SpawnParameter.Attributes)
@@ -2093,8 +2093,42 @@ FVector ARTSGameModeBase::CalcLocation(FVector Offset, FVector MinRange, FVector
 	const float X = RandomOffsetX*MultiplierA+Offset.X; 
 	const float Y = RandomOffsetY*MultiplierB+Offset.Y; 
 	const float Z = RandomOffsetZ+Offset.Z;
-				
-	return FVector(X, Y, Z);
+
+	FVector Ergebnis(X, Y, Z);
+
+	// BEHEBUNG (22.08.2026): Spawnpunkte auf das Navigationsnetz ziehen.
+	//
+	// Die Streuung oben wuerfelt frei im Rechteck MinRange..MaxRange, ohne zu pruefen, ob der
+	// getroffene Punkt ueberhaupt begehbar ist. Im Prologue ist das Netz eine schmale, kurvige
+	// Strasse zwischen Asteroidenfeldern - dort landet ein grosser Teil der Wuerfe daneben.
+	// Eine Einheit neben dem Netz findet keinen Weg, steht still und wirkt im Spiel wie
+	// "gespawnt und wieder verschwunden".
+	//
+	// Schlaegt die Projektion fehl (kein Navigationssystem, Level ganz ohne NavMesh), bleibt der
+	// gewuerfelte Punkt unveraendert - der Spawn darf daran nicht scheitern.
+	//
+	// Die Hoehe bleibt unangetastet: die Aufrufer setzen Z selbst (aus UnitOffset.Z bzw. der
+	// Wegpunkthoehe), und eine vom Netz zurueckgemeldete Z-Hoehe wuerde fliegende Einheiten
+	// auf den Boden ziehen.
+	if (UWorld* Welt = GetWorld())
+	{
+		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(Welt))
+		{
+			const FVector Suchbereich(
+				FMath::Max(MaxRange.X, 1000.f),
+				FMath::Max(MaxRange.Y, 1000.f),
+				1000.f);
+
+			FNavLocation Projiziert;
+			if (NavSys->ProjectPointToNavigation(Ergebnis, Projiziert, Suchbereich))
+			{
+				Ergebnis.X = Projiziert.Location.X;
+				Ergebnis.Y = Projiziert.Location.Y;
+			}
+		}
+	}
+
+	return Ergebnis;
 }
 
 void ARTSGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)

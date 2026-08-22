@@ -357,11 +357,24 @@ void AGASUnit::EnforceCastingInvariant()
 		return;
 	}
 
+	// Laeuft ueberhaupt eine Ability? Unabhaengig von den Fallback-Kennzeichen.
+	//
+	// Regel 2 loeste den Cast bisher auf, sobald WEDER bUseCastingFallbackProcessor NOCH
+	// bBlueprintCastActive gesetzt war - auch wenn die Ability laut GAS lief. Abilities, die ihren
+	// Cast im Eltern-Blueprint starten und sich nicht ueber AddCastingFallback anmelden, wurden
+	// dadurch nach zwei Durchlaeufen (rund 1 s) aus dem Casting geworfen. Gemessen am 20.08. an
+	// GA_Projectile_Snipershot_Hero_AH: castTime 1,0 stirbt genau daran, waehrend Multishot mit 0,5
+	// vorher fertig ist - deshalb sah es nach einem Unterschied zwischen den Abilities aus.
+	//
+	// Regel 1 (INS Casting zwingen) bleibt bewusst an den Kennzeichen: nur wer sich anmeldet, wird
+	// nachgezogen. Hier geht es allein darum, einen laufenden Cast nicht abzuwuergen.
+	const bool bIrgendeineAbilityAktiv = ActivatedAbilityInstance && ActivatedAbilityInstance->IsActive();
+
 	const bool bImCasting = (SelfUnit->GetUnitState() == UnitData::Casting);
 
 	// Regel 1: aktive Cast-Ability ohne Casting-Zustand.
 	// Regel 2: kein aktiver Cast, Einheit haengt trotzdem im Casting.
-	const bool bVerstoss = (bCastAbilityActive && !bImCasting) || (!bCastAbilityActive && bImCasting);
+	const bool bVerstoss = (bCastAbilityActive && !bImCasting) || (!bIrgendeineAbilityAktiv && bImCasting);
 
 	if (!bVerstoss)
 	{

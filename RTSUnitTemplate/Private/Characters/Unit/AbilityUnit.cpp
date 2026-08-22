@@ -371,6 +371,7 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		return;
 	}
 
+
 	if (NewUnitState == UnitData::Run ||
 		NewUnitState == UnitData::Chase ||
 		NewUnitState == UnitData::Patrol ||

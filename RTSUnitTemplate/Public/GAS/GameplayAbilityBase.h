@@ -165,6 +165,19 @@ public:
 	bool bUseCastingFallbackProcessor = false;
 
 	/**
+	 * Beim Wechsel ins Casting aufhoeren, sich zur Maus zu drehen.
+	 *
+	 * An (Vorgabe): waehrend des Zielens dreht sich die Einheit zur Maus; sobald der Cast beginnt,
+	 * bleibt sie in der zuletzt eingeschlagenen Richtung stehen. Nebeneffekt, der so gewollt ist:
+	 * ohne FMassRotateToMouseTag leitet UnitClientTagSyncProcessor den Zustand als Casting statt Aim
+	 * ab - erst dadurch wird die Cast-Leiste ueberhaupt sichtbar, die am Zustand haengt.
+	 *
+	 * Aus: die Einheit dreht sich waehrend des Casts weiter mit der Maus (altes Verhalten).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bStopRotateToMouseWhileCasting = true;
+
+	/**
 	 * True zwischen AddCastingFallback und dem Ende der Ability.
 	 *
 	 * Laufzeitwert, keine Einstellung - deshalb Transient und nicht EditAnywhere.

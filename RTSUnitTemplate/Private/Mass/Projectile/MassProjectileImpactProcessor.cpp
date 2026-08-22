@@ -16,6 +16,24 @@
 #include "LandscapeProxy.h"
 #include "Actors/Projectile.h"
 
+// BEHEBUNG (22.08.2026): Mindestgroesse der Trefferzone von Einheiten.
+//
+// Die Trefferpruefung nimmt den Radius aus dem Mass-Fragment, das ihn wiederum aus der
+// Kollisionskapsel bezieht. Diese Kapseln stehen bei den Xeno-Einheiten deutlich kleiner als das,
+// was der Spieler sieht: Needle-Wing hat CapsuleRadius 30 bei Mesh-Scale 2, MonsterFly 300 bei
+// Kapsel-Scale 0.2 - also effektiv 60. Gemessen ueber 639 Fehlschuesse lag der Zielradius im
+// Median bei 30 uu, waehrend das sichtbare Modell ein Vielfaches davon einnimmt. Der Spieler
+// trifft das Insekt und die Pruefung sieht einen winzigen Zylinder in dessen Mitte vorbeiziehen.
+//
+// Die Kapseln selbst bleiben unangetastet - sie tragen Ausweichen, Klick-Auswahl, Pfadsuche und
+// Einheitenabstaende. Stattdessen bekommt NUR die Projektil-Trefferpruefung eine Untergrenze.
+// Als Konsolenvariable, damit sich der Wert im laufenden Spiel einstellen laesst.
+static TAutoConsoleVariable<float> CVarRTS_MinProjectileHitRadius(
+	TEXT("r.RTS.MinProjectileHitRadius"),
+	150.0f,
+	TEXT("Mindestradius der Trefferzone einer Einheit fuer Projektile (uu). 0 = aus, dann gilt allein die Kollisionskapsel."),
+	ECVF_Default);
+
 UMassProjectileImpactProcessor::UMassProjectileImpactProcessor()
 {
 	ExecutionFlags = (int32)EProcessorExecutionFlags::All;
@@ -194,15 +212,44 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				if (bAlreadyHit) continue;
 
 				// Enhanced distance check considering speed to prevent tunneling
-				float DistSq = FVector::DistSquared(ProjPos, UnitLocations[j]);
+				//
+				// BEHEBUNG (22.08.2026): Die Hoehe darf nicht ueber den Treffer entscheiden.
+				//
+				// Gemessen ueber 3684 Beinahe-Treffer des Spielers: das Projektil fliegt im Median
+				// 152 uu UEBER dem Ziel (bis 550), weil das Schiff hoeher schwebt als die
+				// Bodeneinheiten und der Schuss auf Schiffshoehe waagerecht laeuft. Der Zielradius
+				// betraegt dabei nur 30-60 uu. In einer reinen 3D-Kugelpruefung frisst der
+				// Hoehenanteil damit den halben Radius auf: 173 der 265 echten Beinahe-Treffer
+				// (65%) waeren ohne den Z-Anteil ein Treffer gewesen.
+				//
+				// Der Spieler zielt in der Ebene, also wird auch in der Ebene geprueft - aus der
+				// Kugel wird ein stehender Zylinder. Die Hoehe bleibt eine Schranke, nur eine
+				// grosszuegigere: Trefferradius plus Koerperhoehe des Ziels. Damit trifft ein
+				// Schuss weiterhin nicht quer durch mehrere Etagen, aber der Hoehenversatz
+				// zwischen fliegendem Schuetzen und Bodenziel kostet keinen Treffer mehr.
+				const FVector ZielDelta = ProjPos - UnitLocations[j];
+				const float DistSqEbene = ZielDelta.X * ZielDelta.X + ZielDelta.Y * ZielDelta.Y;
+				const float HoehenAbstand = FMath::Abs(ZielDelta.Z);
 				float SpeedFactor = Projectile.Speed * 10.f * Context.GetDeltaTimeSeconds();
-				float TargetCollisionRadius = UnitCharFrags[j].GetRadiusInDirection(ProjPos - UnitLocations[j], UnitRotations[j]); 
+				float TargetCollisionRadius = UnitCharFrags[j].GetRadiusInDirection(ProjPos - UnitLocations[j], UnitRotations[j]);
+
+				// Untergrenze anwenden - siehe CVarRTS_MinProjectileHitRadius oben.
+				const float MindestZielRadius = CVarRTS_MinProjectileHitRadius.GetValueOnAnyThread();
+				if (MindestZielRadius > 0.f)
+				{
+					TargetCollisionRadius = FMath::Max(TargetCollisionRadius, MindestZielRadius);
+				}
+
 				
 				// Be more generous on the server to ensure damage application
 				float SafetyMargin = (Context.GetWorld()->GetNetMode() < NM_Client) ? 50.f : 25.f;
 				float CombinedRadius = TargetCollisionRadius + Projectile.CollisionRadius + SpeedFactor + SafetyMargin;
 
-				if (DistSq <= FMath::Square(CombinedRadius))
+				const float HoehenToleranz = CombinedRadius + UnitCharFrags[j].CapsuleHeight;
+				const bool bTrefferGeometrie = (DistSqEbene <= FMath::Square(CombinedRadius))
+					&& (HoehenAbstand <= HoehenToleranz);
+
+				if (bTrefferGeometrie)
 				{
 					// Impact!
 					if (bIsTarget)

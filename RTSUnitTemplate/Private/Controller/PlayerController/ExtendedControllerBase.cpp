@@ -117,6 +117,7 @@ void AExtendedControllerBase::BeginPlay()
 		}
 	}
 
+
 }
 
 void AExtendedControllerBase::Tick(float DeltaSeconds)
