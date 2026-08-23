@@ -113,6 +113,23 @@ private:
 
 	bool bIsStoryActive = false;
 
+	/**
+	 * Alle Quellen, die seit der letzten Ruhephase eine Story eingereiht haben.
+	 *
+	 * OnStoryFinished ging bisher NUR an CurrentItem.TriggeringSource. Wer die Musik beim
+	 * Ausloesen leiser dreht (BP_StoryTriggerActor_AH ruft SaveAndLowerVolume) und auf
+	 * OnStoryFinished wartet, um sie zurueckzudrehen, blieb damit stumm, sobald zwischendurch
+	 * eine andere Quelle die aktive wurde - die Musik blieb bis zum Levelwechsel leise.
+	 *
+	 * Deshalb wird jede einreihende Quelle gemerkt und beim Leerlaufen der Warteschlange
+	 * benachrichtigt. RestoreVolume ist idempotent (bVolumeLowered), doppelte Meldungen
+	 * schaden also nicht.
+	 */
+	TArray<TWeakObjectPtr<UObject>> QuellenSeitRuhe;
+
+	/** Meldet allen gemerkten Quellen das Ende und leert die Liste. */
+	void StoryEndeAnAlleMelden();
+
 	float GlobalSoundMultiplier = 1.0f;
 	float DefaultSoundVolume = 1.0f;
 

@@ -53,7 +53,38 @@ float UStoryTriggerQueueSubsystem::GetMasterVolume() const
 void UStoryTriggerQueueSubsystem::EnqueueStory(const FStoryQueueItem& Item)
 {
 	Pending.Add(Item);
+
+	// Quelle merken - siehe QuellenSeitRuhe im Header. Wer beim Ausloesen die Musik leiser
+	// dreht, muss das Ende auch dann erfahren, wenn zwischendurch eine andere Quelle die
+	// aktive geworden ist.
+	if (Item.TriggeringSource.IsValid())
+	{
+		QuellenSeitRuhe.AddUnique(Item.TriggeringSource);
+	}
+
 	TryPlayNext();
+}
+
+void UStoryTriggerQueueSubsystem::StoryEndeAnAlleMelden()
+{
+	for (const TWeakObjectPtr<UObject>& Quelle : QuellenSeitRuhe)
+	{
+		if (!Quelle.IsValid())
+		{
+			continue;
+		}
+
+		if (AStoryTriggerActor* Actor = Cast<AStoryTriggerActor>(Quelle.Get()))
+		{
+			Actor->OnStoryFinished.Broadcast();
+		}
+		else if (UStoryTriggerComponent* Comp = Cast<UStoryTriggerComponent>(Quelle.Get()))
+		{
+			Comp->OnStoryFinished.Broadcast();
+		}
+	}
+
+	QuellenSeitRuhe.Empty();
 }
 
 void UStoryTriggerQueueSubsystem::ClearActive()
@@ -85,6 +116,14 @@ void UStoryTriggerQueueSubsystem::ClearActive()
 	{
 		ActiveWidget->SetVisibility(ESlateVisibility::Collapsed);
 		ActiveWidget = nullptr;
+	}
+
+	// Ist nichts mehr in der Warteschlange, hat die Erzaehlung wirklich geendet: dann bekommen
+	// ALLE Quellen ihr OnStoryFinished, nicht nur die zuletzt aktive. Ohne das blieb die von
+	// einer frueheren Quelle abgesenkte Musik leise (siehe QuellenSeitRuhe im Header).
+	if (Pending.Num() == 0)
+	{
+		StoryEndeAnAlleMelden();
 	}
 }
 
@@ -122,22 +161,18 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		Item.WidgetClass = UStoryWidgetBase::StaticClass();
 	}
 
-	bIsStoryActive = true;
-	if (Item.TriggeringSource.IsValid())
-	{
-		if (AStoryTriggerActor* Actor = Cast<AStoryTriggerActor>(Item.TriggeringSource.Get()))
-		{
-			GlobalSoundMultiplier = Actor->LowerVolume;
-		}
-		else if (UStoryTriggerComponent* Comp = Cast<UStoryTriggerComponent>(Item.TriggeringSource.Get()))
-		{
-			GlobalSoundMultiplier = Comp->LowerVolume;
-		}
-	}
-	else
-	{
-		GlobalSoundMultiplier = 0.4f; // Default lowering
-	}
+	// BEHEBUNG (22.08.2026): Absenken der Lautstaerke erst setzen, wenn die Story auch
+	// wirklich laeuft.
+	//
+	// Frueher standen bIsStoryActive = true und GlobalSoundMultiplier = LowerVolume schon hier,
+	// also VOR zwei Ausstiegen: dem fehlenden PlayerController direkt darunter und dem Fall,
+	// dass kein Widget zustande kommt. Wurde einer davon genommen, blieb die Lautstaerke auf
+	// 0.4 stehen und es war weder ein Widget noch ein Schliess-Timer da, der sie je wieder
+	// hochgesetzt haette - ClearActive() wird nur ueber diesen Timer erreicht. Die Musik blieb
+	// dann bis zum Levelwechsel leise.
+	//
+	// Beides wird deshalb erst unten gesetzt, direkt beim Bewaffnen des Timers, der es auch
+	// wieder abbaut. Zustand und sein Abbau gehoeren zusammen.
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
 	if (!PC)
@@ -196,6 +231,25 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	}
 
 	ActiveWidget = Widget;
+
+	// Ab hier ist die Story sicher sichtbar und der Schliess-Timer wird unten bewaffnet -
+	// erst jetzt darf die uebrige Tonkulisse leiser werden (siehe Hinweis oben).
+	bIsStoryActive = true;
+	if (Item.TriggeringSource.IsValid())
+	{
+		if (AStoryTriggerActor* Actor = Cast<AStoryTriggerActor>(Item.TriggeringSource.Get()))
+		{
+			GlobalSoundMultiplier = Actor->LowerVolume;
+		}
+		else if (UStoryTriggerComponent* Comp = Cast<UStoryTriggerComponent>(Item.TriggeringSource.Get()))
+		{
+			GlobalSoundMultiplier = Comp->LowerVolume;
+		}
+	}
+	else
+	{
+		GlobalSoundMultiplier = 0.4f; // Default lowering
+	}
 
 	// Close-timer: by default keep the widget open until the audio finishes (+ AudioEndExtraDelay).
 	// Fall back to the fixed LifetimeSeconds when bTillAudioEnds is off, there is no sound, or the

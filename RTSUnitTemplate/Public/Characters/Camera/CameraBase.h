@@ -204,6 +204,24 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		bool RotateCamera(float Direction, float Add, bool stopCam = false);
+
+	/**
+	 * Dreht den Federarm sanft auf einen Ziel-Yaw und nimmt dabei immer den kuerzeren Weg.
+	 *
+	 * Bewusst NICHT ueber RotateCamera: das rampt ueber CurrentRotationValue auf eine feste
+	 * Schrittweite hoch und dreht dann gleichfoermig weiter - gut fuer gehaltene Tasten, aber
+	 * es schiesst ueber ein Ziel hinaus und pendelt. Hier wird stattdessen ein Anteil der
+	 * Restdifferenz pro Sekunde abgebaut: schnell bei grosser Abweichung, sanft auslaufend
+	 * kurz vor dem Ziel.
+	 *
+	 * @param TargetYaw    Ziel-Yaw in Weltgrad.
+	 * @param InterpSpeed  Wie zuegig nachgezogen wird (1/s). 0 = keine Bewegung.
+	 * @param DeltaTime    Vergangene Zeit; die Drehung ist damit bildratenunabhaengig.
+	 * @param Toleranz     Ab welcher Restdifferenz das Ziel als erreicht gilt (Grad).
+	 * @return true, sobald die Restdifferenz unter der Toleranz liegt.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+		bool RotateCamYawTowards(float TargetYaw, float InterpSpeed, float DeltaTime, float Toleranz = 0.5f);
 	
 	UFUNCTION(BlueprintCallable, meta = (DisplayName = "RotateCamLeft", Keywords = "RTSUnitTemplate RotateCamLeft"), Category = TopDownRTSCamLib)
 		bool RotateCamLeftTo(float Position, float Add);

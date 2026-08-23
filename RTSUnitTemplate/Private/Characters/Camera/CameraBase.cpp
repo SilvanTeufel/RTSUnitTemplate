@@ -378,6 +378,42 @@ bool ACameraBase::RotateCamera(float Direction, float Add, bool stopCam)
 	return false;
 }
 
+bool ACameraBase::RotateCamYawTowards(float TargetYaw, float InterpSpeed, float DeltaTime, float Toleranz)
+{
+	if (InterpSpeed <= 0.f || DeltaTime <= 0.f)
+	{
+		return false;
+	}
+
+	// UnwindDegrees liefert die Differenz im Bereich [-180, 180] - damit nimmt die Kamera
+	// immer den kuerzeren Weg und dreht nicht einmal komplett herum, wenn Ziel und Ist
+	// beiderseits des 0/360-Sprungs liegen.
+	const float Differenz = FMath::UnwindDegrees(TargetYaw - static_cast<float>(SpringArmRotator.Yaw));
+
+	if (FMath::Abs(Differenz) <= Toleranz)
+	{
+		return true;
+	}
+
+	// Anteil der Restdifferenz, der in diesem Takt abgebaut wird. Die Begrenzung auf 1
+	// verhindert ein Ueberschwingen bei grossen DeltaTime-Werten (Ladepausen, Haltepunkte).
+	const float Anteil = FMath::Clamp(InterpSpeed * DeltaTime, 0.f, 1.f);
+	SpringArmRotator.Yaw += Differenz * Anteil;
+
+	// Auf [0, 360) normieren - dieselbe Konvention wie in RotateCamera.
+	if (SpringArmRotator.Yaw >= 360.f)
+		SpringArmRotator.Yaw = FMath::Fmod(SpringArmRotator.Yaw, 360.f);
+	if (SpringArmRotator.Yaw < 0.f)
+		SpringArmRotator.Yaw = 360.f + FMath::Fmod(SpringArmRotator.Yaw, 360.f);
+
+	if (SpringArm)
+	{
+		SpringArm->SetRelativeRotation(SpringArmRotator);
+	}
+
+	return false;
+}
+
 bool ACameraBase::OrbitCamLeft(float Add)
 {
 

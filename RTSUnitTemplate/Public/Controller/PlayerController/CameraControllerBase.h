@@ -353,6 +353,52 @@ public:
 	bool CameraUnitMouseFollow = true;
 
 	// ============================================================================================
+	// Kamera sanft hinter die CameraUnit schwenken (22.08.2026)
+	//
+	// Gedacht fuer den Fall CameraUnitMouseFollow == false, in dem die Einheit direkt gesteuert
+	// wird: die Kamera zieht dann von selbst hinter sie, sobald der Spieler sie eine Weile nicht
+	// mehr gedreht hat. Dreht er selbst (Q/E), setzt das Nachfuehren aus und beginnt erst nach
+	// RotateCamBehindDelayAfterManual wieder - sonst kaempfte die Automatik gegen die Eingabe.
+	//
+	// Standard ist AUS, damit sich das Verhalten bestehender Projekte nicht aendert.
+	// AstraHelix schaltet es in seinen Controller-Blueprints ein.
+	//
+	// Unterschied zu RotateBehindCharacterIfLocked: jenes dreht in festen Schritten
+	// (AddCamRotation * 2) mit 10 Grad Totzone und ist an LockCameraToCharacter gebunden.
+	// Hier wird ueber RotateCamYawTowards ein Anteil der Restdifferenz abgebaut, also sanft
+	// auslaufend statt gleichfoermig.
+	// ============================================================================================
+
+	/** Kamera von selbst hinter die CameraUnit drehen, solange der Spieler nicht selbst dreht. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Kamera hinter Einheit")
+	bool bRotateCamBehindCharacter = false;
+
+	/** Wie zuegig nachgezogen wird (1/s). Groesser = strafferes Nachziehen. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Kamera hinter Einheit", meta = (ClampMin = "0.1", UIMin = "0.5", UIMax = "10.0"))
+	float RotateCamBehindSpeed = 3.0f;
+
+	/** Wartezeit nach einer eigenen Drehung, bevor die Kamera wieder von selbst nachzieht (Sekunden). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Kamera hinter Einheit", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "10.0"))
+	float RotateCamBehindDelayAfterManual = 1.5f;
+
+	/** Totbereich in Grad - darunter wird nicht nachgeregelt, damit die Kamera nicht zittert. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Kamera hinter Einheit", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "20.0"))
+	float RotateCamBehindDeadzone = 2.0f;
+
+	/**
+	 * Aufschlag auf die Blickrichtung der Einheit, in Grad.
+	 *
+	 * Welcher Federarm-Yaw "hinter der Einheit" bedeutet, haengt davon ab, wie der SpringArm
+	 * im jeweiligen Kamera-Blueprint aufgebaut ist. Steht die Kamera nach dem Einschalten
+	 * VOR der Einheit statt dahinter, ist 180 der richtige Wert.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Kamera hinter Einheit", meta = (ClampMin = "-180.0", ClampMax = "180.0"))
+	float RotateCamBehindYawOffset = 0.0f;
+
+	/** Restliche Wartezeit nach einer eigenen Drehung. Nicht editierbar, laeuft zur Laufzeit. */
+	float RotateCamBehindCooldown = 0.f;
+
+	// ============================================================================================
 	// LUX-ANPASSUNG 1/3 â€” WASD steuert die CameraUnit (16.08.2026)
 	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
 	// ============================================================================================

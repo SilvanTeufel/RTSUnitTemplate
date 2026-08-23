@@ -2452,6 +2452,36 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	
      
         	
+            // ====================================================================================
+            // Kamera sanft hinter die Einheit schwenken (22.08.2026)
+            //
+            // Greift nur bei Direktsteuerung (CameraUnitMouseFollow == false): beim Maus-Folgen
+            // bestimmt der Zeiger die Blickrichtung, ein selbsttaetiges Nachdrehen wuerde dort
+            // gegen die Zielhilfe arbeiten.
+            //
+            // Dreht der Spieler gerade selbst (Q/E), setzt das Nachfuehren aus und beginnt erst
+            // nach RotateCamBehindDelayAfterManual wieder - sonst zoege die Automatik jede
+            // manuelle Drehung sofort zurueck.
+            // ====================================================================================
+            if (bRotateCamBehindCharacter && !CameraUnitMouseFollow && CameraUnitWithTag)
+            {
+                const bool bSpielerDrehtSelbst = CamIsRotatingLeft || CamIsRotatingRight;
+
+                if (bSpielerDrehtSelbst)
+                {
+                    RotateCamBehindCooldown = RotateCamBehindDelayAfterManual;
+                }
+                else if (RotateCamBehindCooldown > 0.f)
+                {
+                    RotateCamBehindCooldown = FMath::Max(0.f, RotateCamBehindCooldown - DeltaTime);
+                }
+                else if (IsLocalController() && CameraBase)
+                {
+                    const float ZielYaw = CameraUnitWithTag->GetActorRotation().Yaw + RotateCamBehindYawOffset;
+                    CameraBase->RotateCamYawTowards(ZielYaw, RotateCamBehindSpeed, DeltaTime, RotateCamBehindDeadzone);
+                }
+            }
+
             if (RotateBehindCharacterIfLocked)
             {
                 float CameraYaw = FMath::Fmod(static_cast<float>(CameraBase->SpringArmRotator.Yaw) + 360.f, 360.f);

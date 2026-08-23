@@ -245,9 +245,24 @@ void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 				float SafetyMargin = (Context.GetWorld()->GetNetMode() < NM_Client) ? 50.f : 25.f;
 				float CombinedRadius = TargetCollisionRadius + Projectile.CollisionRadius + SpeedFactor + SafetyMargin;
 
+				//
+				// BEHEBUNG (23.08.2026): Bei Bodenzielen entscheidet die Hoehe gar nicht mehr mit.
+				//
+				// Die Schranke oben war schon grosszuegig, hat aber weiter Treffer gekostet: das
+				// Schiff schwebt, das Bodenziel steht, und die Zielhoehe wird nicht aus dem
+				// Transform gelesen sondern aus CapsuleHeight + LastGroundLocation rekonstruiert.
+				// Steht das Ziel auf erhoehter Geometrie oder ist LastGroundLocation noch nicht
+				// nachgefuehrt, sitzt es fuer die Pruefung auf einer falschen Hoehe - und ein
+				// Schuss, der optisch trifft, faellt durch.
+				//
+				// Fuer Bodeneinheiten (bIsFlying == false) zaehlt deshalb nur noch die Ebene.
+				// Bei fliegenden Zielen bleibt die Schranke bestehen, sonst wuerde ein Schuss
+				// auf eine Bodeneinheit den Jaeger darueber gleich mit treffen.
+				const bool bZielFliegt = UnitCharFrags[j].bIsFlying;
 				const float HoehenToleranz = CombinedRadius + UnitCharFrags[j].CapsuleHeight;
+				const bool bHoeheTrifft = !bZielFliegt || (HoehenAbstand <= HoehenToleranz);
 				const bool bTrefferGeometrie = (DistSqEbene <= FMath::Square(CombinedRadius))
-					&& (HoehenAbstand <= HoehenToleranz);
+					&& bHoeheTrifft;
 
 				if (bTrefferGeometrie)
 				{
