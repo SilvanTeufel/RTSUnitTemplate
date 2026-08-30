@@ -7,6 +7,52 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
+
+namespace
+{
+    /**
+     * DAgger-Mischung. Anteil 0..1 der Entscheidungen, die in einer Modellpartie die REGEL-KI trifft
+     * und aufzeichnet.
+     *
+     * Warum ueberhaupt: geklontes Verhalten trifft die Aktionsverteilung des Lehrers im Mittel gut
+     * (gemessen: groesste Aktion 19,6 % gegen 21,9 %), ordnet sie aber dem falschen Zustand zu
+     * (Uebereinstimmung 39,6 %). Dadurch geraet das Netz in Lagen, die der Lehrer nie besucht, und dort
+     * hat es nie ein Beispiel gesehen. Genau dagegen gibt es DAgger: Zustaende aus dem Spiel des
+     * SCHUELERS, Antworten vom LEHRER.
+     *
+     * Den Lehrer nur "nebenbei zu fragen" geht hier nicht - ChooseJsonActionRuleBased wertet die
+     * Verteidigung aus, setzt Abklingzeiten und fuehrt Regelzeilen aus. Deshalb die beta-Mischung aus
+     * der Originalarbeit: der Lehrer entscheidet manchmal wirklich, mit allen seinen Nebenwirkungen.
+     *
+     * 0 = aus (reines Modellspiel, wie bisher). Nur fuer die Datensammlung gedacht, nicht fuer Messungen:
+     * eine Partie mit beta > 0 misst eine Mischung aus beiden, nicht die Staerke des Netzes.
+     */
+    /**
+     * Wie viele Aktionen das Netz je Entscheidung ausfuehren darf.
+     *
+     * Der Grund ist gemessen, nicht vermutet: die Regel-KI baut pro Entscheidung eine
+     * ZUSAMMENGESETZTE Aktion aus mehreren Indizes ("Kontrollgruppe waehlen, dann Taste
+     * druecken") und fuehrt sie komplett aus. Das Netz liefert genau einen Index je Abfrage.
+     * Der Verhaltensbaum fragt beide gleich oft - herausgekommen sind 2730 Aktionen je Partie
+     * beim Lehrer gegen 529 beim Netz, also Faktor 5,2. Der Leistungsabstand hat dieselbe
+     * Groessenordnung: das Netz handelt nicht schlechter, es handelt seltener.
+     *
+     * 1 = wie bisher, aendert nichts.
+     */
+    static int32 GRLAktionenJeEntscheidung = 1;
+    static FAutoConsoleVariableRef CVarRLAktionenJeEntscheidung(
+        TEXT("rts.rl.actions.per.decision"),
+        GRLAktionenJeEntscheidung,
+        TEXT("Wie viele Aktionen das Netz je Entscheidung ausfuehrt (1 = wie bisher)."),
+        ECVF_Default);
+
+    static float GRLDaggerBeta = 0.f;
+    static FAutoConsoleVariableRef CVarRLDaggerBeta(
+        TEXT("rts.rl.dagger.beta"),
+        GRLDaggerBeta,
+        TEXT("DAgger-Mischung: Anteil der Zuege, die in einer Modellpartie die Regel-KI uebernimmt (0..1)."),
+        ECVF_Default);
+}
 #include "Characters/Camera/RL/InferenceComponent.h"
 #include "Characters/Camera/RL/RLRecorderSubsystem.h" // for FGameStateData
 
@@ -222,27 +268,78 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
     // bridge enabled - so a trained network would never be consulted if this went straight to the rules.
     FString Json;
     UInferenceComponent* BrainComponent = Pawn->FindComponentByClass<UInferenceComponent>();
-    if (BrainComponent && BrainComponent->GetEffectiveBrainMode() == EBrainMode::RL_Model)
+    const bool bNetzIstZustaendig = BrainComponent
+        && BrainComponent->GetEffectiveBrainMode() == EBrainMode::RL_Model;
+    // DAgger: in einem beta-Anteil der Zuege uebernimmt der Lehrer, damit seine Antworten auf den
+    // Zustaenden landen, in die das NETZ die Partie gebracht hat.
+    const bool bLehrerUebernimmt = bNetzIstZustaendig
+        && GRLDaggerBeta > 0.f
+        && FMath::FRand() < GRLDaggerBeta;
+    if (bNetzIstZustaendig && !bLehrerUebernimmt)
     {
-        Json = BrainComponent->ChooseJsonAction(GS);
+        // Den Zustand aufzeichnen, den das Netz WIRKLICH gesehen hat. ChooseJsonAction setzt
+        // intern LastActionIndex auf die vorige Aktion; das uebergebene GS bleibt davon
+        // unberuehrt. Ohne diese Zeile stand in jeder Modellaufnahme -1 (gemessen: 1268 von
+        // 1268 Zeilen), waehrend die Regelaufnahmen 20 verschiedene Werte hatten - PPO haette
+        // damit auf Zustaenden gerechnet, die es so nie gab.
+        // Mehrere Zuege je Entscheidung (siehe rts.rl.actions.per.decision). Der Zustand wird
+        // dazwischen NICHT neu erhoben - der Lehrer arbeitet seine zusammengesetzte Aktion
+        // ebenfalls auf einem einzigen Zustand ab.
+        const int32 ZuegeJeEntscheidung = FMath::Max(1, GRLAktionenJeEntscheidung);
+        URLRecorderSubsystem* Recorder = URLRecorderSubsystem::Get(Pawn);
+
+        for (int32 Zug = 0; Zug < ZuegeJeEntscheidung; ++Zug)
+        {
+        const int32 VorigeAktion = BrainComponent->GetLastChosenActionIndex();
+
+        const FString ZugJson = BrainComponent->ChooseJsonAction(GS);
 
         // Selbstspiel-Aufnahme (16.08.2026): der Aufnahmehaken sass bisher NUR im Regel-Decider
         // (BuildCompositeActionJSON). Sobald beide Teams das Netz benutzen, entstand deshalb eine
         // Partie ohne eine einzige Trainingszeile - gemessen: "samples":0. Hier fehlt das
         // Gegenstueck fuer den Modellpfad.
-        if (URLRecorderSubsystem* Recorder = URLRecorderSubsystem::Get(Pawn))
+        if (Recorder)
         {
             const int32 ActionIndex = BrainComponent->GetLastChosenActionIndex();
             if (ActionIndex >= 0)
             {
-                Recorder->RecordSampleFromGameState(Decider->ResolveOwningTeamId(), GS, ActionIndex,
+                FGameStateData GSAufnahme = GS;
+                GSAufnahme.LastActionIndex = VorigeAktion;
+                Recorder->RecordSampleFromGameState(Decider->ResolveOwningTeamId(), GSAufnahme, ActionIndex,
                                                    ERLSampleSource::Model);
             }
+        }
+
+        if (Zug + 1 < ZuegeJeEntscheidung)
+        {
+            // Zwischenzuege sofort ausfuehren; der letzte laeuft unten ueber den normalen Weg,
+            // damit Blackboard-Schreiben und Rueckgabewert unveraendert bleiben.
+            if (!ZugJson.IsEmpty())
+            {
+                BrainComponent->ExecuteActionFromJSON(ZugJson);
+            }
+        }
+        else
+        {
+            Json = ZugJson;
+        }
         }
     }
     else
     {
         Json = Decider->ChooseJsonActionRuleBased(GS);
+
+        // Hat der Lehrer fuer das Netz uebernommen, muss das Netz erfahren, was gespielt wurde.
+        // Sonst steht im naechsten Zug ein veraltetes LastActionIndex im Zustandsvektor - und genau
+        // dieses Merkmal traegt die Kopplung "erst auswaehlen, dann Faehigkeit druecken".
+        if (bLehrerUebernimmt)
+        {
+            const int32 GespielteAktion = Decider->GetLastRecordedActionIndex();
+            if (GespielteAktion >= 0)
+            {
+                BrainComponent->SetLastChosenActionIndex(GespielteAktion);
+            }
+        }
     }
 
     if (Json.IsEmpty())

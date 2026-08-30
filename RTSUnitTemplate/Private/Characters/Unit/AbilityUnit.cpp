@@ -1,6 +1,9 @@
 ﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/AbilityUnit.h"
+#include "Characters/Unit/WorkingUnitBase.h"   // bProtectedWhileBuilding (Xeno worker build protection)
+#include "Characters/Unit/MassUnitBase.h"      // SetInvisibility
+#include "Controller/PlayerController/ControllerBase.h"   // bIsAi / SelectableTeamId (Arbeiter-Diagnose)
 
 #include <rapidjson/reader.h>
 
@@ -339,6 +342,81 @@ void AAbilityUnit::GetAbilitiesArrays()
 }
 
 
+namespace
+{
+	/**
+	 * Diagnose: wie oft verlieren KI-Arbeiter ihre Arbeit, und wohin wechseln sie?
+	 *
+	 * Gemeldet wird der Wechsel AUS einem Arbeitszustand (ResourceExtraction, GoToResourceExtraction,
+	 * Build, GoToBuild) in etwas anderes. Der Zielzustand ist die eigentliche Information: Run heisst
+	 * Marschbefehl, Idle heisst "jemand hat sie fallen lassen", Dead heisst gestorben und ist keine
+	 * Unterbrechung.
+	 *
+	 * Die Zeit wird mitgeschrieben, damit sich die Drittel der Partie hinterher trennen lassen -
+	 * gemeldet wurde, dass es im letzten Drittel besonders auffaellt.
+	 *
+	 * Bewusst aufsummierte Zaehler mit einem Bericht an der WELTZEIT, aber mit Ruecksetzer: ein
+	 * prozesslanger static gegen eine pro PIE-Sitzung neu startende Weltzeit haengt sonst fuer
+	 * immer in der Zukunft und feuert nie wieder.
+	 */
+	struct FArbeiterAbbruchDiag
+	{
+		float NaechsterBericht = 0.f;
+		int32 AusRessource = 0;
+		int32 AusBau = 0;
+		int32 NachRun = 0;
+		int32 NachIdle = 0;
+		int32 NachSonstiges = 0;
+		int32 NachTod = 0;
+		/** Zielzustand -> Anzahl. Ohne diese Aufschluesselung bleibt "sonstiges" eine Blackbox. */
+		TMap<uint8, int32> Ziele;
+	};
+	static FArbeiterAbbruchDiag GArbeiterAbbruch;
+
+	/**
+	 * Schalter fuer die Gegenprobe: 0 = Bauschutz des Arbeiters komplett aus.
+	 *
+	 * Gebraucht, weil der Bauschutz (unsichtbar + unverwundbar waehrend des Bauens) in derselben
+	 * Nacht eingebaut wurde, in der der Nutzer haengende Bauvorgaenge meldet. Ein Verdacht gegen
+	 * die eigene juengste Aenderung gehoert ausgeschlossen, BEVOR woanders gesucht wird - und das
+	 * geht mit einem Schalter schneller und sauberer als mit einer Blueprint-Aenderung.
+	 */
+	static int32 GWorkerBuildProtection = 1;
+	static FAutoConsoleVariableRef CVarWorkerBuildProtection(
+		TEXT("rts.worker.buildprotection"),
+		GWorkerBuildProtection,
+		TEXT("Bauschutz des Arbeiters (unsichtbar + unverwundbar waehrend Build). 0 = aus."),
+		ECVF_Default);
+
+	/**
+	 * Zum Arbeitskreislauf gehoert AUCH GoToBase - der Rueckweg mit der vollen Ladung.
+	 *
+	 * Erste Fassung liess ihn weg und zaehlte damit den normalen Rundgang als Arbeitsabbruch:
+	 * 6399 von 7495 Wechseln landeten im Sammeltopf "sonstiges". Eine Diagnose, die den Normalfall
+	 * mitzaehlt, sagt nichts ueber die Stoerung.
+	 */
+	static bool IstArbeitszustand(TEnumAsByte<UnitData::EState> Z)
+	{
+		return Z == UnitData::ResourceExtraction || Z == UnitData::GoToResourceExtraction
+			|| Z == UnitData::Build || Z == UnitData::GoToBuild
+			|| Z == UnitData::GoToBase;
+	}
+
+	/** Ein Team zaehlt als KI, sobald EINER seiner Controller bIsAi ist - es kann mehrere haben. */
+	static bool GehoertZuKiTeam(const UWorld* World, int32 TeamId)
+	{
+		if (!World) return false;
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (const AControllerBase* PC = Cast<AControllerBase>(It->Get()))
+			{
+				if (PC->SelectableTeamId == TeamId && PC->bIsAi) return true;
+			}
+		}
+		return false;
+	}
+}
+
 void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 {
 	// Avoid executing Blueprint events on dedicated servers to prevent crashes from server-side BP-only logic
@@ -470,7 +548,142 @@ void AAbilityUnit::SetUnitState(TEnumAsByte<UnitData::EState> NewUnitState)
 		ChangedUnitState(UnitState, NewUnitState);
 	}
 	
+	// ---- Diagnose: KI-Arbeiter verliert seine Arbeit --------------------------------------
+	// Vor dem Schreiben von UnitState ausgewertet, weil hier noch der ALTE Zustand steht.
+	if (IsWorker && HasAuthority() && IstArbeitszustand(UnitState) && !IstArbeitszustand(NewUnitState))
+	{
+		const UWorld* DiagWorld = GetWorld();
+		AUnitBase* AlsEinheit = Cast<AUnitBase>(this);
+		if (DiagWorld && AlsEinheit && GehoertZuKiTeam(DiagWorld, AlsEinheit->TeamId))
+		{
+			if (UnitState == UnitData::ResourceExtraction || UnitState == UnitData::GoToResourceExtraction)
+			{
+				++GArbeiterAbbruch.AusRessource;
+			}
+			else
+			{
+				++GArbeiterAbbruch.AusBau;
+			}
+
+			switch (NewUnitState.GetValue())
+			{
+			case UnitData::Run:   ++GArbeiterAbbruch.NachRun; break;
+			case UnitData::Idle:  ++GArbeiterAbbruch.NachIdle; break;
+			case UnitData::Dead:  ++GArbeiterAbbruch.NachTod; break;
+			default:              ++GArbeiterAbbruch.NachSonstiges; break;
+			}
+			GArbeiterAbbruch.Ziele.FindOrAdd(static_cast<uint8>(NewUnitState.GetValue()))++;
+
+			const float Jetzt = DiagWorld->GetTimeSeconds();
+			if (Jetzt < GArbeiterAbbruch.NaechsterBericht - 40.f)
+			{
+				GArbeiterAbbruch.NaechsterBericht = 0.f;   // neue PIE-Sitzung
+			}
+			if (Jetzt >= GArbeiterAbbruch.NaechsterBericht)
+			{
+				GArbeiterAbbruch.NaechsterBericht = Jetzt + 20.f;
+				FString Aufschluesselung;
+				for (const TPair<uint8, int32>& Paar : GArbeiterAbbruch.Ziele)
+				{
+					Aufschluesselung += FString::Printf(TEXT(" Z%d=%d"), Paar.Key, Paar.Value);
+				}
+
+				// Zusaetzlich eine BESTANDSAUFNAHME aller KI-Arbeiter je Zustand. Die Ereigniszaehler
+				// oben sagen, wie oft gewechselt wird - sie sagen nicht, ob welche haengenbleiben.
+				// Genau das ist die Frage bei "Arbeiter steckt im Casting fest": ein Zustand, dessen
+				// Bestand nur waechst und nie faellt, ist ein Haenger.
+				if (const ARTSGameModeBase* DiagGameMode = Cast<ARTSGameModeBase>(DiagWorld->GetAuthGameMode()))
+				{
+					TMap<uint8, int32> Bestand;
+					int32 ArbeiterGesamt = 0;
+					for (AActor* Aktor : DiagGameMode->AllUnits)
+					{
+						const AUnitBase* Arbeiter = Cast<AUnitBase>(Aktor);
+						if (!IsValid(Arbeiter) || !Arbeiter->IsWorker) continue;
+						if (!GehoertZuKiTeam(DiagWorld, Arbeiter->TeamId)) continue;
+						Bestand.FindOrAdd(static_cast<uint8>(Arbeiter->GetUnitState().GetValue()))++;
+						++ArbeiterGesamt;
+					}
+					FString BestandText;
+					for (const TPair<uint8, int32>& Paar : Bestand)
+					{
+						BestandText += FString::Printf(TEXT(" Z%d=%d"), Paar.Key, Paar.Value);
+					}
+					UE_LOG(LogTemp, Warning, TEXT("[ArbeiterBestand] t=%.0f  Arbeiter=%d  Zustaende:%s"),
+						Jetzt, ArbeiterGesamt, *BestandText);
+				}
+				UE_LOG(LogTemp, Warning,
+					TEXT("[ArbeitAbgebrochen] t=%.0f  ausRessource=%d ausBau=%d  ->Run=%d ->Idle=%d ->Tod=%d ->sonst=%d  Ziele:%s"),
+					Jetzt, GArbeiterAbbruch.AusRessource, GArbeiterAbbruch.AusBau,
+					GArbeiterAbbruch.NachRun, GArbeiterAbbruch.NachIdle,
+					GArbeiterAbbruch.NachTod, GArbeiterAbbruch.NachSonstiges, *Aufschluesselung);
+			}
+		}
+	}
+	// ---- Ende Diagnose ---------------------------------------------------------------------
+
 	UnitState = NewUnitState;
+
+	// Uebergabe des Baus an die ConstructionUnit - HIER, am einzigen Engpass, durch den jeder
+	// Zustandswechsel muss.
+	//
+	// Der erste Versuch hing in AWorkArea::HandleBuildArea und feuerte NIE: gemessen ueber mehrere
+	// Partien null Uebergaben, obwohl 32 Xeno-Gebaeude fertig wurden. Es gibt drei Wege in den
+	// Build-Zustand (HandleBuildArea, AExtendedControllerBase Zeile 4732 beim Drop, und Zeile 6625),
+	// und die KI nimmt nicht den, den ich abgesichert hatte. Drei Aufrufstellen einzeln zu flicken
+	// ist ein Wettlauf, den man nicht gewinnt - deshalb der Engpass.
+	if (NewUnitState == UnitData::Build && !bUebergabeLaeuft)
+	{
+		if (AWorkingUnitBase* Bauarbeiter = Cast<AWorkingUnitBase>(this))
+		{
+			if (AWorkArea* Flaeche = Bauarbeiter->BuildArea)
+			{
+				if (Flaeche->bConstructionUnitBuildsAlone && HasAuthority())
+				{
+					// Schuetzt gegen Wiedereintritt: die Uebergabe toetet den Arbeiter ueber
+					// SetHealth(0), und das ruft SetUnitState(Dead) - also diese Funktion erneut.
+					TGuardValue<bool> Wache(bUebergabeLaeuft, true);
+					if (Flaeche->UebergebeAnConstructionUnit(Bauarbeiter))
+					{
+						// Der Arbeiter ist tot, den Build-Zustand bekommt er nicht mehr.
+						return;
+					}
+				}
+			}
+		}
+	}
+
+	// Build protection for workers that are consumed by their own build (Xeno Brood-Mite).
+	// Wird durch die Uebergabe oben faktisch wirkungslos - der Arbeiter erreicht den Build-Zustand
+	// gar nicht mehr. Bleibt fuer Fraktionen ohne Uebergabe stehen.
+	if (AWorkingUnitBase* SelfWorker = Cast<AWorkingUnitBase>(this))
+	{
+		if (SelfWorker->bProtectedWhileBuilding && GWorkerBuildProtection != 0)
+		{
+			const bool bShouldProtect = (NewUnitState == UnitData::Build);
+			if (bShouldProtect != SelfWorker->bBuildProtectionActive)
+			{
+				SelfWorker->bBuildProtectionActive = bShouldProtect;
+
+				// Reuses the existing stealth mechanic: bCanBeInvisible lets UUnitSightProcessor
+				// keep the unit invisible for everyone without a detector, and UDetectionProcessor
+				// then skips it as a target. Setting bIsInvisible alone would not survive - that
+				// processor recomputes it every tick.
+				if (AMassUnitBase* SelfMass = Cast<AMassUnitBase>(this))
+				{
+					SelfMass->SetInvisibility(bShouldProtect);
+				}
+
+				// Unsichtbar allein reicht nicht: ein Gegner MIT Detektor sieht den Arbeiter und
+				// darf ihn dann auch toeten. Der Schadenswaechter sitzt im Attributsatz - der
+				// frueher benutzte in AUnitBase::SetHealth wurde vom Kampfschaden umgangen.
+				if (AUnitBase* SelfUnit = Cast<AUnitBase>(this))
+				{
+					SelfUnit->bIsInvulnerable = bShouldProtect;
+				}
+			}
+		}
+	}
 
 	if (HasAuthority())
 	{

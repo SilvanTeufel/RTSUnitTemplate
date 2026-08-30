@@ -42,6 +42,24 @@ public:
 	void ClientReceiveWorkArea(AWorkArea* ClientArea);
 
 	/**
+	 * While this worker is building it can neither be detected nor damaged.
+	 *
+	 * Off by default and meant for a single faction: the Xeno Brood-Mite is consumed by its own
+	 * build, so losing it halfway costs the Xeno the worker AND the building. The other factions
+	 * keep their workers and are deliberately left vulnerable.
+	 *
+	 * Detection reuses the existing stealth mechanic (bCanBeInvisible / bIsInvisible in
+	 * FMassAgentCharacteristicsFragment), so a detector unit still finds it - that is the same rule
+	 * every other invisible unit follows. The damage block sits in AUnitBase::SetHealth.
+	 */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
+	bool bProtectedWhileBuilding = false;
+
+	/** True between entering and leaving the Build state, only for bProtectedWhileBuilding workers. */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = Worker)
+	bool bBuildProtectionActive = false;
+
+	/**
 	 * Effect scale that matches the footprint of this worker's BuildArea.
 	 *
 	 * The finish-build effect used a fixed scale, so it looked the same over a small pod and over a

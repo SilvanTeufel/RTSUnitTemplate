@@ -119,6 +119,41 @@ struct FGameStateData
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
 	int32 LastActionIndex = -1;
 
+	/**
+	 * Verstrichene Spielzeit in Sekunden.
+	 *
+	 * Der Lehrer liest sie unmittelbar: jede Regelzeile hat ein GameTimeCap [Min, Max], und eine
+	 * Zeile ausserhalb ihres Fensters faellt stillschweigend durch. Im Zustandsvektor kam die Zeit
+	 * bisher ueberhaupt nicht vor - dieselbe Spielsituation fuehrte damit in Minute 2 und Minute 12
+	 * zu verschiedenen richtigen Antworten, und das Klonen konnte den Unterschied nicht sehen.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+	float GameTimeSeconds = 0.0f;
+
+	// Bereits BEAUFTRAGTE, noch nicht fertige Bauten je Hotkey-Tag (die Bauwarteschlange).
+	//
+	// Der Lehrer zaehlt in CountByClassTag mit bIncludePendingAreas=true, also einschliesslich der
+	// geplanten Flaechen - genau deshalb baut er eine MatterForge nicht zweimal. Der Vektor kannte
+	// nur die FERTIGEN Einheiten; fuer das Netz sah ein bereits erteilter Bauauftrag aus wie gar
+	// kein Auftrag, und es beauftragte erneut. Das ist einer der Innenzustaende, die der
+	// Abschlussbericht vom 29.08. als Erklaerung fuer die 54,5-Prozent-Grenze benannt hat.
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt2TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt3TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt4TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt5TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt6TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl1TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl2TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl3TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl4TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl5TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl6TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlQTagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlWTagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlETagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlRTagPendingBuildCount = 0;
+
 	// Per-tag unit counts (friendly/enemy) for selection/ability groups
 	// Alt1..Alt6
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagFriendlyUnitCount = 0;
@@ -297,6 +332,15 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "AI|RL")
 	int32 GetLastChosenActionIndex() const { return LastChosenActionIndex; }
+
+	/**
+	 * Nachtragen, was in diesem Zug tatsaechlich gespielt wurde, wenn nicht das Netz entschieden hat.
+	 * Gebraucht fuer die DAgger-Mischung (rts.rl.dagger.beta): dort uebernimmt zeitweise die Regel-KI,
+	 * und ohne dieses Nachtragen sieht das Netz im naechsten Zug ein veraltetes LastActionIndex - der
+	 * Zustandsvektor wiche dann systematisch von dem ab, auf dem trainiert wurde.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AI|RL")
+	void SetLastChosenActionIndex(int32 ActionIndex) { LastChosenActionIndex = ActionIndex; }
 
 	// Expose for BT task to fetch JSON for an index
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")

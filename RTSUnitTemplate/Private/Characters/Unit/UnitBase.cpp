@@ -28,6 +28,7 @@
 #include "Navigation/CrowdManager.h"
 #include "NavModifierComponent.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "NavMesh/RecastNavMesh.h"
 #include "Components/BoxComponent.h"
 #include "Core/CollisionUtils.h"
 #include "Net/UnrealNetwork.h"
@@ -51,6 +52,19 @@
 #include "Mass/MassUnitVisualFragments.h"
 #include "Mass/Replication/ReplicationSettings.h"
 #include "MassReplicationFragments.h"
+
+// ------------------------------------------------------------------------------------------------
+// Schalter fuer die Spawn-Absicherung. 1 = an (Vorgabe), 0 = aus wie vor dem 29.08.2026.
+//
+// Nur zum Nachmessen: ohne Vergleichswert sagt "keine Einheit ausserhalb des Netzes" nichts aus,
+// weil es vorher vielleicht ebenfalls null war. Mit dem Schalter laesst sich derselbe Build
+// beidseitig messen, ohne neu zu bauen. Uebergabe an eine Partie: -dpcvars=rts.spawn.navsicherung=0
+// ------------------------------------------------------------------------------------------------
+static TAutoConsoleVariable<int32> CVarRTSSpawnNavSicherung(
+	TEXT("rts.spawn.navsicherung"),
+	1,
+	TEXT("1 = Spawnstellen auf das Navigationsnetz ziehen (Vorgabe), 0 = alter Stand ohne Absicherung."),
+	ECVF_Default);
 
 const FName AUnitBase::BoxCollisionTag = TEXT("BoxCollision");
 
@@ -186,6 +200,7 @@ void AUnitBase::ApplyStartupSupplyCost()
 
 	// Remember the exact figure so ReleaseUnitSupply hands back what was taken, not an estimate.
 	ChargedSupplyAmount = Amount;
+	bSupplyAmountKnown = true;
 	bStartupSupplyCharged = true;
 }
 
@@ -198,16 +213,37 @@ void AUnitBase::ReleaseUnitSupply()
 	bSupplyReleased = true;
 
 	// Buildings hand back their GRANTED capacity through ReleaseSupplyCapacity() instead.
-	if (bIsBuilding)
+	//
+	// Construction units belong in the same exclusion, and leaving them out was the sign error
+	// behind a NEGATIVE used supply ("-55/70"): ApplyStartupSupplyCost skips them explicitly, so
+	// they never pay - but every one of them refunded UnitSpaceNeeded on death. One building site
+	// per building, dozens per match, each one subtracting from a counter it had never added to.
+	if (bIsBuilding || bIsConstructionUnit)
 	{
 		return;
 	}
 
-	// Prefer the figure that was actually billed. UnitSpaceNeeded is only the fallback for units that
-	// paid through their build ability, where the exact amount is not recorded on the unit.
-	const int32 Amount = (ChargedSupplyAmount > 0)
-		? ChargedSupplyAmount
-		: ((StartupSupplyCost > 0) ? StartupSupplyCost : UnitSpaceNeeded);
+	// Hand back exactly what was billed - and nothing at all when nothing was recorded.
+	//
+	// bSupplyAmountKnown is set by the two paths that actually charge: ApplyStartupSupplyCost for
+	// level-placed units, and the spawn path for units trained by an ability. Everything else -
+	// units placed by the GameMode spawn table, for instance - never paid, so it must not refund.
+	// The old fallback to UnitSpaceNeeded is exactly what drove the used amount below zero and
+	// produced the "-55/70" in the UI: a refund is only correct against a charge.
+	if (!bSupplyAmountKnown)
+	{
+		// Named so an unpaid-but-refunding path can be identified instead of guessed at. Rate is
+		// self-limiting: this runs once per unit, at death.
+		if (UnitSpaceNeeded > 0)
+		{
+			UE_LOG(LogTemp, Verbose,
+				TEXT("[Versorgung] %s (Team %d) hat nie Versorgung bezahlt - keine Rueckgabe (UnitSpaceNeeded=%d)."),
+				*GetName(), TeamId, UnitSpaceNeeded);
+		}
+		return;
+	}
+
+	const int32 Amount = ChargedSupplyAmount;
 	if (Amount <= 0)
 	{
 		return;
@@ -231,6 +267,17 @@ void AUnitBase::ReleaseUnitSupply()
 		}
 		// Positive here: ModifyResource inverts the sign for supply-like resources, so this LOWERS
 		// the used amount - the opposite of the charge in ApplyStartupSupplyCost.
+		//
+		// Named refund. The floor in ModifyResource still catches a refund against an empty
+		// counter, but a floor that fires silently only hides the imbalance; this line says WHICH
+		// unit refunded more than its side had ever paid.
+		const float UsedBefore = ResourceGameMode->GetResource(TeamId, SupplyType);
+		if (UsedBefore < (float)Amount)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Versorgung] %s (%s, Team %d) gibt %d zurueck, verbraucht sind aber nur %.0f."),
+				*GetName(), *GetClass()->GetName(), TeamId, Amount, UsedBefore);
+		}
 		ResourceGameMode->ModifyResource(SupplyType, TeamId, (float)Amount);
 	}
 }
@@ -498,6 +545,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, CanAttack);
 	DOREPLIFETIME(AUnitBase, bIsInvisible);
 	DOREPLIFETIME(AUnitBase, bCanBeInvisible);
+	DOREPLIFETIME(AUnitBase, bIsInvulnerable);
 	DOREPLIFETIME(AUnitBase, bHoldPosition);
 	DOREPLIFETIME(AUnitBase, MovementAcceptanceRadius);
 }
@@ -796,6 +844,11 @@ AWaypoint* AUnitBase::GetNextWaypoint() const
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
 	float OldHealth = Attributes->GetHealth();
+
+	// Unverwundbarkeit wird hier NICHT mehr geprueft. Der frueher an dieser Stelle stehende
+	// Waechter war wirkungslos: der gesamte Kampfschaden laeuft ueber
+	// UAttributeSetBase::PostGameplayEffectExecute und schreibt den Attributwert direkt, ohne
+	// SetHealth je aufzurufen. Der Waechter sitzt jetzt dort - siehe AUnitBase::bIsInvulnerable.
 
 	// Fire Blueprint event when crossing 25% or 50% thresholds (up or down)
 	{
@@ -1972,12 +2025,38 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 
 	FVector BaseSpawnLocation = Location + OffsetLocation;
 
-	if (WaypointDirectionOffset > 0.f && Waypoint && IsValid(Waypoint))
+	// --------------------------------------------------------------------------------------------
+	// Spawnrichtung: der Versatz vom Spawner weg wurde bisher NUR gesetzt, wenn ein gueltiger
+	// Wegpunkt vorlag. Die KI baut aber ohne Wegpunkt - GA_BuildUnit_Parent uebergibt dort 0 -,
+	// also griff der Versatz bei ihr nie und die Einheit erschien praktisch auf dem Gebaeude.
+	// Genau dort stanzt das Gebaeude ein Loch ins Navigationsnetz: die Einheit steht ausserhalb
+	// des begehbaren Bereichs, jede Pfadsuche scheitert, und die Rueckhol-Hilfe
+	// (UUnitSoftAvoidanceProcessor) greift nicht, weil ihre eigene Projektion mitten im Loch
+	// ebenfalls fehlschlaegt - dort entfernt sie nur die Markierung und setzt keine Kraft.
+	// Ergebnis war ein Arbeiter, der direkt nach dem Spawn am Gebaeude haengen bleibt.
+	//
+	// Es gibt jetzt immer eine Richtung: der Wegpunkt, wenn vorhanden, sonst die Blickrichtung
+	// des Spawners, im Notfall +X. Damit kann der Versatz nie ausfallen.
+	// --------------------------------------------------------------------------------------------
+	const bool bSpawnGuard = CVarRTSSpawnNavSicherung.GetValueOnAnyThread() != 0;
+
+	if (WaypointDirectionOffset > 0.f && (bSpawnGuard || (Waypoint && IsValid(Waypoint))))
 	{
-		FVector Direction = (Waypoint->GetActorLocation() - Location).GetSafeNormal2D();
-		float SpawnerRadius = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleRadius() : 0.f;
-		float TotalOffset = SpawnerRadius + WaypointDirectionOffset;
-		BaseSpawnLocation += Direction * TotalOffset;
+		FVector Direction = FVector::ZeroVector;
+		if (Waypoint && IsValid(Waypoint))
+		{
+			Direction = (Waypoint->GetActorLocation() - Location).GetSafeNormal2D();
+		}
+		if (Direction.IsNearlyZero())
+		{
+			Direction = GetActorForwardVector().GetSafeNormal2D();
+		}
+		if (Direction.IsNearlyZero())
+		{
+			Direction = FVector(1.f, 0.f, 0.f);
+		}
+		const float SpawnerRadius = GetCapsuleComponent() ? GetCapsuleComponent()->GetScaledCapsuleRadius() : 0.f;
+		BaseSpawnLocation += Direction * (SpawnerRadius + WaypointDirectionOffset);
 	}
 
 	FUnitSpawnParameter SpawnParameter;
@@ -2014,23 +2093,23 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 	// hat sie erst `AdjustIfPossibleButAlwaysSpawn` und die Separation danach - genau das
 	// beobachtete Abstossen. Das kann Einheiten auch auf angrenzende Geometrie druecken, was
 	// zum Befund aus #111 passt (Arbeiter 330-481 Einheiten ueber der begehbaren Flaeche).
-	float SpawnAbstand = 100.f;
+	float SpawnSpacing = 100.f;
 	if (UnitBaseClass)
 	{
 		if (const AUnitBase* DefaultUnit = UnitBaseClass->GetDefaultObject<AUnitBase>())
 		{
 			if (const UCapsuleComponent* Capsule = DefaultUnit->GetCapsuleComponent())
 			{
-				SpawnAbstand = Capsule->GetScaledCapsuleRadius() * 2.f + 10.f;
+				SpawnSpacing = Capsule->GetScaledCapsuleRadius() * 2.f + 10.f;
 			}
 		}
 	}
 
 	// Ringfoermige Verteilung: die erste Einheit in die Mitte, danach Ringe mit 6*Ring
-	// Plaetzen im Abstand Ring*SpawnAbstand. Auf diese Weise liegt jeder Nachbar - im Ring
-	// wie zwischen zwei Ringen - mindestens SpawnAbstand entfernt, und die Gruppe waechst
+	// Plaetzen im Abstand Ring*SpawnSpacing. Auf diese Weise liegt jeder Nachbar - im Ring
+	// wie zwischen zwei Ringen - mindestens SpawnSpacing entfernt, und die Gruppe waechst
 	// kompakt nach aussen statt in einer langen Reihe.
-	auto RingVersatz = [SpawnAbstand](int32 Index) -> FVector
+	auto RingOffset = [SpawnSpacing](int32 Index) -> FVector
 	{
 		if (Index <= 0) return FVector::ZeroVector;
 		int32 Ring = 1;
@@ -2043,20 +2122,112 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 		const int32 PlatzImRing = Index - Erster;
 		const int32 PlaetzeImRing = 6 * Ring;
 		const float Winkel = (2.f * PI * PlatzImRing) / PlaetzeImRing;
-		const float Radius = Ring * SpawnAbstand;
+		const float Radius = Ring * SpawnSpacing;
 		return FVector(FMath::Cos(Winkel) * Radius, FMath::Sin(Winkel) * Radius, 0.f);
+	};
+
+	// --------------------------------------------------------------------------------------------
+	// Absicherung jeder einzelnen Spawnstelle: der Punkt muss auf dem Navigationsnetz liegen.
+	//
+	// Bisher wurde die berechnete Stelle ungeprueft benutzt. Sie kann aber im Loch liegen, das ein
+	// Gebaeude ins Netz stanzt - bei Ringplatz 0 sogar zwangslaeufig, wenn kein Versatz griff.
+	// Wer dort steht, findet keinen Pfad und wird von der Rueckhol-Hilfe nicht erfasst.
+	//
+	// Ablauf: erst am Wunschpunkt projizieren; schlaegt das fehl oder landet die Projektion in
+	// einem Sperrbereich (NavArea_Obstacle, z.B. Gebaeudegrundriss), ringfoermig nach aussen
+	// weitersuchen. Findet sich gar nichts, bleibt es beim Wunschpunkt - gespawnt wird immer,
+	// eine Einheit darf nicht verloren gehen, nur weil die Karte an der Stelle unklar ist.
+	// --------------------------------------------------------------------------------------------
+	UNavigationSystemV1* SpawnNavSystem = UNavigationSystemV1::GetCurrent(GetWorld());
+
+	auto IsWalkable = [](UNavigationSystemV1* Nav, const FNavLocation& Kandidat) -> bool
+	{
+		if (!Nav) return false;
+		if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(Nav->GetNavDataForProps(FNavAgentProperties())))
+		{
+			const uint32 AreaID = Recast->GetPolyAreaID(Kandidat.NodeRef);
+			const UClass* AreaClass = Recast->GetAreaClass(AreaID);
+			if (AreaClass && AreaClass->IsChildOf(UNavArea_Obstacle::StaticClass()))
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	auto SnapToWalkableGround = [&](const FVector& Wunsch, bool& bGefunden) -> FVector
+	{
+		bGefunden = false;
+		if (!SpawnNavSystem) return Wunsch;
+		if (CVarRTSSpawnNavSicherung.GetValueOnAnyThread() == 0) return Wunsch;   // Vergleichsmessung
+
+		const float Weite = FMath::Max(200.f, SpawnSpacing * 2.f);
+		const FVector Suchbox(Weite, Weite, 500.f);
+
+		FNavLocation Treffer;
+		if (SpawnNavSystem->ProjectPointToNavigation(Wunsch, Treffer, Suchbox) && IsWalkable(SpawnNavSystem, Treffer))
+		{
+			bGefunden = true;
+			return Treffer.Location;
+		}
+
+		// Ringfoermig nach aussen: die Radien decken auch grosse Hauptgebaeude ab.
+		static const float Radien[] = { 200.f, 400.f, 800.f, 1600.f };
+		static const int32 Segmente = 12;
+		for (float R : Radien)
+		{
+			for (int32 Segment = 0; Segment < Segmente; ++Segment)
+			{
+				const float Winkel = (2.f * PI * Segment) / Segmente;
+				const FVector Kandidat = Wunsch + FVector(FMath::Cos(Winkel) * R, FMath::Sin(Winkel) * R, 0.f);
+				FNavLocation KandidatNav;
+				if (SpawnNavSystem->ProjectPointToNavigation(Kandidat, KandidatNav, Suchbox) && IsWalkable(SpawnNavSystem, KandidatNav))
+				{
+					bGefunden = true;
+					return KandidatNav.Location;
+				}
+			}
+		}
+		return Wunsch;
 	};
 
 	for(int i = 0; i < UnitCount; i++)
 	{
 		FTransform UnitTransform;
 
-		FVector FinalSpawnLocation = BaseSpawnLocation + (FVector)SpawnParameter.UnitOffset + RingVersatz(i);
+		FVector FinalSpawnLocation = BaseSpawnLocation + (FVector)SpawnParameter.UnitOffset + RingOffset(i);
+
+		// Erst auf begehbaren Boden ziehen, dann die Hoehe bestimmen.
+		bool bOnNavMesh = false;
+		const FVector DesiredSpot = FinalSpawnLocation;
+		FinalSpawnLocation = SnapToWalkableGround(FinalSpawnLocation, bOnNavMesh);
+		const float NavHeight = FinalSpawnLocation.Z;
+
+		// Belegzeile fuer die Absicherung. Jede Korrektur ueber ein paar Einheiten ist eine
+		// Einheit, die vorher neben dem begehbaren Bereich gelandet waere - genau der Fall,
+		// in dem ein Arbeiter am Gebaeude haengen blieb. "kein Netz" heisst: auch die
+		// Ringsuche fand nichts, dort bleibt ein Restrisiko.
+		{
+			const float Korrektur = FVector::Dist2D(DesiredSpot, FinalSpawnLocation);
+			// Nur melden, wenn die Absicherung ueberhaupt laufen sollte. Bei abgeschaltetem
+			// rts.spawn.navsicherung kehrt das Lambda sofort zurueck - dann hiesse "kein
+			// begehbarer Punkt" nur "nicht gesucht", und die Zeile wuerde in die Irre fuehren.
+			if (!bOnNavMesh && bSpawnGuard)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[SpawnDiag] Team %d Platz %d: kein begehbarer Punkt gefunden, Spawn auf Wunschstelle"), NewTeamId, i);
+			}
+			else if (Korrektur > 25.f)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[SpawnDiag] Team %d Platz %d: um %.0f uu auf das Netz gezogen"), NewTeamId, i, Korrektur);
+			}
+		}
 
 		if (bDoGroundTrace)
 		{
 			FHitResult HitResult;
-			FVector TraceStart = FinalSpawnLocation + FVector(0.f, 0.f, 1000.f);
+			// Start dicht ueber der abgesicherten Stelle statt 1000 darueber: von weit oben trifft
+			// der Strahl bei dicht bebauten Basen ein Gebaeudedach und die Einheit erscheint darauf.
+			FVector TraceStart = FinalSpawnLocation + FVector(0.f, 0.f, 500.f);
 			FVector TraceEnd = FinalSpawnLocation - FVector(0.f, 0.f, 1000.f);
 			FCollisionQueryParams TraceParams(FName(TEXT("SpawnTrace")), true, this);
 
@@ -2073,7 +2244,35 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 						}
 					}
 				}
-				FinalSpawnLocation.Z = HitResult.Location.Z + CapsuleHalfHeight + OffsetLocation.Z;
+				const float TraceHoehe = HitResult.Location.Z + CapsuleHalfHeight + OffsetLocation.Z;
+
+				// Weicht der Bodentreffer stark von der Netzhoehe ab, hat er etwas anderes als den
+				// Boden erwischt (Dach, Anbau). Dann gilt die Netzhoehe - dort ist die Einheit
+				// nachweislich lauffaehig.
+				if (bOnNavMesh && FMath::Abs(TraceHoehe - (NavHeight + CapsuleHalfHeight)) > 300.f)
+				{
+					FinalSpawnLocation.Z = NavHeight + CapsuleHalfHeight + OffsetLocation.Z;
+				}
+				else
+				{
+					FinalSpawnLocation.Z = TraceHoehe;
+				}
+			}
+			else if (bOnNavMesh)
+			{
+				// Kein Bodentreffer: die Netzhoehe ist die verlaesslichere Angabe.
+				float CapsuleHalfHeight = 0.f;
+				if (UnitBaseClass)
+				{
+					if (AUnitBase* DefaultUnit = UnitBaseClass->GetDefaultObject<AUnitBase>())
+					{
+						if (UCapsuleComponent* Capsule = DefaultUnit->GetCapsuleComponent())
+						{
+							CapsuleHalfHeight = Capsule->GetScaledCapsuleHalfHeight();
+						}
+					}
+				}
+				FinalSpawnLocation.Z = NavHeight + CapsuleHalfHeight + OffsetLocation.Z;
 			}
 		}
 
@@ -2117,6 +2316,36 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 			UnitBase->StoredUnitState = SpawnParameter.State;
 			UnitBase->UnitStatePlaceholder = SpawnParameter.StatePlaceholder;
 			UnitBase->ConstructionCost = UsedConstructionCost;
+
+			// Record what the production ability actually billed as supply, so the unit hands back
+			// exactly that on death.
+			//
+			// Before this, the charge came from the ability's cost and the refund from the unit's
+			// own UnitSpaceNeeded - two numbers that nobody keeps in step. A unit whose ability
+			// charges no supply but whose Blueprint says UnitSpaceNeeded=1 refunded one point it
+			// had never paid, and the used amount walked into the negative: "-55/70".
+			if (AResourceGameMode* SupplyGameMode = Cast<AResourceGameMode>(GameMode))
+			{
+				int32 BilledSupply = 0;
+				if (SupplyGameMode->IsSupplyLikeResource(EResourceType::Primary))   BilledSupply += UsedConstructionCost.PrimaryCost;
+				if (SupplyGameMode->IsSupplyLikeResource(EResourceType::Secondary)) BilledSupply += UsedConstructionCost.SecondaryCost;
+				if (SupplyGameMode->IsSupplyLikeResource(EResourceType::Tertiary))  BilledSupply += UsedConstructionCost.TertiaryCost;
+				if (SupplyGameMode->IsSupplyLikeResource(EResourceType::Rare))      BilledSupply += UsedConstructionCost.RareCost;
+				if (SupplyGameMode->IsSupplyLikeResource(EResourceType::Epic))      BilledSupply += UsedConstructionCost.EpicCost;
+				if (SupplyGameMode->IsSupplyLikeResource(EResourceType::Legendary)) BilledSupply += UsedConstructionCost.LegendaryCost;
+
+				// Auf die Einheiten dieses Aufrufs AUFTEILEN. Bezahlt wird EINMAL je Aktivierung
+				// (der Blueprint ruft ModifyResourceCCost einmal und prueft den Rueckgabewert),
+				// gespawnt werden aber UnitCount Einheiten. Wer jeder davon den vollen Betrag
+				// aufstempelt, gibt beim Sterben das Vielfache zurueck - genau das trieb den
+				// Verbrauch unter null. Der Rest geht an die ersten Einheiten, damit die Summe
+				// ueber den Schub exakt dem Bezahlten entspricht.
+				const int32 Gesamt = FMath::Max(1, UnitCount);
+				const int32 ProEinheit = FMath::Max(0, BilledSupply) / Gesamt;
+				const int32 Rest = FMath::Max(0, BilledSupply) % Gesamt;
+				UnitBase->ChargedSupplyAmount = ProEinheit + ((i < Rest) ? 1 : 0);
+				UnitBase->bSupplyAmountKnown = true;
+			}
 			
 			if(UnitToChase && IsValid(UnitToChase))
 			{

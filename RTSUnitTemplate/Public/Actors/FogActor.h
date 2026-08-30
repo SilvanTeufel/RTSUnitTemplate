@@ -49,6 +49,20 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetFogBounds(const FVector2D& Min, const FVector2D& Max);
+
+	/**
+	 * Is this world position inside the LOCAL alliance's current vision?
+	 *
+	 * UpdateFogMaskWithCircles_Local clears the mask and redraws it from scratch on every update,
+	 * so what it holds is live vision, never explored memory - exactly what an actor needs to
+	 * decide whether it may be drawn this moment.
+	 *
+	 * Returns TRUE whenever the answer is unknown (no mask built yet, position outside the fog
+	 * bounds). An unknown answer must not hide anything: a dedicated server or a half-initialised
+	 * client would otherwise blank out the whole map.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
+	bool IsWorldPositionRevealed(const FVector& WorldPosition) const;
 	
 	UFUNCTION(NetMulticast, Unreliable, Category = RTSUnitTemplate)
 	void Multicast_UpdateFogMaskWithCircles(

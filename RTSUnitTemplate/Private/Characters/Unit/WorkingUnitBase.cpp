@@ -123,6 +123,7 @@ void AWorkingUnitBase::Destroyed()
 void AWorkingUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AWorkingUnitBase, bProtectedWhileBuilding);
 	DOREPLIFETIME(AWorkingUnitBase, CurrentDraggedWorkArea);
 	DOREPLIFETIME(AWorkingUnitBase, ResourcePlace);
 	DOREPLIFETIME(AWorkingUnitBase, Base);

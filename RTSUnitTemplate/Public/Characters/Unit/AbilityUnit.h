@@ -44,6 +44,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	bool IsWorker = false;
+
+	/** Wiedereintrittsschutz fuer die Bauuebergabe - siehe AAbilityUnit::SetUnitState. */
+	bool bUebergabeLaeuft = false;
 	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = Ability)
 	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 1000.f, float ZOffset = 70.f);

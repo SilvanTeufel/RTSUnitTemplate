@@ -2449,6 +2449,120 @@ void UUnitStateProcessor::HandleGetClosestBaseArea(FName SignalName, TArray<FMas
 }
 
 
+namespace
+{
+	/** 1 = a finished AI building gets a rally point in front of it. 0 = old behaviour. */
+	static int32 GRTSAiRallyPoints = 1;
+	static FAutoConsoleVariableRef CVarRTSAiRallyPoints(
+		TEXT("rts.ai.rallypoints"),
+		GRTSAiRallyPoints,
+		TEXT("Give AI buildings a rally point away from their base so produced units gather in front instead of between the buildings. 0 = off."),
+		ECVF_Default);
+
+	/** How far in front of the building the rally point sits, on top of the building's own radius. */
+	static float GRTSAiRallyDistance = 600.f;
+	static FAutoConsoleVariableRef CVarRTSAiRallyDistance(
+		TEXT("rts.ai.rallydistance"),
+		GRTSAiRallyDistance,
+		TEXT("Distance from the building hull to its AI rally point, in unreal units."),
+		ECVF_Default);
+
+	/** A team counts as AI if ANY of its controllers is one - a team can carry more than one. */
+	static bool IsAiTeam(const UWorld* World, int32 TeamId)
+	{
+		if (!World) return false;
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (const AControllerBase* PC = Cast<AControllerBase>(It->Get()))
+			{
+				if (PC->SelectableTeamId == TeamId && PC->bIsAi)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+}
+
+void UUnitStateProcessor::EnsureAiRallyPoint(ABuildingBase* Building)
+{
+	if (GRTSAiRallyPoints == 0) return;
+	if (!IsValid(Building) || !Building->HasAuthority()) return;
+
+	// A rally point the player or the build site already set is left alone.
+	if (!Building->HasWaypoint || IsValid(Building->NextWaypoint)) return;
+
+	UWorld* RallyWorld = Building->GetWorld();
+	if (!IsAiTeam(RallyWorld, Building->TeamId)) return;   // the human sets their own
+
+	if (!ControllerBase)
+	{
+		ControllerBase = Cast<AExtendedControllerBase>(RallyWorld->GetFirstPlayerController());
+	}
+	if (!ControllerBase) return;   // CreateAWaypoint needs the controller's WaypointClass
+
+	const FVector BuildingLocation = Building->GetActorLocation();
+
+	// Direction: away from the team's own base. That is what pushes fresh units OUT of the built-up
+	// area instead of leaving them standing between the buildings. The building's forward vector is
+	// only the fallback - it points wherever the placement code happened to rotate the mesh.
+	//
+	// The nearest base is searched here rather than through GetClosestBaseFromArray: that helper
+	// takes a worker, and it would also hand back bases of other teams.
+	FVector Direction = FVector::ZeroVector;
+	if (AResourceGameMode* ResourceGM = Cast<AResourceGameMode>(RallyWorld->GetAuthGameMode()))
+	{
+		const ABuildingBase* NearestBase = nullptr;
+		float NearestDistSq = TNumericLimits<float>::Max();
+		for (const ABuildingBase* Base : ResourceGM->WorkAreaGroups.BaseAreas)
+		{
+			if (!IsValid(Base) || Base == Building || Base->TeamId != Building->TeamId) continue;
+			const float DistSq = FVector::DistSquared2D(Base->GetActorLocation(), BuildingLocation);
+			if (DistSq < NearestDistSq)
+			{
+				NearestDistSq = DistSq;
+				NearestBase = Base;
+			}
+		}
+		if (NearestBase)
+		{
+			Direction = (BuildingLocation - NearestBase->GetActorLocation()).GetSafeNormal2D();
+		}
+	}
+	if (Direction.IsNearlyZero()) Direction = Building->GetActorForwardVector().GetSafeNormal2D();
+	if (Direction.IsNearlyZero()) Direction = FVector(1.f, 0.f, 0.f);
+
+	float Radius = 0.f;
+	if (const UCapsuleComponent* Capsule = Building->GetCapsuleComponent())
+	{
+		Radius = Capsule->GetScaledCapsuleRadius();
+	}
+
+	FVector RallyLocation = BuildingLocation + Direction * (Radius + FMath::Max(0.f, GRTSAiRallyDistance));
+
+	// Pull it onto the navigation mesh. A rally point in a hole is worse than none at all: every
+	// produced unit would path towards something it can never reach and keep asking.
+	if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(RallyWorld))
+	{
+		FNavLocation Projected;
+		if (NavSys->ProjectPointToNavigation(RallyLocation, Projected, FVector(600.f, 600.f, 600.f)))
+		{
+			RallyLocation = Projected.Location;
+		}
+	}
+
+	if (AWaypoint* NewWaypoint = ControllerBase->CreateAWaypoint(RallyLocation, Building))
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[KiSammelpunkt] Team=%d %s Gebaeude(%.0f,%.0f) -> Sammelpunkt(%.0f,%.0f) Abstand=%.0f"),
+			Building->TeamId, *GetNameSafe(Building->GetClass()),
+			BuildingLocation.X, BuildingLocation.Y,
+			NewWaypoint->GetActorLocation().X, NewWaypoint->GetActorLocation().Y,
+			FVector::Dist2D(BuildingLocation, NewWaypoint->GetActorLocation()));
+	}
+}
+
 void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FMassEntityHandle>& Entities)
 {
 	// **Keep initial checks outside AsyncTask if possible and thread-safe**
@@ -2633,6 +2747,10 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 										// the waypoint's AssignedUnits set — keeps the waypoint's lifetime
 										// correct after the construction site that carried it is destroyed.
 										SpawnedBuilding->SetWaypoint(UnitBase->BuildArea->NextWaypoint);
+
+									// Only now, once the handoff above had its chance: an AI building that
+									// still has no rally point gets one in front of itself.
+									EnsureAiRallyPoint(SpawnedBuilding);
 
 									if (SpawnedBuilding && UnitBase->BuildArea && !UnitBase->BuildArea->DestroyAfterBuild)
 										UnitBase->BuildArea->Building = SpawnedBuilding;
@@ -3706,6 +3824,16 @@ void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUn
 			PathFrag->StuckTimer = 0.f;
 		}
 		PathFrag->LastLocation = CurrentLocation;
+
+		// Belegzeile fuer die Haenger-Messung: genau EINMAL je Steckenbleiben, naemlich in dem
+		// Takt, in dem die Schwelle ueberschritten wird. So zaehlt jede Zeile ein Ereignis und
+		// nicht die Dauer - eine lang feststeckende Einheit wuerde sonst hundert Zeilen
+		// schreiben und die Statistik nach oben ziehen.
+		if (PathFrag->StuckTimer > 2.0f && (PathFrag->StuckTimer - GetWorld()->GetDeltaSeconds()) <= 2.0f)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Haenger] Einheit kommt seit %.1f s nicht voran bei %s"),
+				PathFrag->StuckTimer, *CurrentLocation.ToCompactString());
+		}
 
 		if (PathFrag->StuckTimer > 2.0f)
 		{

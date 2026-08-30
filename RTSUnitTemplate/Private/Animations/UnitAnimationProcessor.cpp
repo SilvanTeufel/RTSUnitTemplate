@@ -11,6 +11,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "MassMovementFragments.h"   // FMassVelocityFragment - diagnostic: wanted vs. actual speed
 
 // All ISM animation custom data lives in indices 1..12 (see the *CustomDataIndex members in
 // UnitAnimationProcessor.h), so every animated ISM needs at least this many custom-data floats.
@@ -107,6 +108,11 @@ void UUnitAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
     EntityQuery.AddRequirement<FUnitAnimationFragment>(EMassFragmentAccess::ReadWrite);
 
+    // Diagnostic only, therefore Optional: a missing fragment must never filter an entity out of
+    // the animation update itself.
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+
     // Gate on the dedicated StopAnimation tag (mirrors StopMovement except for CanAnimate opt-ins),
     // NOT StopMovement itself — this is what lets a stationary building with CanAnimate=true animate.
     EntityQuery.AddTagRequirement<FMassStateStopAnimationTag>(EMassFragmentPresence::None);
@@ -127,6 +133,9 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         const TConstArrayView<FMassUnitVisualFragment> VisualList = ChunkContext.GetFragmentView<FMassUnitVisualFragment>();
         const TConstArrayView<FMassCombatStatsFragment> StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
         const TArrayView<FUnitAnimationFragment> AnimList = ChunkContext.GetMutableFragmentView<FUnitAnimationFragment>();
+        const FTransformFragment* TransformList = ChunkContext.GetFragmentView<FTransformFragment>().GetData();
+        const FMassVelocityFragment* VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>().GetData();
+        const float ChunkDeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
         {
@@ -136,7 +145,116 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             
             if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
             {
-                const TEnumAsByte<UnitData::EState> CurrentState = UnitBase->GetUnitState();
+                const TEnumAsByte<UnitData::EState> RealState = UnitBase->GetUnitState();
+
+                // ---- Standing still while a movement state is active ------------------------
+                //
+                // Run/Chase/PatrolRandom and the GoTo states stay active while a unit does not
+                // move: the path search is running, the destination is reached, or the way is
+                // blocked. The animation then showed running on the spot.
+                //
+                // Deliberately decided HERE and not in UUnitBaseAnimInstance, where the same
+                // correction already existed: that one only ever ran for units the local camera
+                // could see (IsOnViewport) and it only rewrote CharAnimState - the blend points,
+                // which is what the ISM and vertex-animation path actually plays, kept the
+                // movement row. Doing it at the source covers every representation.
+                //
+                // Only movement states are listed. Standing still is the correct picture for
+                // Attack, Pause, Build, ResourceExtraction, Casting and Idle, so those keep their
+                // own row and are never touched.
+                //
+                // Measured from the ACTUAL displacement, not from the velocity fragment: the
+                // fragment carries what the movement WANTS, which is exactly the value in doubt.
+                const bool bMovementState =
+                       RealState == UnitData::Run
+                    || RealState == UnitData::Chase
+                    || RealState == UnitData::Patrol
+                    || RealState == UnitData::PatrolRandom
+                    || RealState == UnitData::GoToBase
+                    || RealState == UnitData::GoToBuild
+                    || RealState == UnitData::GoToResourceExtraction;
+
+                bool bStandingStill = false;
+                float MeasuredSpeed = -1.f;
+                {
+                    const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
+                    if (!bMovementState || !TransformList)
+                    {
+                        AnimStandWatches.Remove(Entity);
+                    }
+                    else
+                    {
+                        const FVector Location = TransformList[i].GetTransform().GetLocation();
+                        FAnimStandWatch& Watch = AnimStandWatches.FindOrAdd(Entity);
+
+                        if (!Watch.bHasLocation)
+                        {
+                            Watch.LastLocation = Location;
+                            Watch.bHasLocation = true;
+                        }
+                        else
+                        {
+                            const float Moved = FVector::Dist2D(Watch.LastLocation, Location);
+                            MeasuredSpeed = ChunkDeltaTime > KINDA_SMALL_NUMBER
+                                ? Moved / ChunkDeltaTime : 0.f;
+                            Watch.LastLocation = Location;
+
+                            // Entering takes AnimStandMinSeconds, leaving takes a single moving
+                            // frame. Asymmetric on purpose: a unit that starts walking has to look
+                            // like it immediately, while a single blocked frame must not flip the
+                            // animation.
+                            if (MeasuredSpeed <= AnimStandSpeedThreshold)
+                            {
+                                Watch.SecondsStanding += ChunkDeltaTime;
+                            }
+                            else
+                            {
+                                Watch.SecondsStanding = 0.f;
+                            }
+
+                            bStandingStill = (Watch.SecondsStanding >= AnimStandMinSeconds);
+                        }
+                    }
+                }
+
+                const TEnumAsByte<UnitData::EState> CurrentState =
+                    (bAnimStandFix && bStandingStill) ? TEnumAsByte<UnitData::EState>(UnitData::Idle) : RealState;
+
+                if (bAnimStandDiagnostics && bMovementState)
+                {
+                    ++AnimStandObserved;
+                    if (VisualFrag.bUseSkeletalMovement) ++AnimStandObservedSkeletal;
+
+                    if (bStandingStill)
+                    {
+                        ++AnimStandCount;
+                        if (VisualFrag.bUseSkeletalMovement) ++AnimStandSkeletal;
+                        if (UnitBase->IsOnViewport) ++AnimStandOnViewport;
+
+                        // "No velocity fragment" and "fragment wants to move" are different causes
+                        // and must not collapse into one number.
+                        if (!VelocityList)
+                        {
+                            ++AnimStandNoVelocity;
+                        }
+                        else if (VelocityList[i].Value.Size2D() > AnimStandSpeedThreshold)
+                        {
+                            ++AnimStandWantsToMove;
+                        }
+
+                        if (CurrentWorldTime >= AnimStandNextDetailTime)
+                        {
+                            AnimStandNextDetailTime = CurrentWorldTime + 2.f;
+                            UE_LOG(LogTemp, Warning,
+                                TEXT("[LaufAufDerStelle] %s Zustand=%d -> Idle  gemessen=%.1f  soll=%.1f  skelettal=%d  imBild=%d"),
+                                *UnitBase->GetName(), (int32)RealState.GetValue(), MeasuredSpeed,
+                                VelocityList ? VelocityList[i].Value.Size2D() : -1.f,
+                                VisualFrag.bUseSkeletalMovement ? 1 : 0,
+                                UnitBase->IsOnViewport ? 1 : 0);
+                        }
+                    }
+                }
+                // ---- end standing-still handling --------------------------------------------
 
                 // 1. Check for State Change and Update Targets
                 if (AnimFrag.LastProcessedState != CurrentState)
@@ -261,6 +379,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                         AnimFrag.LastProcessedState = CurrentState;
                     }
                 }
+
             }
 
             // 2. Interpolate Current Values
@@ -355,4 +474,27 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             }
         }
     });
+
+    if (bAnimStandDiagnostics)
+    {
+        AnimStandReportTimer += Context.GetDeltaTimeSeconds();
+        if (AnimStandReportTimer >= 20.f)
+        {
+            const float Share = AnimStandObserved > 0
+                ? 100.f * float(AnimStandCount) / float(AnimStandObserved) : 0.f;
+            UE_LOG(LogTemp, Warning,
+                TEXT("[LaufAufDerStelle] %d von %d Bewegungszustaenden stehen still (%.2f%%)  davon skelettal=%d  soll>0=%d  ohneGeschwindigkeitsfragment=%d  IM BILD=%d   [beobachtet skelettal=%d von %d]"),
+                AnimStandCount, AnimStandObserved, Share, AnimStandSkeletal, AnimStandWantsToMove,
+                AnimStandNoVelocity, AnimStandOnViewport, AnimStandObservedSkeletal, AnimStandObserved);
+
+            AnimStandReportTimer = 0.f;
+            AnimStandObserved = 0;
+            AnimStandObservedSkeletal = 0;
+            AnimStandCount = 0;
+            AnimStandSkeletal = 0;
+            AnimStandWantsToMove = 0;
+            AnimStandNoVelocity = 0;
+            AnimStandOnViewport = 0;
+        }
+    }
 }

@@ -93,6 +93,17 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 			// Assume DamageAmount is the amount of damage to apply
 			float DamageAmount = Data.EvaluatedData.Magnitude;
 
+			// Unverwundbarkeit. HIER und nicht in AUnitBase::SetHealth: der gesamte Kampfschaden
+			// laeuft ueber diesen Zweig und schreibt den Attributwert direkt (SetAttributeHealth).
+			// SetHealth wird dabei NIE aufgerufen - ein Waechter dort ist wirkungslos, was am
+			// 30.08. eine als "unverwundbar" gemeldete Einheit trotzdem sterben liess.
+			//
+			// Nur Schaden wird geblockt (DamageAmount < 0), Heilung geht weiter durch.
+			if (DamageAmount < 0.f && UnitBase->bIsInvulnerable)
+			{
+				return;
+			}
+
 			if (GetHealth() <= 0)
 			{
 				UnitBase->SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);

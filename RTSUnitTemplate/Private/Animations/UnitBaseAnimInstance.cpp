@@ -114,6 +114,46 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 
 			CharAnimState = UnitBase->GetUnitState();
 
+			// ================================================================================
+			// LUX-ANPASSUNG (26.08.2026) - Laufrichtung und Tempo. Siehe Kommentar an
+			// LocomotionDirection in der .h.
+			//
+			// Bewusst hier und nicht im UnitAnimationProcessor: dessen AnimInstance-Zweig
+			// laeuft nur bei Zustandswechseln, Richtung und Tempo brauchen aber jeden Frame
+			// einen frischen Wert. Rein additiv - beschreibt nur neue Felder.
+			// ================================================================================
+			if (bMassSpeedValid && MassSpeed > IdleAnimSpeedThreshold)
+			{
+				// Geschwindigkeit in den lokalen Raum der Einheit drehen: X = vorwaerts,
+				// Y = rechts. Atan2(Y, X) ergibt damit direkt den Winkel gegen die
+				// Blickrichtung, 0 = vorwaerts, +/-180 = rueckwaerts.
+				const FVector LokaleGeschwindigkeit =
+					UnitBase->GetActorRotation().UnrotateVector(MassVelocity);
+				LocomotionDirection = FMath::RadiansToDegrees(
+					FMath::Atan2(LokaleGeschwindigkeit.Y, LokaleGeschwindigkeit.X));
+
+				const float Referenz = FMath::Max(LocomotionReferenceSpeed, 1.0f);
+				LocomotionPlayRate = FMath::Clamp(MassSpeed / Referenz,
+					LocomotionMinPlayRate, LocomotionMaxPlayRate);
+			}
+			else
+			{
+				// Im Stand keinen Winkel aus dem Restrauschen ableiten - das liesse die
+				// Beine auf der Stelle rotieren. Tempo zurueck auf neutral.
+				LocomotionDirection = 0.0f;
+				LocomotionPlayRate = 1.0f;
+			}
+
+			// Umleitung der Blendpunkte auf die Bewegung - nur wenn ausdruecklich gewuenscht.
+			// Der Wert aus dem Fragment wurde weiter oben gelesen und wird hier bewusst
+			// ueberschrieben; der Fragment-Wert ist zustandsbasiert und kennt keine Richtung.
+			if (bUseDirectionalLocomotion)
+			{
+				CurrentBlendPoint_1 = LocomotionDirection;
+				CurrentBlendPoint_2 = bMassSpeedValid ? MassSpeed : 0.0f;
+			}
+			// ===================== ENDE LUX-ANPASSUNG (26.08.2026) ==========================
+
 			// Steht die Einheit, sieht sie auch stehend aus - selbst wenn ihr Zustand Laufen sagt.
 			//
 			// Run/Chase/PatrolRandom und die GoTo-Zustaende bleiben aktiv, waehrend die Einheit

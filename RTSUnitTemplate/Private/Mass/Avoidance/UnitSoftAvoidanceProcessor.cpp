@@ -64,7 +64,11 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	const float ClientSoftScale = (SoftWorld && SoftWorld->IsNetMode(NM_Client))
 		? CVarRTS_ClientSoftAvoidanceForceScale.GetValueOnAnyThread() : 1.f;
 
-	EntityQuery.ForEachEntityChunk(Context, [this, NavSys, &EntityManager, ClientSoftScale](FMassExecutionContext& LocalContext)
+	// Zaehlt die Einheiten, deren Projektion auf das Navigationsnetz scheitert - also die,
+	// denen dieser Prozessor NICHT mehr helfen kann. Siehe Belegzeile am Ende.
+	int32 AbandonedUnits = 0;
+
+	EntityQuery.ForEachEntityChunk(Context, [this, NavSys, &EntityManager, ClientSoftScale, &AbandonedUnits](FMassExecutionContext& LocalContext)
 	{
 		const int32 Num = LocalContext.GetNumEntities();
 		const auto Transforms = LocalContext.GetFragmentView<FTransformFragment>();
@@ -167,6 +171,13 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 }
                 else
                 {
+                     // Die Projektion ist gescheitert: die Einheit steht weiter als vier Kapselradien vom
+                     // naechsten begehbaren Punkt entfernt, also typischerweise mitten im Loch, das ein
+                     // Gebaeude ins Netz stanzt. Hier wird nur die Markierung entfernt und KEINE Kraft
+                     // gesetzt - die Einheit bekommt von diesem Prozessor keine Hilfe mehr. Genau der
+                     // Zustand, in dem ein Arbeiter am Gebaeude haengen bleibt.
+                     ++AbandonedUnits;
+
                      LocalContext.Defer().RemoveTag<FMassSoftAvoidanceTag>(Entity);
                      if (Debug)
                      {
@@ -174,6 +185,21 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
                      }
                 }
             }
-		}
+			}
 	});
+
+	// Belegzeile, hoechstens einmal pro Sekunde: wie viele Einheiten in diesem Takt ausserhalb
+	// des Navigationsnetzes standen, ohne dass eine Rueckholkraft moeglich war. Nach dem
+	// Spawn-Fix (AUnitBase::SpawnUnitsFromParameters zieht jede Spawnstelle auf das Netz)
+	// muss diese Zahl deutlich kleiner sein als vorher.
+	if (AbandonedUnits > 0)
+	{
+		static thread_local double LetzteMeldung = 0.0;
+		const double Jetzt = Context.GetWorld() ? Context.GetWorld()->GetTimeSeconds() : 0.0;
+		if (Jetzt - LetzteMeldung > 1.0 || Jetzt < LetzteMeldung)
+		{
+			LetzteMeldung = Jetzt;
+			UE_LOG(LogTemp, Warning, TEXT("[NavAussen] %d Einheiten ausserhalb des Navigationsnetzes - keine Rueckholkraft moeglich"), AbandonedUnits);
+		}
+	}
 }

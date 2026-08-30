@@ -197,6 +197,10 @@ void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, F
 
 void UUnitActorToFragmentSyncProcessor::SyncCharacteristics(const AUnitBase& Unit, FMassAgentCharacteristicsFragment& Characteristics)
 {
+	// Unverwundbarkeit ins Fragment spiegeln, damit Mass-Prozessoren sie sehen, ohne den Actor
+	// anzufassen. Der Schadenswaechter selbst sitzt im Attributsatz.
+	Characteristics.bIsInvulnerable = Unit.bIsInvulnerable;
+
 	bool bFlyParamChanged = false;
 	if (Characteristics.FlyHeight != Unit.FlyHeight)
 	{

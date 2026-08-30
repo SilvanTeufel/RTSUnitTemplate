@@ -1,6 +1,40 @@
 ﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
 
+namespace
+{
+	/**
+	 * 1 = auch Wander-Entscheidungen aufzeichnen (bisheriges Verhalten).
+	 * 0 = nur Entscheidungen der Regeltabelle.
+	 *
+	 * Der Wander-Pfad wuerfelt (FMath::RandRange) und stellt die Haelfte aller Entscheidungen.
+	 * Ob das Weglassen die Uebereinstimmung hebt, ist im Training messbar - ohne eine einzige
+	 * Partie ausgeben zu muessen.
+	 */
+	/**
+	 * 0 = der Wander-Pfad wird gar nicht erst versucht.
+	 *
+	 * Zur Eingrenzung: Arbeiter werden gemessen ~500 mal je Partie aus ihrer Arbeit in den
+	 * Laufzustand gerissen. Die Angriffsbefehle sind es nachweislich nicht (75 Befehle,
+	 * davonArbeiter=0 in allen). Der Wander-Pfad ist die Haelfte aller KI-Entscheidungen und
+	 * schickt eine Kontrollgruppe irgendwohin - wenn die Arbeiter enthaelt, ist er die Quelle.
+	 * Bricht die Zahl mit diesem Schalter ein, ist es belegt.
+	 */
+	static int32 GRTSWanderPath = 1;
+	static FAutoConsoleVariableRef CVarRTSWanderPath(
+		TEXT("rts.ai.wander"),
+		GRTSWanderPath,
+		TEXT("Wander-Pfad der Regel-KI. 0 = aus (nur zur Eingrenzung, die KI verliert damit ihren Rueckfall)."),
+		ECVF_Default);
+
+	static int32 GRLRecordWander = 1;
+	static FAutoConsoleVariableRef CVarRLRecordWander(
+		TEXT("rts.rl.record.wander"),
+		GRLRecordWander,
+		TEXT("Wander-Entscheidungen (reiner Zufall) mit aufzeichnen. 0 = nur Regeltabelle."),
+		ECVF_Default);
+}
+
 #include "GameFramework/Pawn.h"
 #include "AIController.h"
 #include "Characters/Camera/RL/InferenceComponent.h"
@@ -245,6 +279,14 @@ void URTSRuleBasedDeciderComponent::RecordDecisionForTraining(const TArray<int32
 	// a composite decision ("select the workers, then press ability 3") share a world state, so each sample
 	// carries the action that preceded it - otherwise the same state would appear with two different
 	// answers and the pair could never be learned.
+	// Wuerfelentscheidungen aus den Trainingsdaten halten, wenn so eingestellt. Siehe
+	// bLastDecisionWasWander: der Wander-Pfad ist die Haelfte aller Entscheidungen und traegt
+	// keine Absicht, die sich nachahmen liesse.
+	if (GRLRecordWander == 0 && bLastDecisionWasWander)
+	{
+		return;
+	}
+
 	const int32 TeamId = ResolveOwningTeamId();
 	FGameStateData StateForSample = CachedRecordingState;
 
@@ -1045,6 +1087,9 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 	// then nothing marches. Without these two numbers the empty result looks like a broken gather.
 	int32 GebaeudeMitTag = 0;
 	int32 ToteMitTag = 0;
+	// Arbeiter werden hier NICHT ausgeschlossen - teilt sich ein Arbeiter den Schluesseltag mit
+	// Kampfeinheiten, marschiert er mit. Gezaehlt, um genau das zu belegen statt zu vermuten.
+	int32 ArbeiterMitTag = 0;
 
 	for (AActor* Actor : GameMode->AllUnits)
 	{
@@ -1072,6 +1117,10 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 		if (!Unit->CanBeSelected)
 		{
 			continue;
+		}
+		if (Unit->IsWorker)
+		{
+			++ArbeiterMitTag;
 		}
 		Units.Add(Unit);
 	}
@@ -1120,8 +1169,8 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 		/*bOriginatorPredictsLocally*/ false);
 
 	UE_LOG(LogTemp, Warning,
-		TEXT("[AttackOrder] Team=%d Regel='%s' DIREKT Ziel=(%.0f, %.0f) Einheiten=%d Spalten=%d"),
-		LogTeamId, *RowLabel, Target.X, Target.Y, Units.Num(), Columns);
+		TEXT("[AttackOrder] Team=%d Regel='%s' DIREKT Ziel=(%.0f, %.0f) Einheiten=%d davonArbeiter=%d Spalten=%d"),
+		LogTeamId, *RowLabel, Target.X, Target.Y, Units.Num(), ArbeiterMitTag, Columns);
 
 	return true;
 }
@@ -2201,6 +2250,11 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 
 	auto TryWander = [&]() -> FString
 	{
+		if (GRTSWanderPath == 0)
+		{
+			return TEXT("{}");
+		}
+
 		if (bEnableWander)
 		{
 			// First pick a base candidate according to existing rules
@@ -2237,8 +2291,10 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 				}
 				// If a specific ability is provided, use it; otherwise use the movement as the second step
 				Steps.Add((WanderAbilityAction != ERTSAIAction::None) ? (int32)WanderAbilityAction : ChosenIdx);
+				bLastDecisionWasWander = true;
 				return BuildCompositeActionJSON(Steps, Inference);
 			}
+			bLastDecisionWasWander = true;
 			return Inference->GetActionAsJSON(ChosenIdx);
 		}
 		return TEXT("{}");
@@ -2252,6 +2308,8 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	static bool bTryTableFirstNext = true;
 	const bool bTryTableFirst = IsDeterministicRuleSelection() ? true : bTryTableFirstNext;
 	bTryTableFirstNext = !bTryTableFirstNext;
+
+	bLastDecisionWasWander = false;
 
 	FString Result;
 	if (bTryTableFirst)

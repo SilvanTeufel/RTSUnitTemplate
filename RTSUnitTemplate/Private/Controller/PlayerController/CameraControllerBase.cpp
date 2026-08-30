@@ -158,6 +158,82 @@ void ACameraControllerBase::Server_StopCameraUnitDirect_Implementation()
 // ===================== ENDE LUX-ANPASSUNG 1/3 ===================================================
 
 // ================================================================================================
+// LUX-ANPASSUNG (28.08.2026) - Klick beim Zielen gehoert der zielenden Faehigkeit.
+// Silvan: "Wenn AbilityIndicator aktiviert ist, soll der naechste Klick nicht wieder eine Ability
+// aktivieren sondern in der gleichen Ability den ClickCounter erhoehen."
+//
+// Warum das nur die CameraUnit betrifft: AControllerBase::LeftClickSelect fragt vor dem Selektieren
+// IsAnyAbilityActive() ab und schickt den Klick dann als FireAbilityMouseHit an die laufende
+// Faehigkeit. Die Direktsteuerung geht an dieser Routine vorbei - ihr Linksklick landet direkt in
+// ExecuteOnAbilityInputDetected(AbilityOne) - und startete deshalb den Schuss, statt das Wurfziel
+// zu bestaetigen. Diese Funktion holt den vorhandenen Zweig fuer den Direktsteuerungs-Pfad nach.
+//
+// Bewusst NICHT fuer jede laufende Faehigkeit: das Flag bIndicatorClicksAdvanceAbility an der
+// Faehigkeit mit dem Indikator entscheidet, sonst verloere jede beliebige laufende Faehigkeit den
+// Schuss-Klick.
+// ================================================================================================
+bool ACameraControllerBase::LuxTryAdvanceIndicatorAbilityWithClick()
+{
+	if (!CurrentDraggedAbilityIndicator || !CameraUnitWithTag)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[IndikatorKlick] nicht uebernommen: Indikator=%d CameraUnit=%d"),
+			CurrentDraggedAbilityIndicator ? 1 : 0, CameraUnitWithTag ? 1 : 0);
+		return false;
+	}
+
+	// Auf dem Client existiert die Instanz nicht - dort traegt der replizierte Snapshot die Klasse.
+	const UGameplayAbilityBase* Running = CameraUnitWithTag->ActivatedAbilityInstance
+		? CameraUnitWithTag->ActivatedAbilityInstance
+		: (CameraUnitWithTag->CurrentSnapshot.AbilityClass
+			? CameraUnitWithTag->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>()
+			: nullptr);
+
+	if (!Running || !Running->bIndicatorClicksAdvanceAbility || !Running->AbilityIndicatorClass)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[IndikatorKlick] nicht uebernommen: Faehigkeit=%s Flag=%d IndikatorKlasse=%d"),
+			Running ? *Running->GetClass()->GetName() : TEXT("keine"),
+			Running && Running->bIndicatorClicksAdvanceAbility ? 1 : 0,
+			Running && Running->AbilityIndicatorClass ? 1 : 0);
+		return false;
+	}
+
+	// Dieselbe Drossel wie in LeftClickSelect. Der Klick gilt trotzdem als verbraucht: waehrend der
+	// Sperrzeit darf er erst recht nicht stattdessen den Schuss ausloesen.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - CameraUnitWithTag->LastMouseHitRequestTime < CameraUnitWithTag->AbilityReactivationThrottle)
+	{
+		return true;
+	}
+	CameraUnitWithTag->LastMouseHitRequestTime = Now;
+
+	// Zielpunkt: erst der Bodenstrahl, den auch der Indikator nutzt (MoveAbilityIndicator_Local),
+	// sonst der Indikator selbst. GetHitResultUnderCursor taugt hier NICHT - in der
+	// Direktsteuerung liefert es keinen Treffer (gemessen: Maustreffer=0, Ziel (0,0,0)), die
+	// Faehigkeit haette also ins Nichts geworfen. Der Indikator steht ohnehin genau dort, wohin
+	// der Spieler zielt; damit landet der Wurf sichtbar dort, wo der Ring liegt.
+	FHitResult Hit;
+	FVector Bodenpunkt;
+	if (!TraceMouseToGround(Bodenpunkt, Hit) || !Hit.bBlockingHit)
+	{
+		Hit = FHitResult();
+		Hit.bBlockingHit = true;
+		Hit.Location = CurrentDraggedAbilityIndicator->GetActorLocation();
+		Hit.ImpactPoint = Hit.Location;
+		Hit.TraceStart = Hit.Location;
+		Hit.TraceEnd = Hit.Location;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[IndikatorKlick] weitergeleitet an %s, ClickCount vorher=%d, Ziel=%s"),
+		*Running->GetClass()->GetName(),
+		CameraUnitWithTag->ActivatedAbilityInstance ? CameraUnitWithTag->ActivatedAbilityInstance->ClickCount : -1,
+		*Hit.ImpactPoint.ToCompactString());
+
+	FireAbilityMouseHit(CameraUnitWithTag, Hit);
+	return true;
+}
+// ===================== ENDE LUX-ANPASSUNG =======================================================
+
+// ================================================================================================
 // LUX-ANPASSUNG 5/5 - lokale Vorhersage fuer die WASD-Direktsteuerung (16.08.2026)
 // Setzt auf dem steuernden Client dasselbe FMassClientPredictionFragment, das auch der
 // Rechtsklick-Befehl setzt (ApplyMovePredictionToUnit). Der UnitMovementProcessor bewegt die
@@ -515,6 +591,7 @@ void ACameraControllerBase::Client_ShowTravelLoadingScreen_Implementation()
 #include "AIController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Actors/AutoCamWaypoint.h"
+#include "Actors/AbilityIndicator.h" // LUX-ANPASSUNG (28.08.2026): Indikatorposition als Wurfziel
 #include "Engine/GameViewportClient.h" // Include the header for UGameViewportClient
 #include "Engine/Engine.h"      
 #include "Kismet/GameplayStatics.h"
@@ -2164,9 +2241,32 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	// Unterschied: hier haelt NUR ein echter Cast an. Eine bloss laufende Faehigkeit
         	// (Schiessen) oder ein gezogener Indikator duerfen die Bewegung nicht stoppen.
         	// ====================================================================================
+        	// ------------------------------------------------------------------------------------
+        	// LUX-ANPASSUNG (28.08.2026) - Faehigkeiten, die die Einheit festhalten sollen.
+        	// Silvan: "Waehrend der Character Granaten und CC-Faehigkeit ausfuehrt soll er sich
+        	// nicht bewegen koennen."
+        	//
+        	// bStopMovementOnActivation ist im Template bereits DER Schalter dafuer, ob eine
+        	// laufende Faehigkeit Bewegung erlaubt - er wird an drei weiteren Stellen genau so
+        	// gelesen (GameplayAbilityBase, ExtendedControllerBase, CustomControllerBase) und ist
+        	// beim Schuss aus, bei Granate/CC an. Er hielt die Einheit bisher aber nur EINMAL bei
+        	// der Aktivierung an: die Direktsteuerung setzt jeden Frame ein neues Laufziel, also
+        	// lief sie sofort weiter. Deshalb hier zusaetzlich als Dauer-Sperre lesen.
+        	//
+        	// Auf dem Client gibt es keine Instanz - dort traegt der replizierte Snapshot die
+        	// Klasse; das CDO reicht, weil das Flag eine Einstellung ist.
+        	// ------------------------------------------------------------------------------------
+        	const UGameplayAbilityBase* LuxRunningForMove = CameraUnitWithTag->ActivatedAbilityInstance
+        		? CameraUnitWithTag->ActivatedAbilityInstance
+        		: (CameraUnitWithTag->CurrentSnapshot.AbilityClass
+        			? CameraUnitWithTag->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>()
+        			: nullptr);
+        	const bool bLuxAbilityHoldsUnit = LuxRunningForMove && LuxRunningForMove->bStopMovementOnActivation;
+
         	const bool bCanMoveDirect = !bIsCameraMovementHaltedByUI
         		&& !bHasCastingTag
-        		&& CameraUnitWithTag->GetUnitState() != UnitData::Casting;
+        		&& CameraUnitWithTag->GetUnitState() != UnitData::Casting
+        		&& !bLuxAbilityHoldsUnit;
         	// ===================== ENDE LUX-ANPASSUNG 2/3 =======================================
         	
         	// Calculate movement direction based on input states

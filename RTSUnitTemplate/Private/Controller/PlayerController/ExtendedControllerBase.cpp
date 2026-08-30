@@ -4802,6 +4802,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		return false;
 	}
 
+	// Spaetestens beim Ablegen zurueck auf das Originalmaterial. Die Hervorhebung ist ein
+	// Ablehnungssignal WAEHREND des Ziehens; sie laeuft ueber einen Zeitgeber (HighlightDuration)
+	// und wuerde ohne das hier nach dem Drop noch stehenbleiben - bei laengerer Anzeigedauer
+	// faellt genau das auf.
+	DraggedWorkArea->RevertMaterial();
+
 	if (DraggedWorkArea->PlannedBuilding == true)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because WorkArea is already a PlannedBuilding."));

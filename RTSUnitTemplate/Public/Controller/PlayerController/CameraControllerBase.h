@@ -471,6 +471,18 @@ public:
 	FVector DiagnoseStartOrt = FVector::ZeroVector;
 	// ===================== ENDE LUX-ANPASSUNG 1/3 ===============================================
 
+	// ============================================================================================
+	// LUX-ANPASSUNG (28.08.2026) - Klick beim Zielen gehoert der zielenden Faehigkeit.
+	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
+	//
+	// Steht der Ziel-Indikator einer Faehigkeit mit bIndicatorClicksAdvanceAbility, leitet der
+	// Linksklick der Direktsteuerung an FireAbilityMouseHit weiter (ClickCount++), statt AbilityOne
+	// neu zu starten. Rueckgabe true = der Klick ist verbraucht, der Aufrufer darf nichts weiter tun.
+	// ============================================================================================
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Lux Direktsteuerung")
+	bool LuxTryAdvanceIndicatorAbilityWithClick();
+	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CamIsRotatingRight", Keywords = "TopDownRTSCamLib CamIsRotatingRight"), Category = RTSUnitTemplate)
 	bool CamIsRotatingRight = false;
 

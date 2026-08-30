@@ -182,6 +182,35 @@ void AFogActor::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
 	FogMaxBounds = Max;
 }
 
+bool AFogActor::IsWorldPositionRevealed(const FVector& WorldPosition) const
+{
+	// The mapping below must stay identical to the one in UpdateFogMaskWithCircles_Local, otherwise
+	// this reads a different pixel than the one the units wrote.
+	if (FogTexSize <= 0 || FogPixels.Num() < FogTexSize * FogTexSize)
+	{
+		return true;   // no mask on this machine - see the header: unknown never hides
+	}
+
+	const float WorldExtentX = FogMaxBounds.X - FogMinBounds.X;
+	const float WorldExtentY = FogMaxBounds.Y - FogMinBounds.Y;
+	if (FMath::IsNearlyZero(WorldExtentX) || FMath::IsNearlyZero(WorldExtentY))
+	{
+		return true;
+	}
+
+	const float U = (WorldPosition.X - FogMinBounds.X) / WorldExtentX;
+	const float V = (WorldPosition.Y - FogMinBounds.Y) / WorldExtentY;
+	if (U < 0.f || U > 1.f || V < 0.f || V > 1.f)
+	{
+		return true;   // outside the fogged rectangle
+	}
+
+	const int32 X = FMath::Clamp(FMath::RoundToInt(U * FogTexSize), 0, FogTexSize - 1);
+	const int32 Y = FMath::Clamp(FMath::RoundToInt(V * FogTexSize), 0, FogTexSize - 1);
+
+	return FogPixels[Y * FogTexSize + X].R > 0;
+}
+
 void AFogActor::UpdateFogMaskWithCircles_Local(
     const TArray<FVector_NetQuantize>& Positions,
     const TArray<float>&              WorldRadii,

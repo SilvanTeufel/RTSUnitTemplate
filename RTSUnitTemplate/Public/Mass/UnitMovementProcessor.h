@@ -36,6 +36,31 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = "Navigation")
     FVector NavMeshProjectionExtent = FVector(100.0f, 100.0f, 500.0f);
+
+    // --------------------------------------------------------------------------------------------
+    // Ankunftsschutz im Pfadmodus.
+    //
+    // Fuer die Spieler-Direktsteuerung gibt es diesen Schutz laengst (siehe FMassDirectControlTag
+    // weiter unten in der cpp): am Ziel wird nicht weitergelenkt, sonst schiesst die Einheit
+    // darueber hinaus, dreht um und pendelt um den Punkt. Im Pfadmodus fehlte er - dort wurde bei
+    // Ankunft nur der Pfad zurueckgesetzt, die Sollgeschwindigkeit blieb aber gesetzt und zeigte
+    // weiter auf den Punkt, auf dem die Einheit schon stand.
+    //
+    // Gemessen am 29.08.2026: bei blockierten Arbeitern zeigt das Soll fast exakt entgegen der
+    // Fahrtrichtung (Kosinus -0,90) und die Beschleunigung loescht die laufende Bewegung je Takt
+    // vollstaendig aus (Aenderung 98 bei Geschwindigkeit 97).
+    // --------------------------------------------------------------------------------------------
+    UPROPERTY(EditAnywhere, Category = "Navigation|Ankunft")
+    bool bArrivalGuardInPathMode = true;
+
+    /**
+     * Der Ankunftsradius muss mindestens die Strecke abdecken, die eine Einheit in EINEM Takt
+     * zuruecklegt - sonst springt sie bei niedriger Bildrate darueber hinweg, ohne den Punkt je
+     * zu erreichen, und pendelt endlos. Gemessen: bei 10 FPS sind das rund 45 Einheiten, bei
+     * 52 FPS noch rund 8. Der Faktor gibt den Sicherheitsaufschlag auf diese Schrittweite.
+     */
+    UPROPERTY(EditAnywhere, Category = "Navigation|Ankunft", meta = (ClampMin = "1.0", UIMax = "3.0"))
+    float ArrivalRadiusStepFactor = 1.5f;
     
     UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
     float ExecutionInterval = 0.1f;

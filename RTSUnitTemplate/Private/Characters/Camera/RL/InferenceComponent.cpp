@@ -309,6 +309,29 @@ TArray<float> UInferenceComponent::StateToArray(const FGameStateData& GameStateD
     // select-then-use decision are indistinguishable and the data cannot be learned from.
     StateArray.Add(static_cast<float>(GameStateData.LastActionIndex));
 
+    // Spielzeit und Bauwarteschlange - siehe die Begruendung an den Feldern in FGameStateData.
+    // Beides liest der Lehrer nachweislich (GameTimeCap, CountByClassTag mit bIncludePendingAreas),
+    // beides fehlte im Vektor. Anders als der zurueckgenommene 60-Werte-Versuch sind das keine
+    // plausibel klingenden Groessen, sondern genau die Abfragen aus EvaluateRuleRow.
+    StateArray.Add(GameStateData.GameTimeSeconds);
+
+    StateArray.Add(static_cast<float>(GameStateData.Alt1TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt2TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt3TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt4TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt5TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt6TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl1TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl2TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl3TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl4TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl5TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl6TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlQTagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlWTagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlETagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlRTagPendingBuildCount));
+
     check(StateArray.Num() == GetStateSize());
     return StateArray;
 }
@@ -318,7 +341,21 @@ int32 UInferenceComponent::GetStateSize()
     // 21 original features + 16 per-hotkey friendly counts + the previous action. Changing this invalidates
     // every previously trained model, so bump it deliberately and retrain - a mismatch is not reported by
     // NNE, the network just reads garbage.
-    return 38;
+    //
+    // 29.08.2026 (frueher am Tag): probeweise auf 60 erweitert (Ressourcen-Obergrenzen +
+    // Gegner-Aufteilung je Hotkey) und wieder ZURUECKGENOMMEN. Die Uebereinstimmung mit dem Lehrer
+    // blieb exakt gleich (54,5 %), im Spiel fiel der Median von 47,5 auf 30,5 ueber je 12 Partien.
+    // Die Lehre daraus: eine groessere Eingabe hilft nicht, es muessen die Groessen sein, die der
+    // Decider TATSAECHLICH abfragt.
+    //
+    // 29.08.2026 (Nacht): 38 -> 55. Zwei davon sind belegt, nicht vermutet:
+    //   * Spielzeit  - jede Regelzeile hat ein GameTimeCap [Min, Max] (EvaluateRuleRow).
+    //   * 16 Bauwarteschlangen-Zaehler - CountByClassTag zaehlt mit bIncludePendingAreas=true,
+    //     also die schon beauftragten Flaechen. Das ist der Grund, warum der Lehrer nicht doppelt
+    //     baut; ohne diese Zahl kann das Netz den Unterschied gar nicht sehen.
+    // Erfolgskriterium ist zuerst die Uebereinstimmung im Training (kostet keine Partie): steigt
+    // sie ueber 54,5 %, traegt der Weg. Erst dann im Spiel gegenmessen.
+    return 55;
 }
 
 FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)

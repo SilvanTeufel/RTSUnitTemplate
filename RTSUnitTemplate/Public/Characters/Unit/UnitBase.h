@@ -164,6 +164,20 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool bCanBeInvisible = false;
 
+	/**
+	 * Nimmt keinen Schaden.
+	 *
+	 * Vorgabe AUS, und zwar fuer jede Einheit - das ist ein Werkzeug fuer Faehigkeiten, kein
+	 * Dauerzustand. Der Wert wird repliziert und ausserdem ins Mass-Fragment gespiegelt
+	 * (FMassAgentCharacteristicsFragment::bIsInvulnerable).
+	 *
+	 * Der Waechter sitzt in UAttributeSetBase::PostGameplayEffectExecute, NICHT in
+	 * AUnitBase::SetHealth. Gemessen am 30.08.: der gesamte Kampfschaden laeuft ueber
+	 * SetAttributeHealth und ruft SetHealth nie auf - ein Waechter dort wird schlicht umgangen.
+	 */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		bool bIsInvulnerable = false;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		bool UEPathfindingUsed = false;
 
@@ -583,6 +597,15 @@ public:
 	 * build ability), and then UnitSpaceNeeded is still the best available footprint.
 	 */
 	int32 ChargedSupplyAmount = 0;
+
+	/**
+	 * True once ChargedSupplyAmount holds the amount that was really billed - zero included.
+	 *
+	 * Without this flag a charge of zero was indistinguishable from "never recorded", and the
+	 * refund fell back to UnitSpaceNeeded. That gap is what let the used supply go negative.
+	 */
+	UPROPERTY(Transient)
+	bool bSupplyAmountKnown = false;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ScheduleDelayedNavigationUpdate();

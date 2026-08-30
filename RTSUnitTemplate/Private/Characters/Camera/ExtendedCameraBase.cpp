@@ -759,6 +759,21 @@ void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& Input
 	// ============================================================================================
 	if (LuxUseLeftClickAsAbility(CameraControllerBase))
 	{
+		// ----------------------------------------------------------------------------------------
+		// LUX-ANPASSUNG (28.08.2026) - Klick beim Zielen gehoert der zielenden Faehigkeit.
+		// Steht der Ziel-Indikator einer Faehigkeit mit bIndicatorClicksAdvanceAbility (Granate),
+		// zaehlt dieser Klick fuer SIE weiter, statt AbilityOne (den Schuss) zu starten. Siehe
+		// ACameraControllerBase::LuxTryAdvanceIndicatorAbilityWithClick.
+		// bLuxLeftClickWasAbility bleibt false: es wurde kein Halten begonnen, also darf das
+		// Loslassen auch keines beenden.
+		// ----------------------------------------------------------------------------------------
+		if (CameraControllerBase->LuxTryAdvanceIndicatorAbilityWithClick())
+		{
+			bLuxLeftClickWasAbility = false;
+			return;
+		}
+		// ===================== ENDE LUX-ANPASSUNG ===============================================
+
 		// Identisch zum Tastendruck 1 (HandleState_AbilityOne). Setzt intern auch
 		// SetAbilityInputHeld(AbilityOne, true), damit Dauerfeuer beim Halten laeuft.
 		ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);

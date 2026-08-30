@@ -13,6 +13,7 @@
 #include "Components/PrimitiveComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "EngineUtils.h"
+#include "Actors/WorkArea.h"   // Bauwarteschlange im Zustandsvektor
 #include "Components/SceneComponent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "GameplayTagContainer.h"
@@ -1014,6 +1015,53 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
         }
     }
     
+    // Spielzeit und Bauwarteschlange - die beiden Innenzustaende, die der Regel-Lehrer abfragt und
+    // die im Zustandsvektor bisher fehlten. Begruendung an den Feldern in FGameStateData.
+    if (UWorld* StateWorld = GetWorld())
+    {
+        GameState.GameTimeSeconds = StateWorld->GetTimeSeconds();
+
+        // Geplante, noch nicht fertige Bauten. Gezaehlt wird ueber die Gebaeudeklasse der Flaeche -
+        // genau so, wie CountByClassTag es mit bIncludePendingAreas=true tut. Eine Flaeche, deren
+        // Gebaeude schon steht, ist keine Warteschlange mehr und faellt ueber Building heraus.
+        auto ZaehlePending = [](const FGameplayTag& T, const AUnitBase* CDO, int32& Counter)
+        {
+            if (T.IsValid() && CDO && CDO->UnitTags.HasTagExact(T))
+            {
+                ++Counter;
+            }
+        };
+
+        for (TActorIterator<AWorkArea> It(StateWorld); It; ++It)
+        {
+            const AWorkArea* Area = *It;
+            if (!IsValid(Area) || Area->Type != WorkAreaData::BuildArea) continue;
+            if (Area->TeamId != SelectableTeamId) continue;
+            if (Area->Building || Area->bFinalBuildingSpawned) continue;   // schon gebaut
+            if (!Area->BuildingClass) continue;
+
+            const AUnitBase* BuildingCDO = Cast<AUnitBase>(Area->BuildingClass->GetDefaultObject());
+            if (!BuildingCDO) continue;
+
+            ZaehlePending(TagAlt1, BuildingCDO, GameState.Alt1TagPendingBuildCount);
+            ZaehlePending(TagAlt2, BuildingCDO, GameState.Alt2TagPendingBuildCount);
+            ZaehlePending(TagAlt3, BuildingCDO, GameState.Alt3TagPendingBuildCount);
+            ZaehlePending(TagAlt4, BuildingCDO, GameState.Alt4TagPendingBuildCount);
+            ZaehlePending(TagAlt5, BuildingCDO, GameState.Alt5TagPendingBuildCount);
+            ZaehlePending(TagAlt6, BuildingCDO, GameState.Alt6TagPendingBuildCount);
+            ZaehlePending(TagCtrl1, BuildingCDO, GameState.Ctrl1TagPendingBuildCount);
+            ZaehlePending(TagCtrl2, BuildingCDO, GameState.Ctrl2TagPendingBuildCount);
+            ZaehlePending(TagCtrl3, BuildingCDO, GameState.Ctrl3TagPendingBuildCount);
+            ZaehlePending(TagCtrl4, BuildingCDO, GameState.Ctrl4TagPendingBuildCount);
+            ZaehlePending(TagCtrl5, BuildingCDO, GameState.Ctrl5TagPendingBuildCount);
+            ZaehlePending(TagCtrl6, BuildingCDO, GameState.Ctrl6TagPendingBuildCount);
+            ZaehlePending(TagCtrlQ, BuildingCDO, GameState.CtrlQTagPendingBuildCount);
+            ZaehlePending(TagCtrlW, BuildingCDO, GameState.CtrlWTagPendingBuildCount);
+            ZaehlePending(TagCtrlE, BuildingCDO, GameState.CtrlETagPendingBuildCount);
+            ZaehlePending(TagCtrlR, BuildingCDO, GameState.CtrlRTagPendingBuildCount);
+        }
+    }
+
     // Calculate Averages
     if (NumFriendlyUnits > 0)
     {

@@ -325,6 +325,20 @@ public:
 	/** Remaining supply for this team, or -1 when it cannot be determined. */
 	float GetSupplyHeadroom() const;
 
+	/**
+	 * War die zuletzt getroffene Entscheidung der Wander-Pfad?
+	 *
+	 * Der Wander-Pfad ist der Rueckfall, wenn keine Regel passt, und waehlt mit
+	 * FMath::RandRange aus einer Liste - reiner Muenzwurf. Gemessen am 29.08.: er stellt die
+	 * HAELFTE aller Entscheidungen des Lehrers (13388 von 26836). Wer diese Zeilen mit
+	 * aufzeichnet, bringt dem Netz bei, einen Wuerfel nachzuahmen; die Wahrscheinlichkeitsmasse
+	 * verteilt sich auf Aktionen, die keine Absicht tragen.
+	 *
+	 * mutable, weil RecordDecisionForTraining const ist und die Entscheidungspfade Lambdas in
+	 * einer const-Methode sind.
+	 */
+	mutable bool bLastDecisionWasWander = false;
+
 	// ---------------- Expansion cadence ----------------
 	// Expanding was left to the weighted draw, where a frequency of 200 competes against a pool of
 	// several thousand: the rule PASSED 65 times in five minutes and was picked exactly zero times.
@@ -576,6 +590,15 @@ private:
 
 	/** Previous action written to the training set; becomes the next sample's LastActionIndex feature. */
 	mutable int32 LastRecordedActionIndex = -1;
+
+public:
+	/**
+	 * Welche Aktion die Regel-KI zuletzt aufgezeichnet hat. Fuer die DAgger-Mischung: uebernimmt der
+	 * Lehrer einen Zug, muss das Netz denselben Wert als LastActionIndex weitergereicht bekommen.
+	 */
+	int32 GetLastRecordedActionIndex() const { return LastRecordedActionIndex; }
+
+private:
 
 	// Timestamp of the last time we attempted to evaluate attack rules (seconds). Initialized so first check is allowed immediately.
 	float LastAttackRuleCheckTimeSeconds = -1000000.f;

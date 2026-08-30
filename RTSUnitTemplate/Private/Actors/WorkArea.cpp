@@ -14,7 +14,43 @@
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "Mass/Signals/MySignals.h"   // UnitSignals::Idle / GoToResourceExtraction (ReserveMiningSlotOrReassign follow-up)
 #include "Engine/Texture.h"
+#include "Actors/FogActor.h"   // IsWorldPositionRevealed (fog gate for planned build sites)
+#include "Controller/PlayerController/CustomControllerBase.h"   // AlliedTeamsMask
 
+
+namespace
+{
+	/**
+	 * 1 = build areas of a foreign team follow the fog of war.
+	 * 0 = the old behaviour (always drawn), kept so the two states can be measured against each other.
+	 */
+	static int32 GRTSFogHidesWorkAreas = 1;
+	static FAutoConsoleVariableRef CVarRTSFogHidesWorkAreas(
+		TEXT("rts.fow.workareas"),
+		GRTSFogHidesWorkAreas,
+		TEXT("Hide foreign build areas the local alliance cannot currently see. 0 = always visible (pre-fix behaviour)."),
+		ECVF_Default);
+
+	/**
+	 * Aggregated over all areas, so the log gets one line per interval instead of one per actor.
+	 *
+	 * Deliberately counted in accumulated delta time rather than against the world clock: a static
+	 * holding a world timestamp survives the PIE session that produced it, while the clock restarts
+	 * at zero - the report would then sit in the future forever and never fire again.
+	 */
+	struct FWorkAreaFogDiag
+	{
+		float  ReportTimer        = 0.f;
+		uint64 LastFrame          = 0;
+		int32  SamplesForeign     = 0;   // foreign build areas sampled
+		int32  SamplesInFog       = 0;   // ... of those, standing outside the local alliance's vision
+		double SecondsInFog       = 0.0; // actor-seconds spent in fog
+		double SecondsShownInFog  = 0.0; // ... of those, actor-seconds actually rendered
+	};
+	static FWorkAreaFogDiag GWorkAreaFogDiag;
+
+	static constexpr float WorkAreaFogReportInterval = 20.f;
+}
 
 // Sets default values
 AWorkArea::AWorkArea()
@@ -81,6 +117,20 @@ void AWorkArea::BeginPlay()
 	MaxAvailableResourceAmount = AvailableResourceAmount;
 	OriginalActorScale = GetActorScale3D();
 	SetReplicateMovement(false);
+
+	// Spawn hidden and let the FIRST TICK decide - deliberately not here.
+	//
+	// Build areas are created with a plain SpawnActor, so BeginPlay runs INSIDE the spawn call and
+	// TeamId is only assigned on the line after it (AWorkingUnitBase::SpawnWorkAreaReplicated).
+	// Evaluating here therefore reads TeamId 0, judges the area neutral, reveals it - and the fog
+	// only caught up on the next tick. That was the one frame the enemy's build site flashed
+	// through the fog. Starting hidden and letting the first tick answer costs an own area a single
+	// frame of invisibility, which nobody can see.
+	if (Type == WorkAreaData::BuildArea || Type == WorkAreaData::Base)
+	{
+		ApplyFogHidden(true);
+		FogCheckTimer = FogCheckInterval;   // first Tick evaluates instead of waiting an interval
+	}
 	if (HasAuthority())
 	{
 		InitWorkerOverflowTimer();
@@ -196,6 +246,10 @@ void AWorkArea::TickAiOrphanCheck()
 	UE_LOG(LogTemp, Warning, TEXT("[WorkArea] %s removed: orphaned %.0fs (AI team %d, wasClaimed=%d, started=%d, refunded=%d)."),
 	       *GetName(), AiOrphanElapsed, TeamId, bAiOrphanWasClaimed ? 1 : 0, StartedBuilding ? 1 : 0, IsPaid ? 1 : 0);
 
+	// Der Arbeiter wurde fuer diese Flaeche verbraucht - bricht der Bau ab, bekommt das Team ihn
+	// zurueck. Sonst kostet jeder verworfene Bauauftrag dauerhaft einen Arbeiter.
+	RespawnConsumedWorker();
+
 	GetWorld()->GetTimerManager().ClearTimer(AiOrphanTimerHandle);
 	Destroy();
 }
@@ -242,6 +296,10 @@ void AWorkArea::AbandonIfUnclaimed()
 
 	UE_LOG(LogTemp, Warning, TEXT("[WorkArea] %s abandoned after %.0fs (team %d, refunded=%d)."),
 	       *GetName(), AbandonTimeoutSeconds, TeamId, IsPaid ? 1 : 0);
+
+	// Der Arbeiter wurde fuer diese Flaeche verbraucht - bricht der Bau ab, bekommt das Team ihn
+	// zurueck. Sonst kostet jeder verworfene Bauauftrag dauerhaft einen Arbeiter.
+	RespawnConsumedWorker();
 
 	Destroy();
 }
@@ -396,7 +454,138 @@ void AWorkArea::Tick(float DeltaTime)
 		float Value = (BuildTime > 0.f) ? FMath::Pow(FMath::Clamp(CurrentBuildTime / BuildTime, 0.0f, 1.0f), MaterializePower) : 0.0f;
 		WorkAreaMID->SetScalarParameterValue(MaterializeParameterName, Value);
 	}
-	
+
+	UpdateFogVisibility(DeltaTime);
+}
+
+void AWorkArea::UpdateFogVisibility(float DeltaTime)
+{
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// A dedicated server draws nothing and keeps no fog mask - there is nothing to decide here.
+	if (World->GetNetMode() == NM_DedicatedServer) return;
+
+	// Resource areas belong to the map and stay visible; this gate is about planned build sites.
+	if (Type != WorkAreaData::BuildArea && Type != WorkAreaData::Base) return;
+
+	FogCheckTimer += DeltaTime;
+	if (FogCheckTimer < FogCheckInterval) return;
+	const float Elapsed = FogCheckTimer;
+	FogCheckTimer = 0.f;
+
+	// The report is advanced by whichever area runs first in a frame, so the interval stays wall
+	// clock and does not scale with the number of areas alive.
+	const bool bFirstThisFrame = (GWorkAreaFogDiag.LastFrame != GFrameCounter);
+	if (bFirstThisFrame)
+	{
+		GWorkAreaFogDiag.LastFrame = GFrameCounter;
+		// The frame's own delta, not this actor's accumulated interval: every area carries its own
+		// timer, so whichever ran first contributed a value that had nothing to do with the frame
+		// and the report fired far too early.
+		GWorkAreaFogDiag.ReportTimer += World->GetDeltaSeconds();
+	}
+
+	ACustomControllerBase* LocalPC = nullptr;
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		APlayerController* PC = It->Get();
+		if (PC && PC->IsLocalController())
+		{
+			LocalPC = Cast<ACustomControllerBase>(PC);
+			break;
+		}
+	}
+	if (!LocalPC)
+	{
+		ApplyFogHidden(false);   // no local view to judge with - never hide on a guess
+		return;
+	}
+
+	// A neutral area (TeamId 0) is placed by the level, not planned by a team - always visible.
+	// So is anything the local alliance owns, and everything at all for a spectator (team 0).
+	int64 AllianceMask = LocalPC->AlliedTeamsMask;
+	if (AllianceMask == 0 && LocalPC->SelectableTeamId != 0)
+	{
+		AllianceMask = (1LL << LocalPC->SelectableTeamId);
+	}
+	const bool bAlwaysVisible =
+		   (TeamId == 0)
+		|| (LocalPC->SelectableTeamId == 0)
+		|| (TeamId == LocalPC->SelectableTeamId)
+		|| ((AllianceMask & (1LL << TeamId)) != 0);
+
+	if (bAlwaysVisible)
+	{
+		ApplyFogHidden(false);
+		return;
+	}
+
+	AFogActor* Fog = CachedFogActor.Get();
+	if (!Fog)
+	{
+		AFogActor* AnyFog = nullptr;
+		for (TActorIterator<AFogActor> It(World); It; ++It)
+		{
+			AnyFog = *It;
+			if (AnyFog->TeamId == LocalPC->SelectableTeamId)
+			{
+				Fog = AnyFog;
+				break;
+			}
+		}
+		if (!Fog) Fog = AnyFog;   // single-fog levels do not tag a team
+		if (!Fog)
+		{
+			ApplyFogHidden(false);   // level without fog of war
+			return;
+		}
+		CachedFogActor = Fog;
+	}
+
+	const bool bRevealed = Fog->IsWorldPositionRevealed(GetActorLocation());
+
+	++GWorkAreaFogDiag.SamplesForeign;
+	if (!bRevealed)
+	{
+		++GWorkAreaFogDiag.SamplesInFog;
+		GWorkAreaFogDiag.SecondsInFog += Elapsed;
+		if (!GRTSFogHidesWorkAreas)
+		{
+			GWorkAreaFogDiag.SecondsShownInFog += Elapsed;
+		}
+	}
+
+	ApplyFogHidden(GRTSFogHidesWorkAreas != 0 && !bRevealed);
+
+	if (bFirstThisFrame && GWorkAreaFogDiag.ReportTimer >= WorkAreaFogReportInterval)
+	{
+		const float Share = GWorkAreaFogDiag.SamplesForeign > 0
+			? 100.f * float(GWorkAreaFogDiag.SamplesInFog) / float(GWorkAreaFogDiag.SamplesForeign)
+			: 0.f;
+		UE_LOG(LogTemp, Warning,
+			TEXT("[FogWorkArea] gate=%d  foreign samples=%d  in fog=%d (%.0f%%)  actor-seconds in fog=%.1f  of those rendered=%.1f"),
+			GRTSFogHidesWorkAreas, GWorkAreaFogDiag.SamplesForeign, GWorkAreaFogDiag.SamplesInFog, Share,
+			GWorkAreaFogDiag.SecondsInFog, GWorkAreaFogDiag.SecondsShownInFog);
+
+		GWorkAreaFogDiag.ReportTimer = 0.f;
+		GWorkAreaFogDiag.SamplesForeign = 0;
+		GWorkAreaFogDiag.SamplesInFog = 0;
+		GWorkAreaFogDiag.SecondsInFog = 0.0;
+		GWorkAreaFogDiag.SecondsShownInFog = 0.0;
+	}
+}
+
+void AWorkArea::ApplyFogHidden(bool bHide)
+{
+	if (bFogHidden == bHide) return;
+	bFogHidden = bHide;
+
+	// SetActorHiddenInGame and not a component call: the Blueprint hides the mesh itself once
+	// construction starts, and hidden-in-game sits above that - switching it back off restores
+	// whatever the Blueprint had set instead of overwriting it. Collision is untouched, so the
+	// ECC_Visibility click channel keeps working.
+	SetActorHiddenInGame(bHide);
 }
 
 void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -405,6 +594,7 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, AreaEffect);
 	DOREPLIFETIME(AWorkArea, Mesh);
 	DOREPLIFETIME(AWorkArea, TeamId);
+	DOREPLIFETIME(AWorkArea, bConstructionUnitBuildsAlone);
 	DOREPLIFETIME(AWorkArea, IsNoBuildZone);
 	DOREPLIFETIME(AWorkArea, ConstructionUnitClass);
 	DOREPLIFETIME(AWorkArea, ConstructionUnit);
@@ -800,6 +990,27 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 			{
 				UnitBase->CastTime = UnitBase->BuildArea->BuildTime;
 			}
+
+			// Uebergabe an die ConstructionUnit. Ab hier haengt der Bau nicht mehr am Arbeiter -
+			// siehe bConstructionUnitBuildsAlone. Der Umweg ueber IsExtensionArea ist Absicht: das
+			// ist genau der Schalter, den der Fortschrittspfad ohnehin abfragt, und der
+			// Extension-Weg ist erprobt. Kein zweiter Mechanismus fuer dieselbe Sache.
+			if (bConstructionUnitBuildsAlone)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[Bauuebergabe] %s: Ankunft, Klasse=%s -> Uebergabe wird versucht."),
+					*GetName(), *GetNameSafe(ConstructionUnitClass));
+
+				if (ConstructionUnitClass && UebergebeAnConstructionUnit(Worker))
+				{
+					return;
+				}
+
+				UE_LOG(LogTemp, Warning,
+					TEXT("[Bauuebergabe] %s: FEHLGESCHLAGEN - der Arbeiter baut wie bisher weiter."),
+					*GetName());
+			}
+
 			UnitBase->SetUnitState(UnitData::Build);
 		}else if (this == Worker->BuildArea && (Building != nullptr || !StartedBuilding) && CanAffordConstruction)
 		{
@@ -874,8 +1085,8 @@ void AWorkArea::TemporarilyChangeMaterial()
     // Apply the temporary material
     Mesh->SetMaterial(0, TemporaryHighlightMaterial);
 
-    // Set a timer to call the RevertMaterial function after 3.0 seconds
-    const float RevertDelay = 0.25f;
+    // Dauer aus der Einstellung statt fest verdrahtet - siehe HighlightDuration.
+    const float RevertDelay = FMath::Max(0.05f, HighlightDuration);
     GetWorld()->GetTimerManager().SetTimer(
         ChangeMaterialTimerHandle,      // The handle to manage this timer
         this,                           // The object to call the function on
@@ -890,6 +1101,14 @@ void AWorkArea::TemporarilyChangeMaterial()
  */
 void AWorkArea::RevertMaterial()
 {
+    // Den laufenden Zeitgeber mit abraeumen. Sonst feuert er nach einem vorgezogenen
+    // Zuruecksetzen (z.B. beim Ablegen) ein zweites Mal und setzt ein inzwischen gueltiges
+    // Material erneut zurueck.
+    if (UWorld* W = GetWorld())
+    {
+        W->GetTimerManager().ClearTimer(ChangeMaterialTimerHandle);
+    }
+
     // Ensure the Mesh and the stored OriginalMaterial are still valid
     if (Mesh && OriginalMaterial)
     {
@@ -1254,4 +1473,117 @@ float AWorkArea::GetCollisionRadiusInDirection(const FVector& Direction) const
 	FVector MyOrigin, BoxExtent;
 	GetActorBounds(false, MyOrigin, BoxExtent);
 	return FMath::Max(BoxExtent.X, BoxExtent.Y);
+}
+
+bool AWorkArea::UebergebeAnConstructionUnit(AWorkingUnitBase* Worker)
+{
+	UWorld* World = GetWorld();
+	if (!World || !HasAuthority() || !IsValid(Worker))
+	{
+		return false;
+	}
+
+	// Den Extension-Weg einschalten, BEVOR die ConstructionUnit entsteht:
+	// Server_SpawnExtensionConstructionUnit steigt bei !IsExtensionArea sofort wieder aus, und der
+	// Fortschrittspfad im UnitStateProcessor entscheidet an derselben Fahne, wer den Zaehler treibt.
+	IsExtensionArea = true;
+
+	AExtendedControllerBase* Controller = nullptr;
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (AExtendedControllerBase* AlsErweitert = Cast<AExtendedControllerBase>(It->Get()))
+		{
+			Controller = AlsErweitert;
+			break;
+		}
+	}
+
+	if (!Controller)
+	{
+		// Ohne Controller keine ConstructionUnit - dann lieber beim alten Weg bleiben, als die
+		// Flaeche mit gesetztem IsExtensionArea und ohne Bautraeger stehen zu lassen.
+		UE_LOG(LogTemp, Warning, TEXT("[Bauuebergabe] %s: kein AExtendedControllerBase gefunden."), *GetName());
+		IsExtensionArea = false;
+		return false;
+	}
+
+	// AWorkingUnitBase ist der ELTERNTYP von AUnitBase, deshalb ein Abwaertscast statt einer
+	// stillschweigenden Umwandlung.
+	AUnitBase* WorkerAlsUnit = Cast<AUnitBase>(Worker);
+	if (!WorkerAlsUnit)
+	{
+		IsExtensionArea = false;
+		return false;
+	}
+
+	// Server_SpawnExtensionConstructionUnit leitet die Drehung aus der Lage des Arbeiters zur
+	// Flaeche ab - bei Extensions richtig (sie sollen sich an das Wirtsgebaeude anlegen), hier
+	// falsch: dann stuende jedes Xeno-Gebaeude in der Richtung, aus der zufaellig der Arbeiter kam.
+	// Deshalb die vorgesehene Drehung merken und danach zuruecksetzen.
+	const FRotator GewollteDrehung = ServerMeshRotationBuilding;
+	Controller->Server_SpawnExtensionConstructionUnit(WorkerAlsUnit, this);
+	ServerMeshRotationBuilding = GewollteDrehung;
+	if (ConstructionUnit)
+	{
+		ConstructionUnit->SetActorRotation(GewollteDrehung);
+	}
+
+	if (!ConstructionUnit)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Bauuebergabe] %s: Server_SpawnExtensionConstructionUnit hat keine Einheit geliefert."),
+			*GetName());
+		IsExtensionArea = false;
+		return false;
+	}
+
+	// Erst jetzt den Arbeiter verbrauchen. Die Klasse wird gemerkt, damit ein Abbruch Ersatz an
+	// der Baustelle aufstellen kann.
+	ConsumedWorkerClass = Worker->GetClass();
+	RemoveWorkerFromArray(Worker);
+	Worker->BuildArea = nullptr;
+
+	UE_LOG(LogTemp, Log, TEXT("[Bauuebergabe] %s: %s verbraucht, ConstructionUnit uebernimmt."),
+		*GetName(), *Worker->GetName());
+
+	// Ueber die Lebenspunkte, weil daran die gesamte Aufraeumkette haengt (Versorgung zurueck,
+	// Zustand Dead, Kollision aus). Ein blosses SetUnitState(Dead) wuerde die Haelfte davon
+	// ueberspringen.
+	Worker->SetHealth(0.f);
+	return true;
+}
+
+void AWorkArea::RespawnConsumedWorker()
+{
+	UWorld* World = GetWorld();
+	if (!World || !HasAuthority() || !ConsumedWorkerClass)
+	{
+		return;
+	}
+
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode());
+	if (!GameMode)
+	{
+		return;
+	}
+
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	const FVector Ort = GetActorLocation();
+	AUnitBase* Ersatz = World->SpawnActor<AUnitBase>(ConsumedWorkerClass, Ort, GetActorRotation(), SpawnParams);
+	if (!Ersatz)
+	{
+		return;
+	}
+
+	Ersatz->TeamId = TeamId;
+	Ersatz->SetUnitState(UnitData::Idle);
+	GameMode->AddUnitIndexAndAssignToAllUnitsArray(Ersatz);
+
+	UE_LOG(LogTemp, Warning, TEXT("[Bauuebergabe] %s: Bau abgebrochen, Arbeiter %s an der Baustelle ersetzt."),
+		*GetName(), *ConsumedWorkerClass->GetName());
+
+	// Nur einmal ersetzen.
+	ConsumedWorkerClass = nullptr;
 }
