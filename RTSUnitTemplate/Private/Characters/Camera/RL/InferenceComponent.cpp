@@ -737,8 +737,63 @@ FString UInferenceComponent::GetActionFromRLModel(const FGameStateData& GameStat
 
     LastChosenActionIndex = BestActionIndex;
 
+    // DIAGNOSE (bleibt stehen bis abbestellt): siehe AktionsZaehler im Header.
+    if (AktionsZaehler.Num() < ActionSpace.Num())
+    {
+        AktionsZaehler.SetNumZeroed(ActionSpace.Num());
+    }
+    if (AktionsZaehler.IsValidIndex(BestActionIndex))
+    {
+        ++AktionsZaehler[BestActionIndex];
+        ++AktionenSeitBericht;
+    }
+    if (const UWorld* Welt = GetWorld())
+    {
+        const double Jetzt = Welt->GetTimeSeconds();
+        if (AktionenSeitBericht > 0 && (Jetzt - LetzterAktionsBericht) >= 60.0)
+        {
+            LetzterAktionsBericht = Jetzt;
+            BerichteAktionsverteilung();
+        }
+    }
+
     // --- Return the chosen action as a JSON string ---
     return GetActionAsJSON(BestActionIndex);
+}
+
+void UInferenceComponent::BerichteAktionsverteilung()
+{
+    // Nur die belegten Eintraege, absteigend - eine Zeile je Minute Spielzeit reicht, um zu sehen,
+    // worauf das Netz seine Entscheidungen verteilt.
+    TArray<TPair<int32, int32>> Sortiert;
+    for (int32 i = 0; i < AktionsZaehler.Num(); ++i)
+    {
+        if (AktionsZaehler[i] > 0)
+        {
+            Sortiert.Add(TPair<int32, int32>(i, AktionsZaehler[i]));
+        }
+    }
+    Sortiert.Sort([](const TPair<int32, int32>& A, const TPair<int32, int32>& B)
+    {
+        return A.Value > B.Value;
+    });
+
+    FString Zeile;
+    for (int32 i = 0; i < Sortiert.Num() && i < 10; ++i)
+    {
+        const int32 Index = Sortiert[i].Key;
+        FString Name = TEXT("?");
+        if (ActionSpace.IsValidIndex(Index))
+        {
+            Name = FString::Printf(TEXT("%s%d"), *ActionSpace[Index].Action, ActionSpace[Index].CameraState);
+        }
+        Zeile += FString::Printf(TEXT("%d:%s=%d "), Index, *Name, Sortiert[i].Value);
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("[NetzAktion] Team=%d seit letztem Bericht=%d, haeufigste: %s"),
+        ResolveOwningTeamId(), AktionenSeitBericht, *Zeile);
+
+    AktionenSeitBericht = 0;
 }
 
 FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)

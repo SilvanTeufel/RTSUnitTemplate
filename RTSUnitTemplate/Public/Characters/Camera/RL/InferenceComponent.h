@@ -450,6 +450,21 @@ private:
 
 	TArray<FRLAction> ActionSpace;
 
+	/**
+	 * DIAGNOSE (bleibt stehen bis abbestellt): zaehlt, welche Aktionen das Netz tatsaechlich waehlt.
+	 *
+	 * Anlass: in 34 gemessenen Partien hat Team 1 (Netz) NULL Angriffsbefehle abgesetzt, Team 2
+	 * (Regeln) bis zu 90 - bei vergleichbarer oder besserer Bauleistung des Netzes. Es baut also
+	 * eine Armee und schickt sie nie los. Ohne diese Zaehlung ist nicht zu unterscheiden, ob das
+	 * Netz den Angriffsschritt gar nicht waehlt oder ihn waehlt und er wirkungslos bleibt.
+	 */
+	TArray<int32> AktionsZaehler;
+	int32 AktionenSeitBericht = 0;
+	double LetzterAktionsBericht = 0.0;
+
+	/** Schreibt die Verteilung der gewaehlten Aktionen und setzt das Fenster zurueck. */
+	void BerichteAktionsverteilung();
+
 	// Old behavior (RL) - renamed from ChooseJsonAction
 	FString GetActionFromRLModel(const FGameStateData& GameState);
 };

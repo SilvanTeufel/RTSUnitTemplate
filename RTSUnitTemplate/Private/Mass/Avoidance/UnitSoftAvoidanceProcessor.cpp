@@ -67,8 +67,11 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// Zaehlt die Einheiten, deren Projektion auf das Navigationsnetz scheitert - also die,
 	// denen dieser Prozessor NICHT mehr helfen kann. Siehe Belegzeile am Ende.
 	int32 AbandonedUnits = 0;
+	// Einheiten, die erst die enge Projektion verfehlten und ueber den weiten Suchbereich doch noch
+	// eine Rueckholkraft bekamen. Trennt "gerettet" von "endgueltig verloren".
+	int32 RescuedUnits = 0;
 
-	EntityQuery.ForEachEntityChunk(Context, [this, NavSys, &EntityManager, ClientSoftScale, &AbandonedUnits](FMassExecutionContext& LocalContext)
+	EntityQuery.ForEachEntityChunk(Context, [this, NavSys, &EntityManager, ClientSoftScale, &AbandonedUnits, &RescuedUnits](FMassExecutionContext& LocalContext)
 	{
 		const int32 Num = LocalContext.GetNumEntities();
 		const auto Transforms = LocalContext.GetFragmentView<FTransformFragment>();
@@ -171,12 +174,39 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
                 }
                 else
                 {
-                     // Die Projektion ist gescheitert: die Einheit steht weiter als vier Kapselradien vom
-                     // naechsten begehbaren Punkt entfernt, also typischerweise mitten im Loch, das ein
-                     // Gebaeude ins Netz stanzt. Hier wird nur die Markierung entfernt und KEINE Kraft
-                     // gesetzt - die Einheit bekommt von diesem Prozessor keine Hilfe mehr. Genau der
-                     // Zustand, in dem ein Arbeiter am Gebaeude haengen bleibt.
-                     ++AbandonedUnits;
+                     // Die enge Projektion ist gescheitert: die Einheit steht weiter als vier Kapselradien
+                     // vom naechsten begehbaren Punkt entfernt, also typischerweise mitten im Loch, das ein
+                     // Gebaeude ins Netz stanzt.
+                     //
+                     // Frueher wurde hier NUR die Markierung entfernt und KEINE Kraft gesetzt - die Einheit
+                     // bekam von diesem Prozessor nie wieder Hilfe und blieb dauerhaft stehen. Gemessen am
+                     // 30.08. ueber vier volle Partien: 1061 bis 1353 Meldungen je Partie, und die Zeile ist
+                     // auf hoechstens eine je Sekunde gedrosselt - es standen also fast die ganze Partie
+                     // ueber Einheiten fest. In der langsamsten Partie beherrschten [NavAussen] und
+                     // [RunStall] das Log, und sie rechnete nur 898 statt 1500 Spielsekunden ab.
+                     //
+                     // Jetzt wird ein zweites Mal projiziert, mit weitem Suchbereich. Findet sich irgendwo
+                     // ein begehbarer Punkt, bekommt die Einheit die Rueckholkraft dorthin - ein langer Weg
+                     // hinaus ist allemal besser als dauerhaft im Gebaeude zu stecken. Erst wenn auch das
+                     // scheitert, wird wie bisher aufgegeben.
+                     const float WeiteReichweite = FMath::Max(1500.f, Characteristics.CapsuleRadius * 40.0f);
+                     const FVector WeiterBereich(WeiteReichweite, WeiteReichweite, FMath::Max(ZExtent, 1000.f));
+
+                     FNavLocation WeitNavLoc;
+                     if (NavSys->ProjectPointToNavigation(Location, WeitNavLoc, WeiterBereich))
+                     {
+                         FVector HinausRichtung = WeitNavLoc.Location - Location;
+                         HinausRichtung.Z = 0.f;
+                         if (!HinausRichtung.IsNearlyZero())
+                         {
+                             ForceList[i].Value += HinausRichtung.GetSafeNormal() * AvoidanceStrength * ClientSoftScale;
+                             ++RescuedUnits;
+                         }
+                     }
+                     else
+                     {
+                         ++AbandonedUnits;
+                     }
 
                      LocalContext.Defer().RemoveTag<FMassSoftAvoidanceTag>(Entity);
                      if (Debug)
@@ -192,14 +222,14 @@ void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	// des Navigationsnetzes standen, ohne dass eine Rueckholkraft moeglich war. Nach dem
 	// Spawn-Fix (AUnitBase::SpawnUnitsFromParameters zieht jede Spawnstelle auf das Netz)
 	// muss diese Zahl deutlich kleiner sein als vorher.
-	if (AbandonedUnits > 0)
+	if (AbandonedUnits > 0 || RescuedUnits > 0)
 	{
 		static thread_local double LetzteMeldung = 0.0;
 		const double Jetzt = Context.GetWorld() ? Context.GetWorld()->GetTimeSeconds() : 0.0;
 		if (Jetzt - LetzteMeldung > 1.0 || Jetzt < LetzteMeldung)
 		{
 			LetzteMeldung = Jetzt;
-			UE_LOG(LogTemp, Warning, TEXT("[NavAussen] %d Einheiten ausserhalb des Navigationsnetzes - keine Rueckholkraft moeglich"), AbandonedUnits);
+			UE_LOG(LogTemp, Warning, TEXT("[NavAussen] %d Einheiten ausserhalb des Navigationsnetzes - keine Rueckholkraft moeglich (%d ueber den weiten Suchbereich gerettet)"), AbandonedUnits, RescuedUnits);
 		}
 	}
 }

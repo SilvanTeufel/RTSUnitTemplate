@@ -1883,6 +1883,9 @@ struct FEffectAreaImpactFragment : public FMassFragment
 	bool bHasHiddenVisual = false;          // ensure hide-once
 	bool bHasSpawnedOnDestruction = false;  // ensure spawn-once
 
+	// Nur fuer die [BrutSpawn]-Diagnose: sorgt dafuer, dass die Zeile je Flaeche einmal kommt.
+	bool bBrutDiagnoseGemeldet = false;
+
 	// Impact properties (cached to avoid frequent Actor access)
 	int32 TeamId = 0;
 	bool IsHealing = false;

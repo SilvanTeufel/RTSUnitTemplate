@@ -278,26 +278,37 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     // ueber Null liegen, haengen die Einheiten dauerhaft unter dem Gelaende. Gemessen wurde
     // eine stabile Hoehe von exakt 0+Kapselhalbhoehe - das deutet auf den Zweig "kein
     // Bodentreffer". Diese Zeile zeigt, ob der Trace wirklich nichts findet und was er
-    // gegebenenfalls trifft. Nur im Fehlerfall und stark gedrosselt.
-    if (CurrentZ < 500.f && !CharFragment.bIsFlying)
+    // gegebenenfalls trifft.
+    //
+    // 30.08.2026 UMGEBAUT, INHALT UNVERAENDERT. Vorher stand der Block VOR dem eigentlichen Trace,
+    // mit dem Waechter "CurrentZ < 500 && !bIsFlying" - und zog sich dafuer einen ZWEITEN,
+    // vollstaendigen LineTrace. Der Kommentar versprach "nur im Fehlerfall", aber auf Karten, deren
+    // Boden nahe Null liegt (Level_AITest_Xeno: Z=7), erfuellt JEDE Bodeneinheit in JEDEM Takt die
+    // Bedingung. Gemessen in drei Partien: 177 Zeilen in der schnellen gegen 6706 in der langsamen,
+    // also 21000 gegen 805000 Durchlaeufe - bei gleicher Rechenzeit rechneten die Partien voellig
+    // verschiedene SPIELZEITEN ab (t=1499 gegen t=352 gegen t=164), womit jede Kennzahl je Partie
+    // ueber unterschiedlich lange Zeitraeume gemessen war.
+    //
+    // Jetzt haengt die Zeile am Ergebnis des ECHTEN Traces: sie kommt nur, wenn der Boden
+    // tatsaechlich nicht gefunden wurde - also genau im Fehlerfall, den sie beschreiben soll. Der
+    // zweite Trace entfaellt ersatzlos, die Aussage bleibt dieselbe.
+    const bool bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
+
+    if (!bBodenGefunden && !CharFragment.bIsFlying)
     {
         static int32 BodenDiagZaehler = 0;
         if ((BodenDiagZaehler++ % 120) == 0)
         {
-            FHitResult DiagHit;
-            const bool bDiagTreffer = GetWorld()->LineTraceSingleByObjectType(DiagHit, TraceStart, TraceEnd, ObjectParams, Params);
-            UE_LOG(LogTemp, Log, TEXT("[BodenDiag] %s CurrentZ=%.1f Start=%.1f Ende=%.1f XY=(%.0f,%.0f) Treffer=%d TrefferZ=%.1f Getroffen=%s Offset=%.1f LastGround=%.1f"),
+            UE_LOG(LogTemp, Log, TEXT("[BodenDiag] %s CurrentZ=%.1f Start=%.1f Ende=%.1f XY=(%.0f,%.0f) Treffer=0 TrefferZ=%.1f Getroffen=%s Offset=%.1f LastGround=%.1f"),
                 *UnitBase->GetName(), CurrentZ, TraceStart.Z, TraceEnd.Z, TraceStart.X, TraceStart.Y,
-                bDiagTreffer ? 1 : 0,
-                bDiagTreffer ? DiagHit.ImpactPoint.Z : -99999.f,
-                (bDiagTreffer && DiagHit.GetActor()) ? *DiagHit.GetActor()->GetClass()->GetName() : TEXT("-"),
+                -99999.f, TEXT("-"),
                 HeightOffset, CharFragment.LastGroundLocation);
         }
     }
 
-    if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+    if (bBodenGefunden)
     {
-        
+
         const AActor* HitActor = Hit.GetActor();
         const float DeltaZ = Hit.ImpactPoint.Z - CurrentZ;
 

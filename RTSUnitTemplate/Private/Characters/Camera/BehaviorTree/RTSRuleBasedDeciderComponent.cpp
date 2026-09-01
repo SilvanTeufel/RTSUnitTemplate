@@ -1382,6 +1382,21 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	// there is no agent position for a later rule to contradict, and no return timer to wait out.
 	if (bUseDirectBatchAttackMove && IssueDirectAttackMove(QualifyingTags, AdjustedAttackLoc, RowLabel, LogTeamId))
 	{
+		// HIER aufzeichnen, sonst enthaelt der Trainingsdatensatz KEINEN EINZIGEN Angriff.
+		//
+		// Die Aufzeichnung haengt sonst allein in BuildCompositeActionJSON - und dorthin kommt der
+		// Angriffszweig nie, weil er eine Zeile darueber mit return aussteigt. Folge: der Lehrer
+		// greift an, ohne es je vorzumachen. Gemessen am 30.08. ueber 46 Partien: das Netz waehlt
+		// left_click/right_click NIE, in der Aktionsverteilung tauchen ausschliesslich Kamerazuege
+		// und Faehigkeitswechsel auf, und [NetzAngriff] loest null Mal aus. Das ist keine schwache
+		// Politik, sondern eine Luecke im Datensatz - was nie demonstriert wurde, kann auch die
+		// Belohnungsfunktion nicht herbeifuehren, und die Aktionsmaske des Trainers wirft zu selten
+		// gezeigte Aktionen ohnehin heraus.
+		//
+		// Reine Aufzeichnung, kein Eingriff ins Verhalten: der Angriff selbst laeuft unveraendert
+		// ueber IssueDirectAttackMove.
+		RecordDecisionForTraining(Indices);
+
 		// The [AttackOrder] diagnosis stays on: it is what made the jump-and-turn pattern visible
 		// in the first place, and it is the only way to tell the two paths apart in a log.
 		if (UWorld* DiagWorld = GetWorld())
@@ -1800,14 +1815,34 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 		{
 			bAnyRowHasClasses = true;
 
-			// Pick all possible locations from all requested classes for this specific row
+			// Pick all possible locations from all requested classes for this specific row.
+			// Gebaeude werden dabei getrennt gesammelt - siehe bPreferBuildingTargets im Header.
 			TArray<FVector> PossibleLocations;
+			TArray<FVector> GebaeudeLocations;
 			for (const TSubclassOf<AActor>& Cls : Row->AttackPositionSourceClasses)
 			{
 				if (const TArray<FVector>* Locs = FoundLocationsMap.Find(Cls))
 				{
 					PossibleLocations.Append(*Locs);
+					if (Cls->IsChildOf(ABuildingBase::StaticClass()))
+					{
+						GebaeudeLocations.Append(*Locs);
+					}
 				}
+			}
+
+			// Stehende Ziele schlagen laufende: nur wenn gar kein gegnerisches Gebaeude bekannt ist,
+			// wird auf Einheiten ausgewichen.
+			const int32 EinheitenZahl = PossibleLocations.Num() - GebaeudeLocations.Num();
+			if (bPreferBuildingTargets && GebaeudeLocations.Num() > 0)
+			{
+				if (EinheitenZahl > 0)
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[AttackZiel] Team=%d Regel='%s' Gebaeude bevorzugt: %d Gebaeude, %d Einheiten verworfen"),
+						MyTeamId, *RowNames[i].ToString(), GebaeudeLocations.Num(), EinheitenZahl);
+				}
+				PossibleLocations = MoveTemp(GebaeudeLocations);
 			}
 
 			DiagFoundCount = PossibleLocations.Num();

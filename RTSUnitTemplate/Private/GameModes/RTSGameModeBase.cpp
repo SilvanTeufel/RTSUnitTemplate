@@ -189,6 +189,18 @@ void ARTSGameModeBase::TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool b
 			{
 				MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, Config->DestinationSwitchTagToEnable);
 			}
+
+			// A level can open more than one door - see AdditionalSwitchTagsToEnable.
+			if (!TargetMapName.IsEmpty())
+			{
+				for (const FName& ExtraTag : Config->AdditionalSwitchTagsToEnable)
+				{
+					if (ExtraTag != NAME_None)
+					{
+						MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, ExtraTag);
+					}
+				}
+			}
 		}
 	}
 

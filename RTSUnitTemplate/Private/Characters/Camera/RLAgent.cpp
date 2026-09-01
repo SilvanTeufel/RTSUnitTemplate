@@ -676,8 +676,38 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
         {
             if (!ExtendedController->CheckClickOnWorkArea(EffectiveHit))
             {
-                ExtendedController->RunUnitsAndSetWaypointsMass(EffectiveHit);
-                // RunUnitsAndSetWaypoints(HitResult, ExtendedController);
+                // Arbeiter aus dem Marschbefehl herausnehmen - aber NUR hier, im KI-Pfad.
+                //
+                // RunUnitsAndSetWaypointsMass laeuft ueber die gesamte Auswahl und kennt keinen
+                // Arbeiterausschluss; PerformLeftClickAction hat ihn in beiden Zweigen. Der
+                // Rechtsklick zieht deshalb die Arbeiter mit, und StopWorkOnSelectedUnit nimmt
+                // ihnen dabei die Arbeit ab - genau das Bild "die KI schickt alle Arbeiter weg".
+                // Ausgeloest wird es von Regelzeilen, die Aktion 29 (RightClick1) tragen; in der
+                // Singularianer-Tabelle tut das Load_Antimatter.
+                //
+                // Der Ausschluss darf NICHT in RunUnitsAndSetWaypointsMass selbst stehen: dort
+                // laeuft auch der Rechtsklick des Spielers (CustomControllerBase.cpp:2167) und der
+                // Minimap-Befehl (:2202) durch. Ein Filter dort haette dem Spieler die Kontrolle
+                // ueber seine Arbeiter genommen.
+                TArray<AUnitBase*> AuswahlVorher = ExtendedController->SelectedUnits;
+                ExtendedController->SelectedUnits.RemoveAll([](const AUnitBase* U)
+                {
+                    return U && U->IsWorker;
+                });
+
+                const int32 Entfernt = AuswahlVorher.Num() - ExtendedController->SelectedUnits.Num();
+                if (Entfernt > 0)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[ArbeiterSchutz] Team %d: %d von %d Arbeitern vom Marschbefehl ausgenommen"),
+                        ExtendedController->SelectableTeamId, Entfernt, AuswahlVorher.Num());
+                }
+
+                if (ExtendedController->SelectedUnits.Num() > 0)
+                {
+                    ExtendedController->RunUnitsAndSetWaypointsMass(EffectiveHit);
+                }
+
+                ExtendedController->SelectedUnits = AuswahlVorher;
             }
         }
     }
@@ -731,6 +761,76 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
     {
         AWaypoint* BWaypoint = nullptr;
 
+        // Der Angriffsbefehl der KI zielte bisher auf den Boden UNTER DEM AGENTEN - also dorthin, wo
+        // die KI-Kamera gerade steht. Fuer die Regel-KI ist das folgenlos, sie geht ueber
+        // IssueDirectAttackMove mit eigener Zielwahl. Fuer das NETZ war es der Grund, warum es nie
+        // angreift: es muesste erst die Kamera an den Feind fahren und dann angreifen, und diese
+        // Verkettung gelingt ihm praktisch nie. Gemessen ueber 34 Partien: Team 1 (Netz) NULL
+        // Angriffsbefehle, Team 2 (Regeln) bis zu 90 - bei besserer Bauleistung des Netzes.
+        //
+        // Deshalb bekommt der Angriffsbefehl hier dieselbe Zielwahl wie die Regel-KI: das naechste
+        // gegnerische GEBAEUDE zum eigenen Schwerpunkt. Gebaeude, weil sie stehen bleiben (siehe
+        // bPreferBuildingTargets im Entscheider). Findet sich keines, bleibt es beim urspruenglichen
+        // Punkt, das Verhalten ist dann wie zuvor.
+        //
+        // Dieser Zweig liegt in ARLAgent und wird ausschliesslich von der KI durchlaufen - der
+        // Spieler ist nicht betroffen.
+        FHitResult ZielTreffer = HitResult;
+        if (bAimAttackAtNearestEnemyBuilding)
+        {
+            if (const UWorld* Welt = GetWorld())
+            {
+                const int32 EigenesTeam = CustomControllerBase->SelectableTeamId;
+
+                FVector EigenerSchwerpunkt = FVector::ZeroVector;
+                int32 EigeneZahl = 0;
+                FVector BestesZiel = FVector::ZeroVector;
+                bool bZielGefunden = false;
+
+                TArray<ABuildingBase*> Gegnerische;
+                for (TActorIterator<ABuildingBase> It(Welt); It; ++It)
+                {
+                    ABuildingBase* Gebaeude = *It;
+                    if (!IsValid(Gebaeude)) continue;
+                    if (Gebaeude->TeamId == EigenesTeam)
+                    {
+                        EigenerSchwerpunkt += Gebaeude->GetActorLocation();
+                        ++EigeneZahl;
+                    }
+                    else
+                    {
+                        Gegnerische.Add(Gebaeude);
+                    }
+                }
+
+                const FVector Bezug = (EigeneZahl > 0)
+                    ? (EigenerSchwerpunkt / (float)EigeneZahl)
+                    : GetActorLocation();
+
+                double BesteDistSq = TNumericLimits<double>::Max();
+                for (const ABuildingBase* Gegner : Gegnerische)
+                {
+                    const double DistSq = FVector::DistSquared2D(Gegner->GetActorLocation(), Bezug);
+                    if (DistSq < BesteDistSq)
+                    {
+                        BesteDistSq = DistSq;
+                        BestesZiel = Gegner->GetActorLocation();
+                        bZielGefunden = true;
+                    }
+                }
+
+                if (bZielGefunden)
+                {
+                    ZielTreffer.Location = BestesZiel;
+                    ZielTreffer.ImpactPoint = BestesZiel;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[NetzAngriff] Team=%d Angriffsziel auf naechstes Gegnergebaeude gesetzt: (%.0f, %.0f), %d Kandidaten"),
+                        EigenesTeam, BestesZiel.X, BestesZiel.Y, Gegnerische.Num());
+                }
+            }
+        }
+        const FHitResult& HitResultZiel = ZielTreffer;
+
         // Use the same formation solver the human paths use, so GridFormationShape means the same
         // thing for an RL agent as for a player. The ring and wedge layouts size each ring from the
         // largest unit still unplaced, so they REQUIRE descending-radius order - hence the sorted
@@ -759,7 +859,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
 
             const TArray<FVector> Offsets = CustomControllerBase->ComputeSlotOffsetsDirectional(
                 SortedUnits, -1.f,
-                CustomControllerBase->ComputeApproachDirection(SortedUnits, HitResult.Location));
+                CustomControllerBase->ComputeApproachDirection(SortedUnits, HitResultZiel.Location));
 
             for (int32 s = 0; s < SortedUnits.Num() && s < Offsets.Num(); ++s)
             {
@@ -781,7 +881,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
             {
                 // FindRef yields a zero offset for buildings (never inserted), which is exactly the
                 // "use the raw hit location" case the ternary already handled.
-                FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)HitResult.Location : (FVector)HitResult.Location + RLFormationOffsets.FindRef(U);
+                FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)HitResultZiel.Location : (FVector)HitResultZiel.Location + RLFormationOffsets.FindRef(U);
                 bool HitNavModifier;
                 RunLocation = CustomControllerBase->TraceRunLocation(RunLocation, HitNavModifier);
                 if (HitNavModifier) continue;
@@ -813,7 +913,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
             }
 
             if (U)
-                CustomControllerBase->FireAbilityMouseHit(U, HitResult);
+                CustomControllerBase->FireAbilityMouseHit(U, HitResultZiel);
         }
 
         if (BuildingUnits.Num() > 0)

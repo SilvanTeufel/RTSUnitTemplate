@@ -72,6 +72,26 @@ public:
      */
     bool bActionAimsAtTransporter = false;
 
+    /**
+     * Richtet den Angriffsbefehl der KI auf das naechste gegnerische GEBAEUDE statt auf den Boden
+     * unter dem Agenten.
+     *
+     * Ohne das zielt der Angriffsbefehl dorthin, wo die KI-Kamera gerade steht. Fuer die Regel-KI
+     * ist das folgenlos - sie geht ueber IssueDirectAttackMove mit eigener Zielwahl. Fuer das NETZ
+     * war es der Grund, warum es ueberhaupt nie angreift: es muesste erst die Kamera an den Feind
+     * fahren und dann angreifen, und diese Verkettung gelingt ihm praktisch nie. Gemessen ueber
+     * 34 Partien: Team 1 (Netz) NULL Angriffsbefehle, Team 2 (Regeln) bis zu 90 - bei besserer
+     * Bauleistung des Netzes.
+     *
+     * Gebaeude als Ziel, weil sie stehen bleiben; dieselbe Begruendung wie bei
+     * bPreferBuildingTargets im Regel-Entscheider. Findet sich keines, bleibt es beim
+     * urspruenglichen Punkt.
+     *
+     * Wirkt ausschliesslich im ARLAgent, also nur fuer die KI.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI")
+    bool bAimAttackAtNearestEnemyBuilding = true;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bDebug = false;
 

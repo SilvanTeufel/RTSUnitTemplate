@@ -527,6 +527,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate|AI")
 	bool bAttackNearestTarget = true;
 
+	/**
+	 * Bei der Zielwahl GEBAEUDE bevorzugen und Einheiten nur nehmen, wenn kein gegnerisches Gebaeude
+	 * bekannt ist.
+	 *
+	 * Warum: die Angriffszeilen fuehren als Quellklassen BuildingBase UND UnitBase, und beide landeten
+	 * ununterschieden im selben Topf. Zusammen mit bAttackNearestTarget hiess das: es gewinnt der
+	 * naechstgelegene GEGNER-AKTOR - und das ist fast immer eine herumlaufende Einheit, kein Gebaeude.
+	 * Zwei Folgen, beide vom Nutzer beobachtet:
+	 *   - Das Ziel LAEUFT. Jeder neue Befehl zeigt woanders hin, die Armee dreht unterwegs um.
+	 *     Gemessen am 30.08. ueber drei Partien: Zielsspruenge von 1887 bis 5116 Einheiten zwischen
+	 *     zwei Befehlen an dieselbe Gruppe, im Abstand von 5,5 bis 22,5 Sekunden.
+	 *   - Die Armee erreicht die gegnerische Basis nie, weil sie nie dorthin geschickt wurde. Sie
+	 *     jagt Streuner in der Landschaft.
+	 * Gebaeude stehen still. Damit wird das Ziel stabil, die Bindung muss seltener eingreifen, und
+	 * ein Angriff geht wieder dorthin, wo etwas zu zerstoeren ist.
+	 *
+	 * Der Vorzug gilt NUR fuer die Zielwahl der KI. Auf false verhaelt es sich wie zuvor.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate|AI")
+	bool bPreferBuildingTargets = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	bool bUseDirectBatchAttackMove = true;
 
