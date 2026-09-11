@@ -11,6 +11,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/WorkArea.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Volume.h"
 #include "Async/Async.h"
 #include "NavigationSystem.h"
 #include "LandscapeProxy.h"
@@ -292,7 +293,34 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     // Jetzt haengt die Zeile am Ergebnis des ECHTEN Traces: sie kommt nur, wenn der Boden
     // tatsaechlich nicht gefunden wurde - also genau im Fehlerfall, den sie beschreiben soll. Der
     // zweite Trace entfaellt ersatzlos, die Aussage bleibt dieselbe.
-    const bool bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
+    bool bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
+
+    // ================================================================================================
+    // Volumen duerfen diesen Trace nicht kapern (01.09.2026).
+    //
+    // Ein AVolume - etwa ein PCGVolume - hat objectType ECC_WorldStatic und collisionEnabled
+    // QueryOnly. Seine Kanal-Antworten stehen zwar alle auf Ignore, das hilft hier aber NICHT:
+    // LineTraceSingleByObjectType fragt nach dem OBJEKTTYP und liefert solche Koerper unabhaengig
+    // von ihren Antworten zurueck. Die Ignore-Einstellungen gelten nur fuer Kanal-Abfragen.
+    //
+    // Der Trace startet 1000 ueber der Einheit, also mitten im Volumen, und traf damit sofort -
+    // TrefferZ = StartZ, DeltaZ 1000 bis 2000, weit ueber der Schwelle. Der Treffer wurde
+    // verworfen, LastGroundLocation blieb auf 0 und die Hoehe der Einheit war EINGEFROREN. Auf
+    // ebenem Boden faellt das nicht auf; am Hang laeuft die Einheit ins Gelaende und steckt fest.
+    // Gemessen an der direkt gesteuerten CameraUnit, betroffen war aber jede Einheit im Volumen.
+    //
+    // Ein Volumen ist nie Boden. Wird eines getroffen, wird es ignoriert und erneut gesucht.
+    // ================================================================================================
+    for (int32 Versuch = 0; bBodenGefunden && Versuch < 4; ++Versuch)
+    {
+        AActor* GetroffenerActor = Hit.GetActor();
+        if (!IsValid(GetroffenerActor) || !GetroffenerActor->IsA(AVolume::StaticClass()))
+        {
+            break;
+        }
+        Params.AddIgnoredActor(GetroffenerActor);
+        bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
+    }
 
     if (!bBodenGefunden && !CharFragment.bIsFlying)
     {
@@ -311,6 +339,31 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
 
         const AActor* HitActor = Hit.GetActor();
         const float DeltaZ = Hit.ImpactPoint.Z - CurrentZ;
+
+        // DIAGNOSE (bleibt stehen bis abbestellt) - "CameraUnit laeuft ins Gelaende und steckt".
+        // Gemessen am 01.09.: Actor-Z eingefroren auf 88, Boden an derselben Stelle 176, also
+        // 88 Einheiten UNTER dem Gelaende; Zustand Run, kein einziger Sperr-Tag gesetzt. Die
+        // Abfrage nimmt die Einheit also mit - trotzdem wird die Hoehe nicht nachgefuehrt.
+        // Diese Zeile meldet NUR den Fehlerfall (Treffer verworfen), inklusive WAS getroffen
+        // wurde: der Verdacht ist, dass der Trace nicht den Boden findet, sondern gleich am
+        // Startpunkt (Z+1000) auf Geometrie laeuft.
+        if (!CharFragment.bIsFlying && !bIsDead
+            && !(IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass())
+                 && DeltaZ <= (HeightOffset + 100.f)))
+        {
+            static double LetzteBodenMeldung = 0.0;
+            const double JetztZeit = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+            if (JetztZeit - LetzteBodenMeldung > 1.0)
+            {
+                LetzteBodenMeldung = JetztZeit;
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[BodenVerworfen] %s CurrentZ=%.0f TrefferZ=%.0f DeltaZ=%.0f Schwelle=%.0f Getroffen=%s Klasse=%s StartZ=%.0f LastGround=%.0f"),
+                    *UnitBase->GetName(), CurrentZ, Hit.ImpactPoint.Z, DeltaZ, HeightOffset + 100.f,
+                    IsValid(HitActor) ? *HitActor->GetName() : TEXT("-"),
+                    IsValid(HitActor) ? *HitActor->GetClass()->GetName() : TEXT("-"),
+                    TraceStart.Z, CharFragment.LastGroundLocation);
+            }
+        }
 
         if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= (HeightOffset+100.f) && !CharFragment.bIsFlying) // && DeltaZ <= HeightOffset
         {

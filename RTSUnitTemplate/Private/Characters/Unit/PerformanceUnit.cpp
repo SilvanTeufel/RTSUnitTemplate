@@ -206,16 +206,61 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 			FMassEntityHandle Entity = MassActorBindingComponent->GetEntityHandle();
 			if (Entity.IsValid())
 			{
-				VisualManager->SetUnitVisualVisible(Entity, ComputeInherentVisibility());
+				const bool bSichtbar = ComputeInherentVisibility();
+				VisualManager->SetUnitVisualVisible(Entity, bSichtbar);
+				// Schatten immer im Gleichschritt mit der gezeichneten Instanz - sonst bleibt er
+				// im Nebel des Krieges oder nach dem Ausblenden als Fleck auf dem Boden liegen.
+				SetzeBlobSchattenAktiv(bSichtbar);
 			}
 		}
 	}
 }
 
 
+void APerformanceUnit::SetzeBlobSchattenAktiv(bool bAktiv)
+{
+	// Klasse ueber den Pfad suchen statt sie einzubinden - siehe Kommentar in der Kopfdatei.
+	// FindObject findet sie nur, wenn das Modul bereits geladen ist; LoadObject holt sie sonst nach.
+	static const TCHAR* KlassenPfad = TEXT("/Script/MaterialDrivenShadows.MaterialDrivenShadowComponent");
+	static UClass* SchattenKlasse = nullptr;
+	static bool bSuchteSchonMal = false;
+	if (!bSuchteSchonMal)
+	{
+		bSuchteSchonMal = true;
+		SchattenKlasse = FindObject<UClass>(nullptr, KlassenPfad);
+		if (!SchattenKlasse)
+		{
+			SchattenKlasse = LoadObject<UClass>(nullptr, KlassenPfad);
+		}
+		UE_LOG(LogTemp, Log, TEXT("[BlobSchatten] MaterialDrivenShadowComponent %s"),
+			SchattenKlasse ? TEXT("gefunden - Schatten werden mitgeschaltet")
+			               : TEXT("NICHT gefunden - Plugin fehlt, Schatten bleiben unberuehrt"));
+	}
+	if (!SchattenKlasse)
+	{
+		return; // Plugin nicht vorhanden - nichts zu tun.
+	}
+
+	TArray<UActorComponent*> Schatten;
+	GetComponents(SchattenKlasse, Schatten);
+	for (UActorComponent* Komponente : Schatten)
+	{
+		if (!Komponente) continue;
+		if (UFunction* Funktion = Komponente->FindFunction(FName(TEXT("SetShadowEnabled"))))
+		{
+			struct FParameter { bool bNewEnabled; };
+			FParameter Parameter{ bAktiv };
+			Komponente->ProcessEvent(Funktion, &Parameter);
+		}
+	}
+}
+
 void APerformanceUnit::HideMassVisualNow()
 {
 	SetActorHiddenInGame(true);
+
+	// Der Schatten haengt nicht an der Actor-Sichtbarkeit, er muss ausdruecklich weg.
+	SetzeBlobSchattenAktiv(false);
 
 	if (USkeletalMeshComponent* SkelMesh = GetMesh())
 	{
@@ -818,6 +863,20 @@ ENetMode APerformanceUnit::GetUnitNetMode() const
 bool APerformanceUnit::ComputeInherentVisibility() const
 {
 	if (!IsInitialized)
+	{
+		return false;
+	}
+
+	// Wer den ACTOR versteckt, will die Einheit nicht sehen - auch dann nicht, wenn sie ueber
+	// eine gepoolte ISM-Instanz gezeichnet wird. SetActorHiddenInGame erreicht diese Instanz
+	// naemlich NICHT: sie haengt am UnitVisualISMManagerActor, nicht an der Einheit.
+	//
+	// Gemeldet am 08.09.2026: waehrend einer Replay-Wiedergabe blieb die komplette lebende
+	// Armee sichtbar, obwohl UReplayPlaybackSubsystem alle Einheiten ueber
+	// SetActorHiddenInGame ausgeblendet hatte - Spiel und Replay liefen uebereinander.
+	// Seit der Umstellung auf ISM/Vertexanimation ist die Actor-Sichtbarkeit eben nicht mehr
+	// das, was man sieht. Ueber diesen Weg wirkt sie wieder, und zwar fuer JEDEN Aufrufer.
+	if (IsHidden())
 	{
 		return false;
 	}

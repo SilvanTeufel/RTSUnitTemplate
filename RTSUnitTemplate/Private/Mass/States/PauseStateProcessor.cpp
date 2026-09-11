@@ -300,7 +300,14 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
             if (SignalSubsystem)
             {
                 StateFrag.StateTimer = 0.f;
-                SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
+                // Bei SpawnProjectileAtPercentage > 0 wechselt die Einheit hier nur in den
+                // Angriff (dasselbe Signal wie im Nahkampf) - geschossen wird erst im Verlauf
+                // der Angriffsanimation, siehe UAttackStateProcessor. Bei 0 faellt der Schuss
+                // wie bisher schon beim Eintritt in den Angriff.
+                SignalSubsystem->SignalEntityDeferred(
+                    Context,
+                    Stats.SpawnProjectileAtPercentage > 0.f ? UnitSignals::Attack : UnitSignals::RangedAttack,
+                    Entity);
             }
         }
         else

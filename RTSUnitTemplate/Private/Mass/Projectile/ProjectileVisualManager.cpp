@@ -119,6 +119,22 @@ UInstancedStaticMeshComponent* UProjectileVisualManager::GetOrCreatePooledISM(US
     {
         NewISM->SetMaterial(0, Material);
     }
+    else
+    {
+        // Ohne Material erbt die ISM das Standardmaterial des Meshes - beim Engine-Sphere
+        // eine sichtbare graue Kugel. Genau so sieht "das Projektil ist beim ersten Schuss
+        // nicht durchsichtig" aus. Der Pool schluesselt nach (Mesh, Material), ein spaeterer
+        // Schuss mit gefundenem Material landet also in einem ANDEREN Eintrag und stimmt.
+        UE_LOG(LogTemp, Warning,
+            TEXT("[Projektil] ISM fuer '%s' ohne Material angelegt - das Mesh zeigt sein "
+                 "Standardmaterial. Traegt das Projektil-CDO ein Material auf ISMComponent Slot 0?"),
+            *Mesh->GetName());
+    }
+
+    // Diagnose bleibt stehen, bis sie abbestellt wird: sie zeigt, welcher Pooleintrag beim
+    // ersten Schuss entsteht und mit welchem Material.
+    UE_LOG(LogTemp, Log, TEXT("[Projektil] Neuer ISM-Pooleintrag: Mesh='%s' Material='%s' Schatten=%d"),
+        *Mesh->GetName(), Material ? *Material->GetName() : TEXT("KEINS"), bCastShadow ? 1 : 0);
     
     NewISM->SetMobility(EComponentMobility::Movable);
     NewISM->SetCastShadow(bCastShadow);

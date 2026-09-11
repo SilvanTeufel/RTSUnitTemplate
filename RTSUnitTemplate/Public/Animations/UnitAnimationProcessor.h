@@ -8,6 +8,7 @@
 #include "MassEntityTypes.h"
 #include "Core/UnitData.h"
 #include "Engine/DataTable.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "UnitAnimationProcessor.generated.h"
 
 USTRUCT(BlueprintType)
@@ -68,6 +69,21 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
 
     UPROPERTY(Transient)
     TEnumAsByte<UnitData::EState> LastProcessedState = UnitData::None;
+
+    /**
+     * Wohin die Instanzdaten zuletzt geschrieben wurden.
+     *
+     * Eine Einheit bekommt ihre Instanz zuerst auf der EIGENEN ISMComponent und wird danach vom
+     * UUnitVisualManager auf eine gepoolte ISM umgezogen. Der Erstschreibvorgang landet dann auf der
+     * alten Komponente, auf der neuen stehen weiter Nullen - also Frames 0..0 und damit ein Standbild,
+     * bis zufaellig ein Zustandswechsel neu schreibt. Deshalb merken wir uns das Ziel und schreiben
+     * neu, sobald es sich geaendert hat.
+     */
+    UPROPERTY(Transient)
+    TWeakObjectPtr<UInstancedStaticMeshComponent> LastWrittenISM = nullptr;
+
+    UPROPERTY(Transient)
+    int32 LastWrittenInstanceIndex = INDEX_NONE;
 
 	UPROPERTY(Transient)
 	float PlayRate = 1.0f;

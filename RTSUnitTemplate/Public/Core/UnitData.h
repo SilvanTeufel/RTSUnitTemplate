@@ -74,7 +74,10 @@ enum class EWinLoseCondition : uint8
 	TaggedUnitsDestroyed,
 	TeamReachedResourceCount,
 	TeamReachedGameTime,
-	TaggedUnitsSpawned
+	TaggedUnitsSpawned,
+	// Eine Einheit des Teams erreicht einen Ort. Es gab bisher keine ortsgebundene Bedingung -
+	// "einen Punkt erreichen" liess sich deshalb nur ausserhalb des WinLoseConfigActors bauen.
+	TeamReachedLocation
 };
 
 UENUM()
