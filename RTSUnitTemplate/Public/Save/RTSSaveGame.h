@@ -8,6 +8,7 @@
 #include "Core/WorkerData.h"
 #include "UObject/SoftObjectPath.h"
 #include "Actors/WorkArea.h"
+#include "Actors/WinLoseConfigActor.h"
 #include "RTSSaveGame.generated.h"
 
 USTRUCT(BlueprintType)
@@ -106,9 +107,19 @@ struct FUnitSaveData
 
     // Per-node investment of the radial attribute talent tree (AttributeTreeWidget).
     // Restored as raw state: the resulting GAS attribute values are already captured in
-    // AttributeSaveData and the point pool in LevelData, so this must NOT be re-invested on load.
+    // AttributeSaveData, so this must NOT be re-invested on load.
     UPROPERTY()
     TArray<FAttributeTreeNodeSaveData> AttributeTreeNodes;
+
+    // Der EIGENE Punktevorrat des Attributbaums. Seit dem 10.09.2026 nicht mehr identisch mit
+    // LevelData.TalentPoints - ohne diese beiden Felder waeren die Punkte des Baums nach dem
+    // Laden weg, waehrend die investierten Knoten oben stehen blieben.
+    // Aeltere Spielstaende bringen die Felder nicht mit und laden sie als 0.
+    UPROPERTY()
+    int32 AttributeTreePoints = 0;
+
+    UPROPERTY()
+    int32 UsedAttributeTreePoints = 0;
 
     // Saved abilities states for this unit
     UPROPERTY()
@@ -116,6 +127,30 @@ struct FUnitSaveData
 
     UPROPERTY()
     TMap<FString, FString> SerializedModuleData;
+};
+
+/**
+ * Laufzeitstand einer Siegbedingung (02.09.2026 ergaenzt).
+ * Ohne das setzt ein Spielstand den Fortschritt zum Ziel zurueck: welcher Abschnitt gerade
+ * laeuft und wieviel davon geschafft ist, stand bisher in keinem Slot.
+ */
+USTRUCT()
+struct FWinLoseSaveData
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    int32 TeamId = 0;
+
+    /** Name des Actors, um bei mehreren Konfigurationen die richtige wiederzufinden. */
+    UPROPERTY()
+    FString ActorName;
+
+    UPROPERTY()
+    int32 CurrentWinConditionIndex = 0;
+
+    UPROPERTY()
+    TArray<FTagProgress> TagProgress;
 };
 
 USTRUCT(BlueprintType)
@@ -248,4 +283,16 @@ public:
     // before this field existed, so the loader must skip restore when empty.
     UPROPERTY()
     TArray<FResourceArray> TeamResources;
+
+    // Fortschritt der Siegbedingungen je Team.
+    UPROPERTY()
+    TArray<FWinLoseSaveData> WinLoseStates;
+
+    /**
+     * Verstrichene Spielzeit. World->GetTimeSeconds() faengt beim Laden wieder bei 0 an -
+     * eine Bedingung "ueberlebe N Sekunden" und der 60-s-Takt der Talentpunkte wuerden sonst
+     * von vorn beginnen.
+     */
+    UPROPERTY()
+    float SavedGameTimeSeconds = 0.f;
 };
