@@ -74,6 +74,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AAbilityIndicator> AbilityIndicatorClass;
 
+	/** Kanal, gegen den der Mausstrahl fuer den Zielmarker geschossen wird. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Indicator")
+	TEnumAsByte<ECollisionChannel> IndicatorTraceChannel = ECC_Visibility;
+
+	/** Wenn wahr, zaehlt ausschliesslich die LANDSCHAFT als Zielflaeche: Marker und Klickpunkt
+	 *  werden vom getroffenen Punkt senkrecht auf das Gelaende heruntergezogen. Ohne das klettert
+	 *  der Marker auf Einheiten und Gebaeude, weil die den Sichtkanal blockieren. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Indicator")
+	bool bTargetLandscapeOnly = false;
+
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void OnInputReleased();
 

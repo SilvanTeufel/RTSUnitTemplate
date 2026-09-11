@@ -877,6 +877,14 @@ struct FMassCombatStatsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Stats")
     float AttackDuration = 0.7f;
 
+    /** Spiegelt AUnitBase::PlayRateRunTimeCalculation - siehe dort. */
+    UPROPERTY(EditAnywhere, Category = "Stats")
+    bool bPlayRateRunTimeCalculation = true;
+
+    /** Spiegelt AUnitBase::SpawnProjectileAtPercentage - siehe dort. */
+    UPROPERTY(EditAnywhere, Category = "Stats")
+    float SpawnProjectileAtPercentage = 0.f;
+
 	UPROPERTY(EditAnywhere, Category = "Stats")
 	float ContinuousAttackDuration = 1.0f;
 

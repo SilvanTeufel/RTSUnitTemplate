@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -41,6 +41,20 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "RTSUnitTemplate")
 	UStaticMeshComponent* IndicatorMesh;
+
+	/** Nur die LANDSCHAFT zaehlt als Zielflaeche: der Marker wird vom getroffenen Punkt senkrecht
+	 *  auf das Gelaende heruntergezogen, statt auf Einheiten und Gebaeude zu klettern.
+	 *
+	 *  Bewusst HIER und nicht nur an der Faehigkeit: der Marker wird lokal gespawnt, seine
+	 *  Einstellungen stehen auf dem Client also sofort bereit. Die Faehigkeit erreicht den Client
+	 *  erst ueber CurrentSnapshot - bis dahin waere die Regel dort wirkungslos. Steht das Flag
+	 *  hier auf false, gilt weiterhin die Einstellung der Faehigkeit. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bTargetLandscapeOnly = false;
+
+	/** Kanal fuer die Zielsuche. Nur wirksam, wenn bTargetLandscapeOnly hier gesetzt ist. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	TEnumAsByte<ECollisionChannel> TraceChannel = ECC_Visibility;
 
 	// If true, the controller will detect overlaps with WorkAreas and highlight this indicator
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
