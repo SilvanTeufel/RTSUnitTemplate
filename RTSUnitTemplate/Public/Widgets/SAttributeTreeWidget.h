@@ -35,6 +35,8 @@ struct FAttributeTreeSlateNode
 // Live queries / actions back into the owning UMG widget (which reads the replicated ALevelUnit).
 DECLARE_DELEGATE_RetVal_OneParam(int32, FAttrTreeGetNodePoints, FName);
 DECLARE_DELEGATE_RetVal(int32, FAttrTreeGetAvailablePoints);
+/** Kopfzeile des Baums: verfuegbare Punkte plus Hinweis, in welchem Takt neue kommen. */
+DECLARE_DELEGATE_RetVal(FString, FAttrTreeGetHeaderText);
 DECLARE_DELEGATE_RetVal_OneParam(bool, FAttrTreeIsUnlocked, FName);
 DECLARE_DELEGATE_OneParam(FAttrTreeOnInvest, FName);
 DECLARE_DELEGATE(FAttrTreeOnReset);
@@ -100,6 +102,7 @@ public:
 		SLATE_ARGUMENT(FMargin, BorderPadding)
 		SLATE_EVENT(FAttrTreeGetNodePoints, OnGetNodePoints)
 		SLATE_EVENT(FAttrTreeGetAvailablePoints, OnGetAvailablePoints)
+		SLATE_EVENT(FAttrTreeGetHeaderText, OnGetHeaderText)
 		SLATE_EVENT(FAttrTreeIsUnlocked, OnIsUnlocked)
 		SLATE_EVENT(FAttrTreeOnInvest, OnInvest)
 		SLATE_EVENT(FAttrTreeOnReset, OnReset)
@@ -176,6 +179,9 @@ private:
 	// Delegates
 	FAttrTreeGetNodePoints OnGetNodePointsDelegate;
 	FAttrTreeGetAvailablePoints OnGetAvailablePointsDelegate;
+
+	/** Liefert die Kopfzeile (verfuegbare Punkte + Vergabetakt) als fertigen Text. */
+	FAttrTreeGetHeaderText OnGetHeaderTextDelegate;
 	FAttrTreeIsUnlocked OnIsUnlockedDelegate;
 	FAttrTreeOnInvest OnInvestDelegate;
 	FAttrTreeOnReset OnResetDelegate;

@@ -21,7 +21,6 @@ void UTalentSaveGame::PopulateAttributeSaveData(UAttributeSetBase* AttributeSet)
 	AttributeSaveData.Range = AttributeSet->GetRange();
 	AttributeSaveData.RunSpeed = AttributeSet->GetRunSpeed();
 	AttributeSaveData.IsAttackedSpeed = AttributeSet->GetIsAttackedSpeed();
-	AttributeSaveData.RunSpeedScale = AttributeSet->GetRunSpeedScale();
 	AttributeSaveData.ProjectileScaleActorDirectionOffset = AttributeSet->GetProjectileScaleActorDirectionOffset();
 	AttributeSaveData.ProjectileSpeed = AttributeSet->GetProjectileSpeed();
 	AttributeSaveData.Stamina = AttributeSet->GetStamina();
