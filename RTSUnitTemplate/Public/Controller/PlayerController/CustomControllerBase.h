@@ -95,6 +95,45 @@ public:
 	bool bSelectOwnUnitsOnMatchStart = false;
 	AUnitBase* GetUnitFromHitResult(const FHitResult& Hit) const;
 
+	/**
+	 * Einheit unter dem Mauszeiger, gemeldet von UMassUnitHoverProcessor.
+	 *
+	 * Der Processor prueft den Mausstrahl mit 10 Hz rein GEOMETRISCH gegen Kapsel bzw. Box jeder
+	 * Mass-Einheit (FMassAgentCharacteristicsFragment::GetRadiusInDirection) - ohne jede Kollision.
+	 * Er weiss damit laengst, was unter dem Zeiger liegt, und zwar auch bei Gebaeuden, deren
+	 * sichtbare ISM gar keine Kollision hat.
+	 *
+	 * Deshalb schreibt er das Ergebnis hierher, statt dass der Klick es sich noch einmal ueber
+	 * Spuren zusammensucht: eine Zuweisung je Zehntelsekunde gegen bis zu drei Linienspuren je
+	 * Klick - und vor allem ohne dafuer irgendwo Kollision einschalten zu muessen, was in einem
+	 * RTS mit hunderten Einheiten teuer waere.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	TWeakObjectPtr<AUnitBase> HoveredUnit;
+
+	/** Vom Hover-Processor gerufen. Nullptr loescht den Eintrag. */
+	void SetHoveredUnit(AUnitBase* InUnit) { HoveredUnit = InUnit; }
+
+	/**
+	 * Spur unter dem Cursor, die auf eine anklickbare Einheit fuehrt - ueber alle drei Kanaele,
+	 * auf denen im Projekt etwas Anklickbares liegt.
+	 *
+	 * Eine einzelne ECC_Pawn-Spur reicht nicht: Gebaeude setzen ihre Kapsel in
+	 * ABuildingBase::BeginPlay auf ECC_Pawn = Ignore (Einheiten sollen durch sie hindurchlaufen),
+	 * und AWorkArea blockt ausschliesslich ECC_Visibility - auf Pawn und WorldDynamic steht sie
+	 * auf Overlap, und eine Linienspur liefert nur BLOCKIERENDE Treffer. Die Pawn-Spur ging
+	 * deshalb durch beide hindurch und traf in der Draufsicht das Landscape dahinter.
+	 *
+	 * Der frueher hier stehende Rueckfall `if (!HitPawn.bBlockingHit)` war dadurch wirkungslos:
+	 * das Landscape IST ein blockierender Treffer. Abbruchbedingung ist deshalb nicht mehr
+	 * "irgendetwas getroffen", sondern "eine Einheit aufgeloest".
+	 *
+	 * @param OutHit  Bei Erfolg der Treffer, der eine Einheit ergibt; sonst unveraendert die
+	 *                ECC_Pawn-Spur, damit bodenzielende Faehigkeiten ihren Punkt behalten.
+	 * @return        true, wenn OutHit auf eine Einheit fuehrt.
+	 */
+	bool GetSelectableHitUnderCursor(FHitResult& OutHit) const;
+
 	virtual void BeginPlay() override;
 
 	/** Drives the formation drag line: samples the cursor and polls for the right-mouse release. */
@@ -491,6 +530,19 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_RequestCooldown(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability);
+
+	/**
+	 * Vergibt eine Faehigkeit an ALLE eigenen Einheiten einer Tierklasse (02.09.2026).
+	 * Der AbilityChooser arbeitete bisher nur auf der einen ausgewaehlten Einheit. Punkte gehen
+	 * nur an Einheiten, die welche haben - der Rest wird stillschweigend uebergangen, genau wie
+	 * SpendAbilityPoints es einzeln auch tut.
+	 */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "RTSUnitTemplate|Abilities")
+	void Server_SpendAbilityPointsForTier(FGameplayTag TierTag, EGASAbilityInputID AbilityID, int32 AbilityIndex);
+
+	/** Hat mindestens eine eigene Einheit dieser Tierklasse noch Faehigkeitspunkte? */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Abilities")
+	bool TierHasUnitsWithAbilityPoints(FGameplayTag TierTag) const;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RequestSetTeam(int32 NewTeamId);
