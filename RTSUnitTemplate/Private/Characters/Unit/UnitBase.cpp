@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/UnitBase.h"
 #include "GameModes/ResourceGameMode.h"
@@ -526,6 +526,8 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, CastTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, PauseDuration);
 	DOREPLIFETIME(AUnitBase, AttackDuration);
+	DOREPLIFETIME(AUnitBase, PlayRateRunTimeCalculation);
+	DOREPLIFETIME(AUnitBase, SpawnProjectileAtPercentage);
 	DOREPLIFETIME(AUnitBase, UseProjectile);
 	DOREPLIFETIME(AUnitBase, ReduceCastTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
@@ -566,6 +568,14 @@ void AUnitBase::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 void AUnitBase::SetDeathVisualState(bool bShouldHide)
 {
+	// Der Blob-Schatten der MaterialDrivenShadows haengt NICHT an SetHiddenInGame: die Komponente
+	// ist ein reines SceneComponent, gezeichnet wird der Schatten vom Subsystem des Plugins. Die
+	// Schleife weiter unten setzt also nur ein Flag, und der Schattenfleck blieb nach dem
+	// Ausblenden auf dem Boden liegen. Hier ist die richtige Stelle: HandleHideUnit ruft diese
+	// Funktion auf Client UND Server (siehe die NetMode-Zeile dort), der Schatten verschwindet
+	// damit auf beiden Seiten.
+	SetzeBlobSchattenAktiv(!bShouldHide);
+
 	if (bShouldHide)
 	{
 		// 1. Hide the Skeletal Mesh
@@ -711,6 +721,14 @@ void AUnitBase::StartBuildingFlight(float InFlyHeight)
 
 	FlyHeight = InFlyHeight;   // replicated (AMassUnitBase) -> synced to the Mass fragment on all machines
 	IsFlying = true;           // replicated -> HandleGroundAndHeight interps Z up to LastGroundLocation+FlyHeight
+
+	// ZUERST Vermeidung und Hindernis abschalten, DANN erst CanMove. Ein Gebaeude ist um ein
+	// Vielfaches groesser als eine Einheit; sobald es beweglich wird, draengen Separation und
+	// Avoidance es mit voller Ueberlappung auseinander und katapultieren es seitlich weg. Der
+	// Start soll nur in Z laufen.
+	SetUnitAvoidanceEnabled(false);
+	EnableDynamicObstacle(false);
+
 	CanMove = true;            // unlocks the movers + the Z-interp (StopMovement freeze excludes it otherwise)
 
 	// Drop the navmesh obstacle so ground units can path under the lifted-off building.
@@ -769,6 +787,66 @@ void AUnitBase::FinishLanding(bool bReRegisterObstacle)
 bool AUnitBase::IsUnitAtLocation2D(FVector WorldLocation, float AcceptanceRadius) const
 {
 	return FVector::Dist2D(GetActorLocation(), WorldLocation) <= AcceptanceRadius;
+}
+
+void AUnitBase::SnapUnitToLocation2D(FVector WorldLocation)
+{
+	if (!HasAuthority()) return;
+
+	SnapAusfuehren(WorldLocation);
+
+	// Und dasselbe auf jeder Client-Maschine. Der Client simuliert seine Mass-Entitaet selbst
+	// weiter; steht deren Bewegungsziel noch auf dem alten Punkt, zieht sie das Gebaeude jeden
+	// Tick weg und die Replikation holt es zurueck - sichtbar als Zittern waehrend der Landung.
+	Multicast_SnapUnitToLocation2D(WorldLocation);
+}
+
+void AUnitBase::Multicast_SnapUnitToLocation2D_Implementation(FVector WorldLocation)
+{
+	// Auf dem Server ist die Arbeit schon getan.
+	if (HasAuthority()) return;
+
+	SnapAusfuehren(WorldLocation);
+}
+
+void AUnitBase::SnapAusfuehren(FVector WorldLocation)
+{
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (!GetMassEntityData(EntityManager, EntityHandle) || !EntityManager) return;
+
+	FTransformFragment* TransformFrag = EntityManager->GetFragmentDataPtr<FTransformFragment>(EntityHandle);
+	if (!TransformFrag) return;
+
+	// Nur X/Y. Das Absenken macht HandleGroundAndHeight ueber die Flughoehe - wer hier auch Z
+	// setzt, laesst das Gebaeude im Boden stecken.
+	FTransform NeuerTransform = TransformFrag->GetTransform();
+	FVector NeuePosition = NeuerTransform.GetLocation();
+	NeuePosition.X = WorldLocation.X;
+	NeuePosition.Y = WorldLocation.Y;
+	NeuerTransform.SetLocation(NeuePosition);
+	TransformFrag->SetTransform(NeuerTransform);
+
+	SetActorLocation(NeuePosition, false, nullptr, ETeleportType::TeleportPhysics);
+
+	// Das Bewegungsziel MUSS mitgezogen werden. Bleibt es auf dem alten Punkt stehen, zieht der
+	// naechste Mover-Tick das Gebaeude sofort wieder vom Indikator weg.
+	//
+	// NUR auf der Autoritaet: UpdateMoveTarget und das darin gerufene SetDesiredAction haben je ein
+	// ensure gegen NM_Client. Auf dem Client feuerten beide bei jeder Landung, und jedes ensure
+	// macht einen Stack-Walk samt Fehlerbericht - gemessen 1,1 s und 2,7 s. Genau das war der
+	// Ruckler beim Landen. Der Client braucht das Ziel auch nicht: seine Position kommt ohnehin
+	// aus der Replikation, ihm reichen Transform und Aktorposition oben.
+	if (HasAuthority())
+	{
+		if (FMassMoveTargetFragment* MoveTarget = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
+		{
+			UpdateMoveTarget(*MoveTarget, NeuePosition, 0.f, GetWorld());
+			MoveTarget->SlackRadius = 1.f;
+		}
+
+		AddStopMovementTagToEntity();
+	}
 }
 
 void AUnitBase::FlyUnitToLocationAndLand(FVector WorldLocation, float InFlyHeight, float MoveSpeed, float AcceptanceRadius, float DescendTime)

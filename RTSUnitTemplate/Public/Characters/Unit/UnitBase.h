@@ -1,4 +1,4 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -252,7 +252,22 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RTSUnitTemplate|Flight")
 	bool IsUnitFlying() const { return IsFlying; }
 
+	// Setzt X/Y der Einheit HART auf WorldLocation (Hoehe bleibt). Fuer das Landen eines Gebaeudes
+	// auf dem AbilityIndicator: der Mover kommt nur bis auf den Ankunftsradius heran, das reicht
+	// nicht, wenn der Bauplatz exakt getroffen werden muss.
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Flight")
+	void SnapUnitToLocation2D(FVector WorldLocation);
+
+	/** Setzt denselben Snap auf ALLEN Maschinen. Ohne das rechnet der Client seine Mass-Simulation
+	 *  weiter gegen die replizierte Position - das Gebaeude zittert dort waehrend der Landung,
+	 *  waehrend es auf dem Server ruhig steht. */
+	UFUNCTION(NetMulticast, Reliable)
+	void Multicast_SnapUnitToLocation2D(FVector WorldLocation);
+
 private:
+	/** Die eigentliche Arbeit von SnapUnitToLocation2D - laeuft auf Server UND Client. */
+	void SnapAusfuehren(FVector WorldLocation);
+
 	// Internal auto-land lifecycle state for FlyUnitToLocationAndLand.
 	FVector FlyLandTarget = FVector::ZeroVector;
 	float FlyLandAcceptance = 60.f;
@@ -487,6 +502,34 @@ public:
 
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float AttackDuration = 0.6f;
+
+	/**
+	 * Nur fuer ISM/Vertex-Einheiten. Ist der Schalter an (Vorgabe), rechnet der
+	 * UnitAnimationProcessor die Abspielgeschwindigkeit des ANGRIFFSCLIPS zur Laufzeit so aus,
+	 * dass er genau AttackDuration ausfuellt - der Clip laeuft dann weder vorher leer (PlayOnce
+	 * haelt sonst die letzte Frame und die Einheit wirkt eingefroren) noch wird er abgeschnitten.
+	 * Aus: es gilt die PlayRate aus der ISMAnimationData-Tabelle.
+	 * Skelettanimationen sind davon nicht betroffen.
+	 */
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
+		bool PlayRateRunTimeCalculation = true;
+
+	/**
+	 * Nur fuer Fernkampfeinheiten (UseProjectile). Wann im Angriffszyklus der Schuss faellt.
+	 *
+	 *   0.0 (Vorgabe) - am ENDE DER PAUSE, also im selben Moment, in dem die Einheit in den
+	 *                   Angriff wechselt. Das Projektil ist vor der Ausholbewegung da.
+	 *   0.5           - nach der halben Angriffsdauer.
+	 *   1.0           - am ENDE des Angriffs, nach der Angriffsanimation.
+	 *
+	 * Zu beachten: das Signal RangedAttack ist nicht bloss ein Projektilspawn. Es fuehrt den
+	 * kompletten Angriff aus - Schaden, Faehigkeiten und Projektil. Der Wert verschiebt damit
+	 * auch den Zeitpunkt des Schadens. Die Schlagzahl bleibt gleich, der Zyklus ist weiterhin
+	 * AttackDuration + PauseDuration.
+	 */
+	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate,
+		meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.0", UIMax = "1.0"))
+		float SpawnProjectileAtPercentage = 0.f;
 	
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float CastTime = 5.f;
