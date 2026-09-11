@@ -26,13 +26,45 @@ void UWinLoseWidget::NativeConstruct()
 	{
 		OkButton->OnClicked.AddUniqueDynamic(this, &UWinLoseWidget::OnOkClicked);
 	}
-	
+
 	APlayerController* PC = GetOwningPlayer();
+
+	// Zuschauen nur, wenn noch ein anderer Spieler ohne Ergebnis in der Partie ist. Die Antwort
+	// kommt vom Server (siehe ACameraControllerBase::bSpectateAvailable); ein Client kann sie
+	// nicht selbst ermitteln, weil er die fremden PlayerController gar nicht kennt.
+	if (SpectateButton)
+	{
+		SpectateButton->OnClicked.AddUniqueDynamic(this, &UWinLoseWidget::OnSpectateClicked);
+
+		const ACameraControllerBase* CamPC = Cast<ACameraControllerBase>(PC);
+		SpectateButton->SetIsEnabled(CamPC != nullptr && CamPC->bSpectateAvailable);
+	}
+
 	if (PC && IsValid(PC))
 	{
 		PC->SetShowMouseCursor(true);
 		PC->SetInputMode(FInputModeUIOnly());
 	}
+}
+
+void UWinLoseWidget::OnSpectateClicked()
+{
+	ACameraControllerBase* PC = Cast<ACameraControllerBase>(GetOwningPlayer());
+	if (!PC)
+	{
+		return;
+	}
+
+	// Server-Aufruf, damit der Knopf auch beim Client wirkt - der Pawn-Tausch liegt beim GameMode.
+	PC->Server_EnterSpectate(/*bRevealAll=*/false);
+
+	// Das Fenster muss weg, sonst schaut der Spieler durch FInputModeUIOnly auf ein totes Menue.
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+	PC->SetInputMode(InputMode);
+	PC->SetShowMouseCursor(true);
+	RemoveFromParent();
 }
 
 void UWinLoseWidget::OnOkClicked()
