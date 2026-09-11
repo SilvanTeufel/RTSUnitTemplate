@@ -11,6 +11,8 @@
 #include "Mass/UnitMassTag.h"
 #include "TimerManager.h"
 
+static constexpr int32 GDissolveCustomDataIndex = 13;
+
 void UUnitVisualManager::Initialize(FSubsystemCollectionBase& Collection) {
 	Super::Initialize(Collection);
 }
@@ -88,6 +90,25 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 		return;
 	}
 
+	// Der Pool schluesselt nur ueber Material 0. Bei einem Mesh mit MEHREREN Materialslots behielten
+	// alle weiteren Slots bisher das Material des Mesh-Assets - bei Vertex-Animation heisst das: dieser
+	// Teil traegt kein World Position Offset und steht bewegungslos, waehrend der Rest sich bewegt.
+	// Beim DuneTyrant (zwei Slots) trug ausgerechnet der zweite die Koerpertextur, deshalb sah die
+	// ganze Einheit unanimiert aus. Also alle Slots der Vorlage uebernehmen.
+	// Ein Konflikt ist ausgeschlossen: der Pool teilt sich nur bei GLEICHEM Mesh, und gleiches Mesh
+	// heisst gleicher Einheitentyp und damit dieselbe Materialbelegung.
+	{
+		const int32 SlotAnzahl = TemplateISM->GetNumMaterials();
+		for (int32 Slot = 1; Slot < SlotAnzahl; ++Slot)
+		{
+			UMaterialInterface* SlotMaterial = TemplateISM->GetMaterial(Slot);
+			if (SlotMaterial && ISM->GetMaterial(Slot) != SlotMaterial)
+			{
+				ISM->SetMaterial(Slot, SlotMaterial);
+			}
+		}
+	}
+
 	FMeshMaterialKey Key;
 	Key.Mesh = Mesh;
 	Key.Material = Material;
@@ -104,6 +125,19 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 		// Create a new instance with zero scale to avoid flicker
 		NewIndex = ISM->AddInstance(FTransform::Identity);
 		ISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);
+	}
+
+	// Aufloesewert der VORIGEN Belegung loeschen.
+	//
+	// Eine freigegebene Instanz behaelt ihre Custom Data. Seit die Aufloesung nicht mehr ueber
+	// einen zweiten Materialpool laeuft, sondern ueber Index 13 DERSELBEN Instanz, erbt die
+	// naechste Einheit den Wert 1.0 - und ist damit vollstaendig aufgeloest, also unsichtbar.
+	// Im Spiel gemessen: eine laufende Einheit (Clipwert 1, Laufframes) mit Dissolve 1.0.
+	// Die Indizes 1..12 schreibt der UnitAnimationProcessor beim ersten Zustand ohnehin neu,
+	// nur die 13 hat bisher niemand zurueckgesetzt.
+	if (ISM->NumCustomDataFloats > GDissolveCustomDataIndex)
+	{
+		ISM->SetCustomDataValue(NewIndex, GDissolveCustomDataIndex, 0.0f, true);
 	}
 
 	// Copy collision settings from template to the pooled ISM
@@ -251,7 +285,6 @@ void UUnitVisualManager::SetUnitVisualVisible(FMassEntityHandle Entity, bool bVi
 
 // Custom-data index used by the corpse-dissolve. Animation owns 0..12 (see UnitAnimationProcessor); this is
 // the next free slot. Pooled ISMs are sized to 14 at creation so this index is always valid.
-static constexpr int32 GDissolveCustomDataIndex = 13;
 
 void UUnitVisualManager::SetUnitDissolve(FMassEntityHandle Entity, float Alpha)
 {
@@ -355,6 +388,22 @@ void UUnitVisualManager::SwapUnitVisualToRuin(FMassEntityHandle Entity, AMassUni
 	UInstancedStaticMeshComponent* RuinISM = GetOrCreateISM(RuinMesh, RuinMaterial, bCastShadow);
 	if (!RuinISM) return;
 
+	// Wie in AssignUnitVisual: der Pool schluesselt nur ueber Material 0. Bei einem Mesh mit MEHREREN
+	// Materialslots (DuneTyrant, SiegeColossus, Needle-Wing) behielten die weiteren Slots das Material des
+	// Mesh-Assets - die Leiche loeste sich dann nur teilweise auf, der Rest blieb als solides, unbewegtes
+	// Stueck stehen. Ein Ruin-Mesh ohne eigenes Material (RuinMaterial == null) bleibt unberuehrt.
+	if (RuinMaterial)
+	{
+		const int32 SlotAnzahl = RuinISM->GetNumMaterials();
+		for (int32 Slot = 1; Slot < SlotAnzahl; ++Slot)
+		{
+			if (RuinISM->GetMaterial(Slot) != RuinMaterial)
+			{
+				RuinISM->SetMaterial(Slot, RuinMaterial);
+			}
+		}
+	}
+
 	// Key off the ACTUAL pooled ISM (not the requested material), so the pop bucket here matches the push
 	// bucket in ReleasePooledInstanceInternal — otherwise a null RuinMaterial (ISM keeps the mesh's default
 	// material, so GetMaterial(0) != null) would leak indices into a different bucket than we pop from.
@@ -371,6 +420,12 @@ void UUnitVisualManager::SwapUnitVisualToRuin(FMassEntityHandle Entity, AMassUni
 	else
 	{
 		NewIndex = RuinISM->AddInstance(FTransform::Identity);
+	}
+
+	// Wie oben: die geerbte Aufloesung der Vorbelegung wuerde die Ruine unsichtbar machen.
+	if (RuinISM->NumCustomDataFloats > GDissolveCustomDataIndex)
+	{
+		RuinISM->SetCustomDataValue(NewIndex, GDissolveCustomDataIndex, 0.0f, true);
 	}
 	// Start hidden (zero scale); the placement processor reveals it next tick from RuinRelative.
 	RuinISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);

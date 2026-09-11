@@ -74,6 +74,29 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 
 	FTimerHandle WinLoseTimerHandle;
 
+	/**
+	 * Ist fuer diesen Spieler Sieg oder Niederlage bereits gefallen?
+	 *
+	 * Wird nur auf dem Server gefuehrt - dort stehen alle Spieler zur Verfuegung, auf einem Client
+	 * gibt es die fremden PlayerController gar nicht. Die Antwort auf "darf ich zuschauen?" faellt
+	 * deshalb serverseitig und wird ueber Client_SetSpectateAvailable zurueckgereicht.
+	 */
+	bool bWinLoseResolved = false;
+
+	/**
+	 * Darf dieser Spieler in den Zuschauermodus wechseln?
+	 *
+	 * true heisst: es ist mindestens ein anderer Spieler in der Partie, fuer den noch keine
+	 * Win/Lose-Bedingung ausgeloest hat - es gibt also noch etwas zu sehen. Der Spectate-Knopf im
+	 * WinLose-Widget liest diesen Wert und bleibt sonst ausgegraut.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|Spectator")
+	bool bSpectateAvailable = false;
+
+	/** Setzt bSpectateAvailable auf dem Besitzer-Client. Wird kurz vor dem WinLose-Widget gesendet. */
+	UFUNCTION(Client, Reliable)
+	void Client_SetSpectateAvailable(bool bAvailable);
+
 	UFUNCTION(Client, Reliable)
 	void Client_ShowLoadingWidget(TSubclassOf<class ULoadingWidget> InClass, float InTotalDuration, float InServerWorldTimeStart, int32 InTriggerId);
 
@@ -88,6 +111,17 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	 */
 	UFUNCTION(Client, Reliable)
 	void Client_ShowTravelLoadingScreen();
+
+	/**
+	 * Startet die AKTUELLE Karte neu und nimmt alle Mitspieler mit.
+	 *
+	 * Vom Widget aus aufzurufen - egal ob Host oder Client. Ein Client darf nicht selbst
+	 * reisen (er wuerde die Sitzung verlassen), deshalb geht der Wunsch als Server-RPC
+	 * hinueber und der Server macht den ServerTravel. Ohne diesen Umweg passiert beim
+	 * Client auf den Restart-Knopf schlicht nichts.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Travel")
+	void RequestRestartCurrentMap();
 
 	/** Widget used by Client_ShowTravelLoadingScreen. Falls back to the GameState's
 	 *  LoadingWidgetConfig.WidgetClass when left unset, so existing levels need no extra setup. */
@@ -471,6 +505,18 @@ public:
 	FVector DiagnoseStartOrt = FVector::ZeroVector;
 	// ===================== ENDE LUX-ANPASSUNG 1/3 ===============================================
 
+	// ============================================================================================
+	// LUX-ANPASSUNG (28.08.2026) - Klick beim Zielen gehoert der zielenden Faehigkeit.
+	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
+	//
+	// Steht der Ziel-Indikator einer Faehigkeit mit bIndicatorClicksAdvanceAbility, leitet der
+	// Linksklick der Direktsteuerung an FireAbilityMouseHit weiter (ClickCount++), statt AbilityOne
+	// neu zu starten. Rueckgabe true = der Klick ist verbraucht, der Aufrufer darf nichts weiter tun.
+	// ============================================================================================
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Lux Direktsteuerung")
+	bool LuxTryAdvanceIndicatorAbilityWithClick();
+	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "CamIsRotatingRight", Keywords = "TopDownRTSCamLib CamIsRotatingRight"), Category = RTSUnitTemplate)
 	bool CamIsRotatingRight = false;
 
@@ -498,7 +544,54 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "ScrollZoomCount", Keywords = "TopDownRTSCamLib ScrollZoomCount"), Category = RTSUnitTemplate)
 	float ScrollZoomCount = 0.f;
 	
+	// --- Talentpunkte im Zeittakt (02.09.2026) -------------------------------------------
+	// Bisher gab es Talentpunkte nur beim Levelaufstieg. Damit der Talentbaum ueberhaupt
+	// bespielbar ist, bekommt jede eigene Einheit in festen Abstaenden Punkte dazu.
+
+	/** Abstand zwischen zwei Vergaben in Sekunden. 0 = aus. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	float TalentPointInterval = 60.f;
+
+	/** Wieviele Punkte jede eigene Einheit je Vergabe bekommt. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	int32 TalentPointsPerInterval = 5;
+
+	/**
+	 * Wartezeit bis zur ERSTEN Vergabe. Danach laeuft der Takt aus TalentPointInterval.
+	 *
+	 * Ohne das vergehen nach dem Spielstart 60 Sekunden ohne einen einzigen Punkt - von aussen
+	 * nicht von "die Vergabe ist kaputt" zu unterscheiden.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.1"))
+	float TalentPointFirstDelay = 10.f;
+
+	/** Wie lange die Einblendung stehen bleibt. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	float TalentPointToastSeconds = 4.f;
+
+	/** Abstand von oben. Die Ressourcenleiste sitzt ganz oben, der Hinweis darunter. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	float TalentPointToastTopPadding = 96.f;
+
+	/** Serverseitig: verteilt die Punkte und meldet es dem Besitzer. */
+	void GrantPeriodicTalentPoints();
+
+	/** Blendet den Hinweis beim Besitzer ein. */
+	UFUNCTION(Client, Reliable)
+	void Client_ShowTalentPointToast(int32 Points, int32 UnitCount);
+
+	void HideTalentPointToast();
+
+	/**
+	 * Oeffentlich, damit die Diagnose RTS.Talents.Status nachsehen kann, ob der Takt ueberhaupt
+	 * laeuft. Genau das war von aussen nicht zu erkennen, als keine Punkte ankamen.
+	 */
+	FTimerHandle TalentPointTimerHandle;
+
 private:
+	FTimerHandle TalentPointToastTimerHandle;
+	TSharedPtr<class SWidget> TalentPointToast;
+
 	// Helper functions for scroll zoom logic
 	void HandleScrollZoomIn();
 	void HandleScrollZoomOut();

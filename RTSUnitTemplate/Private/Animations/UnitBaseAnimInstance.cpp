@@ -14,6 +14,7 @@
 #include "Animations/UnitAnimationProcessor.h"
 #include "MassExecutionContext.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimMontage.h"
 
 UUnitBaseAnimInstance::UUnitBaseAnimInstance() {
 	CharAnimState = UnitData::Idle;
@@ -114,6 +115,46 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 
 			CharAnimState = UnitBase->GetUnitState();
 
+			// ================================================================================
+			// LUX-ANPASSUNG (26.08.2026) - Laufrichtung und Tempo. Siehe Kommentar an
+			// LocomotionDirection in der .h.
+			//
+			// Bewusst hier und nicht im UnitAnimationProcessor: dessen AnimInstance-Zweig
+			// laeuft nur bei Zustandswechseln, Richtung und Tempo brauchen aber jeden Frame
+			// einen frischen Wert. Rein additiv - beschreibt nur neue Felder.
+			// ================================================================================
+			if (bMassSpeedValid && MassSpeed > IdleAnimSpeedThreshold)
+			{
+				// Geschwindigkeit in den lokalen Raum der Einheit drehen: X = vorwaerts,
+				// Y = rechts. Atan2(Y, X) ergibt damit direkt den Winkel gegen die
+				// Blickrichtung, 0 = vorwaerts, +/-180 = rueckwaerts.
+				const FVector LokaleGeschwindigkeit =
+					UnitBase->GetActorRotation().UnrotateVector(MassVelocity);
+				LocomotionDirection = FMath::RadiansToDegrees(
+					FMath::Atan2(LokaleGeschwindigkeit.Y, LokaleGeschwindigkeit.X));
+
+				const float Referenz = FMath::Max(LocomotionReferenceSpeed, 1.0f);
+				LocomotionPlayRate = FMath::Clamp(MassSpeed / Referenz,
+					LocomotionMinPlayRate, LocomotionMaxPlayRate);
+			}
+			else
+			{
+				// Im Stand keinen Winkel aus dem Restrauschen ableiten - das liesse die
+				// Beine auf der Stelle rotieren. Tempo zurueck auf neutral.
+				LocomotionDirection = 0.0f;
+				LocomotionPlayRate = 1.0f;
+			}
+
+			// Umleitung der Blendpunkte auf die Bewegung - nur wenn ausdruecklich gewuenscht.
+			// Der Wert aus dem Fragment wurde weiter oben gelesen und wird hier bewusst
+			// ueberschrieben; der Fragment-Wert ist zustandsbasiert und kennt keine Richtung.
+			if (bUseDirectionalLocomotion)
+			{
+				CurrentBlendPoint_1 = LocomotionDirection;
+				CurrentBlendPoint_2 = bMassSpeedValid ? MassSpeed : 0.0f;
+			}
+			// ===================== ENDE LUX-ANPASSUNG (26.08.2026) ==========================
+
 			// Steht die Einheit, sieht sie auch stehend aus - selbst wenn ihr Zustand Laufen sagt.
 			//
 			// Run/Chase/PatrolRandom und die GoTo-Zustaende bleiben aktiv, waehrend die Einheit
@@ -137,6 +178,42 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 					break;
 				}
 			}
+			// ================================================================================
+			// Waehrend eines Casts mit laufender Montage gewinnt die Montage.
+			//
+			// Im AnimGraph haengen Laufblendspace und Montage-Slot nebeneinander in einem
+			// LayeredBoneBlend. Laeuft die Laufanimation weiter, ueberlagert sie die Montage in
+			// allen Knochen, die nicht im Layer stehen - beim Nachladen sah man dann wieder die
+			// Laufbewegung. Die Einheit KANN sich waehrend des Casts ohnehin nicht bewegen, also
+			// wird die Bewegungsseite hier stillgelegt.
+			//
+			// Bewusst an den Casting-Zustand gebunden und nicht an "irgendeine Montage": das
+			// Schiessen laeuft ebenfalls ueber eine Montage, darf aber im Laufen stattfinden.
+			// ================================================================================
+			if (CharAnimState == UnitData::Casting && IsAnyMontagePlaying())
+			{
+				if (!bMontageHaltActive)
+				{
+					bMontageHaltActive = true;
+					UE_LOG(LogTemp, Log,
+						TEXT("[AnimInstance] %s: Montage laeuft im Cast - Laufanimation ausgesetzt (%s)"),
+						*UnitBase->GetName(),
+						GetCurrentActiveMontage() ? *GetCurrentActiveMontage()->GetName() : TEXT("?"));
+				}
+				CharAnimState = UnitData::Idle;
+				LocomotionDirection = 0.0f;
+				LocomotionPlayRate = 1.0f;
+				CurrentBlendPoint_1 = 0.0f;
+				CurrentBlendPoint_2 = 0.0f;
+				BlendPoint_1 = 0.0f;
+				BlendPoint_2 = 0.0f;
+				MassSpeed = 0.0f;
+			}
+			else if (bMontageHaltActive)
+			{
+				bMontageHaltActive = false;
+			}
+
 			// SetBlendPoints(UnitBase, Deltaseconds); // Processor übernimmt das jetzt
 
 			if(LastAnimState != CharAnimState)

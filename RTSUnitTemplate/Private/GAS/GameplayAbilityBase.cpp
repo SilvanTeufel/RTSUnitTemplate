@@ -23,6 +23,8 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Engine/EngineTypes.h"
 #include "Kismet/GameplayStatics.h"
+#include "Animation/AnimInstance.h" // LUX-ANPASSUNG (28.08.2026): Montage-Diagnose
+#include "Animation/AnimMontage.h"
 #include "GameFramework/PlayerController.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h" // LUX-ANPASSUNG (16.08.2026): fuer die Direktsteuerungs-Ausnahme bei FMassStopWhileAimingTag
@@ -465,6 +467,63 @@ void UGameplayAbilityBase::ApplyCost(const FGameplayAbilitySpecHandle Handle, co
 		ASC->SetNumericAttributeBase(UAttributeSetBase::GetManaAttribute(), CurrentMana - ManaCost);
 	}
 }
+
+// ================================================================================================
+// LUX-ANPASSUNG (28.08.2026) - Montage aus einer Faehigkeit abspielen, repliziert.
+// Silvan: zwei Montages fuer die Granate (Zielen und Werfen), die die Animation ueberschreiben -
+// auch auf Clients.
+//
+// UAbilitySystemComponent::PlayMontage traegt die laufende Montage in RepAnimMontageInfo ein und
+// repliziert sie an alle Beobachter; dort spielt OnRep_ReplicatedAnimMontage sie nach. Deshalb
+// hier und nicht ueber PlayAnimMontage am Character - das bliebe rein lokal.
+// ================================================================================================
+float UGameplayAbilityBase::PlayMontageOnAvatar(UAnimMontage* Montage, float PlayRate, FName StartSection)
+{
+	if (!Montage)
+	{
+		return 0.f;
+	}
+
+	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
+	if (!Info || !Info->IsNetAuthority())
+	{
+		// Kein Fehler: Faehigkeiten laufen auf der Autoritaet, Clients bekommen die Montage
+		// ueber die Replikation. Ein Aufruf auf dem Client waere also doppelt gemoppelt.
+		UE_LOG(LogTemp, Log, TEXT("[Montage] %s abgelehnt: ActorInfo=%d Autoritaet=%d"),
+			*Montage->GetName(), Info ? 1 : 0, (Info && Info->IsNetAuthority()) ? 1 : 0);
+		return 0.f;
+	}
+
+	UAbilitySystemComponent* ASC = Info->AbilitySystemComponent.Get();
+	UAnimInstance* AnimInstance = Info->GetAnimInstance();
+	if (!ASC || !AnimInstance)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Montage] %s abgelehnt: ASC=%d AnimInstance=%d"),
+			*Montage->GetName(), ASC ? 1 : 0, AnimInstance ? 1 : 0);
+		return 0.f;
+	}
+
+	const float Dauer = ASC->PlayMontage(this, GetCurrentActivationInfo(), Montage, PlayRate, StartSection);
+	UE_LOG(LogTemp, Log, TEXT("[Montage] %s gestartet von %s: Dauer=%.2f Rate=%.2f | laeuft jetzt: %s"),
+		*Montage->GetName(), *GetClass()->GetName(), Dauer, PlayRate,
+		AnimInstance->GetCurrentActiveMontage() ? *AnimInstance->GetCurrentActiveMontage()->GetName() : TEXT("keine"));
+	return Dauer;
+}
+
+void UGameplayAbilityBase::StopMontageOnAvatar(float BlendOutTime)
+{
+	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
+	if (!Info || !Info->IsNetAuthority())
+	{
+		return;
+	}
+
+	if (UAbilitySystemComponent* ASC = Info->AbilitySystemComponent.Get())
+	{
+		ASC->CurrentMontageStop(BlendOutTime);
+	}
+}
+// ===================== ENDE LUX-ANPASSUNG =======================================================
 
 void UGameplayAbilityBase::AddCastingFallback()
 {

@@ -55,6 +55,98 @@ FName AMapSwitchActor::GetDestinationSwitchTagToEnable() const
     return DestinationSwitchTagToEnable;
 }
 
+void AMapSwitchActor::BuildDestinationStates(TArray<FMapSwitchDestinationState>& OutStates) const
+{
+    OutStates.Reset();
+
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+
+    // Unlock state hangs off the map this actor stands in - exactly where
+    // AWinLoseConfigActor::DestinationSwitchTagToEnable writes it on a win.
+    const FString CurrentLevelName = UGameplayStatics::GetCurrentLevelName(World, /*bRemovePrefixString*/ true);
+    const UMapSwitchSubsystem* Subsystem = nullptr;
+    if (const UGameInstance* GI = World->GetGameInstance())
+    {
+        Subsystem = GI->GetSubsystem<UMapSwitchSubsystem>();
+    }
+
+    if (Destinations.Num() == 0)
+    {
+        // Legacy: emit the single-target fields as exactly one entry, so the five planets that
+        // were already authored behave no differently than before.
+        FMapSwitchDestinationState Legacy;
+        Legacy.MapLongPackageName = TargetMap.IsNull() ? FString() : TargetMap.ToSoftObjectPath().GetLongPackageName();
+        Legacy.DisplayName = LevelDisplayName;
+        Legacy.DestinationSwitchTagToEnable = DestinationSwitchTagToEnable;
+        Legacy.bUnlocked = bIsEnabled;
+        OutStates.Add(Legacy);
+        return;
+    }
+
+    for (const FMapSwitchDestination& Entry : Destinations)
+    {
+        if (Entry.TargetMap.IsNull())
+        {
+            continue;
+        }
+
+        FMapSwitchDestinationState State;
+        State.MapLongPackageName = Entry.TargetMap.ToSoftObjectPath().GetLongPackageName();
+        State.DisplayName = Entry.LevelDisplayName;
+        State.DestinationSwitchTagToEnable = Entry.DestinationSwitchTagToEnable;
+
+        if (Entry.bUnlockedByDefault || Entry.RequiredSwitchTag == NAME_None)
+        {
+            State.bUnlocked = true;
+        }
+        else if (Subsystem)
+        {
+            State.bUnlocked = Subsystem->IsSwitchEnabledForMap(CurrentLevelName, Entry.RequiredSwitchTag);
+        }
+
+        // bIsEnabled still gates the whole actor. A planet the player cannot see must not hand
+        // out a level, even when one of its rows would be open on its own.
+        State.bUnlocked = State.bUnlocked && bIsEnabled;
+
+        OutStates.Add(State);
+    }
+}
+
+void AMapSwitchActor::TravelToDestination(const FMapSwitchDestinationState& State)
+{
+    if (!State.bUnlocked || State.MapLongPackageName.IsEmpty())
+    {
+        return;
+    }
+
+    if (UWorld* World = GetWorld())
+    {
+        if (UGameInstance* GI = World->GetGameInstance())
+        {
+            if (UMapSwitchSubsystem* Subsystem = GI->GetSubsystem<UMapSwitchSubsystem>())
+            {
+                if (State.DestinationSwitchTagToEnable != NAME_None)
+                {
+                    Subsystem->MarkSwitchEnabledForMap(State.MapLongPackageName, State.DestinationSwitchTagToEnable);
+                }
+            }
+        }
+    }
+
+    StartMapSwitch();
+
+    if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
+    {
+        PC->Server_TravelToMap(State.MapLongPackageName, State.DestinationSwitchTagToEnable);
+    }
+
+    CloseWidget();
+}
+
 void AMapSwitchActor::BeginPlay()
 {
     Super::BeginPlay();
@@ -166,8 +258,28 @@ void AMapSwitchActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor
             ActiveWidget = CreateWidget<UMapSwitchWidget>(LocalPC, MapSwitchWidgetClass);
             if (ActiveWidget)
             {
-                FString MapToTravel = TargetMap.IsNull() ? "" : TargetMap.ToSoftObjectPath().GetLongPackageName();
-                ActiveWidget->InitializeWidget(MapToTravel, this, bIsEnabled, LevelDisplayName);
+                TArray<FMapSwitchDestinationState> States;
+                BuildDestinationStates(States);
+
+                // A list only pays off from two destinations up; with one it stays the familiar
+                // yes/no dialog, so the four existing planets look exactly as they did.
+                if (States.Num() > 1 && ActiveWidget->SupportsDestinationList())
+                {
+                    ActiveWidget->InitializeWidgetWithDestinations(States, this);
+                }
+                else
+                {
+                    FString MapToTravel = TargetMap.IsNull() ? "" : TargetMap.ToSoftObjectPath().GetLongPackageName();
+                    FText Caption = LevelDisplayName;
+                    bool bOpen = bIsEnabled;
+                    if (States.Num() == 1)
+                    {
+                        MapToTravel = States[0].MapLongPackageName;
+                        Caption = States[0].DisplayName;
+                        bOpen = States[0].bUnlocked;
+                    }
+                    ActiveWidget->InitializeWidget(MapToTravel, this, bOpen, Caption);
+                }
                 ActiveWidget->AddToViewport();
 
                 if (ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(LocalPC))

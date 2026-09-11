@@ -8,7 +8,7 @@
 #include "WinLoseWidget.generated.h"
 
 /**
- * 
+ *
  */
 UCLASS()
 class RTSUNITTEMPLATE_API UWinLoseWidget : public UUserWidget
@@ -22,6 +22,10 @@ public:
 	UPROPERTY(meta = (BindWidget))
 	class UButton* OkButton;
 
+	/** Optional: wechselt in den Zuschauermodus. Ausgegraut, wenn niemand mehr spielt. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UButton* SpectateButton;
+
 	void SetupWidget(bool bInWon, const FString& MapName, FName InDestinationSwitchTagToEnable);
 
 protected:
@@ -29,6 +33,9 @@ protected:
 
 	UFUNCTION()
 	void OnOkClicked();
+
+	UFUNCTION()
+	void OnSpectateClicked();
 
 	bool bWon;
 	FString TargetMapName;

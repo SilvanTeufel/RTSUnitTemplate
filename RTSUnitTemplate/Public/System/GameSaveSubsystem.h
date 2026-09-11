@@ -37,6 +37,14 @@ public:
 
     // Liest Metadaten eines Slots (gibt true bei Erfolg)
     UFUNCTION(BlueprintCallable, Category="Save")
+    /**
+     * Sieht nur in den Kopf der Datei: sieht das nach einem Spielstand aus?
+     *
+     * Ohne diese Vorpruefung laedt LoadSaveSummary JEDE Datei im Speicherordner vollstaendig -
+     * auch Replays von ueber 30 MB. Genau daran hing die lange Wartezeit des SaveGame-Widgets.
+     */
+    bool IstSpielstandDatei(const FString& SlotName) const;
+
     bool LoadSaveSummary(const FString& SlotName, FString& OutMapAssetName, FString& OutLongPackageName, int64& OutUnixTime) const;
 
     UFUNCTION(BlueprintCallable, Category="Save")

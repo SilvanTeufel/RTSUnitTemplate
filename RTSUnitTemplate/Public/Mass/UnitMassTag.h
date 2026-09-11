@@ -877,6 +877,14 @@ struct FMassCombatStatsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Stats")
     float AttackDuration = 0.7f;
 
+    /** Spiegelt AUnitBase::PlayRateRunTimeCalculation - siehe dort. */
+    UPROPERTY(EditAnywhere, Category = "Stats")
+    bool bPlayRateRunTimeCalculation = true;
+
+    /** Spiegelt AUnitBase::SpawnProjectileAtPercentage - siehe dort. */
+    UPROPERTY(EditAnywhere, Category = "Stats")
+    float SpawnProjectileAtPercentage = 0.f;
+
 	UPROPERTY(EditAnywhere, Category = "Stats")
 	float ContinuousAttackDuration = 1.0f;
 
@@ -998,7 +1006,29 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float LastGroundLocation = 0.f;
-	
+
+	// ================================================================================================
+	// LUX-ANPASSUNG (28.08.2026) - Rettung, wenn eine Einheit durch die Map faellt.
+	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
+	//
+	// LastGroundLocation allein reicht als Rettungsanker nicht: es ist nur eine HOEHE. Wer seitlich
+	// durch eine Luecke rutscht, wird damit an derselben XY-Stelle wieder hochgezogen - also genau
+	// dorthin, wo das Loch ist. Deshalb die vollstaendige letzte sichere Position.
+	// ================================================================================================
+
+	/** Letzte Position, an der die Einheit nachweislich auf Boden stand (inkl. Kapsel-Offset). */
+	UPROPERTY(Transient)
+	FVector LastSafeLocation = FVector::ZeroVector;
+
+	/** Erst true, wenn LastSafeLocation einmal echt gesetzt wurde (sonst waere (0,0,0) ein Ziel). */
+	UPROPERTY(Transient)
+	bool bHasSafeLocation = false;
+
+	/** Wie lange die Einheit ununterbrochen ohne Boden unter sich ist (Sekunden). */
+	UPROPERTY(Transient)
+	float TimeWithoutGround = 0.f;
+	// ===================== ENDE LUX-ANPASSUNG =======================================================
+
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bCanOnlyAttackFlying = true;
 
@@ -1007,6 +1037,16 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bIsInvisible = false;
+
+    /**
+     * Nimmt keinen Schaden. Vorgabe AUS - fuer alle Einheiten.
+     *
+     * Gedacht fuer Faehigkeiten, die eine Einheit zeitweise unangreifbar machen. Der Wert wird vom
+     * Actor gespiegelt (UUnitActorToFragmentSyncProcessor), damit auch Mass-Prozessoren ihn sehen,
+     * ohne den Actor anfassen zu muessen.
+     */
+    UPROPERTY(EditAnywhere, Category = "Characteristics")
+    bool bIsInvulnerable = false;
 
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	bool bCanBeInvisible = false;
@@ -1850,6 +1890,9 @@ struct FEffectAreaImpactFragment : public FMassFragment
 
 	bool bHasHiddenVisual = false;          // ensure hide-once
 	bool bHasSpawnedOnDestruction = false;  // ensure spawn-once
+
+	// Nur fuer die [BrutSpawn]-Diagnose: sorgt dafuer, dass die Zeile je Flaeche einmal kommt.
+	bool bBrutDiagnoseGemeldet = false;
 
 	// Impact properties (cached to avoid frequent Actor access)
 	int32 TeamId = 0;

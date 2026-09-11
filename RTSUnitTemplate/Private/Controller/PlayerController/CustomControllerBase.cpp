@@ -2,6 +2,7 @@
 
 
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "System/AbilityTemplateSubsystem.h"
 // LUX-ANPASSUNG (16.08.2026): fuer die eng gefasste Direktsteuerungs-Ausnahme in
 // CorrectSetUnitMoveTarget_Implementation (Schiessen waehrend des Laufens).
 #include "Controller/PlayerController/CameraControllerBase.h"
@@ -1460,7 +1461,7 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 
 					if (UnitsToLoad[i]->bIsMassUnit && UnitIsValid)
 					{
-						float Speed = UnitsToLoad[i]->Attributes->GetBaseRunSpeed();
+						float Speed = UnitsToLoad[i]->Attributes->GetRunSpeed();
 						// Accumulate for batched RPC instead of sending one RPC per unit
 						BatchUnits.Add(UnitsToLoad[i]);
 						BatchLocations.Add(UnitsToLoad[i]->RunLocation);
@@ -1853,7 +1854,7 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 			float Speed = 300.f;
 			if (Unit->Attributes)
 			{
-				Speed = Unit->Attributes->GetBaseRunSpeed();
+				Speed = Unit->Attributes->GetRunSpeed();
 			}
 			DesiredSpeeds.Add(Speed);
 		}
@@ -1975,6 +1976,96 @@ AUnitBase* ACustomControllerBase::GetUnitFromHitResult(const FHitResult& Hit) co
 	}
 
 	return nullptr;
+}
+
+bool ACustomControllerBase::GetSelectableHitUnderCursor(FHitResult& OutHit) const
+{
+	// Die gewohnte Pawn-Spur zuerst, damit OutHit auch im Misserfolgsfall unveraendert der
+	// bisherige Treffer bleibt (in der Regel der Bodenpunkt) und bodenzielende Faehigkeiten
+	// sich nicht anders verhalten als vorher.
+	GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, OutHit);
+
+	// ZUERST die Einheit, die UMassUnitHoverProcessor ohnehin schon markiert hat.
+	//
+	// Er prueft den Mausstrahl mit 10 Hz geometrisch gegen Kapsel bzw. Box jeder Mass-Einheit -
+	// ohne jede Kollision, und deshalb auch dann, wenn die sichtbare ISM eines Gebaeudes gar keine
+	// hat. Genau das war der Fall, an dem Extension_D haengenblieb: die Kapsel deckt von 407x475 uu
+	// Mesh nur 250 uu Durchmesser ab, und die ISM war fuer jede Spur unsichtbar.
+	//
+	// Der Umweg ueber zusaetzliche Kollision waere in einem RTS mit hunderten Einheiten teuer
+	// gewesen - diese Abfrage kostet einen Zeigervergleich.
+	if (AUnitBase* Markierte = HoveredUnit.Get())
+	{
+		if (IsValid(Markierte))
+		{
+			FHitResult HoverTreffer;
+			HoverTreffer.HitObjectHandle = FActorInstanceHandle(Markierte);
+			HoverTreffer.Location = Markierte->GetActorLocation();
+			HoverTreffer.ImpactPoint = HoverTreffer.Location;
+			HoverTreffer.bBlockingHit = true;
+			// Den Bodenpunkt der Pawn-Spur behalten, falls er gesetzt war: Faehigkeiten, die auf
+			// eine Stelle zielen, lesen TraceStart/TraceEnd und sollen dieselbe Stelle bekommen.
+			HoverTreffer.TraceStart = OutHit.TraceStart;
+			HoverTreffer.TraceEnd = OutHit.TraceEnd;
+
+			OutHit = HoverTreffer;
+			return true;
+		}
+	}
+
+	if (GetUnitFromHitResult(OutHit))
+	{
+		return true;
+	}
+
+	FVector Start, Richtung;
+	if (!DeprojectMousePositionToWorld(Start, Richtung) || !GetWorld())
+	{
+		return false;
+	}
+	const FVector Ende = Start + Richtung * 100000.f;
+
+	// Drei Kanaele, weil im Projekt auf dreien etwas Anklickbares liegt:
+	//   ECC_Pawn         - Einheiten (AUnitBase-Kapsel auf ECR_Block)
+	//   ECC_WorldDynamic - Gebaeudekapseln (ECC_Pawn steht dort bewusst auf Ignore, damit
+	//                      Einheiten hindurchlaufen) und die gepoolten Gebaeude-ISMs
+	//   ECC_Visibility   - Bauplaetze (AWorkArea blockt ausschliesslich diesen Kanal)
+	static const ECollisionChannel Kanaele[] =
+		{ ECC_Pawn, ECC_WorldDynamic, ECC_Visibility };
+
+	for (const ECollisionChannel Kanal : Kanaele)
+	{
+		FCollisionQueryParams Params(TEXT("SelectableHitUnderCursor"), /*bTraceComplex*/ false);
+
+		// Was keine Einheit ergibt, wird ignoriert und die Spur laeuft weiter, statt den Klick zu
+		// verbrauchen. Ohne das schluckt der erste beliebige Blocker die Auswahl - gemeldet fuer
+		// BP_StoryTriggerActor_Survive_AH, dessen Box ueber einem Gebaeude steht: die Box loest auf
+		// keine Einheit auf, lag aber vor dem Gebaeude, und damit war das Gebaeude unerreichbar.
+		// Die Grenze von acht Versuchen deckelt den Aufwand; ein einzelner Klick durchdringt damit
+		// bis zu sieben nicht auswaehlbare Aktoren.
+		for (int32 Versuch = 0; Versuch < 8; ++Versuch)
+		{
+			FHitResult Treffer;
+			if (!GetWorld()->LineTraceSingleByChannel(Treffer, Start, Ende, Kanal, Params))
+			{
+				break; // nichts mehr auf diesem Kanal
+			}
+			if (GetUnitFromHitResult(Treffer))
+			{
+				OutHit = Treffer;
+				return true;
+			}
+			AActor* Blocker = Treffer.GetActor();
+			if (!Blocker)
+			{
+				break;
+			}
+			Params.AddIgnoredActor(Blocker);
+		}
+	}
+
+	// Nichts Anklickbares - OutHit bleibt die Pawn-Spur.
+	return false;
 }
 
 bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPawn)
@@ -3067,6 +3158,9 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
 
 void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	for (AUnitBase* U : SelectedUnits)
 	{
 		if (!U) continue;
@@ -3078,6 +3172,9 @@ void ACustomControllerBase::SetHoldPositionOnSelectedUnits()
 
 void ACustomControllerBase::SetHoldPositionOnUnit_Implementation(AUnitBase* Unit)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	Unit->bHoldPosition = true;
 }
 
@@ -3241,7 +3338,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	
         U->SetRdyForTransport(false);
 
-        float Speed = U->Attributes->GetBaseRunSpeed();
+        float Speed = U->Attributes->GetRunSpeed();
         bool bSuccess = false;
         SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint, bSuccess);
         if (bSuccess)
@@ -3382,14 +3479,13 @@ void ACustomControllerBase::LeftClickPressedMass()
     else
     {
         FHitResult HitPawn;
-        // 1. Primary trace for pawns
-        GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
-
-        // 2. FALLBACK: If no pawn hit, trace for WorldDynamic (e.g., WorkArea)
-        if (!HitPawn.bBlockingHit)
-        {
-            GetHitResultUnderCursor(ECollisionChannel::ECC_WorldDynamic, false, HitPawn);
-        }
+        // Kaskade ueber Pawn -> WorldDynamic -> Visibility, siehe GetSelectableHitUnderCursor.
+        // Der frueher hier stehende Rueckfall pruefte `!HitPawn.bBlockingHit` und lief deshalb nie:
+        // die Pawn-Spur geht durch Gebaeude und Bauplaetze hindurch und trifft das Landscape, und
+        // das IST ein blockierender Treffer. Gebaeude und WorkAreas waren dadurch per Einzelklick
+        // nicht selektierbar - ueber die Rechteckauswahl im HUD dagegen schon, weil die keine Spur
+        // benutzt. Genau dieses Muster war das Symptom.
+        GetSelectableHitUnderCursor(HitPawn);
 
         // Check if any unit is currently aiming an ability, dragging a workarea, or if we have an indicator active
         bool bAnyUnitIsAimingOrDragging = bUsedKeyboardAbilityBeforeClick;
@@ -3755,7 +3851,14 @@ void ACustomControllerBase::LeftClickAMoveUEPFMass_Implementation(const TArray<A
 		bool bIsAttackingOrPausing = bEntityValid && (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct()));
 		bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
 
-		float Speed = Unit->Attributes->GetBaseRunSpeed();
+		// RunSpeed, NICHT BaseRunSpeed - siehe unten.
+		//
+		// Es gibt zwei Bewegungspfade: die Mass-Prozessoren lesen FMassCombatStatsFragment::RunSpeed
+		// (gespeist aus Attributes->GetRunSpeed()), die Spielerbefehle lasen bis zum 11.09.2026
+		// BaseRunSpeed. Ein Haste-Punkt aus dem Attributbaum beschleunigte damit die KI-Bewegung,
+		// aber nicht das, was der Spieler anklickt. BaseRunSpeed ist jetzt reiner
+		// Wiederherstellungspunkt fuer ResetTalents/ResetLevel.
+		float Speed = Unit->Attributes->GetRunSpeed();
 		if (!bIsMovingWhileAttacking)
 		{
 			SetUnitState_Replication(Unit, 1);
@@ -4419,7 +4522,7 @@ bool ACustomControllerBase::FinishFormationLineDrag(bool bFromRightMouse)
 
 		TargetUnits.Add(Unit);
 		TargetLocs.Add(Loc);
-		TargetSpeeds.Add(Unit->Attributes ? Unit->Attributes->GetBaseRunSpeed() : 300.f);
+		TargetSpeeds.Add(Unit->Attributes ? Unit->Attributes->GetRunSpeed() : 300.f);
 	}
 
 	bFormationLineDragActive = false;
@@ -4568,6 +4671,14 @@ void ACustomControllerBase::UpdateFogMaskWithCircles(const TArray<FMassEntityHan
 	
     for (TActorIterator<AFogActor> It(World); It; ++It)
     {
+        // Wer seine Maske von aussen bekommt, will von den lebenden Einheiten nichts wissen.
+        // Ohne diese Zeile schreiben zwei Quellen abwechselnd in dieselbe Maske - siehe
+        // AFogActor::bExternalFogSource.
+        if (It->bExternalFogSource)
+        {
+            continue;
+        }
+
         It->UpdateFogMaskWithCircles_Local(Positions, WorldRadii, UnitTeamIds);
     }
 }
@@ -4834,7 +4945,9 @@ void ACustomControllerBase::HandleAttackMovePressed()
     // 1) get world hit under cursor for ground and pawn
     	
     FHitResult HitPawn;
-    GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, HitPawn);
+    // Dieselbe Kaskade wie bei der Auswahl: ohne sie liess sich kein Gebaeude und kein Bauplatz
+    // als Ziel eines Angriffsbefehls anklicken (Pawn-Spur laeuft durch beide hindurch).
+    GetSelectableHitUnderCursor(HitPawn);
     AUnitBase* TargetUnit = GetUnitFromHitResult(HitPawn);
     AActor* CursorHitActor = TargetUnit ? static_cast<AActor*>(TargetUnit) : (HitPawn.bBlockingHit ? HitPawn.GetActor() : nullptr);
 
@@ -5042,3 +5155,67 @@ void ACustomControllerBase::Batch_RemoveRotateToMouseTag()
 	}
 }
 
+
+
+void ACustomControllerBase::Server_SpendAbilityPointsForTier_Implementation(
+	FGameplayTag TierTag, EGASAbilityInputID AbilityID, int32 AbilityIndex)
+{
+	if (!TierTag.IsValid())
+	{
+		return;
+	}
+
+	// Keine Punktvorgabe mehr (02.09.2026): der Chooser ist eine Vorlage je Tierklasse, die
+	// automatisch angewandt wird. Frueher wurden punktlose Einheiten uebersprungen - dann galt
+	// die Wahl fuer einen Teil der Klasse und fuer den Rest nicht, was von aussen wie ein
+	// Fehler aussah.
+	int32 Vergeben = 0, Unveraendert = 0;
+	for (TActorIterator<AAbilityUnit> It(GetWorld()); It; ++It)
+	{
+		AAbilityUnit* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId != SelectableTeamId) continue;
+		if (!Unit->UnitTags.HasTag(TierTag)) continue;
+
+		if (Unit->ApplyAbilityFromTemplate(AbilityID, AbilityIndex))
+		{
+			++Vergeben;
+		}
+		else
+		{
+			++Unveraendert;
+		}
+	}
+
+	// Die Wahl merken, damit spaeter gebaute Einheiten sie automatisch bekommen.
+	// Ohne das musste der Spieler nach jeder neuen Einheit erneut klicken.
+	if (UWorld* Welt = GetWorld())
+	{
+		if (UAbilityTemplateSubsystem* Vorlagen = Welt->GetSubsystem<UAbilityTemplateSubsystem>())
+		{
+			Vorlagen->Merken(SelectableTeamId, TierTag, AbilityIndex, AbilityID);
+		}
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[Tiervergabe] Team %d Tag=%s Slot=%d: %d Einheiten gesetzt, %d schon so."),
+		SelectableTeamId, *TierTag.ToString(), AbilityIndex, Vergeben, Unveraendert);
+}
+
+bool ACustomControllerBase::TierHasUnitsWithAbilityPoints(FGameplayTag TierTag) const
+{
+	if (!TierTag.IsValid() || !GetWorld())
+	{
+		return false;
+	}
+	for (TActorIterator<AAbilityUnit> It(GetWorld()); It; ++It)
+	{
+		AAbilityUnit* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId != SelectableTeamId) continue;
+		if (!Unit->UnitTags.HasTag(TierTag)) continue;
+		if (Unit->LevelData.AbilityPoints > 0)
+		{
+			return true;
+		}
+	}
+	return false;
+}

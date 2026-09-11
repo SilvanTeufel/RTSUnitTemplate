@@ -49,6 +49,20 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetFogBounds(const FVector2D& Min, const FVector2D& Max);
+
+	/**
+	 * Is this world position inside the LOCAL alliance's current vision?
+	 *
+	 * UpdateFogMaskWithCircles_Local clears the mask and redraws it from scratch on every update,
+	 * so what it holds is live vision, never explored memory - exactly what an actor needs to
+	 * decide whether it may be drawn this moment.
+	 *
+	 * Returns TRUE whenever the answer is unknown (no mask built yet, position outside the fog
+	 * bounds). An unknown answer must not hide anything: a dedicated server or a half-initialised
+	 * client would otherwise blank out the whole map.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
+	bool IsWorldPositionRevealed(const FVector& WorldPosition) const;
 	
 	UFUNCTION(NetMulticast, Unreliable, Category = RTSUnitTemplate)
 	void Multicast_UpdateFogMaskWithCircles(
@@ -81,6 +95,22 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float FogUpdateRate = 0.1f;
+
+	/**
+	 * Solange gesetzt, ignoriert dieser Nebelaktor die Speisung aus den lebenden Einheiten.
+	 *
+	 * Gebraucht wird das von der Wiedergabe: dort wird die Maske aus der Aufnahme gezeichnet. Laeuft
+	 * daneben noch eine Partie - was nach "Aufgeben" und anschliessendem "Replay ansehen" der Fall
+	 * ist -, dann schreibt UUnitSightProcessor ueber ACustomControllerBase::UpdateFogMaskWithCircles
+	 * weiter in DIESELBE Maske. Zwei Schreiber mit unterschiedlichem Inhalt, zehnmal je Sekunde:
+	 * genau das war das gemeldete Flackern des Post-Process. Ueber den Replay-Browser trat es nicht
+	 * auf, weil dort beim Start der Wiedergabe noch keine Einheiten leben.
+	 *
+	 * Bewusst eine schlichte Flagge und keine Abhaengigkeit zum ReplayModule: RTSUnitTemplate darf
+	 * das Replay nicht kennen. Wer die Maske selbst fuellt, setzt die Flagge und raeumt sie wieder ab.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bExternalFogSource = false;
 private:
 	FTimerHandle FogUpdateTimerHandle;
 	

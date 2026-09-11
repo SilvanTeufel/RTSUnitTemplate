@@ -502,6 +502,17 @@ bool AGASUnit::ActivateAbilityByInputID(
 				*GetName(), TeamId, (int32)InputID, *GetNameSafe(AbilityToActivate),
 				AlsUnitGas ? (int32)AlsUnitGas->GetUnitState() : -1);
 		}
+		else
+		{
+			// Erfolgsfall benennen (02.09.2026): der Klassenname stand bisher nur im
+			// Ablehnungszweig. Fuer die Auswertung "welche Faehigkeit erzeugt eine Baustelle"
+			// wird er aber genau hier gebraucht - zusammen mit [NetzDruck] ... Geist=0/1.
+			// Zwei geratene Maskenkriterien waren wirkungslos; das dritte soll aus dieser
+			// Paarung folgen statt geraten zu werden.
+			UE_LOG(LogTemp, Log,
+				TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d AKTIVIERT: %s"),
+				*GetName(), TeamId, (int32)InputID, *GetNameSafe(AbilityToActivate));
+		}
 		if (bIsActivated && ActivatedAbilityInstance)
 		{
 			ActivatedAbilityInstance->AbilityInputID = InputID;

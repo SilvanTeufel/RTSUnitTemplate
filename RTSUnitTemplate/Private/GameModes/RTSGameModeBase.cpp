@@ -2,6 +2,9 @@
 
 
 #include "GameModes/RTSGameModeBase.h"
+#include "System/SurvivalScoreSubsystem.h"
+#include "Actors/BossWaveSpawner.h"
+#include "GameFramework/PlayerState.h"
 #include "GameStates/ResourceGameState.h"
 #include "Actors/WinLoseConfigActor.h"
 #include "PlayerStart/PlayerStartBase.h"
@@ -176,9 +179,76 @@ void ARTSGameModeBase::DataTableTimerStart()
 	bInitialSpawnFinished = true;
 }
 
+void ARTSGameModeBase::TriggerWinLoseForTeam(int32 TeamId, bool bWon)
+{
+	// Einmal ausgeloest bleibt ausgeloest - sonst koennte ein zweiter Auslaeser die
+	// Wertung ueberschreiben, waehrend die Oberflaeche schon laeuft.
+	if (bWinLoseTriggered)
+	{
+		return;
+	}
+
+	UWorld* Welt = GetWorld();
+	if (!Welt)
+	{
+		return;
+	}
+
+	int32 Erreicht = 0;
+	for (FConstPlayerControllerIterator It = Welt->GetPlayerControllerIterator(); It; ++It)
+	{
+		ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+		if (!PC || PC->SelectableTeamId != TeamId)
+		{
+			continue;
+		}
+
+		// Den Konfigurationsaktor dieses Teams suchen; ohne Teambindung gilt der erste.
+		AWinLoseConfigActor* Config = nullptr;
+		for (AWinLoseConfigActor* Kandidat : WinLoseConfigActors)
+		{
+			if (!IsValid(Kandidat))
+			{
+				continue;
+			}
+			if (Kandidat->TeamId == TeamId)
+			{
+				Config = Kandidat;
+				break;
+			}
+			if (!Config)
+			{
+				Config = Kandidat;
+			}
+		}
+
+		if (!Config)
+		{
+			UE_LOG(LogTemp, Warning,
+			       TEXT("[WinLose] TriggerWinLoseForTeam(%d): kein WinLoseConfigActor im Level."), TeamId);
+			return;
+		}
+
+		bWinLoseTriggered = true;
+		TriggerWinLoseForPlayer(PC, bWon, Config);
+		++Erreicht;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[WinLose] TriggerWinLoseForTeam(%d, %s): %d Spieler gewertet."),
+	       TeamId, bWon ? TEXT("Sieg") : TEXT("Niederlage"), Erreicht);
+}
+
+
 void ARTSGameModeBase::TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool bWon, AWinLoseConfigActor* Config)
 {
 	if (!PC || !Config) return;
+
+	// Endlos-Survival: die ueberlebte Zeit gehoert in die Bestenliste, egal ob gewonnen
+	// oder verloren - verloren ist hier der Normalfall, die Karte endet ja nicht von selbst.
+	if (Config->bReportSurvivalScore)
+	{
+		MeldeSurvivalZeit(PC);
+	}
 
 	FString TargetMapName = Config->WinLoseTargetMapName.ToSoftObjectPath().GetLongPackageName();
 	if (UGameInstance* GI = GetGameInstance())
@@ -189,8 +259,25 @@ void ARTSGameModeBase::TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool b
 			{
 				MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, Config->DestinationSwitchTagToEnable);
 			}
+
+			// A level can open more than one door - see AdditionalSwitchTagsToEnable.
+			if (!TargetMapName.IsEmpty())
+			{
+				for (const FName& ExtraTag : Config->AdditionalSwitchTagsToEnable)
+				{
+					if (ExtraTag != NAME_None)
+					{
+						MapSwitchSub->MarkSwitchEnabledForMap(TargetMapName, ExtraTag);
+					}
+				}
+			}
 		}
 	}
+
+	// Dieser Spieler ist ab jetzt durch. VOR der Abfrage setzen, sonst zaehlt er sich selbst als
+	// "spielt noch" und der Zuschauen-Knopf waere immer freigegeben.
+	PC->bWinLoseResolved = true;
+	PC->Client_SetSpectateAvailable(AreOtherPlayersStillPlaying(PC));
 
 	TWeakObjectPtr<ACameraControllerBase> WeakPC = PC;
 	TSubclassOf<UWinLoseWidget> WidgetClass = Config->WinLoseWidgetClass;
@@ -215,6 +302,31 @@ void ARTSGameModeBase::TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool b
 void ARTSGameModeBase::EnterSpectate(AController* Controller, bool bRevealAll)
 {
 	// Intentional no-op base implementation; AExodusGameMode overrides this.
+}
+
+bool ARTSGameModeBase::AreOtherPlayersStillPlaying(ACameraControllerBase* Ausser) const
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return false;
+	}
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+		if (!PC || PC == Ausser)
+		{
+			continue;
+		}
+
+		if (!PC->bWinLoseResolved)
+		{
+			return true;
+		}
+	}
+
+	return false;
 }
 
 bool ARTSGameModeBase::IsAnyUnitWithTagAlive(const FGameplayTag& Tag, const TMap<FGameplayTag, int32>& AliveTagCounts) const
@@ -542,6 +654,28 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 					{
 						bStepMet = true;
 						bStepWon = (PlayerTeamId == Config->TeamId || Config->TeamId == 0);
+					}
+				}
+				else if (CurrentWinCondition == EWinLoseCondition::TeamReachedLocation)
+				{
+					// Erreicht IRGENDEINE lebende Einheit des Teams den Zielort, ist die Stufe erfuellt.
+					// Gemessen wird in X/Y: das Ziel liegt auf einem Berg, und eine Hoehenpruefung
+					// wuerde je nach Kapselmitte und Bodenwelligkeit mal greifen und mal nicht.
+					const float RadiusQuadrat = FMath::Square(FMath::Max(1.f, CurrentWinData.TargetLocationRadius));
+					for (AActor* Aktor : AllUnits)   // AllUnits ist TArray<AActor*>, nicht typisiert
+					{
+						AUnitBase* Einheit = Cast<AUnitBase>(Aktor);
+						if (!IsValid(Einheit) || Einheit->TeamId != PlayerTeamId || Einheit->GetUnitState() == UnitData::Dead)
+						{
+							continue;
+						}
+						const FVector Delta = Einheit->GetActorLocation() - CurrentWinData.TargetLocation;
+						if (FVector2D(Delta.X, Delta.Y).SizeSquared() <= RadiusQuadrat)
+						{
+							bStepMet = true;
+							bStepWon = true;
+							break;
+						}
 					}
 				}
 				else if (CurrentWinCondition == EWinLoseCondition::TeamReachedResourceCount)
@@ -2177,4 +2311,46 @@ void ARTSGameModeBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	#endif
 	*/
+}
+
+void ARTSGameModeBase::MeldeSurvivalZeit(ACameraControllerBase* PC)
+{
+	UGameInstance* GI = GetGameInstance();
+	if (!GI || !PC)
+	{
+		return;
+	}
+	USurvivalScoreSubsystem* Rangliste = GI->GetSubsystem<USurvivalScoreSubsystem>();
+	if (!Rangliste)
+	{
+		return;
+	}
+
+	float Sekunden = GetWorld()->GetTimeSeconds();
+	if (AResourceGameState* GS = GetGameState<AResourceGameState>())
+	{
+		if (GS->MatchStartTime > 0)
+		{
+			Sekunden = GS->GetServerWorldTimeSeconds() - GS->MatchStartTime;
+		}
+	}
+
+	// Bosswellen mitzaehlen, damit die Liste nicht nur eine Zeit zeigt.
+	int32 Wellen = 0;
+	for (TActorIterator<ABossWaveSpawner> It(GetWorld()); It; ++It)
+	{
+		Wellen = FMath::Max(Wellen, It->WaveIndex);
+	}
+
+	// Der Kartenname traegt in PIE ein Praefix (UEDPIE_0_...), das nicht in die Liste gehoert.
+	FString Karte = GetWorld()->GetMapName();
+	Karte.RemoveFromStart(GetWorld()->StreamingLevelsPrefix);
+
+	FString Spieler;
+	if (PC->PlayerState)
+	{
+		Spieler = PC->PlayerState->GetPlayerName();
+	}
+
+	Rangliste->SubmitScore(Karte, Spieler, Sekunden, Wellen);
 }

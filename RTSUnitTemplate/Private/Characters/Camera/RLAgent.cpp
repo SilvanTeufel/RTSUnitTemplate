@@ -13,9 +13,23 @@
 #include "Components/PrimitiveComponent.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "EngineUtils.h"
+#include "Actors/WorkArea.h"   // Bauwarteschlange im Zustandsvektor
 #include "Components/SceneComponent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "GameplayTagContainer.h"
+#include "HAL/IConsoleManager.h"
+
+// Gruppenwahl (Aktionen 0-9) und Faehigkeitsdruck (10-15) sind im Aktionsraum getrennt. Zwischen
+// beiden liegen im Schnitt mehrere andere Zuege - 27 % davon Kamerafahrten - und die Auswahl
+// ueberlebt das nicht. Die Regel-KI hat das Problem nicht, weil BuildCompositeActionJSON Wahl und
+// Druck in EINE Entscheidung packt; Verhaltensklonen kann diese Kopplung deshalb gar nicht lernen.
+// 1 = der Druck stellt bei leerer Auswahl die zuletzt erfolgreiche Gruppe wieder her.
+static int32 GRLAbilityReselect = 0;
+static FAutoConsoleVariableRef CVarRLAbilityReselect(
+    TEXT("rts.rl.ability.reselect"),
+    GRLAbilityReselect,
+    TEXT("1 = ein Faehigkeitsdruck des Netzes stellt bei leerer Auswahl die zuletzt gewaehlte Gruppe wieder her (nur KI-Pfad)."),
+    ECVF_Default);
 
 ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -387,6 +401,27 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 // the worker that took the last build order is exactly the one carrying a BuildArea, so
                 // from then on every further ability action was dropped until it finished. Whole factions
                 // built nothing because of this. Only give up when NOBODY in the selection is free.
+                const bool bIstFaehigkeitsdruck = ActionName.StartsWith("switch_camera_state_ability");
+
+                // Nur eingreifen, wenn die Auswahl leer IST - ein Druck mit gueltiger Auswahl
+                // bleibt unveraendert. Der Eingriff betrifft ausschliesslich den KI-Pfad.
+                if (bIstFaehigkeitsdruck && GRLAbilityReselect != 0
+                    && ExtendedController->SelectedUnits.Num() == 0 && LetzteAuswahlTaste >= 0)
+                {
+                    // Die Gruppenwahl-Aktionen tragen ctrl=true, der Faehigkeitsdruck ctrl=false -
+                    // und ReceiveRLAction hat das oben bereits auf den Controller geschrieben. Ohne
+                    // das Setzen hier druecke ich "1" statt "Ctrl+1", was gar keine Gruppenwahl ist:
+                    // gemessen am 01.09.2026 waren 869 von 869 Nachwahlen erfolglos.
+                    const bool bCtrlVorher = ExtendedController->IsCtrlPressed;
+                    ExtendedController->IsCtrlPressed = true;
+                    SwitchControllerStateMachine(InputActionValue, LetzteAuswahlTaste);
+                    ExtendedController->IsCtrlPressed = bCtrlVorher;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[NetzDruck] Team %d Nachwahl Gruppe=%d -> Auswahl=%d"),
+                        ExtendedController->SelectableTeamId, LetzteAuswahlTaste,
+                        ExtendedController->SelectedUnits.Num());
+                }
+
                 {
                     bool bAnyFree = false;
                     for (AUnitBase* Selected : ExtendedController->SelectedUnits)
@@ -398,8 +433,39 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                         }
                     }
 
+                    // [NetzDruck] Gemessen am 01.09.2026: das Netz waehlt in 24,1 % seiner Zuege eine
+                    // Faehigkeit (Regel-KI: 36,6 %), loest ueber eine ganze Messreihe aber nur 118
+                    // Ablehnungen in ActivateAbilityByInputID aus - gegen 14 710 der Regel-KI. Seine
+                    // Bauwuensche kommen dort also gar nicht erst an. Diese Zeile sagt, wie weit sie
+                    // kommen; ohne sie ist eine leere Auswahl von einem gelungenen Bau nicht zu
+                    // unterscheiden.
+                    if (bIstFaehigkeitsdruck)
+                    {
+                        // Welche Faehigkeit eine Taste ausloest, haengt nicht nur an der Taste,
+                        // sondern am Array-Index - und daran, WELCHE Einheiten ausgewaehlt sind:
+                        // der Druck feuert auf alle. Gemessen am 01.09.2026 loeste das Netz
+                        // ueberwiegend Ein-/Ausgraben aus (4 von 147 Aktivierungen waren ein Bau).
+                        // Diese beiden Felder trennen "falscher Index" von "falsche Einheiten".
+                        int32 Arbeiter = 0;
+                        for (AUnitBase* Selected : ExtendedController->SelectedUnits)
+                        {
+                            if (IsValid(Selected) && Selected->IsWorker) { ++Arbeiter; }
+                        }
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[NetzDruck] Team %d Taste=%d Auswahl=%d frei=%d Index=%d Arbeiter=%d"),
+                            ExtendedController->SelectableTeamId, NewCameraState,
+                            ExtendedController->SelectedUnits.Num(), bAnyFree ? 1 : 0,
+                            ExtendedController->AbilityArrayIndex, Arbeiter);
+                    }
+
                     if (!bAnyFree && ExtendedController->SelectedUnits.Num() > 0)
                     {
+                        if (bIstFaehigkeitsdruck)
+                        {
+                            UE_LOG(LogTemp, Warning,
+                                TEXT("[NetzDruck] Team %d VERWORFEN: alle %d ausgewaehlten Einheiten bauen schon"),
+                                ExtendedController->SelectableTeamId, ExtendedController->SelectedUnits.Num());
+                        }
                         if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Every selected unit is already building."));
                         return;
                     }
@@ -422,6 +488,20 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 if (!bSkipSwitch)
                 {
                     SwitchControllerStateMachine(InputActionValue, NewCameraState);
+                }
+
+                // [NetzDruck] Ohne diese Zeile sind zwei Ursachen nicht zu trennen: das Netz waehlt
+                // Gruppen, die gar keine Einheiten haben - oder die Auswahl geht bis zum Druck
+                // wieder verloren. Erst der Vergleich beider Zeilen entscheidet das.
+                if (ActionName == "switch_camera_state")
+                {
+                    const int32 NachDerWahl = ExtendedController->SelectedUnits.Num();
+                    UE_LOG(LogTemp, Warning, TEXT("[NetzDruck] Team %d Gruppenwahl=%d Auswahl=%d"),
+                        ExtendedController->SelectableTeamId, NewCameraState, NachDerWahl);
+                    if (NachDerWahl > 0)
+                    {
+                        LetzteAuswahlTaste = NewCameraState;
+                    }
                 }
 
                 // if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Post-Switch State: SelectedUnits=%d"), ExtendedController->SelectedUnits.Num());
@@ -469,13 +549,30 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                                     {
                                         if (!WeakController.IsValid() || !WeakWorker.IsValid()) return;
                                         WeakController->SetWorkArea(DropTransform);
-                                        WeakController->DropWorkAreaForUnit(WeakWorker.Get(), false,
-                                            WeakController->DropWorkAreaFailedSound);
+                                        // Ohne Geist gibt es nichts abzuwerfen: dann hat die Faehigkeit
+                                        // oben keine Baustelle erzeugt, der Druck war also schon vorher
+                                        // wirkungslos. DropWorkAreaForUnit verlaesst diesen Fall auf
+                                        // Verbose und damit unsichtbar - gemessen am 01.09.2026 blieben
+                                        // 165 von 210 Fehlschlaegen ohne jeden benannten Grund.
+                                        const bool bHatteGeist = WeakWorker->CurrentDraggedWorkArea != nullptr;
+                                        const bool bAbwurfGelang = WeakController->DropWorkAreaForUnit(
+                                            WeakWorker.Get(), false, WeakController->DropWorkAreaFailedSound);
+                                        // Der Bauplatz ist die Kameraposition des Agenten. Scheitert der
+                                        // Abwurf, war der Druck umsonst - bisher lautlos.
+                                        UE_LOG(LogTemp, Warning,
+                                            TEXT("[NetzDruck] Team %d Abwurf %s Geist=%d bei (%.0f,%.0f)"),
+                                            WeakController->SelectableTeamId,
+                                            bAbwurfGelang ? TEXT("OK") : TEXT("FEHLGESCHLAGEN"),
+                                            bHatteGeist ? 1 : 0,
+                                            DropTransform.GetLocation().X, DropTransform.GetLocation().Y);
                                     }));
                             }
                         }
                         else
                         {
+                            UE_LOG(LogTemp, Warning,
+                                TEXT("[NetzDruck] Team %d VERWORFEN: keine Einheit fuer den Abwurf ausgewaehlt"),
+                                ExtendedController->SelectableTeamId);
                             if (bDebug) UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] switch_camera_state_ability: No unit selected to drop work area for."));
                         }
                     }
@@ -675,8 +772,38 @@ void ARLAgent::PerformRightClickAction(const FHitResult& HitResult)
         {
             if (!ExtendedController->CheckClickOnWorkArea(EffectiveHit))
             {
-                ExtendedController->RunUnitsAndSetWaypointsMass(EffectiveHit);
-                // RunUnitsAndSetWaypoints(HitResult, ExtendedController);
+                // Arbeiter aus dem Marschbefehl herausnehmen - aber NUR hier, im KI-Pfad.
+                //
+                // RunUnitsAndSetWaypointsMass laeuft ueber die gesamte Auswahl und kennt keinen
+                // Arbeiterausschluss; PerformLeftClickAction hat ihn in beiden Zweigen. Der
+                // Rechtsklick zieht deshalb die Arbeiter mit, und StopWorkOnSelectedUnit nimmt
+                // ihnen dabei die Arbeit ab - genau das Bild "die KI schickt alle Arbeiter weg".
+                // Ausgeloest wird es von Regelzeilen, die Aktion 29 (RightClick1) tragen; in der
+                // Singularianer-Tabelle tut das Load_Antimatter.
+                //
+                // Der Ausschluss darf NICHT in RunUnitsAndSetWaypointsMass selbst stehen: dort
+                // laeuft auch der Rechtsklick des Spielers (CustomControllerBase.cpp:2167) und der
+                // Minimap-Befehl (:2202) durch. Ein Filter dort haette dem Spieler die Kontrolle
+                // ueber seine Arbeiter genommen.
+                TArray<AUnitBase*> AuswahlVorher = ExtendedController->SelectedUnits;
+                ExtendedController->SelectedUnits.RemoveAll([](const AUnitBase* U)
+                {
+                    return U && U->IsWorker;
+                });
+
+                const int32 Entfernt = AuswahlVorher.Num() - ExtendedController->SelectedUnits.Num();
+                if (Entfernt > 0)
+                {
+                    UE_LOG(LogTemp, Warning, TEXT("[ArbeiterSchutz] Team %d: %d von %d Arbeitern vom Marschbefehl ausgenommen"),
+                        ExtendedController->SelectableTeamId, Entfernt, AuswahlVorher.Num());
+                }
+
+                if (ExtendedController->SelectedUnits.Num() > 0)
+                {
+                    ExtendedController->RunUnitsAndSetWaypointsMass(EffectiveHit);
+                }
+
+                ExtendedController->SelectedUnits = AuswahlVorher;
             }
         }
     }
@@ -730,6 +857,76 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
     {
         AWaypoint* BWaypoint = nullptr;
 
+        // Der Angriffsbefehl der KI zielte bisher auf den Boden UNTER DEM AGENTEN - also dorthin, wo
+        // die KI-Kamera gerade steht. Fuer die Regel-KI ist das folgenlos, sie geht ueber
+        // IssueDirectAttackMove mit eigener Zielwahl. Fuer das NETZ war es der Grund, warum es nie
+        // angreift: es muesste erst die Kamera an den Feind fahren und dann angreifen, und diese
+        // Verkettung gelingt ihm praktisch nie. Gemessen ueber 34 Partien: Team 1 (Netz) NULL
+        // Angriffsbefehle, Team 2 (Regeln) bis zu 90 - bei besserer Bauleistung des Netzes.
+        //
+        // Deshalb bekommt der Angriffsbefehl hier dieselbe Zielwahl wie die Regel-KI: das naechste
+        // gegnerische GEBAEUDE zum eigenen Schwerpunkt. Gebaeude, weil sie stehen bleiben (siehe
+        // bPreferBuildingTargets im Entscheider). Findet sich keines, bleibt es beim urspruenglichen
+        // Punkt, das Verhalten ist dann wie zuvor.
+        //
+        // Dieser Zweig liegt in ARLAgent und wird ausschliesslich von der KI durchlaufen - der
+        // Spieler ist nicht betroffen.
+        FHitResult ZielTreffer = HitResult;
+        if (bAimAttackAtNearestEnemyBuilding)
+        {
+            if (const UWorld* Welt = GetWorld())
+            {
+                const int32 EigenesTeam = CustomControllerBase->SelectableTeamId;
+
+                FVector EigenerSchwerpunkt = FVector::ZeroVector;
+                int32 EigeneZahl = 0;
+                FVector BestesZiel = FVector::ZeroVector;
+                bool bZielGefunden = false;
+
+                TArray<ABuildingBase*> Gegnerische;
+                for (TActorIterator<ABuildingBase> It(Welt); It; ++It)
+                {
+                    ABuildingBase* Gebaeude = *It;
+                    if (!IsValid(Gebaeude)) continue;
+                    if (Gebaeude->TeamId == EigenesTeam)
+                    {
+                        EigenerSchwerpunkt += Gebaeude->GetActorLocation();
+                        ++EigeneZahl;
+                    }
+                    else
+                    {
+                        Gegnerische.Add(Gebaeude);
+                    }
+                }
+
+                const FVector Bezug = (EigeneZahl > 0)
+                    ? (EigenerSchwerpunkt / (float)EigeneZahl)
+                    : GetActorLocation();
+
+                double BesteDistSq = TNumericLimits<double>::Max();
+                for (const ABuildingBase* Gegner : Gegnerische)
+                {
+                    const double DistSq = FVector::DistSquared2D(Gegner->GetActorLocation(), Bezug);
+                    if (DistSq < BesteDistSq)
+                    {
+                        BesteDistSq = DistSq;
+                        BestesZiel = Gegner->GetActorLocation();
+                        bZielGefunden = true;
+                    }
+                }
+
+                if (bZielGefunden)
+                {
+                    ZielTreffer.Location = BestesZiel;
+                    ZielTreffer.ImpactPoint = BestesZiel;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[NetzAngriff] Team=%d Angriffsziel auf naechstes Gegnergebaeude gesetzt: (%.0f, %.0f), %d Kandidaten"),
+                        EigenesTeam, BestesZiel.X, BestesZiel.Y, Gegnerische.Num());
+                }
+            }
+        }
+        const FHitResult& HitResultZiel = ZielTreffer;
+
         // Use the same formation solver the human paths use, so GridFormationShape means the same
         // thing for an RL agent as for a player. The ring and wedge layouts size each ring from the
         // largest unit still unplaced, so they REQUIRE descending-radius order - hence the sorted
@@ -758,7 +955,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
 
             const TArray<FVector> Offsets = CustomControllerBase->ComputeSlotOffsetsDirectional(
                 SortedUnits, -1.f,
-                CustomControllerBase->ComputeApproachDirection(SortedUnits, HitResult.Location));
+                CustomControllerBase->ComputeApproachDirection(SortedUnits, HitResultZiel.Location));
 
             for (int32 s = 0; s < SortedUnits.Num() && s < Offsets.Num(); ++s)
             {
@@ -780,7 +977,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
             {
                 // FindRef yields a zero offset for buildings (never inserted), which is exactly the
                 // "use the raw hit location" case the ternary already handled.
-                FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)HitResult.Location : (FVector)HitResult.Location + RLFormationOffsets.FindRef(U);
+                FVector RunLocation = Cast<ABuildingBase>(U) ? (FVector)HitResultZiel.Location : (FVector)HitResultZiel.Location + RLFormationOffsets.FindRef(U);
                 bool HitNavModifier;
                 RunLocation = CustomControllerBase->TraceRunLocation(RunLocation, HitNavModifier);
                 if (HitNavModifier) continue;
@@ -812,7 +1009,7 @@ void ARLAgent::PerformLeftClickAction(const FHitResult& HitResult, bool AttackTo
             }
 
             if (U)
-                CustomControllerBase->FireAbilityMouseHit(U, HitResult);
+                CustomControllerBase->FireAbilityMouseHit(U, HitResultZiel);
         }
 
         if (BuildingUnits.Num() > 0)
@@ -1014,6 +1211,53 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
         }
     }
     
+    // Spielzeit und Bauwarteschlange - die beiden Innenzustaende, die der Regel-Lehrer abfragt und
+    // die im Zustandsvektor bisher fehlten. Begruendung an den Feldern in FGameStateData.
+    if (UWorld* StateWorld = GetWorld())
+    {
+        GameState.GameTimeSeconds = StateWorld->GetTimeSeconds();
+
+        // Geplante, noch nicht fertige Bauten. Gezaehlt wird ueber die Gebaeudeklasse der Flaeche -
+        // genau so, wie CountByClassTag es mit bIncludePendingAreas=true tut. Eine Flaeche, deren
+        // Gebaeude schon steht, ist keine Warteschlange mehr und faellt ueber Building heraus.
+        auto ZaehlePending = [](const FGameplayTag& T, const AUnitBase* CDO, int32& Counter)
+        {
+            if (T.IsValid() && CDO && CDO->UnitTags.HasTagExact(T))
+            {
+                ++Counter;
+            }
+        };
+
+        for (TActorIterator<AWorkArea> It(StateWorld); It; ++It)
+        {
+            const AWorkArea* Area = *It;
+            if (!IsValid(Area) || Area->Type != WorkAreaData::BuildArea) continue;
+            if (Area->TeamId != SelectableTeamId) continue;
+            if (Area->Building || Area->bFinalBuildingSpawned) continue;   // schon gebaut
+            if (!Area->BuildingClass) continue;
+
+            const AUnitBase* BuildingCDO = Cast<AUnitBase>(Area->BuildingClass->GetDefaultObject());
+            if (!BuildingCDO) continue;
+
+            ZaehlePending(TagAlt1, BuildingCDO, GameState.Alt1TagPendingBuildCount);
+            ZaehlePending(TagAlt2, BuildingCDO, GameState.Alt2TagPendingBuildCount);
+            ZaehlePending(TagAlt3, BuildingCDO, GameState.Alt3TagPendingBuildCount);
+            ZaehlePending(TagAlt4, BuildingCDO, GameState.Alt4TagPendingBuildCount);
+            ZaehlePending(TagAlt5, BuildingCDO, GameState.Alt5TagPendingBuildCount);
+            ZaehlePending(TagAlt6, BuildingCDO, GameState.Alt6TagPendingBuildCount);
+            ZaehlePending(TagCtrl1, BuildingCDO, GameState.Ctrl1TagPendingBuildCount);
+            ZaehlePending(TagCtrl2, BuildingCDO, GameState.Ctrl2TagPendingBuildCount);
+            ZaehlePending(TagCtrl3, BuildingCDO, GameState.Ctrl3TagPendingBuildCount);
+            ZaehlePending(TagCtrl4, BuildingCDO, GameState.Ctrl4TagPendingBuildCount);
+            ZaehlePending(TagCtrl5, BuildingCDO, GameState.Ctrl5TagPendingBuildCount);
+            ZaehlePending(TagCtrl6, BuildingCDO, GameState.Ctrl6TagPendingBuildCount);
+            ZaehlePending(TagCtrlQ, BuildingCDO, GameState.CtrlQTagPendingBuildCount);
+            ZaehlePending(TagCtrlW, BuildingCDO, GameState.CtrlWTagPendingBuildCount);
+            ZaehlePending(TagCtrlE, BuildingCDO, GameState.CtrlETagPendingBuildCount);
+            ZaehlePending(TagCtrlR, BuildingCDO, GameState.CtrlRTagPendingBuildCount);
+        }
+    }
+
     // Calculate Averages
     if (NumFriendlyUnits > 0)
     {

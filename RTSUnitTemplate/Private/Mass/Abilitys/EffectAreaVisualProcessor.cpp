@@ -128,7 +128,15 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
 					{
 						const float LocalRadius = Visual.BaseMeshRadius;
 						const float ScaleFactor = (LocalRadius > 0.f) ? (Impact.CurrentRadius / LocalRadius) : 1.f;
-						VisualTransform.SetScale3D(FVector(ScaleFactor));
+
+						// Der Maszstab der ISM-Vorlage bleibt als Faktor JE ACHSE erhalten, statt
+						// vom einheitlichen Radiusfaktor ueberschrieben zu werden. Vorher war jede
+						// Flaeche zwangslaeufig so hoch wie breit - eine Kugel wurde zur vollen
+						// Kugel statt zur flachen Haube, und ein (1,1,0.25) im Blueprint war
+						// wirkungslos. Bei (1,1,1), also allen bestehenden Flaechen, aendert sich
+						// nichts. X und Y decken weiterhin exakt den Wirkradius ab.
+						const FVector TemplateScale = Visual.VisualRelativeTransform.GetScale3D();
+						VisualTransform.SetScale3D(FVector(ScaleFactor) * TemplateScale);
 					}
 
 					// [FlaecheGroesse] Einmal je Flaeche: sagt, welche Skalierung wirklich angewandt

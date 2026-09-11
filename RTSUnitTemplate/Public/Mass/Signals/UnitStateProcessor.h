@@ -242,6 +242,16 @@ private:
 		TArray<FMassEntityHandle>& Entities
 	);
 
+	/**
+	 * Gives a freshly finished AI building a rally point in front of itself.
+	 *
+	 * The AI never set one, so everything it produced stayed where it was spawned - in the middle of
+	 * the base, between the buildings. The point is placed away from the team's own base, projected
+	 * onto the navigation mesh, and only when nothing else has claimed the waypoint slot.
+	 * Human-owned buildings are left alone: their rally point is the player's decision.
+	 */
+	void EnsureAiRallyPoint(class ABuildingBase* Building);
+
 	UPROPERTY(VisibleAnywhere, Category = RTSUnitTemplate)
 		AExtendedControllerBase* ControllerBase;
 

@@ -169,6 +169,16 @@ void AControllerBase::Server_EnterSpectate_Implementation(bool bRevealAll)
 	}
 }
 
+void AControllerBase::Server_Surrender_Implementation()
+{
+	// Laeuft auf der Autoritaet. TriggerWinLoseForTeam macht dasselbe, was auch die normale
+	// Niederlagepruefung tut - inklusive Spectate-Umschaltung und Ergebnisfenster.
+	if (ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
+	{
+		GM->TriggerWinLoseForTeam(SelectableTeamId, false);
+	}
+}
+
 void AControllerBase::ToggleUnitCountDisplay(bool bEnable)
 {
 	if (bEnable)
@@ -347,6 +357,9 @@ void AControllerBase::RemoveUnitFromSelection(AUnitBase* Unit)
 
 void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector Location)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	if (!Unit) return;
 
 	if (Unit->IsAnyAbilityActive())
@@ -367,6 +380,9 @@ void AControllerBase::LeftClickAMoveUEPF_Implementation(AUnitBase* Unit, FVector
 
 void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Location)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	if (!Unit) return;
 
 	if (Unit->IsAnyAbilityActive())
@@ -390,6 +406,9 @@ void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Loc
 
 void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Location)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	if (Unit && Unit->UnitState != UnitData::Dead) {
 	
 		FHitResult Hit_Pawn;
@@ -434,6 +453,9 @@ void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Lo
 
 void AControllerBase::FireAbilityMouseHit_Implementation(AUnitBase* Unit, const FHitResult& InHitResult)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	if (Unit)
 	{
 		if (AGASUnit* GASUnit = Cast<AGASUnit>(Unit))
@@ -444,7 +466,27 @@ void AControllerBase::FireAbilityMouseHit_Implementation(AUnitBase* Unit, const 
 				return;
 			}
 			GASUnit->LastMouseHitRequestTime = GetWorld()->GetTimeSeconds();
-			GASUnit->FireMouseHitAbility(InHitResult);
+
+			// Derselbe Zwang wie beim Zielmarker: bTargetLandscapeOnly zieht den Klickpunkt
+			// senkrecht auf das Gelaende. Ohne das zeigt der Marker den Boden, gelandet wird
+			// aber auf dem Dach der Einheit, ueber der die Maus stand.
+			FHitResult Ziel = InHitResult;
+			if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(this))
+			{
+				if (Unit->CurrentSnapshot.AbilityClass)
+				{
+					if (const UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
+					{
+						FVector AufDemBoden;
+						if (AbilityCDO->bTargetLandscapeOnly && ExtPC->SnapPointToLandscape(InHitResult.Location, AufDemBoden))
+						{
+							Ziel.Location = AufDemBoden;
+							Ziel.ImpactPoint = AufDemBoden;
+						}
+					}
+				}
+			}
+			GASUnit->FireMouseHitAbility(Ziel);
 		}
 	}
 }
@@ -741,6 +783,9 @@ void AControllerBase::RightClickRunShift_Implementation(AUnitBase* Unit, FVector
 
 void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector Location, bool CancelAbility)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	if (!Unit) return;
 	
 	if (Unit->IsAnyAbilityActive())
@@ -762,6 +807,9 @@ void AControllerBase::RightClickRunUEPF_Implementation(AUnitBase* Unit, FVector 
 
 void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FVector Location, int Counter)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 
 	if (!Unit) return;
 

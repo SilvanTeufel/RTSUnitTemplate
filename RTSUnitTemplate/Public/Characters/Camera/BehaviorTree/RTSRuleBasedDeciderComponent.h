@@ -325,6 +325,20 @@ public:
 	/** Remaining supply for this team, or -1 when it cannot be determined. */
 	float GetSupplyHeadroom() const;
 
+	/**
+	 * War die zuletzt getroffene Entscheidung der Wander-Pfad?
+	 *
+	 * Der Wander-Pfad ist der Rueckfall, wenn keine Regel passt, und waehlt mit
+	 * FMath::RandRange aus einer Liste - reiner Muenzwurf. Gemessen am 29.08.: er stellt die
+	 * HAELFTE aller Entscheidungen des Lehrers (13388 von 26836). Wer diese Zeilen mit
+	 * aufzeichnet, bringt dem Netz bei, einen Wuerfel nachzuahmen; die Wahrscheinlichkeitsmasse
+	 * verteilt sich auf Aktionen, die keine Absicht tragen.
+	 *
+	 * mutable, weil RecordDecisionForTraining const ist und die Entscheidungspfade Lambdas in
+	 * einer const-Methode sind.
+	 */
+	mutable bool bLastDecisionWasWander = false;
+
 	// ---------------- Expansion cadence ----------------
 	// Expanding was left to the weighted draw, where a frequency of 200 competes against a pool of
 	// several thousand: the rule PASSED 65 times in five minutes and was picked exactly zero times.
@@ -513,6 +527,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate|AI")
 	bool bAttackNearestTarget = true;
 
+	/**
+	 * Bei der Zielwahl GEBAEUDE bevorzugen und Einheiten nur nehmen, wenn kein gegnerisches Gebaeude
+	 * bekannt ist.
+	 *
+	 * Warum: die Angriffszeilen fuehren als Quellklassen BuildingBase UND UnitBase, und beide landeten
+	 * ununterschieden im selben Topf. Zusammen mit bAttackNearestTarget hiess das: es gewinnt der
+	 * naechstgelegene GEGNER-AKTOR - und das ist fast immer eine herumlaufende Einheit, kein Gebaeude.
+	 * Zwei Folgen, beide vom Nutzer beobachtet:
+	 *   - Das Ziel LAEUFT. Jeder neue Befehl zeigt woanders hin, die Armee dreht unterwegs um.
+	 *     Gemessen am 30.08. ueber drei Partien: Zielsspruenge von 1887 bis 5116 Einheiten zwischen
+	 *     zwei Befehlen an dieselbe Gruppe, im Abstand von 5,5 bis 22,5 Sekunden.
+	 *   - Die Armee erreicht die gegnerische Basis nie, weil sie nie dorthin geschickt wurde. Sie
+	 *     jagt Streuner in der Landschaft.
+	 * Gebaeude stehen still. Damit wird das Ziel stabil, die Bindung muss seltener eingreifen, und
+	 * ein Angriff geht wieder dorthin, wo etwas zu zerstoeren ist.
+	 *
+	 * Der Vorzug gilt NUR fuer die Zielwahl der KI. Auf false verhaelt es sich wie zuvor.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="RTSUnitTemplate|AI")
+	bool bPreferBuildingTargets = true;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="AI|Rules|AttackTable")
 	bool bUseDirectBatchAttackMove = true;
 
@@ -577,6 +612,60 @@ private:
 	/** Previous action written to the training set; becomes the next sample's LastActionIndex feature. */
 	mutable int32 LastRecordedActionIndex = -1;
 
+public:
+	/**
+	 * Welche Aktion die Regel-KI zuletzt aufgezeichnet hat. Fuer die DAgger-Mischung: uebernimmt der
+	 * Lehrer einen Zug, muss das Netz denselben Wert als LastActionIndex weitergereicht bekommen.
+	 */
+	int32 GetLastRecordedActionIndex() const { return LastRecordedActionIndex; }
+
+	/**
+	 * Wie viele Entscheidungen die KI je SPIELSEKUNDE faellen darf. 0 = kein Riegel (Verhalten wie frueher).
+	 *
+	 * VORGABE 0 = AUS. Der Riegel wurde gebaut, um eine vermutete fps-Abhaengigkeit der KI zu
+	 * beheben, und die Messung hat die Vermutung WIDERLEGT. Er bleibt als Werkzeug erhalten.
+	 *
+	 * Gemessen (Zeitdehnung 6, zwei gleichzeitige Instanzen derselben Partie):
+	 *
+	 *   Bildrate    Frames je Spielsekunde    Entscheidungen je Spielsekunde
+	 *     6,5 fps            1,1                        0,21
+	 *   105   fps           17,5                        0,67
+	 *   131   fps (Dehnung 1) 131                       0,80
+	 *
+	 * Die Entscheidungsdichte SAETTIGT bei rund 0,8 - sie waechst nicht mit der Bildrate, sondern
+	 * bricht nur ein, wenn zu wenige Frames da sind. Der Unterschied zwischen den Regimen ist also
+	 * ein MANGEL unten, kein UEBERSCHUSS oben. Ein Deckel kann Mangel nicht beheben.
+	 *
+	 * Zwingt man die Dichte per Riegel gleich (0,13 gegen 0,16 statt 0,21 gegen 0,67), bleibt das
+	 * Ergebnis unveraendert vernichtend. Die eigentliche Ursache ist, dass bei hoher Bildrate die
+	 * gesamte Simulation oefter laeuft - Mass, Kampf, Wegfindung, Wirtschaft - und nicht, dass die
+	 * KI oefter entscheidet. Das liegt ausserhalb der KI.
+	 *
+	 * Der Riegel misst in SPIELZEIT (UWorld::GetTimeSeconds), nicht in Realzeit - damit wirkt er
+	 * unabhaengig von der Zeitdehnung, genau wie die Abklingzeiten der einzelnen Regelzeilen.
+	 * Er kann nur DECKELN, nicht nachholen; reicht die Bildrate nicht, warnt ConsumeDecisionSlot
+	 * einmal je Partie mit Soll- und Istwert.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Takt", meta=(ClampMin="0.0"))
+	float DecisionsPerGameSecond = 0.f;
+
+	/**
+	 * Ist jetzt eine Entscheidung faellig? Verbraucht dabei den Zeitschlitz.
+	 * Gibt true zurueck, wenn seit der letzten Entscheidung genug SPIELZEIT vergangen ist.
+	 */
+	bool ConsumeDecisionSlot();
+
+private:
+
+	// Spielzeitpunkt der letzten gefaellten Entscheidung. Negativ = noch keine, erste ist sofort faellig.
+	float LastDecisionGameTime = -1000000.f;
+
+	// Diagnose: wie oft der Riegel gegriffen bzw. durchgelassen hat, plus die einmalige Warnung.
+	int32 DecisionsGranted = 0;
+	int32 DecisionsBlocked = 0;
+	bool bDecisionStarvationReported = false;
+
+
 	// Timestamp of the last time we attempted to evaluate attack rules (seconds). Initialized so first check is allowed immediately.
 	float LastAttackRuleCheckTimeSeconds = -1000000.f;
 
@@ -611,6 +700,20 @@ private:
 
 	FVector LetzteAngriffsBefehlPos = FVector::ZeroVector;
 	float LetzteAngriffsBefehlZeit = -1.f;
+
+	/**
+	 * Einheiten, die gerade einen Angriffsbefehl abmarschieren.
+	 *
+	 * Die Verteidigungsroutine sammelt sonst JEDE Einheit ein, die nicht Attack/Chase/Casting/Build
+	 * ist - und eine marschierende Armee hat den Zustand Run. Folge: der Angriff wird auf halbem Weg
+	 * abgebrochen, die Einheiten laufen heim, die naechste Angriffsregel schickt sie wieder los. Genau
+	 * das Pendeln zwischen den Basen, das der Nutzer am 09.09.2026 gemeldet hat.
+	 *
+	 * Solange AttackCommitSeconds seit LetzteAngriffsBefehlZeit nicht abgelaufen sind, bleiben diese
+	 * Einheiten der Verteidigung entzogen. Schwache Zeiger, damit gefallene Einheiten von selbst
+	 * herausfallen.
+	 */
+	TSet<TWeakObjectPtr<AUnitBase>> MarschierendeEinheiten;
 
 	// Helper to handle the return move and post-return actions
 	void FinalizeAttackReturn();

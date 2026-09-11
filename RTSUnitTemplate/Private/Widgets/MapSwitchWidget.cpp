@@ -9,6 +9,55 @@
 #include "Misc/Paths.h"
 #include "Controller/PlayerController/CameraControllerBase.h" // Include Player Controller
 #include "System/MapSwitchSubsystem.h"
+#include "Widgets/MapSwitchEntryWidget.h"
+#include "Components/PanelWidget.h"
+
+bool UMapSwitchWidget::SupportsDestinationList() const
+{
+    return DestinationList != nullptr && EntryWidgetClass != nullptr;
+}
+
+void UMapSwitchWidget::InitializeWidgetWithDestinations(const TArray<FMapSwitchDestinationState>& States, AMapSwitchActor* InOwningActor)
+{
+    OwningActor = InOwningActor;
+
+    if (!SupportsDestinationList())
+    {
+        // Without a list nothing would be visible at all. Fall back to the first open entry.
+        for (const FMapSwitchDestinationState& State : States)
+        {
+            if (State.bUnlocked)
+            {
+                InitializeWidget(State.MapLongPackageName, InOwningActor, true, State.DisplayName);
+                return;
+            }
+        }
+        InitializeWidget(FString(), InOwningActor, false, FText::GetEmpty());
+        return;
+    }
+
+    if (DialogText)
+    {
+        DialogText->SetText(DestinationListTitle.IsEmpty()
+            ? FText::FromString(TEXT("Where do you want to go?"))
+            : DestinationListTitle);
+    }
+
+    // Yes/No belongs to the single-target dialog; in list mode each row's own button decides.
+    if (YesButton) YesButton->SetVisibility(ESlateVisibility::Collapsed);
+    if (OkButton)  OkButton->SetVisibility(ESlateVisibility::Collapsed);
+    if (NoButton)  NoButton->SetVisibility(ESlateVisibility::Visible);
+
+    DestinationList->ClearChildren();
+    for (const FMapSwitchDestinationState& State : States)
+    {
+        if (UMapSwitchEntryWidget* Row = CreateWidget<UMapSwitchEntryWidget>(GetOwningPlayer(), EntryWidgetClass))
+        {
+            Row->SetEntry(State, InOwningActor);
+            DestinationList->AddChild(Row);
+        }
+    }
+}
 
 void UMapSwitchWidget::InitializeWidget(const FString& MapName, AMapSwitchActor* InOwningActor, bool Enabled, const FText& DisplayName)
 {

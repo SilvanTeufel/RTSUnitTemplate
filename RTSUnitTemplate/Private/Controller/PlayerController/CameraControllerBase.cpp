@@ -1,5 +1,6 @@
-// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "System/RTSTravelHelpers.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "DrawDebugHelpers.h"
 #include "Engine/World.h"
@@ -13,6 +14,7 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "MassEntityManager.h"
+#include "MassCommonFragments.h"
 #include "MassMovementFragments.h" // LUX-ANPASSUNG (16.08.2026): FMassVelocityFragment fuers Auslaufen
 #include "MassEntityTypes.h"
 #include "Mass/UnitMassTag.h"
@@ -98,7 +100,7 @@ void ACameraControllerBase::Server_StopCameraUnitDirect_Implementation()
 				const FVector GlideTarget = StopLoc + GlideDir * UnitDirectStopGlide;
 
 				::UpdateMoveTarget(*MoveTargetFrag, GlideTarget,
-					CameraUnitWithTag->Attributes->GetBaseRunSpeed(), GetWorld());
+					CameraUnitWithTag->Attributes->GetRunSpeed(), GetWorld());
 
 				// StoredLocation MUSS das Auslaufziel sein, sonst zieht die Idle-Regel
 				// "laufe zurueck zu StoredLocation" die Einheit hinterher wieder zurueck.
@@ -158,6 +160,82 @@ void ACameraControllerBase::Server_StopCameraUnitDirect_Implementation()
 // ===================== ENDE LUX-ANPASSUNG 1/3 ===================================================
 
 // ================================================================================================
+// LUX-ANPASSUNG (28.08.2026) - Klick beim Zielen gehoert der zielenden Faehigkeit.
+// Silvan: "Wenn AbilityIndicator aktiviert ist, soll der naechste Klick nicht wieder eine Ability
+// aktivieren sondern in der gleichen Ability den ClickCounter erhoehen."
+//
+// Warum das nur die CameraUnit betrifft: AControllerBase::LeftClickSelect fragt vor dem Selektieren
+// IsAnyAbilityActive() ab und schickt den Klick dann als FireAbilityMouseHit an die laufende
+// Faehigkeit. Die Direktsteuerung geht an dieser Routine vorbei - ihr Linksklick landet direkt in
+// ExecuteOnAbilityInputDetected(AbilityOne) - und startete deshalb den Schuss, statt das Wurfziel
+// zu bestaetigen. Diese Funktion holt den vorhandenen Zweig fuer den Direktsteuerungs-Pfad nach.
+//
+// Bewusst NICHT fuer jede laufende Faehigkeit: das Flag bIndicatorClicksAdvanceAbility an der
+// Faehigkeit mit dem Indikator entscheidet, sonst verloere jede beliebige laufende Faehigkeit den
+// Schuss-Klick.
+// ================================================================================================
+bool ACameraControllerBase::LuxTryAdvanceIndicatorAbilityWithClick()
+{
+	if (!CurrentDraggedAbilityIndicator || !CameraUnitWithTag)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[IndikatorKlick] nicht uebernommen: Indikator=%d CameraUnit=%d"),
+			CurrentDraggedAbilityIndicator ? 1 : 0, CameraUnitWithTag ? 1 : 0);
+		return false;
+	}
+
+	// Auf dem Client existiert die Instanz nicht - dort traegt der replizierte Snapshot die Klasse.
+	const UGameplayAbilityBase* Running = CameraUnitWithTag->ActivatedAbilityInstance
+		? CameraUnitWithTag->ActivatedAbilityInstance
+		: (CameraUnitWithTag->CurrentSnapshot.AbilityClass
+			? CameraUnitWithTag->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>()
+			: nullptr);
+
+	if (!Running || !Running->bIndicatorClicksAdvanceAbility || !Running->AbilityIndicatorClass)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[IndikatorKlick] nicht uebernommen: Faehigkeit=%s Flag=%d IndikatorKlasse=%d"),
+			Running ? *Running->GetClass()->GetName() : TEXT("keine"),
+			Running && Running->bIndicatorClicksAdvanceAbility ? 1 : 0,
+			Running && Running->AbilityIndicatorClass ? 1 : 0);
+		return false;
+	}
+
+	// Dieselbe Drossel wie in LeftClickSelect. Der Klick gilt trotzdem als verbraucht: waehrend der
+	// Sperrzeit darf er erst recht nicht stattdessen den Schuss ausloesen.
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (Now - CameraUnitWithTag->LastMouseHitRequestTime < CameraUnitWithTag->AbilityReactivationThrottle)
+	{
+		return true;
+	}
+	CameraUnitWithTag->LastMouseHitRequestTime = Now;
+
+	// Zielpunkt: erst der Bodenstrahl, den auch der Indikator nutzt (MoveAbilityIndicator_Local),
+	// sonst der Indikator selbst. GetHitResultUnderCursor taugt hier NICHT - in der
+	// Direktsteuerung liefert es keinen Treffer (gemessen: Maustreffer=0, Ziel (0,0,0)), die
+	// Faehigkeit haette also ins Nichts geworfen. Der Indikator steht ohnehin genau dort, wohin
+	// der Spieler zielt; damit landet der Wurf sichtbar dort, wo der Ring liegt.
+	FHitResult Hit;
+	FVector Bodenpunkt;
+	if (!TraceMouseToGround(Bodenpunkt, Hit) || !Hit.bBlockingHit)
+	{
+		Hit = FHitResult();
+		Hit.bBlockingHit = true;
+		Hit.Location = CurrentDraggedAbilityIndicator->GetActorLocation();
+		Hit.ImpactPoint = Hit.Location;
+		Hit.TraceStart = Hit.Location;
+		Hit.TraceEnd = Hit.Location;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[IndikatorKlick] weitergeleitet an %s, ClickCount vorher=%d, Ziel=%s"),
+		*Running->GetClass()->GetName(),
+		CameraUnitWithTag->ActivatedAbilityInstance ? CameraUnitWithTag->ActivatedAbilityInstance->ClickCount : -1,
+		*Hit.ImpactPoint.ToCompactString());
+
+	FireAbilityMouseHit(CameraUnitWithTag, Hit);
+	return true;
+}
+// ===================== ENDE LUX-ANPASSUNG =======================================================
+
+// ================================================================================================
 // LUX-ANPASSUNG 5/5 - lokale Vorhersage fuer die WASD-Direktsteuerung (16.08.2026)
 // Setzt auf dem steuernden Client dasselbe FMassClientPredictionFragment, das auch der
 // Rechtsklick-Befehl setzt (ApplyMovePredictionToUnit). Der UnitMovementProcessor bewegt die
@@ -175,6 +253,11 @@ static TAutoConsoleVariable<int32> CVarLuxDirectPredict(
 	1,
 	TEXT("1 = WASD-Direktsteuerung sagt auf dem Client lokal vorher (responsiv), 0 = nur Server-RPC."),
 	ECVF_Default);
+
+// Der Selbsttest steht weiter unten bei den uebrigen Diagnosebefehlen; BeginPlay braucht ihn aber
+// schon hier.
+static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TArray<FString>& Args);
+static void TempoTest(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar);
 
 void ACameraControllerBase::ApplyDirectMovePredictionLocally(const FVector& Target, bool bStopping, bool bStartingMove)
 {
@@ -207,7 +290,7 @@ void ACameraControllerBase::ApplyDirectMovePredictionLocally(const FVector& Targ
 	// Die Ankunftslogik im UnitMovementProcessor braucht eine Geschwindigkeit > 0, auch beim
 	// Ausrollen - gestoppt wird ueber das Erreichen des (nahen) Auslaufziels, nicht ueber Tempo 0.
 	Pred->Location = Target;
-	Pred->PredDesiredSpeed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
+	Pred->PredDesiredSpeed = CameraUnitWithTag->Attributes->GetRunSpeed();
 	Pred->PredAcceptanceRadius = CameraUnitWithTag->MovementAcceptanceRadius > 0.f
 		? CameraUnitWithTag->MovementAcceptanceRadius
 		: 50.f;
@@ -346,13 +429,13 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 				{
 					if (FMassMoveTargetFragment* MoveTargetFragmentPtr = EntityManager->GetFragmentDataPtr<FMassMoveTargetFragment>(EntityHandle))
 					{
-						UpdateMoveTarget(*MoveTargetFragmentPtr, CameraUnitWithTag->GetMassActorLocation(), CameraUnitWithTag->Attributes->GetBaseRunSpeed(), GetWorld());
+						UpdateMoveTarget(*MoveTargetFragmentPtr, CameraUnitWithTag->GetMassActorLocation(), CameraUnitWithTag->Attributes->GetRunSpeed(), GetWorld());
 					}
 				}
 				else if (FMassClientPredictionFragment* PredFrag = EntityManager->GetFragmentDataPtr<FMassClientPredictionFragment>(EntityHandle))
 				{
 					PredFrag->Location = CameraUnitWithTag->GetMassActorLocation();
-					PredFrag->PredDesiredSpeed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
+					PredFrag->PredDesiredSpeed = CameraUnitWithTag->Attributes->GetRunSpeed();
 					PredFrag->PredAcceptanceRadius = 50.f;
 					PredFrag->bHasData = true;
 				}
@@ -403,7 +486,7 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 		}
 
 		//DrawDebugCircle(GetWorld(), ValidatedLocation, 40.f, 16, FColor::Green, false, 0.5f);
-		const float Speed = CameraUnitWithTag->Attributes->GetBaseRunSpeed();
+		const float Speed = CameraUnitWithTag->Attributes->GetRunSpeed();
 
 		CorrectSetUnitMoveTarget(GetWorld(), CameraUnitWithTag, ValidatedLocation, Speed, CameraUnitWithTag->MovementAcceptanceRadius);
 	}
@@ -480,6 +563,31 @@ void ACameraControllerBase::Server_TravelToMap_Implementation(const FString& Map
 	World->ServerTravel(MapName);
 }
 
+void ACameraControllerBase::RequestRestartCurrentMap()
+{
+	// Ueber Server_TravelToMap statt selbst zu reisen: das ist derselbe Weg, den die
+	// Kartenknoepfe nehmen, und er setzt den Ladebildschirm bei ALLEN Mitspielern vor
+	// die Reise. Als Server-RPC funktioniert er auch, wenn ein Client den Knopf drueckt -
+	// ein Client, der selbst reist, wuerde die Sitzung verlassen.
+	UWorld* Welt = GetWorld();
+	if (!Welt)
+	{
+		return;
+	}
+
+	// Das Weltpaket IST das Kartenpaket. Im PIE traegt es ein "UEDPIE_0_"-Praefix, mit dem
+	// kein Reiseziel gefunden wuerde - RemovePIEPrefix nimmt es weg.
+	const FString Paket = UWorld::RemovePIEPrefix(Welt->GetOutermost()->GetName());
+	if (Paket.IsEmpty())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Neustart] Kein Paketname der aktuellen Karte - kein Neustart."));
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("[Neustart] Karte '%s' wird neu gestartet."), *Paket);
+	Server_TravelToMap(Paket, NAME_None);
+}
+
 void ACameraControllerBase::Client_ShowTravelLoadingScreen_Implementation()
 {
 	if (!IsLocalPlayerController())
@@ -515,10 +623,40 @@ void ACameraControllerBase::Client_ShowTravelLoadingScreen_Implementation()
 #include "AIController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Actors/AutoCamWaypoint.h"
+#include "Actors/AbilityIndicator.h" // LUX-ANPASSUNG (28.08.2026): Indikatorposition als Wurfziel
 #include "Engine/GameViewportClient.h" // Include the header for UGameViewportClient
+#include "Characters/Unit/LevelUnit.h"
+#include "Characters/Unit/MassUnitBase.h"
+#include "Mass/MassActorBindingComponent.h"
+#include "MassEntitySubsystem.h"
+
+// Sekunden nach Spielstart, nach denen RTS.AttributeTree.Test von selbst einmal laeuft.
+// 0 = aus. Gedacht fuer Messlaeufe ohne Bedienung: -dpcvars=rts.attributetree.autotest=30
+static TAutoConsoleVariable<float> CVarAttributbaumSelbsttest(
+	TEXT("rts.attributetree.autotest"),
+	0.f,
+	TEXT("Sekunden nach Spielstart, nach denen der Attributbaum-Selbsttest einmal laeuft. 0 = aus."),
+	ECVF_Default);
+
+// Dasselbe fuer den Tempotest: -dpcvars=rts.speedtest.auto=30
+static TAutoConsoleVariable<float> CVarTempoSelbsttest(
+	TEXT("rts.speedtest.auto"),
+	0.f,
+	TEXT("Sekunden nach Spielstart, nach denen RTS.Speed.Test einmal laeuft. 0 = aus."),
+	ECVF_Default);
+#include "EngineUtils.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/Layout/SBorder.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Styling/CoreStyle.h"
 #include "Engine/Engine.h"      
 #include "Kismet/GameplayStatics.h"
 
+
+void ACameraControllerBase::Client_SetSpectateAvailable_Implementation(bool bAvailable)
+{
+	bSpectateAvailable = bAvailable;
+}
 
 void ACameraControllerBase::Client_TriggerWinLoseUI_Implementation(bool bWon, TSubclassOf<class UWinLoseWidget> InWidgetClass, const FString& InMapName, FName DestinationSwitchTagToEnable)
 {
@@ -679,6 +817,679 @@ void ACameraControllerBase::BeginPlay()
 	if(CameraBase) GetViewPortScreenSizes(CameraBase->GetViewPortScreenSizesState);
 	
 	GetAutoCamWaypoints();
+
+	// Selbsttest des Attributbaums, wenn per CVar angefordert.
+	//
+	// -ExecCmds laeuft beim Kartenstart, und da steht die eigene Teamnummer noch auf -1 und es
+	// existiert keine einzige Einheit - ein Test von dort aus misst garantiert nichts. Deshalb
+	// hier ein eigener Auslöser mit Verzoegerung:
+	//     -dpcvars=rts.attributetree.autotest=30
+	//
+	// Wiederholend, nicht einmalig: der Mass-Abgleich laeuft erst im naechsten Tick, der Wert im
+	// Fragment ist unmittelbar nach dem Investieren also noch der alte. Erst der ZWEITE Durchlauf
+	// zeigt, ob er wirklich angekommen ist - und genau darauf kommt es an, weil der Kampf ueber
+	// das Fragment rechnet und nicht ueber den Attributsatz.
+	if (HasAuthority())
+	{
+		const float Verzoegerung = CVarAttributbaumSelbsttest.GetValueOnGameThread();
+		if (Verzoegerung > 0.f)
+		{
+			FTimerHandle Selbsttest;
+			GetWorldTimerManager().SetTimer(Selbsttest, FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				FuehreAttributbaumTestAus(GetWorld(), *GLog, TArray<FString>());
+			}), Verzoegerung, /*bLoop=*/true);
+		}
+
+		// Einmalig, nicht wiederholend: der Tempotest nimmt seinen Eingriff selbst wieder
+		// zurueck, eine Wiederholung wuerde nur dieselbe Zeile erneut schreiben.
+		const float TempoVerzoegerung = CVarTempoSelbsttest.GetValueOnGameThread();
+		if (TempoVerzoegerung > 0.f)
+		{
+			FTimerHandle TempoSelbsttest;
+			GetWorldTimerManager().SetTimer(TempoSelbsttest, FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				TempoTest(TArray<FString>(), GetWorld(), *GLog);
+			}), TempoVerzoegerung, /*bLoop=*/false);
+		}
+	}
+
+	// Talentpunkte im Zeittakt. Nur der Server verteilt; LevelData ist repliziert, die Clients
+	// sehen die neuen Punkte also ohne weiteres Zutun.
+	if (HasAuthority() && TalentPointInterval > 0.f)
+	{
+		// Die ERSTE Vergabe kommt frueh, danach im normalen Takt. Eine volle Minute ohne einen
+		// einzigen Punkt sieht aus, als waere die Vergabe kaputt.
+		GetWorldTimerManager().SetTimer(TalentPointTimerHandle, this,
+			&ACameraControllerBase::GrantPeriodicTalentPoints, TalentPointInterval, true,
+			FMath::Max(0.1f, TalentPointFirstDelay));
+	}
+}
+
+// ---------------------------------------------------------------------------------------------
+// Diagnose der Talentpunkt-Vergabe
+//
+// `RTS.Talents.Status` beantwortet in einer Zeile, warum keine Punkte ankommen: laeuft der Takt
+// ueberhaupt, stimmen Intervall und Menge, passt die Teamnummer, und wieviele Punkte haben die
+// Einheiten gerade. Ohne das bleibt nur Raten - die Werte stehen im Blueprint des Controllers und
+// sind von aussen nicht zu sehen.
+//
+// `RTS.Talents.Grant <Anzahl>` vergibt sofort, um die Bedienoberflaeche zu pruefen, ohne eine
+// Minute zu warten.
+// ---------------------------------------------------------------------------------------------
+
+static ACameraControllerBase* HoleKameraController(UWorld* World)
+{
+	return World ? Cast<ACameraControllerBase>(World->GetFirstPlayerController()) : nullptr;
+}
+
+static void TalenteStatus(const TArray<FString>& /*Args*/, UWorld* World, FOutputDevice& Ar)
+{
+	ACameraControllerBase* PC = HoleKameraController(World);
+	if (!PC)
+	{
+		Ar.Log(TEXT("[Talente] Kein ACameraControllerBase - falsche Karte oder kein Spieler."));
+		return;
+	}
+
+	const bool bTimer = World->GetTimerManager().IsTimerActive(PC->TalentPointTimerHandle);
+
+	Ar.Logf(TEXT("[Talente] Autoritaet %s | Intervall %.1f s | je Intervall %d | Timer %s | naechste Vergabe in %.1f s | eigenes Team %d"),
+		PC->HasAuthority() ? TEXT("ja") : TEXT("NEIN (nur der Server vergibt)"),
+		PC->TalentPointInterval, PC->TalentPointsPerInterval,
+		bTimer ? TEXT("laeuft") : TEXT("LAEUFT NICHT"),
+		bTimer ? World->GetTimerManager().GetTimerRemaining(PC->TalentPointTimerHandle) : -1.f,
+		PC->SelectableTeamId);
+
+	if (PC->TalentPointInterval <= 0.f || PC->TalentPointsPerInterval <= 0)
+	{
+		Ar.Log(TEXT("[Talente] URSACHE: Intervall oder Menge steht auf 0 - dann wird der Takt gar nicht erst gestartet. Beides steht im Blueprint des Controllers."));
+	}
+
+	int32 Eigene = 0;
+	int32 Fremde = 0;
+	int32 SummePunkte = 0;
+	int32 SummeBaumPunkte = 0;
+	for (TActorIterator<ALevelUnit> It(World); It; ++It)
+	{
+		ALevelUnit* Unit = *It;
+		if (!IsValid(Unit))
+		{
+			continue;
+		}
+
+		if (Unit->TeamId == PC->SelectableTeamId)
+		{
+			++Eigene;
+			SummePunkte += Unit->LevelData.TalentPoints;
+			SummeBaumPunkte += Unit->AttributeTreePoints;
+		}
+		else
+		{
+			++Fremde;
+		}
+	}
+
+	// Die beiden Vorraete GETRENNT ausweisen - sie laufen seit dem 10.09.2026 auseinander, und
+	// eine einzige Zahl liesse offen, welcher der beiden gemeint ist.
+	Ar.Logf(TEXT("[Talente] Einheiten: %d eigene (zusammen %d freie Talentpunkte, %d freie Attributpunkte), %d fremde."),
+		Eigene, SummePunkte, SummeBaumPunkte, Fremde);
+
+	if (Eigene == 0)
+	{
+		Ar.Log(TEXT("[Talente] URSACHE: keine einzige Einheit traegt die eigene Teamnummer - die Vergabe laeuft ins Leere."));
+	}
+
+	// Und jetzt die entscheidende Frage: HAENGT im Widget ueberhaupt eine Einheit, und ist es eine
+	// von denen mit Punkten? Genau hier klaffte die Luecke - der Server vergab (die Meldung kam),
+	// im Widget stand trotzdem nichts.
+	const AExtendedCameraBase* Kamera = Cast<AExtendedCameraBase>(PC->GetPawn());
+	if (!Kamera)
+	{
+		Ar.Log(TEXT("[Talente] Kein AExtendedCameraBase als Pawn - die Widgets haengen dort."));
+		return;
+	}
+
+	auto ZeigeZiel = [&Ar](const TCHAR* Name, ALevelUnit* Ziel)
+	{
+		if (!Ziel)
+		{
+			Ar.Logf(TEXT("[Talente] %s: KEINE Zieleinheit gesetzt - deshalb steht dort nichts und laesst sich nichts vergeben."), Name);
+			return;
+		}
+
+		Ar.Logf(TEXT("[Talente] %s: Ziel '%s' (Team %d) - Talent: %d frei / %d verbraucht, Attributbaum: %d frei / %d verbraucht."),
+			Name, *Ziel->GetName(), Ziel->TeamId,
+			Ziel->LevelData.TalentPoints, Ziel->LevelData.UsedTalentPoints,
+			Ziel->AttributeTreePoints, Ziel->UsedAttributeTreePoints);
+	};
+
+	ZeigeZiel(TEXT("TalentChooser"),
+		Kamera->TalentChooserWidget ? Kamera->TalentChooserWidget->GetOwnerActor() : nullptr);
+
+	if (!Kamera->TalentChooserWidget)
+	{
+		Ar.Log(TEXT("[Talente] TalentChooser: das Widget selbst ist nicht gesetzt (im MainHUD-BP zuweisen)."));
+	}
+
+	ZeigeZiel(TEXT("AttributeTree"),
+		Kamera->AttributeTreeWidget ? Kamera->AttributeTreeWidget->GetTargetUnit() : nullptr);
+
+	if (!Kamera->AttributeTreeWidget)
+	{
+		Ar.Log(TEXT("[Talente] AttributeTree: das Widget selbst ist nicht gesetzt (SetAttributeTreeWidget im MainHUD-BP)."));
+	}
+}
+
+static FAutoConsoleCommandWithWorldArgsAndOutputDevice GTalenteStatusCmd(
+	TEXT("RTS.Talents.Status"),
+	TEXT("Warum kommen keine Talentpunkte an - Takt, Menge, Teamnummer und Bestand."),
+	FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&TalenteStatus));
+
+static void TalenteGeben(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+{
+	ACameraControllerBase* PC = HoleKameraController(World);
+	if (!PC || !PC->HasAuthority())
+	{
+		Ar.Log(TEXT("[Talente] Nur der Server kann Punkte vergeben."));
+		return;
+	}
+
+	const int32 Anzahl = Args.Num() > 0 ? FMath::Max(1, FCString::Atoi(*Args[0])) : 10;
+
+	int32 Beschenkte = 0;
+	for (TActorIterator<ALevelUnit> It(World); It; ++It)
+	{
+		ALevelUnit* Unit = *It;
+		if (IsValid(Unit) && Unit->TeamId == PC->SelectableTeamId)
+		{
+			Unit->LevelData.TalentPoints += Anzahl;
+			Unit->GrantAttributeTreePoints(Anzahl);
+			++Beschenkte;
+		}
+	}
+
+	Ar.Logf(TEXT("[Talente] %d Punkte an %d eigene Einheiten vergeben - in BEIDE Vorraete (Talent und Attributbaum)."),
+		Anzahl, Beschenkte);
+}
+
+static FAutoConsoleCommandWithWorldArgsAndOutputDevice GTalenteGebenCmd(
+	TEXT("RTS.Talents.Grant"),
+	TEXT("RTS.Talents.Grant <Anzahl> - vergibt sofort Talentpunkte an alle eigenen Einheiten."),
+	FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&TalenteGeben));
+
+// ---------------------------------------------------------------------------------------------
+// RTS.AttributeTree.Test - belegt in EINER Ausgabe, dass ein Punkt wirklich ankommt.
+//
+// Die berechtigte Frage dahinter: Stamina, AttackPower, Willpower und Haste sind fuer sich
+// genommen TOTE Werte. Im ganzen Plugin liest sie niemand fuer den Kampf - nur Armor und
+// MagicResistance werden direkt vom Schaden abgezogen (Projectile.cpp, UnitBase.cpp, Missile.cpp).
+// Wirkung entfalten die vier nur, weil derselbe GameplayEffect ZUSAETZLICH einen echten Kampfwert
+// anhebt: Stamina->MaxHealth/Health, AttackPower->AttackDamage, Haste->RunSpeed,
+// Willpower->Regeneration bzw. Panzerung. Fehlt der Effekt an der Einheit, passiert nichts.
+//
+// Der Befehl nimmt die erste eigene Einheit mit Attributbaum, liest ALLE echten Kampfwerte,
+// investiert einen Punkt und liest erneut. Ausgegeben wird die Differenz - am Attributsatz UND
+// am Mass-Fragment, weil der Kampf ueber das Fragment laeuft und ein dort nicht angekommener
+// Wert im Gefecht wirkungslos waere.
+// ---------------------------------------------------------------------------------------------
+struct FBaumMesswerte
+{
+	float Health = 0.f, MaxHealth = 0.f, AttackDamage = 0.f, RunSpeed = 0.f;
+	float Armor = 0.f, MagicResistance = 0.f, HealthRegen = 0.f, ShieldRegen = 0.f;
+	float FragMaxHealth = -1.f, FragAttackDamage = -1.f;
+	float FragRunSpeed = -1.f, FragArmor = -1.f, FragMagicResistance = -1.f;
+};
+
+static FBaumMesswerte LiesMesswerte(ALevelUnit* Unit)
+{
+	FBaumMesswerte M;
+	if (!Unit || !Unit->Attributes)
+	{
+		return M;
+	}
+	M.Health          = Unit->Attributes->GetHealth();
+	M.MaxHealth       = Unit->Attributes->GetMaxHealth();
+	M.AttackDamage    = Unit->Attributes->GetAttackDamage();
+	M.RunSpeed        = Unit->Attributes->GetRunSpeed();
+	M.Armor           = Unit->Attributes->GetArmor();
+	M.MagicResistance = Unit->Attributes->GetMagicResistance();
+	M.HealthRegen     = Unit->Attributes->GetHealthRegeneration();
+	M.ShieldRegen     = Unit->Attributes->GetShieldRegeneration();
+
+	// Und dasselbe aus dem Mass-Fragment. Der Abgleich laeuft ueber
+	// UUnitActorToFragmentSyncProcessor::SyncCombatStats und braucht mindestens einen Tick.
+	AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit);
+	UWorld* Welt = Unit->GetWorld();
+	if (MassUnit && Welt && MassUnit->MassActorBindingComponent)
+	{
+		if (UMassEntitySubsystem* Sub = Welt->GetSubsystem<UMassEntitySubsystem>())
+		{
+			FMassEntityManager& EM = Sub->GetMutableEntityManager();
+			const FMassEntityHandle H = MassUnit->MassActorBindingComponent->GetEntityHandle();
+			if (H.IsSet() && EM.IsEntityValid(H))
+			{
+				if (const FMassCombatStatsFragment* S = EM.GetFragmentDataPtr<FMassCombatStatsFragment>(H))
+				{
+					M.FragMaxHealth       = S->MaxHealth;
+					M.FragAttackDamage    = S->AttackDamage;
+					M.FragRunSpeed        = S->RunSpeed;
+					M.FragArmor           = S->Armor;
+					M.FragMagicResistance = S->MagicResistance;
+				}
+			}
+		}
+	}
+	return M;
+}
+
+static void AttributbaumTest(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+{
+	FuehreAttributbaumTestAus(World, Ar, Args);
+}
+
+static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TArray<FString>& Args)
+{
+	ACameraControllerBase* PC = HoleKameraController(World);
+	if (!PC)
+	{
+		Ar.Log(TEXT("[Attributbaum] Kein ACameraControllerBase."));
+		return;
+	}
+	if (!PC->HasAuthority())
+	{
+		Ar.Log(TEXT("[Attributbaum] Nur der Server kann investieren - auf dem Client waere das Ergebnis geraten."));
+		return;
+	}
+
+	ALevelUnit* Ziel = nullptr;
+	for (TActorIterator<ALevelUnit> It(World); It; ++It)
+	{
+		ALevelUnit* U = *It;
+		if (!IsValid(U) || U->TeamId != PC->SelectableTeamId || !U->AttributeTreeDataTable)
+		{
+			continue;
+		}
+		if (Args.Num() > 0 && !U->GetName().Contains(Args[0]))
+		{
+			continue;
+		}
+		Ziel = U;
+		break;
+	}
+
+	if (!Ziel)
+	{
+		Ar.Logf(TEXT("[Attributbaum] Keine eigene Einheit mit Attributbaum gefunden (Team %d)."),
+			PC->SelectableTeamId);
+		return;
+	}
+
+	// Welche Knoten sieht diese Einheit ueberhaupt? Der Tagfilter der Tabelle entscheidet das.
+	TArray<FName> Sichtbar;
+	for (const FName& RowName : Ziel->AttributeTreeDataTable->GetRowNames())
+	{
+		const FAttributeTreeNodeRow* Row =
+			Ziel->AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(RowName, TEXT("Test"), false);
+		if (Row && Ziel->DoesAttributeTreeNodeMatchUnit(*Row))
+		{
+			Sichtbar.Add(RowName);
+		}
+	}
+
+	FString Stufen;
+	for (const FGameplayTag& T : Ziel->UnitTags)
+	{
+		const FString Name = T.ToString();
+		if (Name.StartsWith(TEXT("Units.Tier.")))
+		{
+			Stufen += Stufen.IsEmpty() ? Name : (TEXT(";") + Name);
+		}
+	}
+
+	// "passt zur Einheit", NICHT "sichtbar": seit dem 11.09.2026 zeigt das Widget ALLE Knoten der
+	// Tabelle - fuenf Aeste T0 bis T4. Diese Zahl sagt nur, wieviele davon DIESE Einheit betreffen.
+	Ar.Logf(TEXT("[Attributbaum] Einheit '%s' (Team %d), Stufe %s, Tabelle '%s': %d von %d Knoten passen zu ihr (gezeichnet werden alle)."),
+		*Ziel->GetName(), Ziel->TeamId, Stufen.IsEmpty() ? TEXT("KEINE") : *Stufen,
+		*Ziel->AttributeTreeDataTable->GetName(), Sichtbar.Num(),
+		Ziel->AttributeTreeDataTable->GetRowNames().Num());
+
+	if (Sichtbar.Num() == 0)
+	{
+		Ar.Log(TEXT("[Attributbaum] URSACHE: kein Knoten passt zum Tag der Einheit - sie kann nichts aufwerten."));
+		return;
+	}
+
+	// Punkte sicherstellen und einen investierbaren Knoten suchen.
+	Ziel->GrantAttributeTreePoints(10);
+
+	FName Knoten = NAME_None;
+	if (Args.Num() > 1)
+	{
+		Knoten = FName(*Args[1]);
+	}
+	else
+	{
+		for (const FName& N : Sichtbar)
+		{
+			if (Ziel->CanInvestInAttributeTreeNode(N))
+			{
+				Knoten = N;
+				break;
+			}
+		}
+	}
+
+	if (Knoten.IsNone())
+	{
+		Ar.Log(TEXT("[Attributbaum] Kein investierbarer Knoten - alles voll oder gesperrt."));
+		return;
+	}
+
+	const FAttributeTreeNodeRow* Row =
+		Ziel->AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(Knoten, TEXT("Test"), false);
+	const FBaumMesswerte Vorher = LiesMesswerte(Ziel);
+	const bool bInvestiert = Ziel->InvestInAttributeTreeNode(Knoten);
+	const FBaumMesswerte Nachher = LiesMesswerte(Ziel);
+
+	Ar.Logf(TEXT("[Attributbaum] Knoten '%s' (Attribut %s): investiert %s, Vorrat %d frei / %d vergeben."),
+		*Knoten.ToString(),
+		Row ? *StaticEnum<EAttributeTreeStat>()->GetNameStringByValue((int64)Row->Attribute) : TEXT("?"),
+		bInvestiert ? TEXT("JA") : TEXT("NEIN"),
+		Ziel->AttributeTreePoints, Ziel->UsedAttributeTreePoints);
+
+	auto Zeile = [&Ar](const TCHAR* Name, float A, float B)
+	{
+		if (!FMath::IsNearlyEqual(A, B))
+		{
+			Ar.Logf(TEXT("[Attributbaum]   %s %.2f -> %.2f   (%+.2f)"), Name, A, B, B - A);
+		}
+	};
+
+	Ar.Log(TEXT("[Attributbaum] Aenderungen am Attributsatz (nur was sich bewegt hat):"));
+	Zeile(TEXT("Health"),          Vorher.Health,          Nachher.Health);
+	Zeile(TEXT("MaxHealth"),       Vorher.MaxHealth,       Nachher.MaxHealth);
+	Zeile(TEXT("AttackDamage"),    Vorher.AttackDamage,    Nachher.AttackDamage);
+	Zeile(TEXT("RunSpeed"),        Vorher.RunSpeed,        Nachher.RunSpeed);
+	Zeile(TEXT("Armor"),           Vorher.Armor,           Nachher.Armor);
+	Zeile(TEXT("MagicResistance"), Vorher.MagicResistance, Nachher.MagicResistance);
+	Zeile(TEXT("HealthRegen"),     Vorher.HealthRegen,     Nachher.HealthRegen);
+	Zeile(TEXT("ShieldRegen"),     Vorher.ShieldRegen,     Nachher.ShieldRegen);
+
+	if (Nachher.FragMaxHealth < 0.f)
+	{
+		Ar.Log(TEXT("[Attributbaum] Kein Mass-Fragment (Einheit ist kein AMassUnitBase oder noch nicht verknuepft)."));
+	}
+	else
+	{
+		// Das Fragment wird erst beim naechsten Abgleich nachgezogen. Der Wert unmittelbar nach dem
+		// Investieren ist deshalb noch der alte - das ist kein Fehler. Zweiter Aufruf zeigt es.
+		Ar.Logf(TEXT("[Attributbaum] Mass-Fragment JETZT: MaxHealth %.2f, AttackDamage %.2f, RunSpeed %.2f, Armor %.2f, MagicResistance %.2f"),
+			Nachher.FragMaxHealth, Nachher.FragAttackDamage, Nachher.FragRunSpeed,
+			Nachher.FragArmor, Nachher.FragMagicResistance);
+		Ar.Log(TEXT("[Attributbaum] Das Fragment zieht UUnitActorToFragmentSyncProcessor je Tick nach - Befehl nach einer Sekunde erneut aufrufen, dann steht der neue Wert drin."));
+	}
+}
+
+// RTS.Speed.Test - belegt, ob ein Spielerbefehl den AKTUELLEN RunSpeed benutzt.
+//
+// Hintergrund: es gibt zwei Bewegungspfade. Die Mass-Prozessoren lesen
+// FMassCombatStatsFragment::RunSpeed (gespeist aus Attributes->GetRunSpeed()), die
+// Spielerbefehle lasen bis zum 11.09.2026 Attributes->GetBaseRunSpeed(). Ein Haste-Punkt aus
+// dem Attributbaum gibt RunSpeed +10 (am GE_HasteInvestmentEffect nachgemessen) - er beschleunigte
+// also die KI-Bewegung, aber jeder Klick des Spielers setzte die Einheit wieder auf das Tempo
+// vom Spawnzeitpunkt zurueck.
+//
+// Der Befehl gibt ZWEIMAL denselben Bewegungsbefehl ueber genau den Pfad, den auch der
+// Rechtsklick nimmt (Batch_CorrectSetUnitMoveTargets), und hebt dazwischen RunSpeed um 10 an -
+// also um genau einen Haste-Punkt. Steigt DesiredSpeed mit, wirkt der Punkt.
+static void TempoTest(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar)
+{
+	if (!World)
+	{
+		Ar.Log(TEXT("[Tempo] Keine Welt - der Befehl braucht ein laufendes Spiel."));
+		return;
+	}
+
+	ACustomControllerBase* Controller = Cast<ACustomControllerBase>(World->GetFirstPlayerController());
+	if (!Controller)
+	{
+		Ar.Log(TEXT("[Tempo] Kein ACustomControllerBase - ohne ihn gibt es keinen Spielerbefehl zu messen."));
+		return;
+	}
+
+	const FString Filter = Args.Num() > 0 ? Args[0] : FString();
+
+	// Ueber AUnitBase iterieren, nicht ueber AMassUnitBase: CanMove sitzt erst in AUnitBase
+	// (Kette AUnitBase -> AWorkingUnitBase -> ATransportUnit -> APerformanceUnit -> AMassUnitBase),
+	// und Batch_CorrectSetUnitMoveTargets nimmt ohnehin TArray<AUnitBase*>.
+	AUnitBase* Ziel = nullptr;
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		AUnitBase* U = *It;
+		if (!IsValid(U) || !U->Attributes || !U->CanMove || !U->bIsMassUnit)
+		{
+			continue;
+		}
+		if (!Filter.IsEmpty() && !U->GetName().Contains(Filter))
+		{
+			continue;
+		}
+		Ziel = U;
+		break;
+	}
+
+	if (!Ziel)
+	{
+		Ar.Logf(TEXT("[Tempo] Keine bewegliche Mass-Einheit gefunden%s."),
+			Filter.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" (Filter '%s')"), *Filter));
+		return;
+	}
+
+	UMassEntitySubsystem* MassSys = World->GetSubsystem<UMassEntitySubsystem>();
+	FMassEntityHandle Handle = Ziel->MassActorBindingComponent
+		? Ziel->MassActorBindingComponent->GetMassEntityHandle() : FMassEntityHandle();
+	if (!MassSys || !Handle.IsSet() || !MassSys->GetMutableEntityManager().IsEntityValid(Handle))
+	{
+		Ar.Logf(TEXT("[Tempo] '%s' hat keine gueltige Mass-Entitaet - nichts zu messen."), *Ziel->GetName());
+		return;
+	}
+	FMassEntityManager& EM = MassSys->GetMutableEntityManager();
+	FMassMoveTargetFragment* MoveTarget = EM.GetFragmentDataPtr<FMassMoveTargetFragment>(Handle);
+	if (!MoveTarget)
+	{
+		Ar.Logf(TEXT("[Tempo] '%s' hat kein FMassMoveTargetFragment."), *Ziel->GetName());
+		return;
+	}
+
+	const float RunVorher  = Ziel->Attributes->GetRunSpeed();
+	const float BaseVorher = Ziel->Attributes->GetBaseRunSpeed();
+
+	// Genau der Pfad des Rechtsklicks: RunUnitsAndSetWaypointsMass fuellt BatchSpeeds aus
+	// Attributes->GetRunSpeed() und reicht sie an Batch_CorrectSetUnitMoveTargets weiter.
+	auto BefehlGeben = [&](float Speed)
+	{
+		TArray<AUnitBase*> Einheiten;   Einheiten.Add(Ziel);
+		TArray<FVector>    Orte;        Orte.Add(Ziel->GetMassActorLocation() + FVector(1000.f, 0.f, 0.f));
+		TArray<float>      Tempi;       Tempi.Add(Speed);
+		TArray<float>      Radien;      Radien.Add(50.f);
+		Controller->Batch_CorrectSetUnitMoveTargets(World, Einheiten, Orte, Tempi, Radien, false, true, true);
+	};
+
+	BefehlGeben(Ziel->Attributes->GetRunSpeed());
+	const float TempoVorher = MoveTarget->DesiredSpeed.Get();
+
+	// Um genau einen Haste-Punkt anheben (GE_HasteInvestmentEffect: Haste +1, RunSpeed +10).
+	Ziel->Attributes->SetAttributeRunSpeed(RunVorher + 10.f);
+	const float RunNachher = Ziel->Attributes->GetRunSpeed();
+
+	BefehlGeben(Ziel->Attributes->GetRunSpeed());
+	const float TempoNachher = MoveTarget->DesiredSpeed.Get();
+
+	Ar.Logf(TEXT("[Tempo] Einheit '%s'"), *Ziel->GetName());
+	Ar.Logf(TEXT("[Tempo] Attribut RunSpeed %.2f -> %.2f (+10, ein Haste-Punkt), BaseRunSpeed unveraendert %.2f"),
+		RunVorher, RunNachher, BaseVorher);
+	Ar.Logf(TEXT("[Tempo] MoveTarget.DesiredSpeed nach dem Spielerbefehl: %.2f -> %.2f (Differenz %.2f)"),
+		TempoVorher, TempoNachher, TempoNachher - TempoVorher);
+
+	if (FMath::IsNearlyEqual(TempoNachher - TempoVorher, RunNachher - RunVorher, 0.01f))
+	{
+		Ar.Log(TEXT("[Tempo] ERGEBNIS: der Spielerbefehl uebernimmt den Punkt vollstaendig."));
+	}
+	else if (FMath::IsNearlyEqual(TempoVorher, TempoNachher, 0.01f))
+	{
+		Ar.Logf(TEXT("[Tempo] ERGEBNIS: der Punkt kommt NICHT an - der Befehl haengt weiter am Ausgangswert (%.2f)."), BaseVorher);
+	}
+	else
+	{
+		Ar.Log(TEXT("[Tempo] ERGEBNIS: teilweise - irgendetwas skaliert den Wert zwischen Attribut und Fragment."));
+	}
+
+	// Den Messeingriff zuruecknehmen: der Befehl soll den Spielstand nicht veraendern.
+	Ziel->Attributes->SetAttributeRunSpeed(RunVorher);
+	Ar.Logf(TEXT("[Tempo] RunSpeed wieder auf %.2f zurueckgesetzt."), Ziel->Attributes->GetRunSpeed());
+}
+
+static FAutoConsoleCommandWithWorldArgsAndOutputDevice GTempoTestCmd(
+	TEXT("RTS.Speed.Test"),
+	TEXT("RTS.Speed.Test [Namensteil] - prueft, ob ein Spielerbefehl den aktuellen RunSpeed benutzt (Haste-Punkt)."),
+	FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&TempoTest));
+
+static FAutoConsoleCommandWithWorldArgsAndOutputDevice GAttributbaumTestCmd(
+	TEXT("RTS.AttributeTree.Test"),
+	TEXT("RTS.AttributeTree.Test [Namensteil] [KnotenId] - investiert einen Punkt und zeigt, welche Kampfwerte sich dadurch bewegen."),
+	FConsoleCommandWithWorldArgsAndOutputDeviceDelegate::CreateStatic(&AttributbaumTest));
+
+void ACameraControllerBase::GrantPeriodicTalentPoints()
+{
+	if (!HasAuthority() || TalentPointsPerInterval <= 0)
+	{
+		return;
+	}
+
+	// Beim Spielstart steht die eigene Teamnummer noch auf -1; der Spieler bekommt sie erst kurz
+	// danach. Gemessen am 10.09.2026: die Vergabe nach 10 s lief deshalb ins Leere. Statt eine
+	// ganze Runde auszusetzen, bald erneut versuchen.
+	if (SelectableTeamId < 0)
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("[Talente] Teamnummer noch nicht vergeben - neuer Versuch in 2 s."));
+		FTimerHandle Nachfassen;
+		GetWorldTimerManager().SetTimer(Nachfassen, this,
+			&ACameraControllerBase::GrantPeriodicTalentPoints, 2.f, false);
+		return;
+	}
+
+	int32 Beschenkte = 0;
+	int32 MitBaum = 0;
+
+	// Bestand BEIDER Vorraete nach der Vergabe. Genau daran haengt die Frage, ob die Punkte des
+	// Baums bleiben: der Talentvorrat wird von AutoLevelUp() laufend leergeraeumt, der Vorrat des
+	// Baums darf das nicht mehr sein. Als Zeitreihe ueber die Partie ist das ohne weiteres Zutun
+	// ablesbar.
+	int32 BestandTalent = 0;
+	int32 BestandBaum = 0;
+
+	for (TActorIterator<ALevelUnit> It(GetWorld()); It; ++It)
+	{
+		ALevelUnit* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId != SelectableTeamId)
+		{
+			continue;
+		}
+		Unit->LevelData.TalentPoints += TalentPointsPerInterval;
+
+		// Und derselbe Betrag in den EIGENEN Vorrat des Attributbaums.
+		//
+		// Zwei getrennte Zaehler, nicht ein geteilter: der TalentChooser bekommt seine Punkte
+		// unveraendert wie bisher, und der Baum bekommt seine eigenen, an die AutoLevelUp() nicht
+		// herankommt. Vorher gab es nur den einen Topf - das Selbstaufwerten leerte ihn, und im
+		// Baum standen dauerhaft 0 Punkte.
+		Unit->GrantAttributeTreePoints(TalentPointsPerInterval);
+		++Beschenkte;
+
+		BestandTalent += Unit->LevelData.TalentPoints;
+		BestandBaum += Unit->AttributeTreePoints;
+
+		// Mitzaehlen, wieviele Einheiten ueberhaupt einen Attributbaum tragen. Ohne diese Tabelle
+		// bekommt UAttributeTreeWidget nie eine Zieleinheit und bleibt leer - von aussen sieht das
+		// aus wie "es kommen keine Punkte an".
+		if (Unit->AttributeTreeDataTable)
+		{
+			++MitBaum;
+		}
+	}
+
+	if (Beschenkte > 0)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[Talente] %d Punkte an %d Einheiten von Team %d vergeben; davon %d mit Attributbaum. Bestand: Talent %d, Attributbaum %d."),
+			TalentPointsPerInterval, Beschenkte, SelectableTeamId, MitBaum,
+			BestandTalent, BestandBaum);
+
+		if (MitBaum == 0)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Talente] KEINE eigene Einheit hat ein AttributeTreeDataTable - das Attributbaum-Widget bleibt deshalb leer."));
+		}
+		Client_ShowTalentPointToast(TalentPointsPerInterval, Beschenkte);
+	}
+	else
+	{
+		// Nicht stillschweigend nichts tun: bei Teamnummer -1 oder falscher Nummer laeuft die
+		// Vergabe ins Leere, und von aussen sieht das genauso aus wie "es gibt keine Punkte".
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Talente] Vergabe lief ins Leere - keine Einheit mit Teamnummer %d gefunden."),
+			SelectableTeamId);
+	}
+}
+
+void ACameraControllerBase::Client_ShowTalentPointToast_Implementation(int32 Points, int32 UnitCount)
+{
+	if (!GEngine || !GEngine->GameViewport)
+	{
+		return;
+	}
+
+	// Einen noch stehenden Hinweis zuerst wegnehmen, sonst stapeln sich die Overlays.
+	HideTalentPointToast();
+
+	const FText Text = FText::Format(
+		NSLOCTEXT("RTSUnitTemplate", "TalentPointToast", "+{0} Talent Points  ({1} units)"),
+		FText::AsNumber(Points), FText::AsNumber(UnitCount));
+
+	// Direkt ins Viewport statt in den HUD: so braucht es kein UMG-Asset und der Hinweis
+	// funktioniert in jedem MainHUD, auch in denen die es noch nicht kennen.
+	TalentPointToast =
+		SNew(SBox)
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Top)
+		.Padding(FMargin(0.f, TalentPointToastTopPadding, 0.f, 0.f))
+		[
+			SNew(SBorder)
+			.BorderBackgroundColor(FLinearColor(0.010f, 0.015f, 0.027f, 0.85f))
+			.Padding(FMargin(16.f, 6.f))
+			[
+				SNew(STextBlock)
+				.Text(Text)
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 16))
+				.ColorAndOpacity(FSlateColor(FLinearColor(0.209f, 0.644f, 0.694f, 1.f)))
+			]
+		];
+
+	GEngine->GameViewport->AddViewportWidgetContent(TalentPointToast.ToSharedRef(), 20);
+
+	GetWorldTimerManager().SetTimer(TalentPointToastTimerHandle, this,
+		&ACameraControllerBase::HideTalentPointToast,
+		FMath::Max(0.5f, TalentPointToastSeconds), false);
+}
+
+void ACameraControllerBase::HideTalentPointToast()
+{
+	if (TalentPointToast.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(TalentPointToast.ToSharedRef());
+	}
+	TalentPointToast.Reset();
 }
 
 
@@ -702,6 +1513,32 @@ void ACameraControllerBase::SetCameraUnitWithTag_Implementation(FGameplayTag Tag
 				ServerSetCameraUnit(Unit, TeamId);
 				ClientSetCameraUnit(Unit, TeamId);
 				bFound = true;
+			}
+		}
+
+		if (!bFound)
+		{
+			// LUX-ANPASSUNG: Rueckfall auf die TeamId.
+			// Der Tag wird aus dem Spielerindex gebildet (Character.CameraUnit.<Index>), das Team
+			// kommt aus dem PlayerStart. In einer Lobby mit mehreren Spielern muessen beide nicht
+			// mehr uebereinstimmen - wer als zweiter beitritt und Team 1 waehlt, sucht sonst
+			// CameraUnit.1 im Team 1 und findet nichts. Deshalb: sucht der exakte Tag ins Leere,
+			// genuegt eine beliebige CameraUnit desselben Teams.
+			const FGameplayTag BasisTag = FGameplayTag::RequestGameplayTag(FName(TEXT("Character.CameraUnit")), false);
+			if (BasisTag.IsValid())
+			{
+				for (int32 i = 0; i < GameMode->AllUnits.Num(); i++)
+				{
+					AUnitBase* Unit = Cast<AUnitBase>(GameMode->AllUnits[i]);
+					if (Unit && Unit->TeamId == TeamId && Unit->UnitTags.HasTag(BasisTag))
+					{
+						UE_LOG(LogTemp, Log, TEXT("ACameraControllerBase::SetCameraUnitWithTag_Implementation: Rueckfall ueber TeamId %d -> %s"), TeamId, *Unit->GetName());
+						ServerSetCameraUnit(Unit, TeamId);
+						ClientSetCameraUnit(Unit, TeamId);
+						bFound = true;
+						break;
+					}
+				}
 			}
 		}
 
@@ -832,8 +1669,12 @@ FVector ACameraControllerBase::GetCameraPanDirection() {
 
 	GetMousePosition(MousePosX, MousePosY);
 
-	const float CosYaw = FMath::Cos(CameraBase->SpringArmRotator.Yaw*PI/180);
-	const float SinYaw = FMath::Sin(CameraBase->SpringArmRotator.Yaw*PI/180);
+	// Wie in ACameraBase::MoveInDirection: die Blickrichtung ist Pawn-Drehung PLUS
+	// SpringArm-Drehung. Mit nur dem relativen Anteil scrollt der Bildschirmrand bei
+	// gedrehtem Start (Xeno-PlayerStarts stehen auf Yaw 180) in die falsche Richtung.
+	const float WorldYaw = CameraBase->GetActorRotation().Yaw + CameraBase->SpringArmRotator.Yaw;
+	const float CosYaw = FMath::Cos(WorldYaw*PI/180);
+	const float SinYaw = FMath::Sin(WorldYaw*PI/180);
 	
 	if (MousePosX <= CameraBase->Margin)
 	{
@@ -2164,9 +3005,32 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	// Unterschied: hier haelt NUR ein echter Cast an. Eine bloss laufende Faehigkeit
         	// (Schiessen) oder ein gezogener Indikator duerfen die Bewegung nicht stoppen.
         	// ====================================================================================
+        	// ------------------------------------------------------------------------------------
+        	// LUX-ANPASSUNG (28.08.2026) - Faehigkeiten, die die Einheit festhalten sollen.
+        	// Silvan: "Waehrend der Character Granaten und CC-Faehigkeit ausfuehrt soll er sich
+        	// nicht bewegen koennen."
+        	//
+        	// bStopMovementOnActivation ist im Template bereits DER Schalter dafuer, ob eine
+        	// laufende Faehigkeit Bewegung erlaubt - er wird an drei weiteren Stellen genau so
+        	// gelesen (GameplayAbilityBase, ExtendedControllerBase, CustomControllerBase) und ist
+        	// beim Schuss aus, bei Granate/CC an. Er hielt die Einheit bisher aber nur EINMAL bei
+        	// der Aktivierung an: die Direktsteuerung setzt jeden Frame ein neues Laufziel, also
+        	// lief sie sofort weiter. Deshalb hier zusaetzlich als Dauer-Sperre lesen.
+        	//
+        	// Auf dem Client gibt es keine Instanz - dort traegt der replizierte Snapshot die
+        	// Klasse; das CDO reicht, weil das Flag eine Einstellung ist.
+        	// ------------------------------------------------------------------------------------
+        	const UGameplayAbilityBase* LuxRunningForMove = CameraUnitWithTag->ActivatedAbilityInstance
+        		? CameraUnitWithTag->ActivatedAbilityInstance
+        		: (CameraUnitWithTag->CurrentSnapshot.AbilityClass
+        			? CameraUnitWithTag->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>()
+        			: nullptr);
+        	const bool bLuxAbilityHoldsUnit = LuxRunningForMove && LuxRunningForMove->bStopMovementOnActivation;
+
         	const bool bCanMoveDirect = !bIsCameraMovementHaltedByUI
         		&& !bHasCastingTag
-        		&& CameraUnitWithTag->GetUnitState() != UnitData::Casting;
+        		&& CameraUnitWithTag->GetUnitState() != UnitData::Casting
+        		&& !bLuxAbilityHoldsUnit;
         	// ===================== ENDE LUX-ANPASSUNG 2/3 =======================================
         	
         	// Calculate movement direction based on input states

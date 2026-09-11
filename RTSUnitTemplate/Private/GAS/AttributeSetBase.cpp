@@ -24,7 +24,6 @@ void UAttributeSetBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, Range, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, IsAttackedSpeed, COND_None, REPNOTIFY_Always);
-	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, RunSpeedScale, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ProjectileScaleActorDirectionOffset, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, ProjectileSpeed, COND_None, REPNOTIFY_Always);
 	DOREPLIFETIME_CONDITION_NOTIFY(UAttributeSetBase, HealthRegeneration, COND_None, REPNOTIFY_Always);
@@ -63,7 +62,6 @@ void UAttributeSetBase::UpdateAttributes(const FAttributeSaveData SourceData)
 	SetAttributeRange(SourceData.Range);
 	SetAttributeRunSpeed(SourceData.RunSpeed);
 	SetAttributeIsAttackedSpeed(SourceData.IsAttackedSpeed);
-	SetAttributeRunSpeedScale(SourceData.RunSpeedScale);
 	SetAttributeProjectileScaleActorDirectionOffset(SourceData.ProjectileScaleActorDirectionOffset);
 	SetAttributeProjectileSpeed(SourceData.ProjectileSpeed);
 	SetAttributeStamina(SourceData.Stamina);
@@ -92,6 +90,17 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 
 			// Assume DamageAmount is the amount of damage to apply
 			float DamageAmount = Data.EvaluatedData.Magnitude;
+
+			// Unverwundbarkeit. HIER und nicht in AUnitBase::SetHealth: der gesamte Kampfschaden
+			// laeuft ueber diesen Zweig und schreibt den Attributwert direkt (SetAttributeHealth).
+			// SetHealth wird dabei NIE aufgerufen - ein Waechter dort ist wirkungslos, was am
+			// 30.08. eine als "unverwundbar" gemeldete Einheit trotzdem sterben liess.
+			//
+			// Nur Schaden wird geblockt (DamageAmount < 0), Heilung geht weiter durch.
+			if (DamageAmount < 0.f && UnitBase->bIsInvulnerable)
+			{
+				return;
+			}
 
 			if (GetHealth() <= 0)
 			{
@@ -304,11 +313,6 @@ void UAttributeSetBase::OnRep_IsAttackedSpeed(const FGameplayAttributeData& OldI
 }
 
 
-void UAttributeSetBase::OnRep_RunSpeedScale(const FGameplayAttributeData& OldRunSpeedScale)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UAttributeSetBase, RunSpeedScale, OldRunSpeedScale);
-}
-
 void UAttributeSetBase::OnRep_ProjectileScaleActorDirectionOffset(
 	const FGameplayAttributeData& OldProjectileScaleActorDirectionOffset)
 {
@@ -431,11 +435,6 @@ void UAttributeSetBase::SetAttributeIsAttackedSpeed(float NewValue)
     SetIsAttackedSpeed(NewValue);
 }
 
-
-void UAttributeSetBase::SetAttributeRunSpeedScale(float NewValue)
-{
-    SetRunSpeedScale(NewValue);
-}
 
 void UAttributeSetBase::SetAttributeProjectileScaleActorDirectionOffset(float NewValue)
 {

@@ -35,6 +35,14 @@ protected:
     TObjectPtr<UInferenceComponent> InferenceComponent;
 
     /**
+     * Die zuletzt gewaehlte Gruppe, die tatsaechlich Einheiten hatte (camera_state der Aktionen 0-9).
+     * -1 = noch keine. Gebraucht, weil Gruppenwahl und Faehigkeitsdruck im Aktionsraum getrennt sind:
+     * gemessen am 01.09.2026 treffen 61 % der Faehigkeitsdruecke des Netzes eine leere Auswahl,
+     * bei der Regel-KI kein einziger - die packt beides in EINE Entscheidung.
+     */
+    int32 LetzteAuswahlTaste = -1;
+
+    /**
      * Spawn location, used to pick this agent's own "RLAgentCameraBounds" box when the level contains one
      * per team. Taken once at BeginPlay because the agent wanders far from its base later on, and matching
      * against its current position would let it drift into the enemy's box.
@@ -71,6 +79,26 @@ public:
      * right-click is also an ordinary move order for the workers it always has selected.
      */
     bool bActionAimsAtTransporter = false;
+
+    /**
+     * Richtet den Angriffsbefehl der KI auf das naechste gegnerische GEBAEUDE statt auf den Boden
+     * unter dem Agenten.
+     *
+     * Ohne das zielt der Angriffsbefehl dorthin, wo die KI-Kamera gerade steht. Fuer die Regel-KI
+     * ist das folgenlos - sie geht ueber IssueDirectAttackMove mit eigener Zielwahl. Fuer das NETZ
+     * war es der Grund, warum es ueberhaupt nie angreift: es muesste erst die Kamera an den Feind
+     * fahren und dann angreifen, und diese Verkettung gelingt ihm praktisch nie. Gemessen ueber
+     * 34 Partien: Team 1 (Netz) NULL Angriffsbefehle, Team 2 (Regeln) bis zu 90 - bei besserer
+     * Bauleistung des Netzes.
+     *
+     * Gebaeude als Ziel, weil sie stehen bleiben; dieselbe Begruendung wie bei
+     * bPreferBuildingTargets im Regel-Entscheider. Findet sich keines, bleibt es beim
+     * urspruenglichen Punkt.
+     *
+     * Wirkt ausschliesslich im ARLAgent, also nur fuer die KI.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI")
+    bool bAimAttackAtNearestEnemyBuilding = true;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Debug")
     bool bDebug = false;

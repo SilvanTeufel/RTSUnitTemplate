@@ -11,6 +11,61 @@ class AUnitBase;
 class UMapSwitchWidget;
 class UWidgetComponent;
 
+/**
+ * One level a switch actor can send the player to.
+ *
+ * A planet used to carry exactly one destination, which meant a second mission on the same planet
+ * needed a second actor sitting inside the first one. Authoring several entries here keeps one
+ * marker per planet and lets the missions unlock over the course of the campaign.
+ */
+USTRUCT(BlueprintType)
+struct FMapSwitchDestination
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    TSoftObjectPtr<UWorld> TargetMap;
+
+    /** Shown on the button. Empty falls back to the map's file name. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    FText LevelDisplayName;
+
+    /** Tag switched on for the TARGET map once this entry has been travelled to. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    FName DestinationSwitchTagToEnable;
+
+    /**
+     * Gate. The entry stays greyed out until this tag is enabled for the map the actor stands in.
+     * The tag is set by the WinLoseConfigActor of whichever level unlocks this one - see
+     * AWinLoseConfigActor::DestinationSwitchTagToEnable. None means "playable from the start".
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    FName RequiredSwitchTag;
+
+    /** Ignores RequiredSwitchTag and is always offered. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    bool bUnlockedByDefault = false;
+};
+
+/** A destination plus the answer to "may the player go there right now?". Handed to the widget. */
+USTRUCT(BlueprintType)
+struct FMapSwitchDestinationState
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+    FString MapLongPackageName;
+
+    UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+    FText DisplayName;
+
+    UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+    FName DestinationSwitchTagToEnable;
+
+    UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+    bool bUnlocked = false;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AMapSwitchActor : public AActor
 {
@@ -32,6 +87,18 @@ public:
 
     float GetMinimapRadius() const { return CachedMinimapRadius; }
 
+    /**
+     * Every destination this actor offers, each with its unlock state resolved against the
+     * MapSwitchSubsystem. When Destinations is empty the legacy single-target fields are wrapped
+     * into one entry, so actors authored before this existed behave exactly as before.
+     */
+    UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+    void BuildDestinationStates(TArray<FMapSwitchDestinationState>& OutStates) const;
+
+    /** Travels to one of the entries from BuildDestinationStates. Ignores locked entries. */
+    UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+    void TravelToDestination(const FMapSwitchDestinationState& State);
+
 protected:
     virtual void BeginPlay() override;
 
@@ -49,7 +116,14 @@ protected:
 
     UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
     TSoftObjectPtr<UWorld> TargetMap;
-    
+
+    /**
+     * Several levels behind one marker. Leave empty to keep using TargetMap / LevelDisplayName /
+     * DestinationSwitchTagToEnable above; filling it in takes over completely.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    TArray<FMapSwitchDestination> Destinations;
+
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     FName SwitchTag;
     

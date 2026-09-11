@@ -118,6 +118,53 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsNoBuildZone = false;
+
+	/**
+	 * Der Arbeiter uebergibt den Bau bei ANKUNFT an die ConstructionUnit und stirbt dabei.
+	 *
+	 * Warum das ueberhaupt: bei einer gewoehnlichen Baustelle treibt der ARBEITER den Fortschritt
+	 * (sein UnitControlTimer wandert in CurrentBuildTime). Wird er unterwegs weggeschickt oder
+	 * stirbt er, steht der Zaehler, und die Aufraeumfristen reissen die Flaeche mitsamt Fortschritt
+	 * wieder ab. Gemessen: Arbeiter werden rund 500 Mal je Partie aus ihrer Arbeit in den
+	 * Laufzustand gerissen - jeder davon ist ein moeglicher Bauabbruch.
+	 *
+	 * Mit diesem Schalter uebernimmt stattdessen die ConstructionUnit, genau wie bei den
+	 * Extensions (IsExtensionArea). Der Bau kann dann durch nichts mehr unterbrochen werden, was
+	 * dem Arbeiter zustoesst - er ist zu diesem Zeitpunkt schon tot.
+	 *
+	 * Unterschied zu IsExtensionArea: dort beginnt der Bau SOFORT beim Auftrag. Hier laeuft der
+	 * Arbeiter erst hin; erst seine Ankunft loest die Uebergabe aus.
+	 *
+	 * Gedacht fuer die Xeno-Gebaeude, deren Arbeiter (Brood-Mite) ohnehin vom Bau verbraucht wird.
+	 */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bConstructionUnitBuildsAlone = false;
+
+	/**
+	 * Klasse des Arbeiters, der fuer diese Flaeche verbraucht wurde.
+	 *
+	 * Wird beim Abbruch gebraucht, um an der Baustelle Ersatz zu spawnen. Leer = es wurde keiner
+	 * verbraucht, dann gibt es auch nichts zurueckzugeben.
+	 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = RTSUnitTemplate)
+	TSubclassOf<class AUnitBase> ConsumedWorkerClass;
+
+	/**
+	 * Baut die verbrauchte Arbeitereinheit an der Baustelle neu auf. Tut nichts ohne
+	 * ConsumedWorkerClass - dann wurde fuer diese Flaeche naemlich keiner verbraucht.
+	 *
+	 * Blueprintfaehig, weil der Abbruch ueber eine Ability laeuft (GA_CancelBuild_Xeno_AH).
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void RespawnConsumedWorker();
+
+	/**
+	 * Uebergibt den Bau an die ConstructionUnit und verbraucht den Arbeiter.
+	 *
+	 * Gibt false zurueck, wenn die Uebergabe nicht zustande kam - dann laeuft der gewohnte
+	 * Arbeiterpfad weiter, statt eine Flaeche ohne Bautraeger stehen zu lassen.
+	 */
+	bool UebergebeAnConstructionUnit(AWorkingUnitBase* Worker);
 	
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffect;
@@ -151,6 +198,38 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TEnumAsByte<WorkAreaData::WorkAreaType> Type = WorkAreaData::Primary;
+
+	/**
+	 * Fog of war for planned build sites.
+	 *
+	 * A build area used to stand in plain sight from the moment a team planned it until
+	 * construction began - the actor carries no fog logic of its own and, unlike a unit, it is not
+	 * a Mass entity, so UUnitVisibilityProcessor never touched it. The screen-space fog is only a
+	 * post process and dims rather than hides. Resource areas are map features and stay exempt.
+	 *
+	 * Evaluated on the rendering machine only, against the LOCAL alliance's vision, so a host and
+	 * its clients each hide what their own fog says - see AFogActor::IsWorldPositionRevealed.
+	 */
+	void UpdateFogVisibility(float DeltaTime);
+
+	/** Seconds between fog samples. The fog mask itself refreshes at FogUpdateRate (0.1 s). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|FogOfWar")
+	float FogCheckInterval = 0.2f;
+
+private:
+	/** Fog actor of the local view. Resolved once; never replicated. */
+	UPROPERTY(Transient)
+	TWeakObjectPtr<class AFogActor> CachedFogActor;
+
+	float FogCheckTimer = 0.f;
+
+	/** What this actor last asked the engine for, so the call is made only on a real change. */
+	bool bFogHidden = false;
+
+	/** Single point where the hidden flag is written, so the change test cannot be forgotten. */
+	void ApplyFogHidden(bool bHide);
+
+public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AWorkResource> WorkResourceClass;
@@ -336,6 +415,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* TemporaryHighlightMaterial;
 
+	/**
+	 * Wie lange das Hervorhebungs-Material zu sehen ist, in Sekunden.
+	 *
+	 * Stand fest verdrahtet auf 0,25 s. Das ist ein Aufblitzen, kein Signal - der Nutzer meldete
+	 * mehrfach "kaum zu unterscheiden", und die Ursache war nicht die Farbe, sondern die Dauer.
+	 * Wer den Wert erhoeht, sieht die Markierung wirklich; wer bei 0,25 bleibt, bekommt das alte
+	 * Verhalten.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float HighlightDuration = 0.25f;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void TemporarilyChangeMaterial();
 
@@ -426,8 +516,17 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UMaterialInterface* OriginalMaterial;
     
-	/** Called by a timer to revert the material back to its original state. */
+	/**
+	 * Setzt das Material zurueck.
+	 *
+	 * Oeffentlich, weil das Ablegen es vorziehen muss: der Zeitgeber laeuft sonst noch, und die
+	 * Hervorhebung bliebe nach dem Drop stehen. Raeumt den Zeitgeber selbst mit ab.
+	 */
+public:
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RevertMaterial();
+
+protected:
 
 	void SetupMID();
 

@@ -74,6 +74,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<class AAbilityIndicator> AbilityIndicatorClass;
 
+	/** Kanal, gegen den der Mausstrahl fuer den Zielmarker geschossen wird. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Indicator")
+	TEnumAsByte<ECollisionChannel> IndicatorTraceChannel = ECC_Visibility;
+
+	/** Wenn wahr, zaehlt ausschliesslich die LANDSCHAFT als Zielflaeche: Marker und Klickpunkt
+	 *  werden vom getroffenen Punkt senkrecht auf das Gelaende heruntergezogen. Ohne das klettert
+	 *  der Marker auf Einheiten und Gebaeude, weil die den Sichtkanal blockieren. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Indicator")
+	bool bTargetLandscapeOnly = false;
+
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void OnInputReleased();
 
@@ -160,7 +170,55 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int ClickCount = 0;
-	
+
+	// ================================================================================================
+	// LUX-ANPASSUNG (28.08.2026) - Klick beim Zielen gehoert der zielenden Faehigkeit.
+	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
+	// ================================================================================================
+	/**
+	 * Ein Klick, waehrend der Ziel-Indikator DIESER Faehigkeit steht, zaehlt fuer sie weiter
+	 * (ClickCount++ ueber AGASUnit::FireMouseHitAbility), statt eine neue Faehigkeit zu starten.
+	 *
+	 * Gebraucht wird das nur von der direkt gesteuerten CameraUnit: dort loest der Linksklick
+	 * AbilityOne aus (den Schuss). Ohne diesen Schalter startet ein Klick waehrend des Zielens
+	 * also den Schuss, statt das Wurfziel zu bestaetigen. Im normalen RTS-Betrieb macht
+	 * AControllerBase::LeftClickSelect genau das schon von sich aus (IsAnyAbilityActive ->
+	 * FireAbilityMouseHit); allein der Direktsteuerungs-Pfad ging daran vorbei.
+	 *
+	 * Das Flag gehoert an die Faehigkeit MIT dem Indikator (z. B. die Granate), nicht an die,
+	 * die sonst ausgeloest wuerde. Aus (Vorgabe) heisst: unveraendertes Verhalten.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bIndicatorClicksAdvanceAbility = false;
+	// ===================== ENDE LUX-ANPASSUNG =======================================================
+
+	// ================================================================================================
+	// LUX-ANPASSUNG (28.08.2026) - Montage aus einer Faehigkeit abspielen, repliziert.
+	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
+	// ================================================================================================
+	/**
+	 * Spielt eine Montage auf dem Traeger dieser Faehigkeit - und zwar auf ALLEN Maschinen.
+	 *
+	 * Bewusst ueber UAbilitySystemComponent::PlayMontage statt ueber ein eigenes Multicast-Event:
+	 * GAS fuehrt die laufende Montage in RepAnimMontageInfo mit und repliziert sie von sich aus an
+	 * jeden Client, der die Einheit sieht (dort OnRep_ReplicatedAnimMontage). Ein handgebauter
+	 * Multicast wuerde dasselbe noch einmal daneben tun und bei spaeter dazukommenden Clients
+	 * nichts nachholen - die Replikation ueber GAS ist ein Zustand, ein Multicast nur ein Ereignis.
+	 *
+	 * Nur auf der Autoritaet aufrufen (Faehigkeiten laufen dort ohnehin); auf einem Client
+	 * passiert nichts. Ein erneuter Aufruf loest die vorige Montage im selben Slot ab - genau so
+	 * ist der Wechsel vom Ziel- auf das Wurf-Bild gedacht.
+	 *
+	 * @return Laenge der gestarteten Montage in Sekunden, 0 wenn nichts gestartet wurde.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	float PlayMontageOnAvatar(class UAnimMontage* Montage, float PlayRate = 1.f, FName StartSection = NAME_None);
+
+	/** Blendet eine ueber PlayMontageOnAvatar gestartete Montage wieder aus. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void StopMontageOnAvatar(float BlendOutTime = 0.25f);
+	// ===================== ENDE LUX-ANPASSUNG =======================================================
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bUseCastingFallbackProcessor = false;
 

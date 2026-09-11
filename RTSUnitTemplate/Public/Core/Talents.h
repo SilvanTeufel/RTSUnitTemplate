@@ -43,9 +43,6 @@ struct FAttributeSaveData
 	float IsAttackedSpeed = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")
-	float RunSpeedScale = 0.0f;
-
-	UPROPERTY(VisibleAnywhere, Category = "Attributes")
 	float ProjectileScaleActorDirectionOffset = 0.0f;
 
 	UPROPERTY(VisibleAnywhere, Category = "Attributes")

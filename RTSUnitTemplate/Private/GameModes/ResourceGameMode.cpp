@@ -162,7 +162,19 @@ void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType
 				bool bIsSupply = SupplyLikeResources.Contains(ResourceType) ? SupplyLikeResources[ResourceType] : false;
 				if (bIsSupply)
 				{
-					ResourceArray.Resources[TeamId] -= Amount; // Inverted logic for Supply
+					// A supply-like resource counts what is USED, so it can never be less than
+					// nothing. Without this floor a refund that no charge matched showed up in the
+					// UI as "-55/70". The clamp is the safety net, not the fix - it logs, so an
+					// imbalance stays visible instead of being silently absorbed.
+					const float Before = ResourceArray.Resources[TeamId];
+					const float Wanted = Before - Amount; // Inverted logic for Supply
+					if (Wanted < 0.f)
+					{
+						UE_LOG(LogTemp, Warning,
+							TEXT("[Versorgung] Team %d: Rueckgabe von %.0f wuerde den Verbrauch auf %.0f druecken (vorher %.0f) - auf 0 begrenzt."),
+							TeamId, Amount, Wanted, Before);
+					}
+					ResourceArray.Resources[TeamId] = FMath::Max(0.f, Wanted);
 				}
 				else
 				{
@@ -756,7 +768,16 @@ bool AResourceGameMode::ModifyResourceCCost(const FBuildingCost& ConstructionCos
 			bool bIsSupply = SupplyLikeResources.Contains(ResourceArray.ResourceType) ? SupplyLikeResources[ResourceArray.ResourceType] : false;
 			if (bIsSupply)
 			{
-				ResourceArray.Resources[TeamId] += CostMap[ResourceArray.ResourceType];
+				// Same floor as in ModifyResource: a refund (negative cost, e.g. bRefundOnCancel)
+				// must not push the used amount below zero.
+				const float Wanted = ResourceArray.Resources[TeamId] + CostMap[ResourceArray.ResourceType];
+				if (Wanted < 0.f)
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[Versorgung] Team %d: Kostenerstattung wuerde den Verbrauch auf %.0f druecken - auf 0 begrenzt."),
+						TeamId, Wanted);
+				}
+				ResourceArray.Resources[TeamId] = FMath::Max(0.f, Wanted);
 			}
 			else
 			{

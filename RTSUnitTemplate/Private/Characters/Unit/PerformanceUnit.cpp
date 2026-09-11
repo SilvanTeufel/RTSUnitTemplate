@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Actors/AreaDecalComponent.h"   // ground painting is exempt from the fog visibility push
 #include "Characters/Unit/BuildingBase.h"
 
 #include "Components/WidgetComponent.h"
@@ -113,12 +114,65 @@ void APerformanceUnit::Destroyed()
 	Super::Destroyed();
 }
 
+namespace
+{
+	/**
+	 * The ground painting must never follow the fog.
+	 *
+	 * It writes into the runtime virtual texture and is meant to stay where it was painted;
+	 * switching it with the fog made it blink under the building. AUnitBase::SetDeathVisualState
+	 * spares the same two components for the same reason - this keeps both paths in agreement.
+	 */
+	static bool IsGroundPaintingComponent(const USceneComponent* Component)
+	{
+		return Component
+			&& (Component->IsA<UAreaDecalComponent>() || Component->GetName().Contains(TEXT("RVTWriterMesh")));
+	}
+}
+
 void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 {
+	// Blueprints ueber die Fog-Sichtbarkeit informieren - bei JEDEM Aufruf, nicht nur bei
+	// Aenderung. Dieselbe Begruendung wie beim Neu-Setzen der Komponentensichtbarkeit im
+	// UnitVisibilityProcessor: wer nur auf Aenderungen reagiert, verpasst alles, was den
+	// ersten Push nicht miterlebt hat.
+	//
+	// Der konkrete Fehler der ersten Fassung: verglichen wurde gegen einen Startwert false.
+	// Eine GEGNERISCHE Einheit, die im Nebel entsteht, ist von Anfang an unsichtbar - falsch
+	// gleich falsch, das Ereignis feuerte nie, und ihr Anhaengsel behielt den Vorgabewert.
+	// Sichtbar als Schatten, der durch den Nebel wandert.
+	//
+	// Wiederholen ist billig: im Blueprint wird nur ein bool gesetzt.
+	// ...but not before the actor exists in full. Buildings are created with SpawnActorDeferred, and
+	// a Blueprint's own components (UnitBlobShadow among them) are only built at FinishSpawning. A
+	// push landing in that window ran the event graph against components that did not exist yet -
+	// "Accessed None trying to read property UnitBlobShadow", hundreds of times per match.
+	// IsActorInitialized() is true from PostInitializeComponents on, so BeginPlay's own first call
+	// still gets through and the shadow is still off on the very first frame.
+	if (IsActorInitialized())
+	{
+		OnFogVisibilityChanged(ComputeInherentVisibility());
+	}
+
 	UCapsuleComponent* Capsule = GetCapsuleComponent();
 
 	if (Capsule)
-		Capsule->SetVisibility(desiredVisibility, true);
+	{
+		// The ground painting hangs on the CAPSULE, not on the mesh: AreaDecal is attached to
+		// CollisionCylinder, and the RVT writer mesh attaches to the decal's own parent - so this
+		// one propagating call is what switched the texture painting on and off with the fog.
+		// Walking the children by hand instead lets the painting stay put, exactly as
+		// AUnitBase::SetDeathVisualState already spares it.
+		Capsule->SetVisibility(desiredVisibility, false);
+
+		for (USceneComponent* Child : Capsule->GetAttachChildren())
+		{
+			if (!Child) continue;
+			if (IsGroundPaintingComponent(Child)) continue;
+
+			Child->SetVisibility(desiredVisibility, true);
+		}
+	}
 	
 	USkeletalMeshComponent* SkelMesh = GetMesh();
 	if (SkelMesh && bUseSkeletalMovement)
@@ -138,10 +192,11 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 		{
 			for (USceneComponent* Child : SkelMesh->GetAttachChildren())
 			{
-				if (Child)
-				{
-					Child->SetVisibility(desiredVisibility, true);
-				}
+				if (!Child) continue;
+
+				if (IsGroundPaintingComponent(Child)) continue;
+
+				Child->SetVisibility(desiredVisibility, true);
 			}
 		}
 
@@ -151,12 +206,78 @@ void APerformanceUnit::SetCharacterVisibility(bool desiredVisibility)
 			FMassEntityHandle Entity = MassActorBindingComponent->GetEntityHandle();
 			if (Entity.IsValid())
 			{
-				VisualManager->SetUnitVisualVisible(Entity, ComputeInherentVisibility());
+				const bool bSichtbar = ComputeInherentVisibility();
+				VisualManager->SetUnitVisualVisible(Entity, bSichtbar);
+				// Schatten immer im Gleichschritt mit der gezeichneten Instanz - sonst bleibt er
+				// im Nebel des Krieges oder nach dem Ausblenden als Fleck auf dem Boden liegen.
+				SetzeBlobSchattenAktiv(bSichtbar);
 			}
 		}
 	}
 }
 
+
+void APerformanceUnit::SetzeBlobSchattenAktiv(bool bAktiv)
+{
+	// Klasse ueber den Pfad suchen statt sie einzubinden - siehe Kommentar in der Kopfdatei.
+	// FindObject findet sie nur, wenn das Modul bereits geladen ist; LoadObject holt sie sonst nach.
+	static const TCHAR* KlassenPfad = TEXT("/Script/MaterialDrivenShadows.MaterialDrivenShadowComponent");
+	static UClass* SchattenKlasse = nullptr;
+	static bool bSuchteSchonMal = false;
+	if (!bSuchteSchonMal)
+	{
+		bSuchteSchonMal = true;
+		SchattenKlasse = FindObject<UClass>(nullptr, KlassenPfad);
+		if (!SchattenKlasse)
+		{
+			SchattenKlasse = LoadObject<UClass>(nullptr, KlassenPfad);
+		}
+		UE_LOG(LogTemp, Log, TEXT("[BlobSchatten] MaterialDrivenShadowComponent %s"),
+			SchattenKlasse ? TEXT("gefunden - Schatten werden mitgeschaltet")
+			               : TEXT("NICHT gefunden - Plugin fehlt, Schatten bleiben unberuehrt"));
+	}
+	if (!SchattenKlasse)
+	{
+		return; // Plugin nicht vorhanden - nichts zu tun.
+	}
+
+	TArray<UActorComponent*> Schatten;
+	GetComponents(SchattenKlasse, Schatten);
+	for (UActorComponent* Komponente : Schatten)
+	{
+		if (!Komponente) continue;
+		if (UFunction* Funktion = Komponente->FindFunction(FName(TEXT("SetShadowEnabled"))))
+		{
+			struct FParameter { bool bNewEnabled; };
+			FParameter Parameter{ bAktiv };
+			Komponente->ProcessEvent(Funktion, &Parameter);
+		}
+	}
+}
+
+void APerformanceUnit::HideMassVisualNow()
+{
+	SetActorHiddenInGame(true);
+
+	// Der Schatten haengt nicht an der Actor-Sichtbarkeit, er muss ausdruecklich weg.
+	SetzeBlobSchattenAktiv(false);
+
+	if (USkeletalMeshComponent* SkelMesh = GetMesh())
+	{
+		SkelMesh->SetVisibility(false, true);
+	}
+
+	UWorld* World = GetWorld();
+	UUnitVisualManager* VisualManager = World ? World->GetSubsystem<UUnitVisualManager>() : nullptr;
+	if (VisualManager && MassActorBindingComponent)
+	{
+		const FMassEntityHandle Entity = MassActorBindingComponent->GetEntityHandle();
+		if (Entity.IsValid())
+		{
+			VisualManager->SetUnitVisualVisible(Entity, false);
+		}
+	}
+}
 
 void APerformanceUnit::VisibilityTickFog()
 {
@@ -742,6 +863,20 @@ ENetMode APerformanceUnit::GetUnitNetMode() const
 bool APerformanceUnit::ComputeInherentVisibility() const
 {
 	if (!IsInitialized)
+	{
+		return false;
+	}
+
+	// Wer den ACTOR versteckt, will die Einheit nicht sehen - auch dann nicht, wenn sie ueber
+	// eine gepoolte ISM-Instanz gezeichnet wird. SetActorHiddenInGame erreicht diese Instanz
+	// naemlich NICHT: sie haengt am UnitVisualISMManagerActor, nicht an der Einheit.
+	//
+	// Gemeldet am 08.09.2026: waehrend einer Replay-Wiedergabe blieb die komplette lebende
+	// Armee sichtbar, obwohl UReplayPlaybackSubsystem alle Einheiten ueber
+	// SetActorHiddenInGame ausgeblendet hatte - Spiel und Replay liefen uebereinander.
+	// Seit der Umstellung auf ISM/Vertexanimation ist die Actor-Sichtbarkeit eben nicht mehr
+	// das, was man sieht. Ueber diesen Weg wirkt sie wieder, und zwar fuer JEDEN Aufrufer.
+	if (IsHidden())
 	{
 		return false;
 	}

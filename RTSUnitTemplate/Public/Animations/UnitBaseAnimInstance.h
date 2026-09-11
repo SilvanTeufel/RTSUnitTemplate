@@ -109,6 +109,13 @@ public:
 	float MassSpeed = 0.0f;
 
 	/**
+	 * Laeuft gerade eine blockierende Montage (Nachladen, Waffenwechsel)? Dient nur dazu, die
+	 * Diagnosezeile einmal je Vorgang zu schreiben statt in jedem Frame.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bMontageHaltActive = false;
+
+	/**
 	 * True, solange MassSpeed in DIESEM Frame aus dem Velocity-Fragment gelesen wurde.
 	 *
 	 * Ohne diese Pruefung wuerde eine Einheit ohne Mass-Entity (Hero-Modus, gerade zerstoerte
@@ -134,6 +141,66 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	FVector MassVelocity = FVector::ZeroVector;
 	// ===================== ENDE LUX-ANPASSUNG ===================================================
+
+	// ============================================================================================
+	// LUX-ANPASSUNG (26.08.2026) - Laufrichtung und Tempo fuer richtungsabhaengige Blendspaces.
+	// Beim Uebernehmen ins Original-Template mitnehmen.
+	//
+	// Hintergrund: Die Blendpunkte des Systems haengen am ZUSTAND - der UnitAnimationProcessor
+	// setzt TargetBlendPoint_1/_2 nur bei einem Zustandswechsel aus einer DataTable-Zeile. Damit
+	// laesst sich keine Bewegungsrichtung darstellen: eine seitwaerts laufende Einheit steht im
+	// selben Zustand wie eine vorwaerts laufende.
+	//
+	// Diese Werte leiten Richtung und Tempo aus MassVelocity ab (AActor::GetVelocity() ist hier
+	// immer null, siehe Kommentar an MassSpeed). Rein additiv: nur neue, lesbare Werte, kein
+	// Eingriff in den geteilten Processor. Wer sie nicht im AnimGraph verdrahtet, merkt nichts.
+	// ============================================================================================
+
+	/**
+	 * Laufrichtung relativ zur Blickrichtung in Grad: 0 = vorwaerts, +90 = rechts,
+	 * -90 = links, +/-180 = rueckwaerts. Als X-Achse eines Richtungs-Blendspace gedacht.
+	 *
+	 * Steht die Einheit (Tempo unter IdleAnimSpeedThreshold), bleibt der Wert 0 - ohne das
+	 * wuerde der Winkel beim Stehen aus dem Rauschen der Restgeschwindigkeit springen und die
+	 * Beine im Stand rotieren lassen.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float LocomotionDirection = 0.0f;
+
+	/**
+	 * Abspieltempo der Laufanimation, gekoppelt an die tatsaechliche Geschwindigkeit
+	 * (MassSpeed / LocomotionReferenceSpeed). Gegen Rutschen der Fuesse.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float LocomotionPlayRate = 1.0f;
+
+	/** Geschwindigkeit, bei der die Laufanimation mit Tempo 1.0 laeuft. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "1.0"))
+	float LocomotionReferenceSpeed = 600.0f;
+
+	/** Untere und obere Schranke fuer LocomotionPlayRate, damit nichts einfriert oder flimmert. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.01"))
+	float LocomotionMinPlayRate = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.01"))
+	float LocomotionMaxPlayRate = 2.0f;
+
+	/**
+	 * Speist CurrentBlendPoint_1/_2 aus LocomotionDirection/MassSpeed statt aus der
+	 * zustandsbasierten DataTable-Zeile.
+	 *
+	 * Nur fuer AnimBPs gedacht, deren Blendspace eine Richtungsachse hat. Default aus, damit
+	 * jede bestehende Einheit in allen drei Projekten unveraendert weiterlaeuft - der
+	 * UnitAnimationProcessor wird dafuer NICHT angefasst.
+	 *
+	 * Warum die Umleitung hier und nicht im AnimGraph: die vorhandenen Get-Nodes lesen bereits
+	 * CurrentBlendPoint_1/_2: es genuegt, diese beiden Werte anders zu befuellen, statt Nodes
+	 * umzuhaengen (was ueber die Werkzeuge ohnehin nicht geht - der State-Graph laesst sich
+	 * nicht als Blueprint aufloesen).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bUseDirectionalLocomotion = false;
+	// ===================== ENDE LUX-ANPASSUNG (26.08.2026) ======================================
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ContinuousAttackSpeedMultiplier = 1.0f;
