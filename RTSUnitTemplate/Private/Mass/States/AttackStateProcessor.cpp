@@ -425,12 +425,36 @@ void UAttackStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMa
                 }
                 StateFrag.HasAttacked = true;
             }
+            // Fernkampf mit SpawnProjectileAtPercentage > 0: der Schuss faellt nicht mehr beim
+            // Eintritt in den Angriff (Ende der Pause), sondern nach dem eingestellten Anteil der
+            // Angriffsdauer. HasAttacked dient dabei als Sperre, damit es bei einem Angriff genau
+            // einmal ausloest; im Nahkampfzweig hat das Feld dieselbe Aufgabe.
+            else if (Stats.bUseProjectile && Stats.SpawnProjectileAtPercentage > 0.f && !StateFrag.HasAttacked)
+            {
+                const float Anteil = FMath::Clamp(Stats.SpawnProjectileAtPercentage, 0.f, 1.f);
+                if (StateFrag.StateTimer >= Stats.AttackDuration * Anteil)
+                {
+                    if (SignalSubsystem)
+                    {
+                        SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
+                    }
+                    StateFrag.HasAttacked = true;
+                }
+            }
         }
         else if (!StateFrag.SwitchingState) // --- Attack Duration Over ---
         {
             StateFrag.SwitchingState = true;
             if (SignalSubsystem)
             {
+                // Nachzuegler: bei einem Anteil nahe 1.0 kann der Takt die Schwelle ueberspringen,
+                // dann faellt der Schuss hier. RangedAttack fuehrt den ganzen Angriff aus (Schaden,
+                // Faehigkeiten, Projektil), deshalb muss es vor dem Pause-Signal stehen - beide
+                // werden in dieser Reihenfolge zugestellt.
+                if (Stats.bUseProjectile && Stats.SpawnProjectileAtPercentage > 0.f && !StateFrag.HasAttacked)
+                {
+                    SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::RangedAttack, Entity);
+                }
                 SignalSubsystem->SignalEntityDeferred(Context, UnitSignals::Pause, Entity);
             }
             StateFrag.HasAttacked = false;

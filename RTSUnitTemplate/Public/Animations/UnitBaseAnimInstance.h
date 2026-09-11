@@ -109,6 +109,13 @@ public:
 	float MassSpeed = 0.0f;
 
 	/**
+	 * Laeuft gerade eine blockierende Montage (Nachladen, Waffenwechsel)? Dient nur dazu, die
+	 * Diagnosezeile einmal je Vorgang zu schreiben statt in jedem Frame.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bMontageHaltActive = false;
+
+	/**
 	 * True, solange MassSpeed in DIESEM Frame aus dem Velocity-Fragment gelesen wurde.
 	 *
 	 * Ohne diese Pruefung wuerde eine Einheit ohne Mass-Entity (Hero-Modus, gerade zerstoerte

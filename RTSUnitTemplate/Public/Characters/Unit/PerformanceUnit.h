@@ -160,6 +160,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HideMassVisualNow();
 
+	/**
+	 * Schaltet den Blob-Schatten der MaterialDrivenShadows mit der Sichtbarkeit der Einheit.
+	 *
+	 * Der Schattenkomponent ist ein SceneComponent, kein PrimitiveComponent - SetActorHiddenInGame
+	 * erreicht ihn also nicht, gezeichnet wird er vom Subsystem des Plugins. Ohne diesen Aufruf
+	 * blieb der Schatten stehen, nachdem eine tote Einheit ueber HideActorTime ausgeblendet wurde.
+	 *
+	 * Bewusst ueber Reflection statt ueber einen Direktaufruf: MaterialDrivenShadows liegt nur im
+	 * Spielprojekt, nicht in Lux und nicht in RTSUnitExample. Eine Modulabhaengigkeit hier wuerde
+	 * die beiden anderen Projekte nicht mehr bauen lassen. Fehlt das Plugin, passiert schlicht nichts.
+	 */
+	void SetzeBlobSchattenAktiv(bool bAktiv);
+
 	// --------------------------------------------------------------------------------------------
 	// Meldet die Sichtbarkeit dieser Einheit im Nebel des Krieges an Blueprints.
 	//

@@ -173,6 +173,8 @@ void UUnitActorToFragmentSyncProcessor::SyncCombatStats(const AUnitBase& Unit, F
 
 	Stats.PauseDuration = Unit.PauseDuration;
 	Stats.AttackDuration = Unit.AttackDuration;
+	Stats.bPlayRateRunTimeCalculation = Unit.PlayRateRunTimeCalculation;
+	Stats.SpawnProjectileAtPercentage = Unit.SpawnProjectileAtPercentage;
 
 	if (const AAbilityUnit* AbilityUnit = Cast<AAbilityUnit>(&Unit))
 	{

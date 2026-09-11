@@ -2060,7 +2060,25 @@ void AMassUnitBase::StartAcceleratingTowardsDestination(const FVector& NewDestin
 		return;
 	}
 	
-	Attributes->SetRunSpeed(Attributes->GetRunSpeed()*10);
+	// ACHTUNG: diese Funktion hat derzeit KEINEN Aufrufer - weder in C++ noch in einem Asset
+	// (gepruft am 11.09.2026). Sie ist BlueprintCallable, also koennte sie jederzeit einer
+	// bekommen, und dann faellt auf: sie verzehnfacht das ATTRIBUT RunSpeed und nichts stellt
+	// es je zurueck. Der ChargeMonitorProcessor setzt nur das FRAGMENT zurueck, und der
+	// Abgleich schreibt das Attribut jeden Tick wieder darueber - die Verzehnfachung waere
+	// dauerhaft, bis ResetTalents laeuft.
+	//
+	// Deshalb hier ueber das Fragment gehen, wie StartCharge es auch macht: dort liegt der
+	// Ausgangswert in FMassChargeTimerFragment::OriginalDesiredSpeed und wird zurueckgestellt.
+	// Das Attribut bleibt unangetastet.
+	FMassEntityManager* EntityManager = nullptr;
+	FMassEntityHandle EntityHandle;
+	if (GetMassEntityData(EntityManager, EntityHandle) && EntityManager->IsEntityValid(EntityHandle))
+	{
+		if (FMassCombatStatsFragment* StatsFrag = EntityManager->GetFragmentDataPtr<FMassCombatStatsFragment>(EntityHandle))
+		{
+			StatsFrag->RunSpeed = Attributes->GetRunSpeed() * 10.f;
+		}
+	}
 }
 
 void AMassUnitBase::StartCharge(const FVector& NewDestination, float ChargeSpeed, float ChargeDuration)
@@ -2221,7 +2239,7 @@ void AMassUnitBase::MulticastTransformSync_Implementation(const FVector& Locatio
 {
 	//SetActorLocation(Location);
 	SetTranslationLocation(Location);
-	UpdatePredictionFragment(Location, Attributes->GetBaseRunSpeed());
+	UpdatePredictionFragment(Location, Attributes->GetRunSpeed());
 	StopMassMovement();
 	SwitchEntityTagByState(UnitData::Idle, UnitStatePlaceholder);
 }
@@ -3433,7 +3451,7 @@ void AMassUnitBase::ApplyFollowTargetForUnit(AUnitBase* ThisUnit, AUnitBase* New
 				float DesiredSpeed = 300.f;
 				if (ThisUnit && ThisUnit->Attributes)
 				{
-					DesiredSpeed = ThisUnit->Attributes->GetBaseRunSpeed();
+					DesiredSpeed = ThisUnit->Attributes->GetRunSpeed();
 				}
 				UpdateMoveTarget(*MoveTargetFragmentPtr, NewTargetLocation, DesiredSpeed, World);
 			}

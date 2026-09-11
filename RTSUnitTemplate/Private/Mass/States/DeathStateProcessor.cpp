@@ -317,6 +317,25 @@ void UDeathStateProcessor::HandleUpdateDissolve(FName SignalName, TArray<FMassEn
                 (TimeSinceDeath - CharFrag->DissolveStartTime) / FMath::Max(CharFrag->DissolveDuration, KINDA_SMALL_NUMBER),
                 0.f, 1.f);
 
+            // Blob-Schatten (MaterialDrivenShadows) mit dem BEGINN der Aufloesung abschalten und
+            // nicht erst beim Ausblenden ueber HideActorTime: sonst liegt der Schattenfleck in
+            // voller Staerke unter einer Leiche, die sich schon sichtbar aufloest.
+            //
+            // Genau einmal je Einheit: bDissolveApplied ist beim ersten Durchlauf noch false und
+            // wird in beiden Zweigen unten gesetzt. Ohne die Sperre liefe je Takt und Leiche ein
+            // ProcessEvent. AUnitBase::SetDeathVisualState schaltet den Schatten spaeter erneut ab
+            // - derselbe Aufruf mit demselben Wert, das stoert nicht und bleibt der Rueckfall fuer
+            // Einheiten ohne Aufloesung.
+            // Der Zeiger ist ein AMassUnitBase; SetzeBlobSchattenAktiv sitzt eine Ebene tiefer
+            // in APerformanceUnit, deshalb der Cast.
+            if (!CharFrag->bDissolveApplied)
+            {
+                if (APerformanceUnit* LeistungsEinheit = Cast<APerformanceUnit>(Unit))
+                {
+                    LeistungsEinheit->SetzeBlobSchattenAktiv(false);
+                }
+            }
+
             if (Unit->bUseSkeletalMovement)
             {
                 // SKM: swap the skeletal mesh's materials to dynamic instances of DissolveMaterial (once)
@@ -341,21 +360,20 @@ void UDeathStateProcessor::HandleUpdateDissolve(FName SignalName, TArray<FMassEn
             }
             else if (VisualManager)
             {
-                // ISM: one-shot swap the pooled instance to a (same mesh, DissolveMaterial) pool — reuses the
-                // ruin swap with the unit's OWN mesh + unit scale (StretchFactor 1), so it reproduces the unit
-                // ground-seated at its world size — then ramp the fade via PerInstanceCustomData index 13.
-                if (!CharFrag->bDissolveApplied)
-                {
-                    UStaticMesh* CurrentMesh = Unit->ISMComponent ? Unit->ISMComponent->GetStaticMesh() : nullptr;
-                    if (!CurrentMesh) { CharFrag->bDissolveApplied = true; continue; }
-
-                    const bool bCastShadow = Unit->ISMComponent ? Unit->ISMComponent->CastShadow : true;
-                    const float YawDegrees = Unit->GetActorRotation().Yaw;
-                    VisualManager->SwapUnitVisualToRuin(
-                        Entity, Unit, CurrentMesh, Binding->DissolveMaterial,
-                        bCastShadow, FVector(1.f, 1.f, 1.f), YawDegrees);
-                    CharFrag->bDissolveApplied = true;
-                }
+                // ISM: NICHT mehr das Material tauschen, nur den Aufloeseanteil auf
+                // PerInstanceCustomData 13 schreiben.
+                //
+                // Frueher wurde die Instanz in einen zweiten ISM-Pool umgehaengt (gleiches Mesh,
+                // aber DissolveMaterial). Ein Materialwechsel heisst hier aber: NEUE Instanz in
+                // einem ANDEREN ISM - und deren Custom Data 1..12 sind frisch, also Clipwert 0
+                // und Frames 0..0. Genau daran sprang jede Leiche in die Bindepose, statt auf der
+                // letzten Frame der Todesanimation zu verharren (der Todesclip ist PlayOnce).
+                // Zugleich brachte das getauschte Material keine Vertexanimation mit.
+                //
+                // Seit Mat_Master_Skin_VAT die Funktion MF_XenoDissolve_AH in seine Opacity Mask
+                // zieht, kann das VAT-Material den Aufloeseanteil selbst - die Instanz bleibt also,
+                // wo sie ist, behaelt ihre Animationsdaten und loest sich trotzdem auf.
+                CharFrag->bDissolveApplied = true;
                 VisualManager->SetUnitDissolve(Entity, Alpha);
             }
         }

@@ -14,6 +14,7 @@
 #include "Animations/UnitAnimationProcessor.h"
 #include "MassExecutionContext.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimMontage.h"
 
 UUnitBaseAnimInstance::UUnitBaseAnimInstance() {
 	CharAnimState = UnitData::Idle;
@@ -177,6 +178,42 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 					break;
 				}
 			}
+			// ================================================================================
+			// Waehrend eines Casts mit laufender Montage gewinnt die Montage.
+			//
+			// Im AnimGraph haengen Laufblendspace und Montage-Slot nebeneinander in einem
+			// LayeredBoneBlend. Laeuft die Laufanimation weiter, ueberlagert sie die Montage in
+			// allen Knochen, die nicht im Layer stehen - beim Nachladen sah man dann wieder die
+			// Laufbewegung. Die Einheit KANN sich waehrend des Casts ohnehin nicht bewegen, also
+			// wird die Bewegungsseite hier stillgelegt.
+			//
+			// Bewusst an den Casting-Zustand gebunden und nicht an "irgendeine Montage": das
+			// Schiessen laeuft ebenfalls ueber eine Montage, darf aber im Laufen stattfinden.
+			// ================================================================================
+			if (CharAnimState == UnitData::Casting && IsAnyMontagePlaying())
+			{
+				if (!bMontageHaltActive)
+				{
+					bMontageHaltActive = true;
+					UE_LOG(LogTemp, Log,
+						TEXT("[AnimInstance] %s: Montage laeuft im Cast - Laufanimation ausgesetzt (%s)"),
+						*UnitBase->GetName(),
+						GetCurrentActiveMontage() ? *GetCurrentActiveMontage()->GetName() : TEXT("?"));
+				}
+				CharAnimState = UnitData::Idle;
+				LocomotionDirection = 0.0f;
+				LocomotionPlayRate = 1.0f;
+				CurrentBlendPoint_1 = 0.0f;
+				CurrentBlendPoint_2 = 0.0f;
+				BlendPoint_1 = 0.0f;
+				BlendPoint_2 = 0.0f;
+				MassSpeed = 0.0f;
+			}
+			else if (bMontageHaltActive)
+			{
+				bMontageHaltActive = false;
+			}
+
 			// SetBlendPoints(UnitBase, Deltaseconds); // Processor übernimmt das jetzt
 
 			if(LastAnimState != CharAnimState)
