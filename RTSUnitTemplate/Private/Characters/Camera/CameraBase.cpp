@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Camera/CameraBase.h"
 #include "Blueprint/AIBlueprintHelperLibrary.h"
@@ -655,9 +655,14 @@ void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 		// Normalize the direction
 		Direction.Normalize();
 
-		// Calculate the movement direction relative to the SpringArm rotation
-		const float CosYaw = FMath::Cos(SpringArmRotator.Yaw * PI / 180.f);
-		const float SinYaw = FMath::Sin(SpringArmRotator.Yaw * PI / 180.f);
+		// Die Blickrichtung ist Pawn-Drehung PLUS SpringArm-Drehung - der SpringArm sitzt
+		// relativ am Aktor. Frueher ging hier nur der relative Anteil ein; sobald ein
+		// PlayerStart gedreht war (die Xeno-Starts stehen auf Yaw 180), zeigte die Ansicht
+		// in die eine und die Bewegung in die andere Richtung - die Steuerung fuehlte sich
+		// invertiert an. Mit der Weltdrehung stimmt sie auf jeder Karte.
+		const float WorldYaw = GetActorRotation().Yaw + SpringArmRotator.Yaw;
+		const float CosYaw = FMath::Cos(WorldYaw * PI / 180.f);
+		const float SinYaw = FMath::Sin(WorldYaw * PI / 180.f);
 
 		// Transform the input direction based on camera rotation
 		// Forward/Backward uses Cos/Sin, Left/Right uses Sin/Cos with appropriate signs

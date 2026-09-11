@@ -37,6 +37,20 @@ public:
 	          meta = (DisplayName = "AI Time Scale", ClampMin = "0.1", UIMin = "1.0", UIMax = "20.0"))
 	float AITimeScale = 1.f;
 
+	/**
+	 * Ladebildschirm fuer Levelwechsel ueber URTSTravelHelpers::TravelToMap.
+	 *
+	 * Der eingebaute Weg haengt an ACameraControllerBase (eigene Widgetklasse) und faellt
+	 * sonst auf den AResourceGameState zurueck. Storylevel laufen aber mit den
+	 * Engine-Standardklassen - dort greift beides nicht, und der Spieler sieht bis zum
+	 * Ende des Ladens das letzte Bild der alten Karte. Diese Klasse wird in genau dem
+	 * Fall benutzt. Leer lassen heisst: kein Ladebildschirm fuer solche Level.
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "Travel",
+	          meta = (DisplayName = "Travel Loading Widget (Fallback)",
+	                  AllowedClasses = "/Script/RTSUnitTemplate.LoadingWidget"))
+	TSoftClassPtr<class ULoadingWidget> TravelLoadingWidgetClass;
+
 	/** Convenience accessor; never returns null (UDeveloperSettings are CDO-backed). */
 	static const URTSUnitTemplateSettings* Get();
 };
