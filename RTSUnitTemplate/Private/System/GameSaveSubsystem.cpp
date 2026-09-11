@@ -134,7 +134,6 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
                 AttrData.Range = Attr->GetRange();
                 AttrData.RunSpeed = Attr->GetRunSpeed();
                 AttrData.IsAttackedSpeed = Attr->GetIsAttackedSpeed();
-                AttrData.RunSpeedScale = Attr->GetRunSpeedScale();
                 AttrData.ProjectileScaleActorDirectionOffset = Attr->GetProjectileScaleActorDirectionOffset();
                 AttrData.ProjectileSpeed = Attr->GetProjectileSpeed();
                 AttrData.Stamina = Attr->GetStamina();
@@ -163,6 +162,9 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
                 NodeSave.Points = NodeState.Points;
                 Data.AttributeTreeNodes.Add(NodeSave);
             }
+
+            Data.AttributeTreePoints = LevelUnit->AttributeTreePoints;
+            Data.UsedAttributeTreePoints = LevelUnit->UsedAttributeTreePoints;
         }
 
         // Ability states (owner-level toggles) for this unit
@@ -247,6 +249,25 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
     {
         Save->TeamResources = ResourceGM->TeamResources;
     }
+
+    // Fortschritt der Siegbedingungen (02.09.2026). Fehlte bisher komplett: nach dem Laden
+    // stand wieder der erste Abschnitt an und alle Zaehler auf null.
+    for (TActorIterator<AWinLoseConfigActor> It(World); It; ++It)
+    {
+        AWinLoseConfigActor* Config = *It;
+        if (!IsValid(Config)) continue;
+
+        FWinLoseSaveData S;
+        S.TeamId = Config->TeamId;
+        S.ActorName = Config->GetName();
+        S.CurrentWinConditionIndex = Config->CurrentWinConditionIndex;
+        S.TagProgress = Config->TagProgress;
+        Save->WinLoseStates.Add(MoveTemp(S));
+    }
+
+    // Verstrichene Spielzeit mitschreiben, damit Zeitziele und der Talentpunkt-Takt nach dem
+    // Laden nicht von vorn beginnen.
+    Save->SavedGameTimeSeconds = World->GetTimeSeconds();
 
     UGameplayStatics::SaveGameToSlot(Save, SlotName, 0);
 }
@@ -362,6 +383,30 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
             {
                 ResourceGS->SetTeamResources(ResourceGM->TeamResources);
             }
+        }
+    }
+
+    // Fortschritt der Siegbedingungen zurueckspielen (02.09.2026). Zuordnung ueber den
+    // Actornamen, ersatzweise ueber die Team-Id - eine Karte kann mehrere Konfigurationen
+    // haben, und die Reihenfolge der Actor-Iteration ist nicht garantiert.
+    if (SaveData->WinLoseStates.Num() > 0)
+    {
+        for (TActorIterator<AWinLoseConfigActor> It(LoadedWorld); It; ++It)
+        {
+            AWinLoseConfigActor* Config = *It;
+            if (!IsValid(Config)) continue;
+
+            const FWinLoseSaveData* Passend = SaveData->WinLoseStates.FindByPredicate(
+                [Config](const FWinLoseSaveData& S){ return S.ActorName == Config->GetName(); });
+            if (!Passend)
+            {
+                Passend = SaveData->WinLoseStates.FindByPredicate(
+                    [Config](const FWinLoseSaveData& S){ return S.TeamId == Config->TeamId; });
+            }
+            if (!Passend) continue;
+
+            Config->CurrentWinConditionIndex = Passend->CurrentWinConditionIndex;
+            Config->TagProgress = Passend->TagProgress;
         }
     }
 
@@ -532,6 +577,11 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
                 NodeState.Points = NodeSave.Points;
                 LevelUnit->AttributeTreeNodes.Add(NodeState);
             }
+
+            // Der eigene Vorrat des Baums. Er kommt NICHT mehr aus LevelData - beides sind seit
+            // dem 10.09.2026 getrennte Zaehler.
+            LevelUnit->AttributeTreePoints = SavedUnit.AttributeTreePoints;
+            LevelUnit->UsedAttributeTreePoints = SavedUnit.UsedAttributeTreePoints;
         }
 
         // Mass-Entität auf die neue Actor-Position synchronisieren, Targets anpassen und Tags setzen
@@ -851,11 +901,106 @@ TArray<FString> UGameSaveSubsystem::GetAllSaveSlots() const
     return Result;
 }
 
+bool UGameSaveSubsystem::IstSpielstandDatei(const FString& SlotName) const
+{
+    // Nur in den KOPF der Datei sehen, statt sie ganz zu laden.
+    //
+    // Der Ordner Saved/SaveGames enthaelt weit mehr als Spielstaende: Faehigkeiten je Einheit,
+    // Replays, Indexdateien. Gemessen am 10.09.2026 lagen dort 7884 Dateien mit zusammen 267 MB,
+    // darunter Replays von ueber 30 MB. LoadSaveSummary lud jede einzelne davon vollstaendig,
+    // nur um danach festzustellen, dass es kein URTSSaveGame ist - daher brauchte das
+    // SaveGame-Widget so lange zum Oeffnen.
+    //
+    // Unreal schreibt den Klassennamen des Spielstands weit vorn in die Datei. Ihn dort zu suchen
+    // kostet ein paar Kilobyte statt Dutzender Megabyte. Findet sich der Kopf nicht wie erwartet,
+    // wird NICHT ausgeschlossen - dann entscheidet wie bisher das vollstaendige Laden, damit ein
+    // geaendertes Dateiformat keine Spielstaende verschwinden laesst.
+    const FString Pfad = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"),
+        SlotName + TEXT(".sav"));
+
+    TUniquePtr<FArchive> Datei(IFileManager::Get().CreateFileReader(*Pfad));
+    if (!Datei)
+    {
+        return true; // Nicht lesbar - die alte Entscheidung uebernehmen.
+    }
+
+    const int64 Groesse = Datei->TotalSize();
+    const int64 Menge = FMath::Min<int64>(Groesse, 4096);
+    if (Menge <= 0)
+    {
+        return false;
+    }
+
+    TArray<uint8> Kopf;
+    Kopf.SetNumUninitialized(static_cast<int32>(Menge));
+    Datei->Serialize(Kopf.GetData(), Menge);
+    Datei->Close();
+
+    // Der Klassenname steht als schlichter Text im Kopf. Beide Schreibweisen pruefen, weil Unreal
+    // FString je nach Inhalt einbytig oder zweibytig ablegt.
+    auto Enthaelt = [&Kopf](const ANSICHAR* Suche) -> bool
+    {
+        const int32 Laenge = FCStringAnsi::Strlen(Suche);
+        if (Laenge <= 0 || Kopf.Num() < Laenge)
+        {
+            return false;
+        }
+
+        // Einbytig.
+        for (int32 i = 0; i + Laenge <= Kopf.Num(); ++i)
+        {
+            if (FMemory::Memcmp(Kopf.GetData() + i, Suche, Laenge) == 0)
+            {
+                return true;
+            }
+        }
+
+        // Zweibytig: jedes Zeichen gefolgt von einer Null.
+        for (int32 i = 0; i + Laenge * 2 <= Kopf.Num(); ++i)
+        {
+            bool bPasst = true;
+            for (int32 j = 0; j < Laenge; ++j)
+            {
+                if (Kopf[i + j * 2] != static_cast<uint8>(Suche[j]) || Kopf[i + j * 2 + 1] != 0)
+                {
+                    bPasst = false;
+                    break;
+                }
+            }
+            if (bPasst)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    if (Enthaelt("RTSSaveGame"))
+    {
+        return true;
+    }
+
+    // Eindeutig etwas anderes? Dann sicher aussortieren.
+    if (Enthaelt("ReplaySaveGame") || Enthaelt("ReplayIndexSaveGame") || Enthaelt("TalentSaveGame"))
+    {
+        return false;
+    }
+
+    // Unbekannt: nicht raten, sondern wie bisher vollstaendig laden.
+    return true;
+}
+
 bool UGameSaveSubsystem::LoadSaveSummary(const FString& SlotName, FString& OutMapAssetName, FString& OutLongPackageName, int64& OutUnixTime) const
 {
     OutMapAssetName.Reset();
     OutLongPackageName.Reset();
     OutUnixTime = 0;
+
+    if (!IstSpielstandDatei(SlotName))
+    {
+        return false;
+    }
 
     USaveGame* SG = UGameplayStatics::LoadGameFromSlot(SlotName, 0);
     URTSSaveGame* RTS = Cast<URTSSaveGame>(SG);
