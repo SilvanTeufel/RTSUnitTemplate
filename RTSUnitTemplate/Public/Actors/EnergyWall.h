@@ -27,6 +27,9 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	/** Gibt die Batch-Plaetze zurueck. Ohne das bliebe eine unsichtbare Instanz fuer immer belegt. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 public:	
 	virtual void Tick(float DeltaTime) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -182,6 +185,38 @@ private:
 	void OnDeactivationTimerComplete();
 
 	FTimerHandle InitializationTimerHandle;
+	/**
+	 * Plaetze im gemeinsamen Batch-ISM (UEnergyWallBatchSubsystem).
+	 *
+	 * Die drei eigenen ISM-Komponenten bleiben als Mesh- und Materialquelle bestehen - das Blueprint
+	 * setzt sie -, werden aber nicht mehr gezeichnet. Gezeichnet wird ueber diese Indizes.
+	 * INDEX_NONE heisst "nicht belegt".
+	 */
+	int32 BatchIndexTop = INDEX_NONE;
+	int32 BatchIndexBottom = INDEX_NONE;
+	int32 BatchIndexShield = INDEX_NONE;
+
+	/** Meldet die drei Teile beim Batch an und blendet die eigenen Komponenten aus. */
+	void MeldeBeimBatchAn();
+
+	/** Gibt die drei Plaetze zurueck. Mehrfach aufrufbar. */
+	void MeldeVomBatchAb();
+
+	/** Schreibt Lage und Groesse der drei Teile in den Batch. */
+	void SchreibeBatchTransformationen();
+
+	/** Schaltet das Schild ueber Custom Data 1 sichtbar oder unsichtbar. */
+	void SetzeSchildSichtbar(bool bSichtbar);
+
+	/**
+	 * Zuletzt gesetzte Schildsichtbarkeit.
+	 *
+	 * Frueher las der Code ShieldISM->bHiddenInGame zurueck. Im gemeinsamen Batch gibt es diesen
+	 * Zustand je Instanz nicht mehr, also wird er hier gefuehrt - er ist die Umschaltquelle fuer das
+	 * Flackern.
+	 */
+	bool bSchildZuletztSichtbar = false;
+
 	float TargetScaleY = 1.0f;
 	float CurrentScaleY = 0.0f;
 	float TargetDistance2D = 0.0f;

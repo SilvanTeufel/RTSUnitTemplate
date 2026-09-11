@@ -2,6 +2,7 @@
 
 
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "LandscapeProxy.h"
 #include "System/RTSBeaconSubsystem.h"
 #include "Controller/PlayerController/CameraControllerBase.h" // LUX-ANPASSUNG (16.08.2026): fuer die Direktsteuerungs-Ausnahme bei FMassStopWhileAimingTag
 
@@ -468,7 +469,14 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 			// asset, and reading the raw flag here hid the indicator for every such ability.
 			// Safe on clients: the force/disable registries are replicated via
 			// Client_ApplyTeamAbilityKeyToggle / Client_ApplyOwnerAbilityKeyToggle.
-			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass && UGameplayAbilityBase::IsAbilityKeyGateOpenForUnit(AbilityCDO, UnitBase))
+			// NUR fuer den eigenen Spieler zeichnen. AAbilityIndicator hat bReplicates=false
+			// (AbilityIndicator.cpp), der Aktor existiert also ausschliesslich auf der Maschine, die ihn
+			// spawnt. Diese Funktion ist ein Server-RPC: auf einem Listen-Server laeuft sie auch fuer die
+			// Controller ANDERER Spieler, und der Host haette deren Zielmarker in seiner eigenen Welt
+			// gesehen - also auch die des Gegnerteams. Fuer entfernte Clients aendert der Waechter nichts:
+			// ein hier gespawnter Aktor war fuer sie ohnehin unsichtbar, ihren eigenen Marker setzt der
+			// Client-Pfad in ActivateAbilities.
+			if (AbilityCDO && AbilityCDO->AbilityIndicatorClass && IsLocalController() && UGameplayAbilityBase::IsAbilityKeyGateOpenForUnit(AbilityCDO, UnitBase))
 			{
 				HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
 			}
@@ -610,7 +618,8 @@ void AExtendedControllerBase::ActivateAbilities_Implementation(AGASUnit* UnitBas
 			if (UGameplayAbilityBase* AbilityCDO = Cast<UGameplayAbilityBase>(AbilityToActivate->GetDefaultObject()))
 			{
 				// Skip the mouse-follow indicator for unusable abilities (see ActivateAbilitiesByIndex).
-				if (AbilityCDO->AbilityIndicatorClass && UGameplayAbilityBase::IsAbilityKeyGateOpenForUnit(AbilityCDO, UnitBase))
+				// IsLocalController(): siehe Begruendung dort - der Marker gehoert nur dem eigenen Spieler.
+				if (AbilityCDO->AbilityIndicatorClass && IsLocalController() && UGameplayAbilityBase::IsAbilityKeyGateOpenForUnit(AbilityCDO, UnitBase))
 				{
 					HandleAbilityIndicatorStart(AbilityCDO->AbilityIndicatorClass, UnitBase);
 					
@@ -851,6 +860,9 @@ void AExtendedControllerBase::ClientReceiveClosestUnit_Implementation(AUnitBase*
 
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnCloseUnits(EGASAbilityInputID InputID, FVector CameraLocation, int PlayerTeamId, AHUDBase* HUD)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 
 	if (HasAuthority())
 	{
@@ -1026,6 +1038,9 @@ bool AExtendedControllerBase::GetAbilityHitResultForAI(FHitResult& OutHit) const
 
 void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbilityInputID InputID)
 {
+	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
+	if (IsSpectatorController()) return;
+
 	if (AltIsPressed || IsCtrlPressed) return;
 
 	// 1. Identify the ability class from the current selection and InputID
@@ -1899,6 +1914,89 @@ bool AExtendedControllerBase::TraceMouseToGround(FVector& OutMouseGround, FHitRe
     }
 
     return false;
+}
+
+bool AExtendedControllerBase::TraceMouseToLandscape(FVector& OutPoint, FHitResult& OutHit, ECollisionChannel Kanal) const
+{
+	OutPoint = FVector::ZeroVector;
+	UWorld* Welt = GetWorld();
+	if (!Welt) return false;
+
+	FVector MausPos, MausRichtung;
+	if (!DeprojectMousePositionToWorld(MausPos, MausRichtung)) return false;
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(TraceMouseToLandscape), true);
+	Params.bTraceComplex = true;
+	for (TActorIterator<AWorkArea> It(Welt); It; ++It) { Params.AddIgnoredActor(*It); }
+
+	// Schleife statt LineTraceMultiByChannel: das Multi hoert beim ERSTEN blockierenden Treffer auf,
+	// die Landschaft dahinter taucht also nie in der Liste auf. Gemessen: Treffer=0 Getroffen=None,
+	// sobald der Zeiger ueber dem Gebaeude stand - und weil der Aufrufer dann mit return aussteigt,
+	// blieb der Marker am Gebaeude stehen. Jeder Nicht-Landschafts-Treffer wandert deshalb auf die
+	// Ignorierliste und der Strahl laeuft weiter.
+	const FVector Ende = MausPos + MausRichtung * 1000000.f;
+	for (int32 Versuch = 0; Versuch < 12; ++Versuch)
+	{
+		FHitResult Treffer;
+		if (!Welt->LineTraceSingleByChannel(Treffer, MausPos, Ende, Kanal, Params))
+		{
+			return false;
+		}
+		if (Cast<ALandscapeProxy>(Treffer.GetActor()))
+		{
+			OutHit = Treffer;
+			OutPoint = Treffer.Location;
+			return true;
+		}
+		if (!Treffer.GetActor())
+		{
+			return false;
+		}
+		Params.AddIgnoredActor(Treffer.GetActor());
+	}
+	return false;
+}
+
+bool AExtendedControllerBase::SnapPointToLandscape(FVector InPoint, FVector& OutPoint, ECollisionChannel Kanal) const
+{
+	OutPoint = InPoint;
+	UWorld* Welt = GetWorld();
+	if (!Welt)
+	{
+		return false;
+	}
+
+	// Senkrecht von oben nach unten statt entlang des Mausstrahls: steht der Zeiger ueber einer
+	// Einheit, liegt der Treffer auf DEREN Dach - der Punkt darunter ist genau die Stelle, die der
+	// Spieler meint. Mehrfachtreffer, weil zwischen Start und Boden noch Einheiten liegen koennen.
+	const FVector Start = InPoint + FVector(0.f, 0.f, 20000.f);
+	const FVector Ende  = InPoint - FVector(0.f, 0.f, 50000.f);
+
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(SnapPointToLandscape), true);
+	Params.bTraceComplex = true;
+
+	// Gleiche Schleife wie in TraceMouseToLandscape - aus demselben Grund: ein Multi-Trace endet am
+	// ersten Blocker, und von oben ist das das Dach der Einheit, nicht der Boden darunter.
+	for (int32 Versuch = 0; Versuch < 12; ++Versuch)
+	{
+		FHitResult Treffer;
+		if (!Welt->LineTraceSingleByChannel(Treffer, Start, Ende, Kanal, Params))
+		{
+			return false;
+		}
+		if (Cast<ALandscapeProxy>(Treffer.GetActor()))
+		{
+			OutPoint = Treffer.Location;
+			return true;
+		}
+		if (!Treffer.GetActor())
+		{
+			return false;
+		}
+		Params.AddIgnoredActor(Treffer.GetActor());
+	}
+
+	return false;
 }
 
 bool AExtendedControllerBase::TraceMouseToHorizontalPlane(float PlaneZ, FVector& OutPoint) const
@@ -3918,13 +4016,35 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         return;
     }
 
+    // Die Einstellungen muessen VOR dem Trace feststehen: bei bTargetLandscapeOnly darf gar nicht
+    // erst TraceMouseToGround laufen. Der nimmt den ersten Treffer (das Gebaeudedach) und
+    // projiziert ihn aufs Navmesh - scheitert das, verlaesst die Funktion sich hier mit return und
+    // der Marker bleibt stehen, wo er war. Genau das sah aus, als klebte er am DataCenter.
+    bool bNurLandschaft = CurrentDraggedAbilityIndicator->bTargetLandscapeOnly;
+    ECollisionChannel MarkerKanal = CurrentDraggedAbilityIndicator->TraceChannel.GetValue();
+    if (!bNurLandschaft)
+    {
+        for (const AUnitBase* Unit : SelectedUnits)
+        {
+            if (!Unit || !Unit->CurrentSnapshot.AbilityClass) continue;
+            if (const UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>())
+            {
+                bNurLandschaft = AbilityCDO->bTargetLandscapeOnly;
+                MarkerKanal = AbilityCDO->IndicatorTraceChannel.GetValue();
+                break;
+            }
+        }
+    }
+
     FVector MouseGround;
     FHitResult HitResult;
     bool bHit = false;
 
     if (IsLocalController())
     {
-        bHit = TraceMouseToGround(MouseGround, HitResult);
+        bHit = bNurLandschaft
+            ? TraceMouseToLandscape(MouseGround, HitResult, MarkerKanal)
+            : TraceMouseToGround(MouseGround, HitResult);
         if (!bHit)
         {
             return;
@@ -3941,6 +4061,10 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
     {
         return;
     }
+
+    // Einstellungen der LAUFENDEN Faehigkeit einmal holen. Sie muessen bis ganz unten gelten:
+    // die spaeteren Bodentraces schiessen von MouseGround.Z + 2000 nach unten und wuerden den
+    // Marker sonst wieder auf das Dach der Einheit heben, ueber der die Maus steht.
 
     // Consolidated Range Check: If ANY selected unit is out of range, blink
     bool bAnyOutOfRange = false;
@@ -4029,12 +4153,62 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             FHitResult GroundHit;
             FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_MouseFollowGround")), true, CurrentIndicator);
             Params.AddIgnoredActor(CurrentIndicator);
-            const FVector TraceStart(MouseGround.X, MouseGround.Y, MouseGround.Z + 2000.f);
-            const FVector TraceEnd  (MouseGround.X, MouseGround.Y, MouseGround.Z - 10000.f);
+            // wird nach dem Ressourcen-Schub anhand von FinalLoc gesetzt
+            FVector TraceStart, TraceEnd;
             FVector FinalLoc = MouseGround;
-            if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+
+            // Mindestabstand zu Ressourcen. Die Pruefung stand bisher NUR im Snap-Zweig und war
+            // zusaetzlich an DetectOverlapWithWorkArea gebunden - schaltet man den Zweig ab (weil
+            // er den Marker an Gebaeude klebt), fiel sie ersatzlos weg. Hier wird nur in X/Y
+            // weggeschoben, die Hoehe kommt danach ohnehin neu vom Boden.
+            if (CurrentIndicator->DenyPlacementCloseToResources && CurrentIndicator->ResourcePlacementDistance > 0.f)
             {
-                FinalLoc.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
+                for (int32 Runde = 0; Runde < 8; ++Runde)
+                {
+                    FVector Schub = FVector::ZeroVector;
+                    bool bVerletzt = false;
+                    for (TActorIterator<AWorkArea> It(World); It; ++It)
+                    {
+                        AWorkArea* WA = *It;
+                        if (!WA) continue;
+                        const WorkAreaData::WorkAreaType T = WA->Type;
+                        const bool bIstRessource = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary
+                            || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare
+                            || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+                        if (!bIstRessource) continue;
+
+                        const FVector Res = WA->GetActorLocation();
+                        const float D = FVector::Dist2D(FinalLoc, Res);
+                        if (D < CurrentIndicator->ResourcePlacementDistance)
+                        {
+                            bVerletzt = true;
+                            FVector Richtung = FinalLoc - Res;
+                            Richtung.Z = 0.f;
+                            if (Richtung.IsNearlyZero(1e-3f)) Richtung = FVector(1.f, 0.f, 0.f);
+                            Richtung.Normalize();
+                            Schub += Richtung * (CurrentIndicator->ResourcePlacementDistance - D + 1.f);
+                        }
+                    }
+                    if (!bVerletzt) break;
+                    FinalLoc += FVector(Schub.X, Schub.Y, 0.f);
+                }
+            }
+
+            FVector NurBoden;
+            if (bNurLandschaft && SnapPointToLandscape(FinalLoc, NurBoden, MarkerKanal))
+            {
+                // Nur die Landschaft zaehlt: der Einzeltrace unten wuerde an der ersten Einheit
+                // haengenbleiben, die zwischen Startpunkt und Boden steht.
+                FinalLoc.Z = NurBoden.Z - OffsetActorToBottom;
+            }
+            else
+            {
+                TraceStart = FVector(FinalLoc.X, FinalLoc.Y, FinalLoc.Z + 2000.f);
+                TraceEnd   = FVector(FinalLoc.X, FinalLoc.Y, FinalLoc.Z - 10000.f);
+                if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, MarkerKanal, Params))
+                {
+                    FinalLoc.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
+                }
             }
             CurrentIndicator->SetActorLocation(FinalLoc);
             ApplyRotationIfNeeded(CurrentIndicator);
@@ -4054,7 +4228,12 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             Params.AddIgnoredActor(CurrentIndicator);
             const FVector TraceStart(InLoc.X, InLoc.Y, InLoc.Z + 2000.f);
             const FVector TraceEnd  (InLoc.X, InLoc.Y, InLoc.Z - 10000.f);
-            if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, ECC_Visibility, Params))
+            FVector NurBoden;
+            if (bNurLandschaft && SnapPointToLandscape(InLoc, NurBoden, MarkerKanal))
+            {
+                Grounded.Z = NurBoden.Z - OffsetActorToBottom;
+            }
+            else if (World->LineTraceSingleByChannel(GroundHit, TraceStart, TraceEnd, MarkerKanal, Params))
             {
                 Grounded.Z = GroundHit.ImpactPoint.Z - OffsetActorToBottom;
             }
@@ -4802,6 +4981,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		return false;
 	}
 
+	// Spaetestens beim Ablegen zurueck auf das Originalmaterial. Die Hervorhebung ist ein
+	// Ablehnungssignal WAEHREND des Ziehens; sie laeuft ueber einen Zeitgeber (HighlightDuration)
+	// und wuerde ohne das hier nach dem Drop noch stehenbleiben - bei laengerer Anzeigedauer
+	// faellt genau das auf.
+	DraggedWorkArea->RevertMaterial();
+
 	if (DraggedWorkArea->PlannedBuilding == true)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because WorkArea is already a PlannedBuilding."));
@@ -5498,10 +5683,84 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					// base away from. Measured: the ghost was shoved 1076 units off the marker every
 					// single time, so either the base landed somewhere else or nothing was built at all.
 					// The designer already decided this spot is good, so drop it there and skip both.
-					DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Origin));
+					// Nah ist erlaubt, DRAUF nicht.
+					//
+					// Der Freibrief oben galt bisher uneingeschraenkt, also auch fuer einen Marker, der
+					// mitten auf der Lagerstaette steht. Gemessen am 09.09.2026 in
+					// Helix_Basin_KITraining_AH: alle sechs Marker liegen 190-255 uu von einem
+					// Primary-Vorkommen - die Basen wuchsen darauf und begruben es.
+					//
+					// Statt den Marker zu verwerfen wird die Basis nur so weit abgerueckt, wie noetig:
+					// zuerst der Marker selbst, dann Kreise in 200er-Schritten um ihn herum. Der erste
+					// Punkt, der MarkerMinResourceDistance einhaelt, gewinnt - der Marker bleibt damit
+					// bestimmend, das Vorkommen aber frei.
+					auto RessourceZuNah = [this](const FVector& Ort, float MindestAbstand) -> bool
+					{
+						if (MindestAbstand <= 0.f)
+						{
+							return false;
+						}
+
+						for (TActorIterator<AWorkArea> ItRes(GetWorld()); ItRes; ++ItRes)
+						{
+							const AWorkArea* ResWA = *ItRes;
+							if (!IsValid(ResWA))
+							{
+								continue;
+							}
+
+							const WorkAreaData::WorkAreaType T = ResWA->Type;
+							const bool bIstRessource = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary
+								|| T == WorkAreaData::Tertiary || T == WorkAreaData::Rare
+								|| T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
+
+							if (bIstRessource && FVector::Dist2D(Ort, ResWA->GetActorLocation()) < MindestAbstand)
+							{
+								return true;
+							}
+						}
+						return false;
+					};
+
+					FVector Platz = ComputeGroundedLocation(DraggedWorkArea, Origin);
+					float Abgerueckt = 0.f;
+
+					if (RessourceZuNah(Platz, MarkerMinResourceDistance))
+					{
+						bool bGefunden = false;
+						for (int32 RingIndex = 1; RingIndex <= 6 && !bGefunden; ++RingIndex)
+						{
+							const float Radius = 200.f * RingIndex;
+							for (int32 Schritt = 0; Schritt < 8 && !bGefunden; ++Schritt)
+							{
+								const float Winkel = FMath::DegreesToRadians(45.f * Schritt);
+								const FVector Kandidat = Origin
+									+ FVector(FMath::Cos(Winkel) * Radius, FMath::Sin(Winkel) * Radius, 0.f);
+								const FVector Geerdet = ComputeGroundedLocation(DraggedWorkArea, Kandidat);
+
+								if (!RessourceZuNah(Geerdet, MarkerMinResourceDistance))
+								{
+									Platz = Geerdet;
+									Abgerueckt = Radius;
+									bGefunden = true;
+								}
+							}
+						}
+
+						if (!bGefunden)
+						{
+							// Rundherum alles belegt: lieber am Marker bauen als gar nicht - das war der
+							// Zustand vor dieser Sperre, und ohne Basis steht die ganze Wirtschaft.
+							UE_LOG(LogTemp, Warning,
+								TEXT("[Expansion] Team %d: um den Marker herum ist kein Platz mit %.0f uu Abstand zu einem Vorkommen - baue trotzdem am Marker."),
+								UnitBase->TeamId, MarkerMinResourceDistance);
+						}
+					}
+
+					DraggedWorkArea->SetActorLocation(Platz);
 					bPlacementValid = true;
-					UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d placed on marker at %s (spacing pass skipped)."),
-					       UnitBase->TeamId, *DraggedWorkArea->GetActorLocation().ToCompactString());
+					UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d placed on marker at %s (spacing pass skipped, %.0f uu vom Marker abgerueckt)."),
+					       UnitBase->TeamId, *DraggedWorkArea->GetActorLocation().ToCompactString(), Abgerueckt);
 				}
 				else
 				{

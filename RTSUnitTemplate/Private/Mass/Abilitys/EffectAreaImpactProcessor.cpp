@@ -14,12 +14,23 @@
 static void SpawnUnitsForEffectArea(FMassExecutionContext& Ctx, AEffectArea& Area, const FVector& SpawnCenter, const FEffectAreaImpactFragment& Impact)
 {
 	UWorld* World = Ctx.GetWorld();
-	if (!World || World->GetNetMode() == NM_Client) return; // server-only
+	if (!World || World->GetNetMode() == NM_Client)
+	{
+		// DIAGNOSE (bleibt stehen bis abbestellt), siehe [BrutSpawn] weiter unten.
+		UE_LOG(LogTemp, Warning, TEXT("[BrutSpawn] abgebrochen: %s"),
+			!World ? TEXT("keine Welt") : TEXT("laeuft auf dem Client"));
+		return; // server-only
+	}
 
 	const TSubclassOf<AUnitBase> UnitClass = Area.SpawnClassOnDestruction;
-	if (!UnitClass) return;
+	if (!UnitClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[BrutSpawn] abgebrochen: SpawnClassOnDestruction ist leer (%s)"), *Area.GetName());
+		return;
+	}
 
 	const int32 Count = FMath::Max(1, Area.SpawnCountOnDestruction);
+	int32 Erzeugt = 0;
 
 		for (int32 idx = 0; idx < Count; ++idx)
 		{
@@ -71,8 +82,21 @@ static void SpawnUnitsForEffectArea(FMassExecutionContext& Ctx, AEffectArea& Are
 			// Minimal init: carry over team from area if applicable
 			NewUnit->TeamId = Area.TeamId;
 			UGameplayStatics::FinishSpawningActor(NewUnit, Xform);
+			++Erzeugt;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[BrutSpawn] SpawnActorDeferred lieferte nullptr fuer %s bei (%.0f,%.0f,%.0f)"),
+				*UnitClass->GetName(), SpawnLoc.X, SpawnLoc.Y, SpawnLoc.Z);
 		}
 	}
+
+	// DIAGNOSE (bleibt stehen bis abbestellt): sagt, ob dieser Weg ueberhaupt beschritten wurde und
+	// wie viele Einheiten dabei herauskamen. Ohne die Zeile ist "keine Brut" nicht von "Funktion
+	// nie gerufen" zu unterscheiden - genau daran hing die Eingrenzung fest.
+	UE_LOG(LogTemp, Warning, TEXT("[BrutSpawn] %s: %d von %d %s erzeugt, Mitte (%.0f,%.0f,%.0f), Team %d"),
+		*Area.GetName(), Erzeugt, Count, *UnitClass->GetName(),
+		SpawnCenter.X, SpawnCenter.Y, SpawnCenter.Z, Area.TeamId);
 }
 
 UMassEffectAreaImpactProcessor::UMassEffectAreaImpactProcessor()
@@ -190,6 +214,24 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 			if (Impact.bPendingDestruction)
 			{
 				Impact.PostImpactTimer += DeltaTime;
+
+				// DIAGNOSE (bleibt stehen bis abbestellt): Die Brutblasen des Xeno-Bosses entstehen,
+				// setzen aber keine Einheiten frei. Zwei Ausloesepfade geprueft, beide ohne Wirkung,
+				// und keiner davon sagt WARUM - die Bedingung unten hat vier Teile und scheitert
+				// stumm. Die Zeile nennt genau den Teil, an dem es haengt. Nur einmal je Flaeche.
+				if (bIsServer && !Impact.bBrutDiagnoseGemeldet)
+				{
+					Impact.bBrutDiagnoseGemeldet = true;
+					UE_LOG(LogTemp, Warning,
+						TEXT("[BrutSpawn] Abbau beginnt: Flaeche=%s schonGespawnt=%d Klasse=%s Anzahl=%d "
+						     "PostTimer=%.2f DespawnTime=%.2f EarlySpawn=%.2f"),
+						EffectArea ? *EffectArea->GetName() : TEXT("<Aktor weg>"),
+						Impact.bHasSpawnedOnDestruction ? 1 : 0,
+						(EffectArea && EffectArea->SpawnClassOnDestruction)
+							? *EffectArea->SpawnClassOnDestruction->GetName() : TEXT("<keine>"),
+						EffectArea ? EffectArea->SpawnCountOnDestruction : -1,
+						Impact.PostImpactTimer, Impact.DespawnTime, Impact.EarlySpawnTime);
+				}
 
 				// Spawn-on-destruction (server-only, once)
 				if (bIsServer && !Impact.bHasSpawnedOnDestruction && EffectArea && EffectArea->SpawnClassOnDestruction)

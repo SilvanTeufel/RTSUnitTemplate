@@ -11,7 +11,28 @@
 #include "AIController.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Characters/Unit/UnitBase.h"
+#include "HAL/IConsoleManager.h"
+
+// Ein Faehigkeitsdruck auf einen Slot, den keine der ausgewaehlten Einheiten belegt, ist ein
+// reiner Leerzug: die Aktivierung laeuft durch, es entsteht aber keine Baustelle. Gemessen am
+// 01.09.2026 im Fenster 0-60 s: Taste 1 zu 97 % und Taste 5 zu 61 % ohne Baustelle, insgesamt
+// 209 von 522 Druecken verschenkt - waehrend die Regel-KI sich auf die zwei passenden Tasten
+// beschraenkt und dort auf 0 % kommt. Das Netz hat die Randhaeufigkeit der Tasten gelernt,
+// nicht die Bedingung "welche Gruppe ist gerade gewaehlt".
+// 1 = solche Aktionen bei der Auswahl ausblenden. Betrifft nur den KI-Pfad.
+static int32 GRLActionMask = 0;
+static FAutoConsoleVariableRef CVarRLActionMask(
+    TEXT("rts.rl.action.mask"),
+    GRLActionMask,
+    TEXT("0 = aus. 1 = Slot ohne Bau-Faehigkeit ausblenden (Anlauf 2, gemessen wirkungslos). ")
+    TEXT("2 = unbezahlbare Bau-Faehigkeiten ausblenden (Anlauf 3: Bauquote 53->100 %, Ergebnis unveraendert). ")
+    TEXT("3 = leere Gruppenwahlen ausblenden (Anlauf 4, zielt auf die gemessene PPO-Drift). Nur KI-Pfad."),
+    ECVF_Default);
 #include "GameFramework/Pawn.h"
+#include "GameModes/ResourceGameMode.h"
+#include "EngineUtils.h"
 
 // Bring the NNE namespace into scope to simplify type names
 using namespace UE::NNE;
@@ -24,8 +45,23 @@ namespace
      * actions per state, and argmax keeps only the single most likely one, which in practice means the
      * agent repeats its most common key and never performs the rarer, decisive ones.
      * 1.0 reproduces the learned distribution; lower is more decisive, higher more erratic.
+     *
+     * 0.4 is measured, not guessed. Four values, 36 clean matches each against the rule-based AI,
+     * paired by seed (win rate / mean unit difference):
+     *
+     *     1.0 -> 19 % / -7.9      0.7 -> 44 % / -1.6
+     *     0.4 -> 56 % / -0.1      0.15 -> 17 % / -4.3
+     *
+     * The optimum is interior and both ends are significantly worse (p = 0.002 and p = 0.0006);
+     * 0.4 against 0.7 is not separable (p = 0.35), so treat 0.4 to 0.7 as a plateau rather than
+     * a sharp peak. Both extremes hurt for different reasons: too much spread dilutes the choice,
+     * too little collapses the policy onto its most common action - the failure described above.
+     *
+     * Measured on the clean matches only. In a parallel measurement run one instance runs roughly
+     * 15x the frame rate of the others and therefore gets 15x the AI decisions, which the
+     * rule-based side exploits far better than the network; those matches are not valid samples.
      */
-    static float GRLSamplingTemperature = 1.0f;
+    static float GRLSamplingTemperature = 0.4f;
     static FAutoConsoleVariableRef CVarRLSamplingTemperature(
         TEXT("rts.ai.rl.temperature"),
         GRLSamplingTemperature,
@@ -309,6 +345,29 @@ TArray<float> UInferenceComponent::StateToArray(const FGameStateData& GameStateD
     // select-then-use decision are indistinguishable and the data cannot be learned from.
     StateArray.Add(static_cast<float>(GameStateData.LastActionIndex));
 
+    // Spielzeit und Bauwarteschlange - siehe die Begruendung an den Feldern in FGameStateData.
+    // Beides liest der Lehrer nachweislich (GameTimeCap, CountByClassTag mit bIncludePendingAreas),
+    // beides fehlte im Vektor. Anders als der zurueckgenommene 60-Werte-Versuch sind das keine
+    // plausibel klingenden Groessen, sondern genau die Abfragen aus EvaluateRuleRow.
+    StateArray.Add(GameStateData.GameTimeSeconds);
+
+    StateArray.Add(static_cast<float>(GameStateData.Alt1TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt2TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt3TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt4TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt5TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Alt6TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl1TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl2TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl3TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl4TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl5TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.Ctrl6TagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlQTagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlWTagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlETagPendingBuildCount));
+    StateArray.Add(static_cast<float>(GameStateData.CtrlRTagPendingBuildCount));
+
     check(StateArray.Num() == GetStateSize());
     return StateArray;
 }
@@ -318,7 +377,21 @@ int32 UInferenceComponent::GetStateSize()
     // 21 original features + 16 per-hotkey friendly counts + the previous action. Changing this invalidates
     // every previously trained model, so bump it deliberately and retrain - a mismatch is not reported by
     // NNE, the network just reads garbage.
-    return 38;
+    //
+    // 29.08.2026 (frueher am Tag): probeweise auf 60 erweitert (Ressourcen-Obergrenzen +
+    // Gegner-Aufteilung je Hotkey) und wieder ZURUECKGENOMMEN. Die Uebereinstimmung mit dem Lehrer
+    // blieb exakt gleich (54,5 %), im Spiel fiel der Median von 47,5 auf 30,5 ueber je 12 Partien.
+    // Die Lehre daraus: eine groessere Eingabe hilft nicht, es muessen die Groessen sein, die der
+    // Decider TATSAECHLICH abfragt.
+    //
+    // 29.08.2026 (Nacht): 38 -> 55. Zwei davon sind belegt, nicht vermutet:
+    //   * Spielzeit  - jede Regelzeile hat ein GameTimeCap [Min, Max] (EvaluateRuleRow).
+    //   * 16 Bauwarteschlangen-Zaehler - CountByClassTag zaehlt mit bIncludePendingAreas=true,
+    //     also die schon beauftragten Flaechen. Das ist der Grund, warum der Lehrer nicht doppelt
+    //     baut; ohne diese Zahl kann das Netz den Unterschied gar nicht sehen.
+    // Erfolgskriterium ist zuerst die Uebereinstimmung im Training (kostet keine Partie): steigt
+    // sie ueber 54,5 %, traegt der Weg. Erst dann im Spiel gegenmessen.
+    return 55;
 }
 
 FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)
@@ -590,6 +663,159 @@ int32 UInferenceComponent::ChooseAction(const TArray<float>& GameState)
 }
 
 
+bool UInferenceComponent::IstAktionMoeglich(int32 ActionIndex) const
+{
+    const ARLAgent* AgentFuerGruppe = Cast<ARLAgent>(GetOwner());
+    AExtendedControllerBase* PCFuerGruppe = AgentFuerGruppe
+        ? Cast<AExtendedControllerBase>(AgentFuerGruppe->GetController()) : nullptr;
+
+    // Anlauf 4 (02.09.2026): leere Gruppenwahlen ausblenden.
+    //
+    // Gemessen ueber je 12 Partien: BC waehlt in 8,9 % der Faelle eine leere Gruppe, PPO mit
+    // KL-Leine in 52,8 %. PPO driftet also in Aktionen, die nichts kosten und deshalb auch
+    // keinen Gegendruck aus der Belohnung bekommen - genau die Vermutung aus dem Plan, jetzt
+    // mit Zahlen. Die KL-Leine haelt das nicht auf (KL 0,0095 und trotzdem -40,3).
+    // Die Aktionen 0-9 sind die Gruppenwahlen, Reihenfolge wie in InitializeActionSpace.
+    if (GRLActionMask == 3)
+    {
+        if (ActionIndex < 0 || ActionIndex > 9 || !PCFuerGruppe)
+        {
+            return true;
+        }
+        static const int32 Tastencodes[10] = { 18, 9, 10, 1, 21, 22, 23, 24, 25, 26 };
+        const int32 Code = Tastencodes[ActionIndex];
+        FGameplayTag Gruppentag;
+        switch (Code)
+        {
+        case 18: Gruppentag = PCFuerGruppe->KeyTagCtrlR; break;
+        case  9: Gruppentag = PCFuerGruppe->KeyTagCtrlQ; break;
+        case 10: Gruppentag = PCFuerGruppe->KeyTagCtrlE; break;
+        case  1: Gruppentag = PCFuerGruppe->KeyTagCtrlW; break;
+        case 21: Gruppentag = PCFuerGruppe->KeyTagCtrl1; break;
+        case 22: Gruppentag = PCFuerGruppe->KeyTagCtrl2; break;
+        case 23: Gruppentag = PCFuerGruppe->KeyTagCtrl3; break;
+        case 24: Gruppentag = PCFuerGruppe->KeyTagCtrl4; break;
+        case 25: Gruppentag = PCFuerGruppe->KeyTagCtrl5; break;
+        default: Gruppentag = PCFuerGruppe->KeyTagCtrl6; break;
+        }
+        if (!Gruppentag.IsValid() || !GetWorld())
+        {
+            return true; // ohne Tag nichts entscheiden
+        }
+        // Dieselbe Bedingung wie AExtendedControllerBase::SelectUnitsWithTag - sonst zaehlt
+        // die Maske etwas anderes als die Auswahl spaeter findet. Ein erster Versuch mit
+        // TActorIterator und HasTag blockierte fast JEDE Gruppenwahl (1 statt ~700).
+        if (!PCFuerGruppe->RTSGameMode || PCFuerGruppe->RTSGameMode->AllUnits.Num() == 0)
+        {
+            return true; // ohne Einheitenliste nichts entscheiden
+        }
+        const FGameplayTagContainer Behaelter(Gruppentag);
+        for (AActor* A : PCFuerGruppe->RTSGameMode->AllUnits)
+        {
+            const AUnitBase* U = Cast<AUnitBase>(A);
+            if (U && U->CanBeSelected && U->GetUnitState() != UnitData::Dead
+                && U->TeamId == PCFuerGruppe->SelectableTeamId
+                && U->UnitTags.HasAnyExact(Behaelter))
+            {
+                return true; // Gruppe ist besetzt
+            }
+        }
+        return false; // Leerzug
+    }
+
+    // Nur die sechs Faehigkeitsdruecke (Aktionen 10-15) sind hier zu pruefen; alles andere
+    // bleibt unangetastet.
+    if (ActionIndex < 10 || ActionIndex > 15)
+    {
+        return true;
+    }
+
+    const ARLAgent* Agent = Cast<ARLAgent>(GetOwner());
+    if (!Agent)
+    {
+        return true;
+    }
+    AExtendedControllerBase* PC = Cast<AExtendedControllerBase>(Agent->GetController());
+    if (!PC || PC->SelectedUnits.Num() == 0)
+    {
+        // Ohne Auswahl trifft der Druck ohnehin nichts - aber das ist ein anderer Fall, den
+        // die Nachwahl behandelt. Hier nicht zusaetzlich eingreifen.
+        return true;
+    }
+
+    const EGASAbilityInputID InputID = static_cast<EGASAbilityInputID>(
+        static_cast<int32>(EGASAbilityInputID::AbilityOne) + (ActionIndex - 10));
+
+    // Erster Anlauf (20:42) hat NICHTS bewirkt: der Slot ist bei Kampfeinheiten gar nicht leer,
+    // er haelt nur Ein-/Ausgraben statt eines Baus. Der Trichter blieb Zeile fuer Zeile gleich.
+    // Deshalb greift die Maske jetzt nur dort, wo der gemessene Verlust entsteht: bei einer
+    // Auswahl, die ein Arbeiter anfuehrt - denn nur dann laeuft der Abwurf des Bauplatzes an.
+    // Als Bau-Merkmal dient die ConstructionCost der Faehigkeit; Ein-/Ausgraben und Upgrades
+    // kosten dort nichts.
+    const AUnitBase* Erster = PC->SelectedUnits.IsValidIndex(0) ? PC->SelectedUnits[0] : nullptr;
+    if (!IsValid(Erster) || !Erster->IsWorker)
+    {
+        return true; // kein Arbeiterpfad - nicht eingreifen
+    }
+
+    for (AUnitBase* Selected : PC->SelectedUnits)
+    {
+        if (!IsValid(Selected) || !Selected->IsWorker)
+        {
+            continue;
+        }
+        TArray<TSubclassOf<UGameplayAbilityBase>> Array =
+            PC->GetAbilityArrayForUnit(Selected, PC->AbilityArrayIndex);
+        const TSubclassOf<UGameplayAbility> Gefunden = Selected->GetAbilityForInputID(InputID, Array);
+        if (!Gefunden)
+        {
+            continue;
+        }
+        const UGameplayAbilityBase* CDO = Gefunden->GetDefaultObject<UGameplayAbilityBase>();
+        if (!CDO)
+        {
+            return true; // im Zweifel zulassen
+        }
+        const FBuildingCost& K = CDO->ConstructionCost;
+        const bool bKostetEtwas = (K.PrimaryCost > 0 || K.SecondaryCost > 0 || K.TertiaryCost > 0
+            || K.RareCost > 0 || K.EpicCost > 0 || K.LegendaryCost > 0);
+
+        if (GRLActionMask == 2)
+        {
+            // Anlauf 3 (02.09.2026), aus der Messung abgeleitet statt geraten.
+            //
+            // Gemessen ueber 12 Partien im Fenster 0-60 s: bei ALLEN 125 Abwuerfen war eine
+            // GA_BuildBuilding_* aktiv - die Annahme von Anlauf 1 und 2, der Slot halte gar
+            // keinen Bau, war falsch. Die Bauquote haengt monoton an den Kosten:
+            //   LarvalPod 50 -> 92 %,  SynapseCluser 75 -> 92 %,  CarapacePod 50+25 -> 75 %,
+            //   TresherRoot 100 -> 58 %, SomaticPool 150 -> 37 %, BroodHive 400 -> 0 (0/12).
+            // Geist=0 ist also ein Bezahlbarkeitsproblem. Die Regel-KI erreichte im selben
+            // Fenster 41 von 41.
+            if (!bKostetEtwas)
+            {
+                return true; // kein Bau - nicht eingreifen
+            }
+            const AResourceGameMode* RGM =
+                GetWorld() ? GetWorld()->GetAuthGameMode<AResourceGameMode>() : nullptr;
+            if (!RGM)
+            {
+                return true; // ohne GameMode nichts entscheiden
+            }
+            if (RGM->CanAffordConstruction(K, PC->SelectableTeamId))
+            {
+                return true;
+            }
+            continue; // unbezahlbar - weiter suchen, vielleicht kann eine andere Einheit
+        }
+
+        if (bKostetEtwas)
+        {
+            return true; // baut tatsaechlich etwas
+        }
+    }
+    return false;
+}
+
 int32 UInferenceComponent::SelectActionFromScores(const TArray<float>& Scores)
 {
     if (Scores.Num() == 0)
@@ -605,12 +831,25 @@ int32 UInferenceComponent::SelectActionFromScores(const TArray<float>& Scores)
         // always taking its most likely key collapses the agent onto that key. Measured on the Xeno model,
         // greedy emitted "select workers" 13650 times and "use ability 1" 39 times where the teacher used
         // them 15385 and 3387 times - an agent that selects endlessly and never builds.
-        int32 Best = 0;
-        for (int32 i = 1; i < Scores.Num(); ++i)
+        int32 Best = INDEX_NONE;
+        for (int32 i = 0; i < Scores.Num(); ++i)
         {
-            if (Scores[i] > Scores[Best])
+            if (GRLActionMask != 0 && !IstAktionMoeglich(i))
+            {
+                continue;
+            }
+            if (Best == INDEX_NONE || Scores[i] > Scores[Best])
             {
                 Best = i;
+            }
+        }
+        if (Best == INDEX_NONE)
+        {
+            // Alles ausgeblendet waere schlimmer als gar keine Maske.
+            Best = 0;
+            for (int32 i = 1; i < Scores.Num(); ++i)
+            {
+                if (Scores[i] > Scores[Best]) { Best = i; }
             }
         }
         return Best;
@@ -630,12 +869,26 @@ int32 UInferenceComponent::SelectActionFromScores(const TArray<float>& Scores)
     for (int32 i = 0; i < Scores.Num(); ++i)
     {
         Weights[i] = FMath::Exp((Scores[i] - MaxScore) / Temperature);
+        if (GRLActionMask != 0 && !IstAktionMoeglich(i))
+        {
+            Weights[i] = 0.f;
+        }
         Total += Weights[i];
     }
 
     if (Total <= 0.f || !FMath::IsFinite(Total))
     {
-        return 0;
+        // Maske hat alles weggenommen: unmaskiert weiterwuerfeln statt Aktion 0 zu erzwingen.
+        Total = 0.f;
+        for (int32 i = 0; i < Scores.Num(); ++i)
+        {
+            Weights[i] = FMath::Exp((Scores[i] - MaxScore) / Temperature);
+            Total += Weights[i];
+        }
+        if (Total <= 0.f || !FMath::IsFinite(Total))
+        {
+            return 0;
+        }
     }
 
     float Roll = FMath::FRandRange(0.f, Total);
@@ -700,8 +953,63 @@ FString UInferenceComponent::GetActionFromRLModel(const FGameStateData& GameStat
 
     LastChosenActionIndex = BestActionIndex;
 
+    // DIAGNOSE (bleibt stehen bis abbestellt): siehe AktionsZaehler im Header.
+    if (AktionsZaehler.Num() < ActionSpace.Num())
+    {
+        AktionsZaehler.SetNumZeroed(ActionSpace.Num());
+    }
+    if (AktionsZaehler.IsValidIndex(BestActionIndex))
+    {
+        ++AktionsZaehler[BestActionIndex];
+        ++AktionenSeitBericht;
+    }
+    if (const UWorld* Welt = GetWorld())
+    {
+        const double Jetzt = Welt->GetTimeSeconds();
+        if (AktionenSeitBericht > 0 && (Jetzt - LetzterAktionsBericht) >= 60.0)
+        {
+            LetzterAktionsBericht = Jetzt;
+            BerichteAktionsverteilung();
+        }
+    }
+
     // --- Return the chosen action as a JSON string ---
     return GetActionAsJSON(BestActionIndex);
+}
+
+void UInferenceComponent::BerichteAktionsverteilung()
+{
+    // Nur die belegten Eintraege, absteigend - eine Zeile je Minute Spielzeit reicht, um zu sehen,
+    // worauf das Netz seine Entscheidungen verteilt.
+    TArray<TPair<int32, int32>> Sortiert;
+    for (int32 i = 0; i < AktionsZaehler.Num(); ++i)
+    {
+        if (AktionsZaehler[i] > 0)
+        {
+            Sortiert.Add(TPair<int32, int32>(i, AktionsZaehler[i]));
+        }
+    }
+    Sortiert.Sort([](const TPair<int32, int32>& A, const TPair<int32, int32>& B)
+    {
+        return A.Value > B.Value;
+    });
+
+    FString Zeile;
+    for (int32 i = 0; i < Sortiert.Num() && i < 10; ++i)
+    {
+        const int32 Index = Sortiert[i].Key;
+        FString Name = TEXT("?");
+        if (ActionSpace.IsValidIndex(Index))
+        {
+            Name = FString::Printf(TEXT("%s%d"), *ActionSpace[Index].Action, ActionSpace[Index].CameraState);
+        }
+        Zeile += FString::Printf(TEXT("%d:%s=%d "), Index, *Name, Sortiert[i].Value);
+    }
+
+    UE_LOG(LogTemp, Warning, TEXT("[NetzAktion] Team=%d seit letztem Bericht=%d, haeufigste: %s"),
+        ResolveOwningTeamId(), AktionenSeitBericht, *Zeile);
+
+    AktionenSeitBericht = 0;
 }
 
 FString UInferenceComponent::ChooseJsonAction(const FGameStateData& GameState)

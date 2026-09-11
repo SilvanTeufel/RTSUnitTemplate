@@ -36,6 +36,7 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "Actors/WorkArea.h"
+#include "Actors/FogActor.h"   // resource worker counts must not read through the fog
 #include "Actors/Waypoint.h"
 
 
@@ -2348,6 +2349,20 @@ void AHUDBase::DrawAllResourceCounts()
 	const FLinearColor Color(ResourceCountColor);
 	const float FontScale = FMath::Max(0.1f, ResourceCountTextScale);
 
+	// The counts are drawn straight onto the canvas, so nothing in the world hides them - they used
+	// to report how busy an enemy's resource nodes were straight through the fog. Resolved once per
+	// draw; IsWorldPositionRevealed answers "visible" when there is no mask, so a level without fog
+	// keeps showing everything.
+	AFogActor* Fog = nullptr;
+	for (TActorIterator<AFogActor> FogIt(World); FogIt; ++FogIt)
+	{
+		Fog = *FogIt;
+		if (const AControllerBase* LocalPC = Cast<AControllerBase>(PC))
+		{
+			if (Fog->TeamId == LocalPC->SelectableTeamId) break;
+		}
+	}
+
 	for (TActorIterator<AWorkArea> It(World); It; ++It)
 	{
 		AWorkArea* Area = *It;
@@ -2364,6 +2379,8 @@ void AHUDBase::DrawAllResourceCounts()
 		if (Max <= 0) continue; // unlimited / disabled -> draw nothing
 		const int32 Shown = FMath::Clamp(Area->CurrentWorkers, 0, Max);
 		if (Shown <= 0) continue; // "0/Max" -> draw nothing
+
+		if (Fog && !Fog->IsWorldPositionRevealed(Area->GetActorLocation())) continue;
 
 		FVector2D ScreenPos;
 		const FVector WorldPos = Area->GetActorLocation() + FVector(0.f, 0.f, ResourceCountHeightOffset);

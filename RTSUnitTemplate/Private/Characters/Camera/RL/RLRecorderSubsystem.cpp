@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Characters/Camera/RL/RLRecorderSubsystem.h"
 
 #include "Characters/Camera/RL/InferenceComponent.h"
@@ -6,6 +6,7 @@
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Core/RTSUnitTemplateSettings.h"   // AITimeScale from Project Settings
 #include "GameModes/RTSGameModeBase.h"   // CountAliveUnitsForTeam fuer die Ergebniszeile
+#include "Characters/Unit/BuildingBase.h"   // Gebaeude von Einheiten trennen
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "HAL/PlatformFileManager.h"
@@ -72,6 +73,25 @@ namespace
 		TEXT("rts.ai.timescale"),
 		GRLTimeScale,
 		TEXT("Global time dilation for AI training runs. 1 = real time."),
+		ECVF_Default);
+
+	/**
+	 * Seed for the random generator every match starts from. 0 = leave it alone (normal play).
+	 *
+	 * This exists for PAIRED measurements. A single match's outcome swings so hard that a
+	 * 12-match run of one net cannot be told apart from a 12-match run of another: the biggest
+	 * source of that swing is how the rule-based side happens to roll its weighted rule choice.
+	 * Give both variants the same seed per match index and that source cancels out in the
+	 * per-pair difference, which is a far quieter number than either side on its own.
+	 *
+	 * It does NOT make a match bit-for-bit reproducible - Mass runs across threads and the frame
+	 * time varies. It fixes the decisions, not the physics.
+	 */
+	static int32 GRLMatchSeed = 0;
+	static FAutoConsoleVariableRef CVarRLMatchSeed(
+		TEXT("rts.ai.seed"),
+		GRLMatchSeed,
+		TEXT("Seed the random generator at match start so two runs make the same rule choices. 0 = off."),
 		ECVF_Default);
 
 	/**
@@ -200,16 +220,67 @@ void URLRecorderSubsystem::WriteEpisodeSummary()
 	TArray<int32> Teams = GetAITeamIds();
 	Teams.Sort();
 
-	FString TeamJson;
+	// Gebaeude und Einheiten getrennt zaehlen. "Mehr lebende Einheiten" allein bevorzugt
+	// systematisch die Fraktion mit den billigeren Einheiten - deshalb stehen hier die
+	// Bestandteile einzeln, aus denen der Trainer sein Mass bildet. Bewertet wird weiterhin
+	// dort, nicht hier.
+	TMap<int32, int32> GebaeudeJeTeam;
+	TMap<int32, int32> EinheitenJeTeam;
+	for (int32 TeamId : Teams)
+	{
+		GebaeudeJeTeam.Add(TeamId, 0);
+		EinheitenJeTeam.Add(TeamId, 0);
+	}
+	for (AActor* Actor : GameMode->AllUnits)
+	{
+		const AUnitBase* U = Cast<AUnitBase>(Actor);
+		if (!U || U->GetUnitState() == UnitData::Dead)
+		{
+			continue;
+		}
+		if (int32* Gebaeude = GebaeudeJeTeam.Find(U->TeamId))
+		{
+			if (Cast<const ABuildingBase>(U))
+			{
+				++(*Gebaeude);
+			}
+			else if (int32* Einheiten = EinheitenJeTeam.Find(U->TeamId))
+			{
+				++(*Einheiten);
+			}
+		}
+	}
+
+	FString TeamJson, GebaeudeJson, EinheitenJson, BasisJson, ResJson;
 	for (int32 i = 0; i < Teams.Num(); ++i)
 	{
-		TeamJson += FString::Printf(TEXT("%s\"%d\":%d"), i == 0 ? TEXT("") : TEXT(","),
-			Teams[i], GameMode->CountAliveUnitsForTeam(Teams[i], false));
+		const int32 TeamId = Teams[i];
+		const TCHAR* Komma = (i == 0) ? TEXT("") : TEXT(",");
+
+		TeamJson += FString::Printf(TEXT("%s\"%d\":%d"), Komma, TeamId,
+			GameMode->CountAliveUnitsForTeam(TeamId, false));
+		GebaeudeJson += FString::Printf(TEXT("%s\"%d\":%d"), Komma, TeamId, GebaeudeJeTeam[TeamId]);
+		EinheitenJson += FString::Printf(TEXT("%s\"%d\":%d"), Komma, TeamId, EinheitenJeTeam[TeamId]);
+
+		// Ohne Gebaeude ist die Produktion tot. Das ist das eigentliche Siegkriterium und
+		// nicht der Einheitenbestand im Moment des Zeitablaufs.
+		BasisJson += FString::Printf(TEXT("%s\"%d\":%d"), Komma, TeamId,
+			GebaeudeJeTeam[TeamId] > 0 ? 1 : 0);
+
+		FString Werte;
+		for (uint8 R = 0; R < static_cast<uint8>(EResourceType::MAX); ++R)
+		{
+			Werte += FString::Printf(TEXT("%s%.0f"), R == 0 ? TEXT("") : TEXT(","),
+				GameMode->GetResource(TeamId, static_cast<EResourceType>(R)));
+		}
+		ResJson += FString::Printf(TEXT("%s\"%d\":[%s]"), Komma, TeamId, *Werte);
 	}
 
 	const FString Line = FString::Printf(
-		TEXT("{\"ep\":\"end\",\"t\":%.2f,\"samples\":%d,\"alive\":{%s}}"),
-		World->GetTimeSeconds(), SampleCount, *TeamJson);
+		TEXT("{\"ep\":\"end\",\"t\":%.2f,\"samples\":%d,\"alive\":{%s},")
+		TEXT("\"buildings\":{%s},\"units\":{%s},\"base\":{%s},\"res\":{%s}}"),
+		World->GetTimeSeconds(), SampleCount, *TeamJson,
+		*GebaeudeJson, *EinheitenJson, *BasisJson, *ResJson);
 
 	{
 		FScopeLock Lock(&BufferLock);
@@ -241,6 +312,17 @@ void URLRecorderSubsystem::ApplyTimeScaleToWorld(UWorld* World, const UWorld::In
 	UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] Time scale %.1fx applied to '%s' (source: %s)."),
 	       EffectiveScale, *World->GetName(),
 	       FMath::IsNearlyEqual(GRLTimeScale, 1.f) ? TEXT("Project Settings") : TEXT("CVar rts.ai.timescale"));
+
+	// Seeded here rather than in a processor: this runs once per world, before any decider has made
+	// a choice, and both generators matter - FMath::RandRange uses the C generator, FRandRange the
+	// engine's own SRand.
+	if (GRLMatchSeed != 0)
+	{
+		FMath::RandInit(GRLMatchSeed);
+		FMath::SRandInit(GRLMatchSeed);
+		UE_LOG(LogTemp, Warning, TEXT("[RLRecorder] Match seed %d applied to '%s'."),
+		       GRLMatchSeed, *World->GetName());
+	}
 }
 
 namespace

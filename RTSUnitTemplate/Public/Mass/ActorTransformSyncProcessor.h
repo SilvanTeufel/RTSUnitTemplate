@@ -48,6 +48,33 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Performance Throttling", meta = (ClampMin = "0.01", UIMin="0.01"))
 	float MaxTickInterval = 0.5f; // Slowest update rate (e.g., at low FPS)
 
+	// ============================================================================================
+	// LUX-ANPASSUNG (28.08.2026) - Rettung, wenn eine Einheit durch die Map faellt.
+	// Muss beim Uebernehmen ins Original-Template mitwandern. Siehe REAPPLY_AFTER_PLUGIN_SWAP.md.
+	// ============================================================================================
+
+	/**
+	 * Sekunden ohne Boden unter der Einheit, nach denen sie an die letzte sichere Position
+	 * zurueckgesetzt wird. 0 = Rettung aus.
+	 *
+	 * Nicht kleiner als etwa 0,5 waehlen: kurze bodenlose Momente sind normal (Kante, Rampe,
+	 * Luecke zwischen zwei Meshes) und sollen NICHT zu einem Sprung fuehren.
+	 */
+	// Config: UMassProcessor ist UCLASS(config = Mass, defaultconfig) - mit dem Config-Specifier
+	// stehen diese beiden Werte in Config/DefaultMass.ini unter
+	// [/Script/RTSUnitTemplate.ActorTransformSyncProcessor] und lassen sich ohne Neubau aendern,
+	// genau wie ExecutionOrder und ProcessingPhase daneben. Ohne Config greift eine Aenderung am
+	// Klassen-Default nicht: die laufenden Prozessor-Instanzen lesen ihn nicht neu ein.
+	UPROPERTY(config, EditAnywhere, Category = "RTSUnitTemplate|Absturz-Rettung", meta = (ClampMin = "0.0", UIMin = "0.0", UIMax = "10.0"))
+	float FallRescueAfterSeconds = 1.0f;
+
+	/**
+	 * Absolute Hoehe, unter der sofort gerettet wird - ohne auf FallRescueAfterSeconds zu warten.
+	 * Wer so tief ist, kommt nicht mehr von allein zurueck.
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "RTSUnitTemplate|Absturz-Rettung")
+	float FallRescueBelowZ = -3000.f;
+
 	// FPS thresholds for interpolation range
 	UPROPERTY(EditAnywhere, Category = "Performance Throttling", meta = (ClampMin = "1.0", UIMin="1.0"))
 	float LowFPSThreshold = 30.0f; // Below this FPS, use MaxTickInterval

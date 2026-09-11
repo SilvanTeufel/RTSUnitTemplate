@@ -1,6 +1,40 @@
 ﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
 
+namespace
+{
+	/**
+	 * 1 = auch Wander-Entscheidungen aufzeichnen (bisheriges Verhalten).
+	 * 0 = nur Entscheidungen der Regeltabelle.
+	 *
+	 * Der Wander-Pfad wuerfelt (FMath::RandRange) und stellt die Haelfte aller Entscheidungen.
+	 * Ob das Weglassen die Uebereinstimmung hebt, ist im Training messbar - ohne eine einzige
+	 * Partie ausgeben zu muessen.
+	 */
+	/**
+	 * 0 = der Wander-Pfad wird gar nicht erst versucht.
+	 *
+	 * Zur Eingrenzung: Arbeiter werden gemessen ~500 mal je Partie aus ihrer Arbeit in den
+	 * Laufzustand gerissen. Die Angriffsbefehle sind es nachweislich nicht (75 Befehle,
+	 * davonArbeiter=0 in allen). Der Wander-Pfad ist die Haelfte aller KI-Entscheidungen und
+	 * schickt eine Kontrollgruppe irgendwohin - wenn die Arbeiter enthaelt, ist er die Quelle.
+	 * Bricht die Zahl mit diesem Schalter ein, ist es belegt.
+	 */
+	static int32 GRTSWanderPath = 1;
+	static FAutoConsoleVariableRef CVarRTSWanderPath(
+		TEXT("rts.ai.wander"),
+		GRTSWanderPath,
+		TEXT("Wander-Pfad der Regel-KI. 0 = aus (nur zur Eingrenzung, die KI verliert damit ihren Rueckfall)."),
+		ECVF_Default);
+
+	static int32 GRLRecordWander = 1;
+	static FAutoConsoleVariableRef CVarRLRecordWander(
+		TEXT("rts.rl.record.wander"),
+		GRLRecordWander,
+		TEXT("Wander-Entscheidungen (reiner Zufall) mit aufzeichnen. 0 = nur Regeltabelle."),
+		ECVF_Default);
+}
+
 #include "GameFramework/Pawn.h"
 #include "AIController.h"
 #include "Characters/Camera/RL/InferenceComponent.h"
@@ -245,6 +279,14 @@ void URTSRuleBasedDeciderComponent::RecordDecisionForTraining(const TArray<int32
 	// a composite decision ("select the workers, then press ability 3") share a world state, so each sample
 	// carries the action that preceded it - otherwise the same state would appear with two different
 	// answers and the pair could never be learned.
+	// Wuerfelentscheidungen aus den Trainingsdaten halten, wenn so eingestellt. Siehe
+	// bLastDecisionWasWander: der Wander-Pfad ist die Haelfte aller Entscheidungen und traegt
+	// keine Absicht, die sich nachahmen liesse.
+	if (GRLRecordWander == 0 && bLastDecisionWasWander)
+	{
+		return;
+	}
+
 	const int32 TeamId = ResolveOwningTeamId();
 	FGameStateData StateForSample = CachedRecordingState;
 
@@ -504,6 +546,75 @@ bool URTSRuleBasedDeciderComponent::TryGetAbilityCostForRule(const FRTSRuleRow& 
 	}
 
 	return bFound;
+}
+
+namespace
+{
+	/**
+	 * Ueberschreibt DecisionsPerGameSecond global. Negativ = Wert der Komponente benutzen.
+	 *
+	 * Fuer Messreihen: damit laesst sich die Handlungsdichte der KI verstellen, ohne jedes
+	 * Blueprint anzufassen - und ohne dass zwischen zwei Messungen ein Unterschied bleibt,
+	 * den man nicht in der Kommandozeile sieht.
+	 */
+	static float GRLEntscheidungenJeSpielsekunde = -1.f;
+	static FAutoConsoleVariableRef CVarEntscheidungstakt(
+		TEXT("rts.ai.decision.hz"),
+		GRLEntscheidungenJeSpielsekunde,
+		TEXT("Entscheidungen der KI je Spielsekunde. <0 = Wert der Komponente, 0 = kein Riegel."),
+		ECVF_Default);
+}
+
+bool URTSRuleBasedDeciderComponent::ConsumeDecisionSlot()
+{
+	const float Soll = (GRLEntscheidungenJeSpielsekunde >= 0.f)
+		? GRLEntscheidungenJeSpielsekunde
+		: DecisionsPerGameSecond;
+
+	// 0 = ausgeschaltet: jeder Takt darf entscheiden, also das Verhalten von vor dieser Aenderung.
+	if (Soll <= 0.f)
+	{
+		return true;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return true;
+	}
+
+	// SPIELZEIT, nicht Realzeit: so wirkt der Riegel unabhaengig von der Zeitdehnung, genauso
+	// wie die Abklingzeiten der einzelnen Regelzeilen weiter unten.
+	const float Jetzt = World->GetTimeSeconds();
+	const float Abstand = 1.f / Soll;
+
+	if (Jetzt - LastDecisionGameTime < Abstand)
+	{
+		++DecisionsBlocked;
+		return false;
+	}
+
+	LastDecisionGameTime = Jetzt;
+	++DecisionsGranted;
+
+	// Der Riegel kann nur deckeln, nicht nachholen. Reicht die Bildrate nicht aus, um den Sollwert
+	// zu bedienen, ist die Handlungsdichte WEITER von der Maschine abhaengig - dann ist die
+	// Messung nicht vergleichbar und muss es erfahren. Einmal je Partie, nicht je Takt.
+	if (!bDecisionStarvationReported && Jetzt > 60.f && DecisionsGranted > 30)
+	{
+		const float Erreicht = DecisionsGranted / FMath::Max(1.f, Jetzt);
+		if (Erreicht < Soll * 0.9f)
+		{
+			bDecisionStarvationReported = true;
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Entscheidungstakt] Team %d erreicht nur %.2f Entscheidungen je Spielsekunde statt %.2f. ")
+				TEXT("Die Bildrate reicht fuer den Sollwert nicht aus - diese Partie ist mit schnelleren ")
+				TEXT("Laeufen NICHT vergleichbar. Sollwert senken oder Zeitdehnung verringern."),
+				ResolveOwningTeamId(), Erreicht, Soll);
+		}
+	}
+
+	return true;
 }
 
 bool URTSRuleBasedDeciderComponent::IsRuleOnCooldown(const FRTSRuleRow& Row, const FName& RowName) const
@@ -1045,6 +1156,9 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 	// then nothing marches. Without these two numbers the empty result looks like a broken gather.
 	int32 GebaeudeMitTag = 0;
 	int32 ToteMitTag = 0;
+	// Arbeiter werden hier NICHT ausgeschlossen - teilt sich ein Arbeiter den Schluesseltag mit
+	// Kampfeinheiten, marschiert er mit. Gezaehlt, um genau das zu belegen statt zu vermuten.
+	int32 ArbeiterMitTag = 0;
 
 	for (AActor* Actor : GameMode->AllUnits)
 	{
@@ -1072,6 +1186,10 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 		if (!Unit->CanBeSelected)
 		{
 			continue;
+		}
+		if (Unit->IsWorker)
+		{
+			++ArbeiterMitTag;
 		}
 		Units.Add(Unit);
 	}
@@ -1105,7 +1223,7 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 		float Speed = 300.f;
 		if (Units[i]->Attributes)
 		{
-			Speed = Units[i]->Attributes->GetBaseRunSpeed();
+			Speed = Units[i]->Attributes->GetRunSpeed();
 		}
 		Speeds.Add(Speed);
 		Radii.Add(Units[i]->MovementAcceptanceRadius);
@@ -1119,9 +1237,17 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 		/*AttackT*/ true, /*bResetHoldPosition*/ true, /*bResetFollowTarget*/ true,
 		/*bOriginatorPredictsLocally*/ false);
 
+	// Wer jetzt losmarschiert, gehoert bis zum Ablauf des Bindefensters nicht der Verteidigung.
+	// Ohne das zieht TickDefence die Armee auf halbem Weg zurueck (siehe MarschierendeEinheiten).
+	MarschierendeEinheiten.Reset();
+	for (AUnitBase* Unit : Units)
+	{
+		MarschierendeEinheiten.Add(Unit);
+	}
+
 	UE_LOG(LogTemp, Warning,
-		TEXT("[AttackOrder] Team=%d Regel='%s' DIREKT Ziel=(%.0f, %.0f) Einheiten=%d Spalten=%d"),
-		LogTeamId, *RowLabel, Target.X, Target.Y, Units.Num(), Columns);
+		TEXT("[AttackOrder] Team=%d Regel='%s' DIREKT Ziel=(%.0f, %.0f) Einheiten=%d davonArbeiter=%d Spalten=%d"),
+		LogTeamId, *RowLabel, Target.X, Target.Y, Units.Num(), ArbeiterMitTag, Columns);
 
 	return true;
 }
@@ -1333,6 +1459,21 @@ bool URTSRuleBasedDeciderComponent::ExecuteAttackRuleRow(const FRTSAttackRuleRow
 	// there is no agent position for a later rule to contradict, and no return timer to wait out.
 	if (bUseDirectBatchAttackMove && IssueDirectAttackMove(QualifyingTags, AdjustedAttackLoc, RowLabel, LogTeamId))
 	{
+		// HIER aufzeichnen, sonst enthaelt der Trainingsdatensatz KEINEN EINZIGEN Angriff.
+		//
+		// Die Aufzeichnung haengt sonst allein in BuildCompositeActionJSON - und dorthin kommt der
+		// Angriffszweig nie, weil er eine Zeile darueber mit return aussteigt. Folge: der Lehrer
+		// greift an, ohne es je vorzumachen. Gemessen am 30.08. ueber 46 Partien: das Netz waehlt
+		// left_click/right_click NIE, in der Aktionsverteilung tauchen ausschliesslich Kamerazuege
+		// und Faehigkeitswechsel auf, und [NetzAngriff] loest null Mal aus. Das ist keine schwache
+		// Politik, sondern eine Luecke im Datensatz - was nie demonstriert wurde, kann auch die
+		// Belohnungsfunktion nicht herbeifuehren, und die Aktionsmaske des Trainers wirft zu selten
+		// gezeigte Aktionen ohnehin heraus.
+		//
+		// Reine Aufzeichnung, kein Eingriff ins Verhalten: der Angriff selbst laeuft unveraendert
+		// ueber IssueDirectAttackMove.
+		RecordDecisionForTraining(Indices);
+
 		// The [AttackOrder] diagnosis stays on: it is what made the jump-and-turn pattern visible
 		// in the first place, and it is the only way to tell the two paths apart in a log.
 		if (UWorld* DiagWorld = GetWorld())
@@ -1751,14 +1892,34 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 		{
 			bAnyRowHasClasses = true;
 
-			// Pick all possible locations from all requested classes for this specific row
+			// Pick all possible locations from all requested classes for this specific row.
+			// Gebaeude werden dabei getrennt gesammelt - siehe bPreferBuildingTargets im Header.
 			TArray<FVector> PossibleLocations;
+			TArray<FVector> GebaeudeLocations;
 			for (const TSubclassOf<AActor>& Cls : Row->AttackPositionSourceClasses)
 			{
 				if (const TArray<FVector>* Locs = FoundLocationsMap.Find(Cls))
 				{
 					PossibleLocations.Append(*Locs);
+					if (Cls->IsChildOf(ABuildingBase::StaticClass()))
+					{
+						GebaeudeLocations.Append(*Locs);
+					}
 				}
+			}
+
+			// Stehende Ziele schlagen laufende: nur wenn gar kein gegnerisches Gebaeude bekannt ist,
+			// wird auf Einheiten ausgewichen.
+			const int32 EinheitenZahl = PossibleLocations.Num() - GebaeudeLocations.Num();
+			if (bPreferBuildingTargets && GebaeudeLocations.Num() > 0)
+			{
+				if (EinheitenZahl > 0)
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[AttackZiel] Team=%d Regel='%s' Gebaeude bevorzugt: %d Gebaeude, %d Einheiten verworfen"),
+						MyTeamId, *RowNames[i].ToString(), GebaeudeLocations.Num(), EinheitenZahl);
+				}
+				PossibleLocations = MoveTemp(GebaeudeLocations);
 			}
 
 			DiagFoundCount = PossibleLocations.Num();
@@ -1980,6 +2141,15 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 	// every few seconds would pull them out of combat over and over.
 	TArray<AUnitBase*> Fighters;
 	TArray<AUnitBase*> Workers;
+
+	// Laeuft gerade ein Angriff, dessen Bindefenster noch offen ist? Nur dann werden marschierende
+	// Einheiten der Verteidigung entzogen - nach Ablauf darf sie wieder auf alles zugreifen.
+	bool bAngriffLaeuft = false;
+	if (AttackCommitSeconds > 0.f && LetzteAngriffsBefehlZeit >= 0.f)
+	{
+		bAngriffLaeuft = (World->GetTimeSeconds() - LetzteAngriffsBefehlZeit) < AttackCommitSeconds;
+	}
+	int32 ImAnmarschUebersprungen = 0;
 	for (TActorIterator<AUnitBase> It(World); It; ++It)
 	{
 		AUnitBase* Unit = *It;
@@ -1993,6 +2163,18 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 			continue;
 		}
 
+		// Einheiten, die gerade einen Angriff abmarschieren, bleiben beim Angriff.
+		//
+		// Der Zustandsfilter darueber laesst sie durch: eine marschierende Armee ist im Zustand Run,
+		// nicht Attack. Ohne diese Ausnahme holt die Verteidigung sie auf halbem Weg zurueck, die
+		// naechste Angriffsregel schickt sie wieder los - das vom Nutzer gemeldete Pendeln zwischen
+		// den Basen. Das Bindefenster ist dasselbe, das schon das Umzielen verhindert.
+		if (bAngriffLaeuft && MarschierendeEinheiten.Contains(Unit))
+		{
+			++ImAnmarschUebersprungen;
+			continue;
+		}
+
 		if (Unit->IsWorker)
 		{
 			Workers.Add(Unit);
@@ -2001,6 +2183,13 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 		{
 			Fighters.Add(Unit);
 		}
+	}
+
+	if (ImAnmarschUebersprungen > 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Verteidigung] %d Einheiten bleiben im Anmarsch und werden nicht zurueckgerufen."),
+			ImAnmarschUebersprungen);
 	}
 
 	TArray<AUnitBase*>& Defenders = Fighters;
@@ -2201,6 +2390,11 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 
 	auto TryWander = [&]() -> FString
 	{
+		if (GRTSWanderPath == 0)
+		{
+			return TEXT("{}");
+		}
+
 		if (bEnableWander)
 		{
 			// First pick a base candidate according to existing rules
@@ -2237,8 +2431,10 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 				}
 				// If a specific ability is provided, use it; otherwise use the movement as the second step
 				Steps.Add((WanderAbilityAction != ERTSAIAction::None) ? (int32)WanderAbilityAction : ChosenIdx);
+				bLastDecisionWasWander = true;
 				return BuildCompositeActionJSON(Steps, Inference);
 			}
+			bLastDecisionWasWander = true;
 			return Inference->GetActionAsJSON(ChosenIdx);
 		}
 		return TEXT("{}");
@@ -2252,6 +2448,8 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 	static bool bTryTableFirstNext = true;
 	const bool bTryTableFirst = IsDeterministicRuleSelection() ? true : bTryTableFirstNext;
 	bTryTableFirstNext = !bTryTableFirstNext;
+
+	bLastDecisionWasWander = false;
 
 	FString Result;
 	if (bTryTableFirst)

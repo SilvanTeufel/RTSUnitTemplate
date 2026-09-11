@@ -21,7 +21,15 @@ class RTSUNITTEMPLATE_API AWidgetController : public AControllerBase
 	GENERATED_BODY()
 
 public:
-	
+
+	// ------------------------------------------------------------------------------------------
+	// Entwickler-Hilfe. Wird vom UCheatWidget benutzt, um die aktuelle Siegbedingung zu erfuellen.
+	// Muss ueber den Server laufen: die Siegabwicklung sitzt im GameMode, und den gibt es auf
+	// einem Client gar nicht - ein Direktaufruf waere im Netzspiel wirkungslos.
+	// ------------------------------------------------------------------------------------------
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "RTSUnitTemplate|Cheat")
+	void Server_CheatWinCurrentLevel();
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SaveLevel(const FString& SlotName);
 
@@ -74,6 +82,14 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpendAbilityPointsByTag(EGASAbilityInputID AbilityID, int Ability, const int32 UnitIndex);
+
+	/** Die im AbilityChooser gewaehlte Tierklasse (Units.Tier.1-4), vom Widget gesetzt.
+	 *
+	 *  Ist sie gueltig, schreibt SpendAbilityPointsByTag in die Vorlage DIESER Klasse statt
+	 *  in den TalentTag der angeklickten Einheit. Ohne das zeigten und setzten alle vier
+	 *  Reiter dasselbe, weil die Einheit beim Umschalten dieselbe bleibt. */
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag ChooserTierTag;
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void ResetAbility(const int32 UnitIndex);

@@ -280,6 +280,60 @@ int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 
 	int32 Layer = LayerId + 1;
 
+	// --- Kopfzeile: verfuegbare Punkte und Vergabetakt -----------------------------------
+	//
+	// Beides stand bisher nirgends. OnGetAvailablePoints war zwar verdrahtet, wurde aber nie
+	// abgerufen - man sah also weder, wieviele Punkte man hat, noch dass ueberhaupt welche
+	// kommen. Genau das war der Eindruck "ich bekomme keine Punkte": vergeben werden sie
+	// (ACameraControllerBase::GrantPeriodicTalentPoints, Vorgabe alle 60 s je Einheit), nur
+	// zeigte es niemand an.
+	if (OnGetAvailablePointsDelegate.IsBound() || OnGetHeaderTextDelegate.IsBound())
+	{
+		const TSharedRef<FSlateFontMeasure> MessDienst =
+			FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		const FSlateFontInfo KopfSchrift = FCoreStyle::GetDefaultFontStyle("Bold", TooltipTitleFontSize);
+
+		FString Kopf;
+		if (OnGetHeaderTextDelegate.IsBound())
+		{
+			Kopf = OnGetHeaderTextDelegate.Execute();
+		}
+		else
+		{
+			Kopf = FString::Printf(TEXT("Points: %d"), OnGetAvailablePointsDelegate.Execute());
+		}
+
+		if (!Kopf.IsEmpty())
+		{
+			const FVector2D KopfMass = MessDienst->Measure(Kopf, KopfSchrift);
+
+			// NEBEN den Reset-Knopf, nicht darueber.
+			//
+			// Beide sassen bisher in der linken oberen Ecke: der Knopf auf (10,10)-(106,36), die
+			// Kopfzeile auf (12,10). Sie ueberlagerten sich also vollstaendig - gemeldet am
+			// 10.09.2026. Die Anfangsposition kommt jetzt aus ResetButtonRect selbst, damit eine
+			// Aenderung an der Knopfgroesse die Ueberlagerung nicht erneut herbeifuehren kann.
+			const FSlateRect KnopfFlaeche = ResetButtonRect(LocalSize);
+			const float Abstand = 12.f;
+			const FVector2D KopfPos(
+				KnopfFlaeche.Right + Abstand,
+				KnopfFlaeche.Top + FMath::Max(0.f, (KnopfFlaeche.GetSize().Y - KopfMass.Y) * 0.5f));
+
+			// Dunkle Unterlegung, damit die Zeile auf jedem Hintergrund lesbar bleibt.
+			FSlateDrawElement::MakeBox(OutDrawElements, Layer,
+				AllottedGeometry.ToPaintGeometry(KopfMass + FVector2D(16.f, 8.f),
+					FSlateLayoutTransform(1.f, KopfPos - FVector2D(8.f, 4.f))),
+				FCoreStyle::Get().GetBrush("WhiteBrush"), ESlateDrawEffect::None,
+				FLinearColor(0.f, 0.f, 0.f, 0.55f));
+
+			FSlateDrawElement::MakeText(OutDrawElements, Layer + 1,
+				AllottedGeometry.ToPaintGeometry(KopfMass, FSlateLayoutTransform(1.f, KopfPos)),
+				Kopf, KopfSchrift, ESlateDrawEffect::None, AvailableColor);
+
+			Layer += 2;
+		}
+	}
+
 	// --- 0. Empty-state placeholder ---
 	if (Nodes.Num() == 0)
 	{

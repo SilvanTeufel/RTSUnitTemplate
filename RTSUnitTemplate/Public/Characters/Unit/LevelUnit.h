@@ -238,7 +238,18 @@ public:
 
 	// ---------------------------------------------------------------------
 	//  Radial Attribute Tree (alternative to the TalentChooser)
-	//  Spends the unit's LevelData.TalentPoints into attributes via a table.
+	//
+	//  EIGENER Punktevorrat, getrennt vom TalentChooser.
+	//
+	//  Bis zum 10.09.2026 zahlte der Baum aus LevelData.TalentPoints - demselben Topf, aus dem
+	//  auch der TalentChooser, das einheitenspezifische Attributfenster und vor allem
+	//  AutoLevelUp() bedient werden. AutoLevelUp investiert selbsttaetig, bis der Topf leer ist,
+	//  also standen im Baum staendig 0 Punkte: die Vergabe im Zeittakt legte 5 nach, das
+	//  Selbstaufwerten gab sie sofort wieder aus. Genau das war das gemeldete "irgendwas setzt
+	//  die Punkte automatisch auf 0" und das Springen zwischen 5 und 10.
+	//
+	//  Der Baum fuehrt deshalb seinen eigenen Vorrat. Die Attributwerte selbst bleiben geteilt -
+	//  Stamina, AttackPower und die uebrigen kennen keine Herkunft -, nur die PUNKTE sind getrennt.
 	// ---------------------------------------------------------------------
 
 	/** DataTable of FAttributeTreeNodeRow describing the ring-shaped tree. Set in the editor (present on server & client). */
@@ -249,6 +260,23 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attribute Tree")
 	TArray<FAttributeTreeNodeState> AttributeTreeNodes;
 
+	/**
+	 * Freie Punkte NUR fuer den Attributbaum. Nichts anderes greift darauf zu.
+	 *
+	 * Repliziert, weil das Widget auf dem Client zeichnet: ohne Replikation stuenden dort
+	 * dauerhaft 0 Punkte, obwohl der Server welche vergeben hat.
+	 */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attribute Tree")
+	int32 AttributeTreePoints = 0;
+
+	/** Bereits im Baum ausgegebene Punkte - Grundlage der Rueckerstattung beim Zuruecksetzen. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attribute Tree")
+	int32 UsedAttributeTreePoints = 0;
+
+	/** Legt Punkte in den Vorrat des Baums. Nur der Server; die Replikation traegt sie zum Client. */
+	UFUNCTION(BlueprintCallable, Category = "Attribute Tree")
+	void GrantAttributeTreePoints(int32 Anzahl);
+
 	/** Points invested into a specific node (0 if none). */
 	UFUNCTION(BlueprintPure, Category = "Attribute Tree")
 	int32 GetAttributeTreeNodePoints(FName NodeId) const;
@@ -257,7 +285,7 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Attribute Tree")
 	bool IsAttributeTreeNodeUnlocked(FName NodeId) const;
 
-	/** True when the node is unlocked, not yet full, and the unit still has a talent point. */
+	/** True when the node is unlocked, not yet full, and the unit still has an ATTRIBUTE TREE point. */
 	UFUNCTION(BlueprintPure, Category = "Attribute Tree")
 	bool CanInvestInAttributeTreeNode(FName NodeId) const;
 
@@ -268,17 +296,35 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Attribute Tree")
 	bool DoesAttributeTreeNodeMatchUnit(const FAttributeTreeNodeRow& Row) const;
 
-	/** Server-authoritative: invest one talent point through a node. Returns true if a point was actually spent. */
+	/** Server-authoritative: invest one ATTRIBUTE TREE point through a node. True if a point was spent. */
 	UFUNCTION(BlueprintCallable, Category = "Attribute Tree")
 	bool InvestInAttributeTreeNode(FName NodeId);
 
-	/** Server-authoritative: clear the tree's node state and refund/zero all talents (via ResetTalents). */
+	/**
+	 * Server-authoritative: leert die Knoten und erstattet die Punkte des Baums zurueck.
+	 *
+	 * Ruft zusaetzlich ResetTalents(). Das ist ABSICHT und kein Rueckfall in den gemeinsamen Topf:
+	 * beide Wege schreiben in DIESELBEN Attribute (Stamina, AttackPower, ...), und es wird nirgends
+	 * mitgefuehrt, welcher Punkt welchen Anteil gestellt hat. Wer die Attribute auf null setzt,
+	 * muss deshalb auch die Talentpunkte erstatten - sonst waeren sie ersatzlos weg.
+	 */
 	UFUNCTION(BlueprintCallable, Category = "Attribute Tree")
 	void ResetAttributeTree();
 
 protected:
 	/** Dispatches to the matching InvestPointInto* function. Returns false only for an invalid enum. */
 	bool ApplyAttributeTreeStat(EAttributeTreeStat Stat);
+
+	/**
+	 * Hebt ein Attribut an, OHNE Talentpunkte anzufassen - der Weg des Baums.
+	 *
+	 * InvestPointInto* prueft LevelData.TalentPoints und zieht davon ab; genau ueber diese
+	 * Funktionen lief der Baum bisher und teilte sich damit den Vorrat. Hier wird nur der
+	 * Gameplay-Effekt gelegt, die Abrechnung macht InvestInAttributeTreeNode aus seinem eigenen
+	 * Vorrat. Rueckgabe false, wenn das Attribut schon an MaxTalentsPerStat steht oder der Effekt
+	 * fehlt - der Knoten darf trotzdem weiterwachsen, siehe dort.
+	 */
+	bool ApplyAttributeTreeEffectOnly(EAttributeTreeStat Stat);
 
 public:
 

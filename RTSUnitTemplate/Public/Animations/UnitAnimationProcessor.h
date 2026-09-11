@@ -8,6 +8,7 @@
 #include "MassEntityTypes.h"
 #include "Core/UnitData.h"
 #include "Engine/DataTable.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "UnitAnimationProcessor.generated.h"
 
 USTRUCT(BlueprintType)
@@ -68,6 +69,21 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
 
     UPROPERTY(Transient)
     TEnumAsByte<UnitData::EState> LastProcessedState = UnitData::None;
+
+    /**
+     * Wohin die Instanzdaten zuletzt geschrieben wurden.
+     *
+     * Eine Einheit bekommt ihre Instanz zuerst auf der EIGENEN ISMComponent und wird danach vom
+     * UUnitVisualManager auf eine gepoolte ISM umgezogen. Der Erstschreibvorgang landet dann auf der
+     * alten Komponente, auf der neuen stehen weiter Nullen - also Frames 0..0 und damit ein Standbild,
+     * bis zufaellig ein Zustandswechsel neu schreibt. Deshalb merken wir uns das Ziel und schreiben
+     * neu, sobald es sich geaendert hat.
+     */
+    UPROPERTY(Transient)
+    TWeakObjectPtr<UInstancedStaticMeshComponent> LastWrittenISM = nullptr;
+
+    UPROPERTY(Transient)
+    int32 LastWrittenInstanceIndex = INDEX_NONE;
 
 	UPROPERTY(Transient)
 	float PlayRate = 1.0f;
@@ -162,4 +178,51 @@ protected:
     int32 PrevPlayRateCustomDataIndex = 12;
 
     FMassEntityQuery EntityQuery;
+
+    /**
+     * Diagnostic only: is a unit playing a movement animation while it does not move?
+     *
+     * Measures the ACTUAL displacement per entity, not the velocity fragment - the fragment holds
+     * what the movement wants, which is exactly the value in doubt here.
+     */
+    struct FAnimStandWatch
+    {
+        FVector  LastLocation = FVector::ZeroVector;
+        float    SecondsStanding = 0.f;
+        bool     bHasLocation = false;
+    };
+    TMap<FMassEntityHandle, FAnimStandWatch> AnimStandWatches;
+
+    float AnimStandReportTimer = 0.f;
+
+    int32 AnimStandObserved = 0;      // entities in a movement state that were looked at
+    int32 AnimStandCount = 0;         // ... of those, standing still long enough to be visible
+    int32 AnimStandSkeletal = 0;      // ... of those, drawn as a real skeletal mesh
+    int32 AnimStandWantsToMove = 0;   // ... of those, whose velocity fragment still asks for speed
+    int32 AnimStandNoVelocity = 0;    // ... of those, that carry no velocity fragment at all
+    int32 AnimStandOnViewport = 0;    // ... of those, that are actually on screen (the visible case)
+    int32 AnimStandObservedSkeletal = 0; // how many of the observed entity-frames were skeletal
+    float AnimStandNextDetailTime = 0.f; // rate limit for the per-case line
+
+    /**
+     * Show a unit that does not move as standing, even while its state says it is walking.
+     *
+     * Applies to movement states only - standing is the correct picture for Attack, Pause, Build,
+     * ResourceExtraction and Casting, and those are never touched. Only the animation row is
+     * swapped; the unit's own state stays exactly as it was.
+     */
+    UPROPERTY(EditAnywhere, Category = "Animations")
+    bool bAnimStandFix = true;
+
+    /** Switches the diagnostic above off; it costs one map lookup per moving entity. */
+    UPROPERTY(EditAnywhere, Category = "Mass|Diagnostics")
+    bool bAnimStandDiagnostics = true;
+
+    /** Below this measured ground speed a unit counts as standing (uu/s). */
+    UPROPERTY(EditAnywhere, Category = "Mass|Diagnostics")
+    float AnimStandSpeedThreshold = 5.f;
+
+    /** How long it has to stand before it counts - a single blocked frame is not the problem. */
+    UPROPERTY(EditAnywhere, Category = "Mass|Diagnostics")
+    float AnimStandMinSeconds = 0.5f;
 };

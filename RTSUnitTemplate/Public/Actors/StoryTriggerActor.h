@@ -94,6 +94,32 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	/**
+	 * Loest die Story von Hand aus - ohne dass jemand die Auslaeseflaeche betreten muss.
+	 *
+	 * Gedacht fuer Aufhaenger wie OnHealthThresholdCrossed oder IsDead. Der Name ist bewusst
+	 * derselbe wie beim AStoryDialogueTriggerActor, damit bestehende Blueprint-Verdrahtungen
+	 * beim Umhaengen nicht neu gezogen werden muessen.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Story")
+	void TriggerStory();
+
+	/**
+	 * Zeigt Story-Zeilen, OHNE dass ein Aktor im Level stehen muss.
+	 *
+	 * Gedacht als Ersatz fuer UStoryBlueprintLibrary::PlayStoryScene an Stellen, an denen
+	 * waehrenddessen weitergespielt wird. PlayStoryScene oeffnet den vollen Dialog
+	 * (WBP_StoryDialogue_AH), der Eingabe und Kamera an sich zieht - im Bosskampf heisst das,
+	 * dass der Spieler mitten im Gefecht die Steuerung verliert. Diese Fassung reiht die
+	 * Zeilen stattdessen in die StoryTriggerQueue: kleines Bild oben links, eine Figur nach
+	 * der anderen, Spiel laeuft weiter.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Story",
+	          meta = (WorldContext = "WorldContextObject", AutoCreateRefTerm = "RowIds"))
+	static void EnqueueStoryRows(UObject* WorldContextObject, UDataTable* StoryTable,
+	                             const TArray<FName>& RowIds,
+	                             TSubclassOf<UStoryWidgetBase> FallbackWidgetClass);
+
 	UFUNCTION()
 	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 
@@ -111,6 +137,19 @@ protected:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Data")
 	FName StoryRowId;
+
+	/**
+	 * Mehrere Zeilen nacheinander, in Array-Reihenfolge - fuer Dialoge WAEHREND des Spiels.
+	 *
+	 * Ist die Liste gefuellt, gewinnt sie gegen StoryRowId und UseRandomRow. Jede Zeile wird
+	 * einzeln in die StoryTriggerQueue eingereiht; die zeigt immer nur EIN Widget gleichzeitig
+	 * und startet das naechste erst, wenn das vorige abgelaufen ist. Damit spricht nie mehr als
+	 * eine Figur auf einmal, und das Spiel laeuft waehrenddessen normal weiter - anders als beim
+	 * AStoryDialogueTriggerActor, der Eingabe und Kamera an sich zieht und deshalb nur in
+	 * Story-Leveln ohne Gameplay etwas zu suchen hat.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Data")
+	TArray<FName> StoryRowIds;
 
 	// Widget class to create (choose a BP subclass of StoryWidgetBase)
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Story)
@@ -179,4 +218,10 @@ private:
 	FTimerHandle RemoveWidgetTimer;
 
 	void RemoveActiveWidget();
+
+	/** Reiht die Story ein: entweder die Zeilenfolge aus StoryRowIds oder die eine gemerkte Zeile. */
+	void StoryEinreihen();
+
+	/** Baut aus einer Tabellenzeile einen Warteschlangeneintrag und reiht ihn ein. */
+	void ZeileEinreihen(const struct FStoryWidgetTable& Zeile);
 };

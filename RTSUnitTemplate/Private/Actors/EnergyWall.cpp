@@ -1,6 +1,8 @@
 ﻿// Copyright 2024 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/EnergyWall.h"
+#include "Mass/EnergyWallBatchSubsystem.h"
+#include "Components/InstancedStaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "NavModifierComponent.h"
@@ -141,10 +143,13 @@ void AEnergyWall::Tick(float DeltaTime)
 			ShieldISM->UpdateInstanceTransform(0, ShieldTransform, false, true, true);
 		}
 
+		// Die eigenen Instanzen oben tragen die Y-Skalierung; der Batch bekommt sie in Weltlage.
+		SchreibeBatchTransformationen();
+
 		// Handle Shield Visibility (Flickering or hidden)
 		if (!bIsVisibleByFoW)
 		{
-			ShieldISM->SetHiddenInGame(true);
+			SetzeSchildSichtbar(false);
 		}
 		else if (bIsInitializing)
 		{
@@ -155,20 +160,20 @@ void AEnergyWall::Tick(float DeltaTime)
 					float FlickerAlpha = (Alpha - 0.5f) * 2.f;
 					float VisibilityProb = FMath::Lerp(0.1f, 1.0f, FlickerAlpha);
 					float Frequency = FMath::Lerp(25.f, 5.f, FlickerAlpha);
-					const float SwitchProb = ShieldISM->bHiddenInGame ? (Frequency * DeltaTime * VisibilityProb) : (Frequency * DeltaTime * (1.f - VisibilityProb));
+					const float SwitchProb = !bSchildZuletztSichtbar ? (Frequency * DeltaTime * VisibilityProb) : (Frequency * DeltaTime * (1.f - VisibilityProb));
 					if (FMath::FRand() < SwitchProb)
 					{
-						ShieldISM->SetHiddenInGame(!ShieldISM->bHiddenInGame);
+						SetzeSchildSichtbar(!bSchildZuletztSichtbar);
 					}
 				}
 				else
 				{
-					ShieldISM->SetHiddenInGame(false);
+					SetzeSchildSichtbar(true);
 				}
 			}
 			else
 			{
-				ShieldISM->SetHiddenInGame(true);
+				SetzeSchildSichtbar(false);
 			}
 		}
 		else if (bIsDespawning)
@@ -180,20 +185,20 @@ void AEnergyWall::Tick(float DeltaTime)
 					float FlickerAlpha = Alpha * 2.f;
 					float VisibilityProb = FMath::Lerp(0.9f, 0.0f, FlickerAlpha);
 					float Frequency = FMath::Lerp(25.f, 5.f, FlickerAlpha);
-					const float SwitchProb = ShieldISM->bHiddenInGame ? (Frequency * DeltaTime * VisibilityProb) : (Frequency * DeltaTime * (1.f - VisibilityProb));
+					const float SwitchProb = !bSchildZuletztSichtbar ? (Frequency * DeltaTime * VisibilityProb) : (Frequency * DeltaTime * (1.f - VisibilityProb));
 					if (FMath::FRand() < SwitchProb)
 					{
-						ShieldISM->SetHiddenInGame(!ShieldISM->bHiddenInGame);
+						SetzeSchildSichtbar(!bSchildZuletztSichtbar);
 					}
 				}
 				else
 				{
-					ShieldISM->SetHiddenInGame(false);
+					SetzeSchildSichtbar(true);
 				}
 			}
 			else
 			{
-				ShieldISM->SetHiddenInGame(true);
+				SetzeSchildSichtbar(false);
 			}
 		}
 	}
@@ -275,6 +280,10 @@ void AEnergyWall::InitializeWallInternal()
 
 	bIsInitialized = true;
 
+	// Beim gemeinsamen Batch anmelden. Die eigenen Instanzen darunter bleiben bestehen: sie sind
+	// die Vorlage fuer Mesh, Material und die relative Lage der drei Teile.
+	MeldeBeimBatchAn();
+
 	// Add instance for top rod with 0 scale at its Blueprint position
 	TopRodISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(1.f, 0.f, 1.f)));
 
@@ -283,7 +292,7 @@ void AEnergyWall::InitializeWallInternal()
 
 	// Add instance for shield plane at its Blueprint position, and hide it
 	ShieldISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(1.f, TargetScaleY, 1.f)));
-	ShieldISM->SetHiddenInGame(true);
+	SetzeSchildSichtbar(false);
 
 	// A wall that replicated in already-deactivated (e.g. to a late-joining client) must stay
 	// collapsed + hidden and NOT play the spawn/inflate animation. The instances above still exist
@@ -315,20 +324,18 @@ void AEnergyWall::UpdateVisibility()
 		bIsVisibleByFoW = true;
 	}
 
-	if (TopRodISM) TopRodISM->SetHiddenInGame(!bIsVisibleByFoW);
-	if (BottomRodISM) BottomRodISM->SetHiddenInGame(!bIsVisibleByFoW);
-	
-	if (ShieldISM)
+	// Sichtbarkeit geht ueber die Instanzskalierung, nicht mehr ueber SetHiddenInGame.
+	//
+	// Im gemeinsamen Batch-ISM gibt es keine Sichtbarkeit JE INSTANZ - SetHiddenInGame wuerde ALLE
+	// Waende ausblenden. Unsichtbar heisst hier Skalierung null; siehe SchreibeBatchTransformationen.
+	if (!bIsInitializing && !bIsDespawning)
 	{
-		if (!bIsVisibleByFoW || bIsDeactivated)
-		{
-			ShieldISM->SetHiddenInGame(true);
-		}
-		else if (!bIsInitializing && !bIsDespawning)
-		{
-			ShieldISM->SetHiddenInGame(false);
-		}
+		// Ausserhalb von Auf- und Abbau bestimmt der Nebel das Schild. Waehrend beider Phasen
+		// steuert der Tick das Flackern und darf hier nicht ueberschrieben werden.
+		bSchildZuletztSichtbar = bIsVisibleByFoW && !bIsDeactivated;
 	}
+
+	SchreibeBatchTransformationen();
 }
 
 void AEnergyWall::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -567,21 +574,18 @@ void AEnergyWall::DeactivateNavigation()
 
 void AEnergyWall::ApplyDespawnEffects()
 {
-	TArray<UInstancedStaticMeshComponent*> Components = { ShieldISM, TopRodISM, BottomRodISM };
-	for (UInstancedStaticMeshComponent* Comp : Components)
+	// Aufloesezeit geht in Custom Data 0, nicht mehr auf ein dynamisches Material JE WAND.
+	//
+	// Im gemeinsamen Batch-ISM teilen sich alle Waende EIN Material - ein dynamisches Material zu
+	// erzeugen haette allen dieselbe Aufloesezeit gegeben, und die zuerst gebaute Wand haette die
+	// Animation aller uebrigen ausgeloest. Das Material liest den Wert aus PerInstanceCustomData
+	// (Platz 0) statt aus dem Skalarparameter DespawnStartTimeParameterName.
+	if (UEnergyWallBatchSubsystem* Batch = UEnergyWallBatchSubsystem::Get(this))
 	{
-		for (int32 i = 0; i < Comp->GetNumMaterials(); ++i)
-		{
-			UMaterialInterface* Mat = Comp->GetMaterial(i);
-			if (Mat)
-			{
-				UMaterialInstanceDynamic* DynamicMat = Comp->CreateDynamicMaterialInstance(i, Mat);
-				if (DynamicMat)
-				{
-					DynamicMat->SetScalarParameterValue(DespawnStartTimeParameterName, GetWorld()->GetTimeSeconds());
-				}
-			}
-		}
+		const float Jetzt = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		Batch->SetzeAufloesebeginn(EEnergyWallPart::TopRod,    BatchIndexTop,    Jetzt);
+		Batch->SetzeAufloesebeginn(EEnergyWallPart::BottomRod, BatchIndexBottom, Jetzt);
+		Batch->SetzeAufloesebeginn(EEnergyWallPart::Shield,    BatchIndexShield, Jetzt);
 	}
 }
 
@@ -679,7 +683,7 @@ void AEnergyWall::StartDespawn(AActor* DestroyedActor)
 			InstTransform.SetScale3D(FVector(1.f, 0.f, 1.f));
 			BottomRodISM->UpdateInstanceTransform(0, InstTransform, false, true, true);
 		}
-		if (ShieldISM) ShieldISM->SetHiddenInGame(true);
+		if (ShieldISM) SetzeSchildSichtbar(false);
 
 		DeactivateNavigation(); // idempotent; nav is already down for a deactivated wall
 		if (HasAuthority())
@@ -698,4 +702,108 @@ void AEnergyWall::StartDespawn(AActor* DestroyedActor)
 	{
 		SetLifeSpan(DespawnDelay);
 	}
+}
+
+
+// ============================================================================================
+// Batch-Zeichnen (09.09.2026)
+//
+// Vorher hielt jede Wand drei eigene ISM-Komponenten mit je EINER Instanz - bei N Waenden also
+// 3N Zeichenaufrufe. Die Komponenten bleiben als Mesh- und Materialquelle bestehen (das Blueprint
+// setzt sie), werden aber ausgeblendet; gezeichnet wird ueber drei gemeinsame ISMs im
+// UEnergyWallBatchSubsystem.
+//
+// Die Instanztransformationen waren rein LOKAL (Position und Drehung null, nur die Y-Skalierung
+// aenderte sich) - die Lage kam von der Aktortransformation. Im gemeinsamen ISM muss beides
+// verrechnet werden, deshalb Komponententransformation * Skalierung.
+// ============================================================================================
+
+void AEnergyWall::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	MeldeVomBatchAb();
+	Super::EndPlay(EndPlayReason);
+}
+
+void AEnergyWall::MeldeBeimBatchAn()
+{
+	UEnergyWallBatchSubsystem* Batch = UEnergyWallBatchSubsystem::Get(this);
+	if (!Batch || BatchIndexTop != INDEX_NONE)
+	{
+		return;
+	}
+
+	// Eigene Komponenten nicht mehr zeichnen - sie bleiben nur als Vorlage stehen.
+	if (TopRodISM)    { TopRodISM->SetVisibility(false, true); }
+	if (BottomRodISM) { BottomRodISM->SetVisibility(false, true); }
+	if (ShieldISM)    { ShieldISM->SetVisibility(false, true); }
+
+	BatchIndexTop    = Batch->BelegePlatz(EEnergyWallPart::TopRod,    TopRodISM,    FTransform::Identity);
+	BatchIndexBottom = Batch->BelegePlatz(EEnergyWallPart::BottomRod, BottomRodISM, FTransform::Identity);
+	BatchIndexShield = Batch->BelegePlatz(EEnergyWallPart::Shield,    ShieldISM,    FTransform::Identity);
+
+	SchreibeBatchTransformationen();
+}
+
+void AEnergyWall::SetzeSchildSichtbar(bool bSichtbar)
+{
+	if (bSchildZuletztSichtbar == bSichtbar)
+	{
+		return;
+	}
+
+	bSchildZuletztSichtbar = bSichtbar;
+	SchreibeBatchTransformationen();
+}
+
+void AEnergyWall::MeldeVomBatchAb()
+{
+	UEnergyWallBatchSubsystem* Batch = UEnergyWallBatchSubsystem::Get(this);
+	if (!Batch)
+	{
+		return;
+	}
+
+	Batch->GibPlatzFrei(EEnergyWallPart::TopRod,    BatchIndexTop);
+	Batch->GibPlatzFrei(EEnergyWallPart::BottomRod, BatchIndexBottom);
+	Batch->GibPlatzFrei(EEnergyWallPart::Shield,    BatchIndexShield);
+
+	BatchIndexTop = INDEX_NONE;
+	BatchIndexBottom = INDEX_NONE;
+	BatchIndexShield = INDEX_NONE;
+}
+
+void AEnergyWall::SchreibeBatchTransformationen()
+{
+	UEnergyWallBatchSubsystem* Batch = UEnergyWallBatchSubsystem::Get(this);
+	if (!Batch || BatchIndexTop == INDEX_NONE)
+	{
+		return;
+	}
+
+	// Die Y-Skalierung ist der Auf- und Abbau der Wand; Position und Drehung kommen aus der
+	// Komponente, die am Wandaktor haengt.
+	// Unsichtbar = Skalierung null.
+	//
+	// Bewusst NICHT ueber Custom Data: gemessen am 09.09.2026 hat KEINES der beiden Wandmaterialien
+	// (M_Shield_AH_Inst, MI_Emissive_03) einen passenden Parameter - das Material haette also erst
+	// umgebaut werden muessen. Ueber die Skalierung geht es ohne jeden Materialeingriff, und es
+	// passt zum vorhandenen Aussehen: die Wand faehrt beim Auf- und Abbau ohnehin ueber die
+	// Y-Skalierung hoch und runter.
+	auto Weltlage = [this](const UInstancedStaticMeshComponent* Komponente, bool bSichtbar) -> FTransform
+	{
+		FTransform T = Komponente ? Komponente->GetComponentTransform() : GetActorTransform();
+		if (!bSichtbar)
+		{
+			T.SetScale3D(FVector::ZeroVector);
+			return T;
+		}
+
+		const FVector S = T.GetScale3D();
+		T.SetScale3D(FVector(S.X, S.Y * CurrentScaleY, S.Z));
+		return T;
+	};
+
+	Batch->SetzeTransform(EEnergyWallPart::TopRod,    BatchIndexTop,    Weltlage(TopRodISM,    bIsVisibleByFoW));
+	Batch->SetzeTransform(EEnergyWallPart::BottomRod, BatchIndexBottom, Weltlage(BottomRodISM, bIsVisibleByFoW));
+	Batch->SetzeTransform(EEnergyWallPart::Shield,    BatchIndexShield, Weltlage(ShieldISM,    bIsVisibleByFoW && bSchildZuletztSichtbar));
 }

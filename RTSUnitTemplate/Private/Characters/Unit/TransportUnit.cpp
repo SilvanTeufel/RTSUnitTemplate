@@ -263,7 +263,7 @@ void ATransportUnit::MulticastApplyUnloadEffects_Implementation(AUnitBase* Loade
 
 	LoadedUnit->SetActorLocation(FinalUnloadLocation);
 	LoadedUnit->SetTranslationLocation(FinalUnloadLocation); // also re-anchors StoredLocation (FMassAIStateFragment), server + clients
-	LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetBaseRunSpeed());
+	LoadedUnit->UpdatePredictionFragment(FinalUnloadLocation, LoadedUnit->Attributes->GetRunSpeed());
 	LoadedUnit->StopMassMovement();
 	LoadedUnit->EnableDynamicObstacle(true);
 	LoadedUnit->EditUnitDetectable(true);

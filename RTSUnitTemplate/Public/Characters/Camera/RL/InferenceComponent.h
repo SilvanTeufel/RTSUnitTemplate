@@ -119,6 +119,41 @@ struct FGameStateData
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
 	int32 LastActionIndex = -1;
 
+	/**
+	 * Verstrichene Spielzeit in Sekunden.
+	 *
+	 * Der Lehrer liest sie unmittelbar: jede Regelzeile hat ein GameTimeCap [Min, Max], und eine
+	 * Zeile ausserhalb ihres Fensters faellt stillschweigend durch. Im Zustandsvektor kam die Zeit
+	 * bisher ueberhaupt nicht vor - dieselbe Spielsituation fuehrte damit in Minute 2 und Minute 12
+	 * zu verschiedenen richtigen Antworten, und das Klonen konnte den Unterschied nicht sehen.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+	float GameTimeSeconds = 0.0f;
+
+	// Bereits BEAUFTRAGTE, noch nicht fertige Bauten je Hotkey-Tag (die Bauwarteschlange).
+	//
+	// Der Lehrer zaehlt in CountByClassTag mit bIncludePendingAreas=true, also einschliesslich der
+	// geplanten Flaechen - genau deshalb baut er eine MatterForge nicht zweimal. Der Vektor kannte
+	// nur die FERTIGEN Einheiten; fuer das Netz sah ein bereits erteilter Bauauftrag aus wie gar
+	// kein Auftrag, und es beauftragte erneut. Das ist einer der Innenzustaende, die der
+	// Abschlussbericht vom 29.08. als Erklaerung fuer die 54,5-Prozent-Grenze benannt hat.
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt2TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt3TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt4TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt5TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt6TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl1TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl2TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl3TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl4TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl5TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Ctrl6TagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlQTagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlWTagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlETagPendingBuildCount = 0;
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlRTagPendingBuildCount = 0;
+
 	// Per-tag unit counts (friendly/enemy) for selection/ability groups
 	// Alt1..Alt6
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 Alt1TagFriendlyUnitCount = 0;
@@ -298,6 +333,15 @@ public:
 	UFUNCTION(BlueprintPure, Category = "AI|RL")
 	int32 GetLastChosenActionIndex() const { return LastChosenActionIndex; }
 
+	/**
+	 * Nachtragen, was in diesem Zug tatsaechlich gespielt wurde, wenn nicht das Netz entschieden hat.
+	 * Gebraucht fuer die DAgger-Mischung (rts.rl.dagger.beta): dort uebernimmt zeitweise die Regel-KI,
+	 * und ohne dieses Nachtragen sieht das Netz im naechsten Zug ein veraltetes LastActionIndex - der
+	 * Zustandsvektor wiche dann systematisch von dem ab, auf dem trainiert wurde.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "AI|RL")
+	void SetLastChosenActionIndex(int32 ActionIndex) { LastChosenActionIndex = ActionIndex; }
+
 	// Expose for BT task to fetch JSON for an index
 	UFUNCTION(BlueprintCallable, Category = "AI|Inference")
 	FString GetActionAsJSON(int32 ActionIndex);
@@ -391,7 +435,12 @@ private:
 	 * Turns the network's raw scores into one action - greedily, or by sampling the softmax when
 	 * rts.ai.rl.temperature is above zero. See the CVar for why a cloned policy needs the latter.
 	 */
-	static int32 SelectActionFromScores(const TArray<float>& Scores);
+	// Nicht mehr static: die Aktionsmaske braucht die aktuelle Auswahl des Controllers.
+	int32 SelectActionFromScores(const TArray<float>& Scores);
+
+	/** Trifft dieser Faehigkeitsdruck bei der aktuellen Auswahl ueberhaupt eine Faehigkeit?
+	 *  Nur fuer die Aktionen 10-15 relevant, alles andere ist immer moeglich. */
+	bool IstAktionMoeglich(int32 ActionIndex) const;
 
 	static float GetSamplingTemperature();
 
@@ -405,6 +454,21 @@ private:
 	void InitializeActionSpace();
 
 	TArray<FRLAction> ActionSpace;
+
+	/**
+	 * DIAGNOSE (bleibt stehen bis abbestellt): zaehlt, welche Aktionen das Netz tatsaechlich waehlt.
+	 *
+	 * Anlass: in 34 gemessenen Partien hat Team 1 (Netz) NULL Angriffsbefehle abgesetzt, Team 2
+	 * (Regeln) bis zu 90 - bei vergleichbarer oder besserer Bauleistung des Netzes. Es baut also
+	 * eine Armee und schickt sie nie los. Ohne diese Zaehlung ist nicht zu unterscheiden, ob das
+	 * Netz den Angriffsschritt gar nicht waehlt oder ihn waehlt und er wirkungslos bleibt.
+	 */
+	TArray<int32> AktionsZaehler;
+	int32 AktionenSeitBericht = 0;
+	double LetzterAktionsBericht = 0.0;
+
+	/** Schreibt die Verteilung der gewaehlten Aktionen und setzt das Fenster zurueck. */
+	void BerichteAktionsverteilung();
 
 	// Old behavior (RL) - renamed from ChooseJsonAction
 	FString GetActionFromRLModel(const FGameStateData& GameState);

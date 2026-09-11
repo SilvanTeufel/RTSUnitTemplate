@@ -44,6 +44,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
 	bool IsWorker = false;
+
+	/** Wiedereintrittsschutz fuer die Bauuebergabe - siehe AAbilityUnit::SetUnitState. */
+	bool bUebergabeLaeuft = false;
 	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = Ability)
 	void TeleportToValidLocation(const FVector& Destination, float MaxZDifference = 1000.f, float ZOffset = 70.f);
@@ -183,6 +186,16 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	void SpendAbilityPoints( EGASAbilityInputID AbilityID, int AbilityIndex);
+
+	/** Setzt einen Faehigkeits-Slot direkt aus der Vorlage des AbilityChoosers (02.09.2026).
+	 *
+	 *  Anders als SpendAbilityPoints verlangt und verbraucht das keine AbilityPoints: die Wahl
+	 *  im Chooser ist eine Vorlage je Tierklasse und soll unabhaengig vom Punktestand gelten,
+	 *  sonst muesste der Spieler nach jeder neuen Einheit erneut klicken.
+	 *
+	 *  Gibt true zurueck, wenn sich dadurch etwas geaendert hat. */
+	UFUNCTION(BlueprintCallable, Category = Ability)
+	bool ApplyAbilityFromTemplate(EGASAbilityInputID AbilityID, int32 AbilityIndex);
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	int32 DetermineAbilityID(int32 Level);

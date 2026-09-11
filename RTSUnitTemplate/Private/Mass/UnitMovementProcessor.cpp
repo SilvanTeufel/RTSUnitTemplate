@@ -345,10 +345,40 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 }
             }
             
-            if (FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadiusUsed))
+            // ----------------------------------------------------------------------------------
+            // Ankunft: Radius mindestens so gross wie EIN Bewegungsschritt, und am Ziel nicht
+            // weiterlenken. Begruendung am Feld bArrivalGuardInPathMode im Header.
+            //
+            // Ohne den Aufschlag springt die Einheit bei niedriger Bildrate ueber den Zielbereich
+            // hinweg (bei 10 FPS rund 45 Einheiten je Takt), erreicht ihn also nie - und ohne das
+            // Nullen der Sollgeschwindigkeit laeuft sie weiter, kehrt um und pendelt.
+            // ----------------------------------------------------------------------------------
+            // Der Aufschlag gilt NUR fuer 'Punkt gilt als erreicht, Pfad zuruecksetzen' - NICHT
+            // fuer das Anhalten. Erste Fassung nutzte denselben vergroesserten Radius fuer beides,
+            // damit galten Einheiten hunderte Einheiten vor dem Ziel als angekommen und blieben
+            // stehen: die Haengerquote stieg von 6 auf 50 %. GetDeltaTimeSeconds liefert hier das
+            // Prozessorintervall (0,1 s), bei Zeitdehnung entsprechend mehr - der Aufschlag wird
+            // deshalb zusaetzlich gedeckelt.
+            float AcceptanceRadiusUsedFuerPfad = AcceptanceRadiusUsed;
+            if (bArrivalGuardInPathMode)
+            {
+                const float SchrittWeite = DesiredSpeedUsed * Context.GetDeltaTimeSeconds();
+                const float Aufschlag = FMath::Min(SchrittWeite * ArrivalRadiusStepFactor, AcceptanceRadiusUsed * 2.f);
+                AcceptanceRadiusUsedFuerPfad = FMath::Max(AcceptanceRadiusUsed, Aufschlag);
+            }
+
+            if (FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadiusUsedFuerPfad))
             {
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
+            }
+
+            // Anhalten erst am ECHTEN Ankunftsradius - sonst bleibt die Einheit vor dem Ziel stehen.
+            if (bArrivalGuardInPathMode
+                && FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadiusUsed))
+            {
+                // Am Ziel nicht weiterlenken - dieselbe Regel wie bei der Direktsteuerung oben.
+                Steering.DesiredVelocity = FVector::ZeroVector;
             }
             // Neu planen nur bei einem WESENTLICH anderen Ziel, nicht bei jedem Float-Unterschied.
             //
@@ -535,10 +565,40 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 }
             }
      
-            if (FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
+            // ----------------------------------------------------------------------------------
+            // Ankunft: Radius mindestens so gross wie EIN Bewegungsschritt, und am Ziel nicht
+            // weiterlenken. Begruendung am Feld bArrivalGuardInPathMode im Header.
+            //
+            // Ohne den Aufschlag springt die Einheit bei niedriger Bildrate ueber den Zielbereich
+            // hinweg (bei 10 FPS rund 45 Einheiten je Takt), erreicht ihn also nie - und ohne das
+            // Nullen der Sollgeschwindigkeit laeuft sie weiter, kehrt um und pendelt.
+            // ----------------------------------------------------------------------------------
+            // Der Aufschlag gilt NUR fuer 'Punkt gilt als erreicht, Pfad zuruecksetzen' - NICHT
+            // fuer das Anhalten. Erste Fassung nutzte denselben vergroesserten Radius fuer beides,
+            // damit galten Einheiten hunderte Einheiten vor dem Ziel als angekommen und blieben
+            // stehen: die Haengerquote stieg von 6 auf 50 %. GetDeltaTimeSeconds liefert hier das
+            // Prozessorintervall (0,1 s), bei Zeitdehnung entsprechend mehr - der Aufschlag wird
+            // deshalb zusaetzlich gedeckelt.
+            float AcceptanceRadiusFuerPfad = AcceptanceRadius;
+            if (bArrivalGuardInPathMode)
+            {
+                const float SchrittWeite = DesiredSpeed * Context.GetDeltaTimeSeconds();
+                const float Aufschlag = FMath::Min(SchrittWeite * ArrivalRadiusStepFactor, AcceptanceRadius * 2.f);
+                AcceptanceRadiusFuerPfad = FMath::Max(AcceptanceRadius, Aufschlag);
+            }
+
+            if (FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadiusFuerPfad))
             {
                 PathFrag.ResetPath();
                 PathFrag.bIsPathfindingInProgress = false;
+            }
+
+            // Anhalten erst am ECHTEN Ankunftsradius - sonst bleibt die Einheit vor dem Ziel stehen.
+            if (bArrivalGuardInPathMode
+                && FVector::DistSquared2D(CurrentLocation, FinalDestination) <= FMath::Square(AcceptanceRadius))
+            {
+                // Am Ziel nicht weiterlenken - dieselbe Regel wie bei der Direktsteuerung oben.
+                Steering.DesiredVelocity = FVector::ZeroVector;
             }
             // Neu planen nur bei einem WESENTLICH anderen Ziel, nicht bei jedem Float-Unterschied.
             //

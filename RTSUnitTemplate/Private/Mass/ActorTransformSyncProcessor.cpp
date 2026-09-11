@@ -11,8 +11,10 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/WorkArea.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/Volume.h"
 #include "Async/Async.h"
 #include "NavigationSystem.h"
+#include "LandscapeProxy.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
 
@@ -218,6 +220,52 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         
     */
 
+    // ================================================================================================
+    // LUX-ANPASSUNG (28.08.2026) - Rettung, wenn eine Einheit durch die Map faellt.
+    // Silvan: "Gegen das durch die Map fallen brauchen wir noch einen besseren Fix, der den
+    // Character wieder an die richtige Position setzt. Im Moment kommt es zum Ruckeln."
+    //
+    // Das Ruckeln kommt vom bisherigen Verhalten: die Einheit wurde mit FInterpConstantTo
+    // Stueck fuer Stueck nach oben GEZOGEN, waehrend die Kamera ihr folgte - und im selben Takt
+    // zog die Bodenpruefung sie wieder herunter. Eine Rettung ist kein Bewegungsablauf, sondern
+    // eine Korrektur: sie gehoert HART gesetzt, in einem Bild.
+    //
+    // Ausgeloest wird nur, wenn wirklich nichts mehr traegt - entweder lange genug bodenlos
+    // (FallRescueAfterSeconds) oder unterhalb einer Hoehe, aus der niemand zurueckkommt
+    // (FallRescueBelowZ). Kurze bodenlose Momente an Kanten und Rampen bleiben unberuehrt.
+    //
+    // Ziel ist die letzte Position MIT belegtem Boden, nicht die Startposition: LastGroundLocation
+    // allein ist nur eine Hoehe und wuerde die Einheit an derselben XY-Stelle - also im Loch -
+    // wieder hochsetzen. Ohne je gesehenen Boden greift die Rettung gar nicht; die erste sichere
+    // Position wird beim ersten Bodenkontakt gesetzt, in aller Regel direkt am Spawn.
+    // ================================================================================================
+    if (!CharFragment.bIsFlying && !bIsDead && CharFragment.bHasSafeLocation)
+    {
+        const bool bZuTief  = CurrentZ < FallRescueBelowZ;
+        const bool bZuLange = FallRescueAfterSeconds > 0.f
+                           && CharFragment.TimeWithoutGround >= FallRescueAfterSeconds;
+
+        if (bZuTief || bZuLange)
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("[Absturz-Rettung] %s von (%.0f,%.0f,%.0f) zurueck auf (%.0f,%.0f,%.0f) - %s"),
+                *UnitBase->GetName(),
+                InOutFinalLocation.X, InOutFinalLocation.Y, CurrentZ,
+                CharFragment.LastSafeLocation.X, CharFragment.LastSafeLocation.Y, CharFragment.LastSafeLocation.Z,
+                bZuTief ? TEXT("unter der Rettungshoehe") : TEXT("zu lange ohne Boden"));
+
+            InOutFinalLocation = CharFragment.LastSafeLocation;                       // hart, ohne Interpolation
+            CharFragment.LastGroundLocation = CharFragment.LastSafeLocation.Z - HeightOffset;
+            CharFragment.TimeWithoutGround = 0.f;
+
+            // Neigung geradeziehen, Blickrichtung behalten.
+            const FRotator AktuelleRotation = MassTransform.GetRotation().Rotator();
+            MassTransform.SetRotation(FRotator(0.f, AktuelleRotation.Yaw, 0.f).Quaternion());
+            return;
+        }
+    }
+    // ===================== ENDE LUX-ANPASSUNG =======================================================
+
     // --- Ground/Height Adjustment Logic ---
     FHitResult Hit;
     FCollisionQueryParams Params;
@@ -227,16 +275,107 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     const FVector TraceStart = FVector(InOutFinalLocation.X, InOutFinalLocation.Y, InOutFinalLocation.Z + 1000.0f);
     const FVector TraceEnd = FVector(InOutFinalLocation.X, InOutFinalLocation.Y, InOutFinalLocation.Z - 2000.0f);
 
-    if (GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+    // DIAGNOSE (bleibt stehen bis abbestellt): In Leveln, deren begehbare Flaechen weit
+    // ueber Null liegen, haengen die Einheiten dauerhaft unter dem Gelaende. Gemessen wurde
+    // eine stabile Hoehe von exakt 0+Kapselhalbhoehe - das deutet auf den Zweig "kein
+    // Bodentreffer". Diese Zeile zeigt, ob der Trace wirklich nichts findet und was er
+    // gegebenenfalls trifft.
+    //
+    // 30.08.2026 UMGEBAUT, INHALT UNVERAENDERT. Vorher stand der Block VOR dem eigentlichen Trace,
+    // mit dem Waechter "CurrentZ < 500 && !bIsFlying" - und zog sich dafuer einen ZWEITEN,
+    // vollstaendigen LineTrace. Der Kommentar versprach "nur im Fehlerfall", aber auf Karten, deren
+    // Boden nahe Null liegt (Level_AITest_Xeno: Z=7), erfuellt JEDE Bodeneinheit in JEDEM Takt die
+    // Bedingung. Gemessen in drei Partien: 177 Zeilen in der schnellen gegen 6706 in der langsamen,
+    // also 21000 gegen 805000 Durchlaeufe - bei gleicher Rechenzeit rechneten die Partien voellig
+    // verschiedene SPIELZEITEN ab (t=1499 gegen t=352 gegen t=164), womit jede Kennzahl je Partie
+    // ueber unterschiedlich lange Zeitraeume gemessen war.
+    //
+    // Jetzt haengt die Zeile am Ergebnis des ECHTEN Traces: sie kommt nur, wenn der Boden
+    // tatsaechlich nicht gefunden wurde - also genau im Fehlerfall, den sie beschreiben soll. Der
+    // zweite Trace entfaellt ersatzlos, die Aussage bleibt dieselbe.
+    bool bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
+
+    // ================================================================================================
+    // Volumen duerfen diesen Trace nicht kapern (01.09.2026).
+    //
+    // Ein AVolume - etwa ein PCGVolume - hat objectType ECC_WorldStatic und collisionEnabled
+    // QueryOnly. Seine Kanal-Antworten stehen zwar alle auf Ignore, das hilft hier aber NICHT:
+    // LineTraceSingleByObjectType fragt nach dem OBJEKTTYP und liefert solche Koerper unabhaengig
+    // von ihren Antworten zurueck. Die Ignore-Einstellungen gelten nur fuer Kanal-Abfragen.
+    //
+    // Der Trace startet 1000 ueber der Einheit, also mitten im Volumen, und traf damit sofort -
+    // TrefferZ = StartZ, DeltaZ 1000 bis 2000, weit ueber der Schwelle. Der Treffer wurde
+    // verworfen, LastGroundLocation blieb auf 0 und die Hoehe der Einheit war EINGEFROREN. Auf
+    // ebenem Boden faellt das nicht auf; am Hang laeuft die Einheit ins Gelaende und steckt fest.
+    // Gemessen an der direkt gesteuerten CameraUnit, betroffen war aber jede Einheit im Volumen.
+    //
+    // Ein Volumen ist nie Boden. Wird eines getroffen, wird es ignoriert und erneut gesucht.
+    // ================================================================================================
+    for (int32 Versuch = 0; bBodenGefunden && Versuch < 4; ++Versuch)
     {
-        
+        AActor* GetroffenerActor = Hit.GetActor();
+        if (!IsValid(GetroffenerActor) || !GetroffenerActor->IsA(AVolume::StaticClass()))
+        {
+            break;
+        }
+        Params.AddIgnoredActor(GetroffenerActor);
+        bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
+    }
+
+    if (!bBodenGefunden && !CharFragment.bIsFlying)
+    {
+        static int32 BodenDiagZaehler = 0;
+        if ((BodenDiagZaehler++ % 120) == 0)
+        {
+            UE_LOG(LogTemp, Log, TEXT("[BodenDiag] %s CurrentZ=%.1f Start=%.1f Ende=%.1f XY=(%.0f,%.0f) Treffer=0 TrefferZ=%.1f Getroffen=%s Offset=%.1f LastGround=%.1f"),
+                *UnitBase->GetName(), CurrentZ, TraceStart.Z, TraceEnd.Z, TraceStart.X, TraceStart.Y,
+                -99999.f, TEXT("-"),
+                HeightOffset, CharFragment.LastGroundLocation);
+        }
+    }
+
+    if (bBodenGefunden)
+    {
+
         const AActor* HitActor = Hit.GetActor();
         const float DeltaZ = Hit.ImpactPoint.Z - CurrentZ;
+
+        // DIAGNOSE (bleibt stehen bis abbestellt) - "CameraUnit laeuft ins Gelaende und steckt".
+        // Gemessen am 01.09.: Actor-Z eingefroren auf 88, Boden an derselben Stelle 176, also
+        // 88 Einheiten UNTER dem Gelaende; Zustand Run, kein einziger Sperr-Tag gesetzt. Die
+        // Abfrage nimmt die Einheit also mit - trotzdem wird die Hoehe nicht nachgefuehrt.
+        // Diese Zeile meldet NUR den Fehlerfall (Treffer verworfen), inklusive WAS getroffen
+        // wurde: der Verdacht ist, dass der Trace nicht den Boden findet, sondern gleich am
+        // Startpunkt (Z+1000) auf Geometrie laeuft.
+        if (!CharFragment.bIsFlying && !bIsDead
+            && !(IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass())
+                 && DeltaZ <= (HeightOffset + 100.f)))
+        {
+            static double LetzteBodenMeldung = 0.0;
+            const double JetztZeit = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+            if (JetztZeit - LetzteBodenMeldung > 1.0)
+            {
+                LetzteBodenMeldung = JetztZeit;
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[BodenVerworfen] %s CurrentZ=%.0f TrefferZ=%.0f DeltaZ=%.0f Schwelle=%.0f Getroffen=%s Klasse=%s StartZ=%.0f LastGround=%.0f"),
+                    *UnitBase->GetName(), CurrentZ, Hit.ImpactPoint.Z, DeltaZ, HeightOffset + 100.f,
+                    IsValid(HitActor) ? *HitActor->GetName() : TEXT("-"),
+                    IsValid(HitActor) ? *HitActor->GetClass()->GetName() : TEXT("-"),
+                    TraceStart.Z, CharFragment.LastGroundLocation);
+            }
+        }
 
         if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= (HeightOffset+100.f) && !CharFragment.bIsFlying) // && DeltaZ <= HeightOffset
         {
             CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
             const float TargetZ = Hit.ImpactPoint.Z + HeightOffset;
+
+            // LUX-ANPASSUNG (28.08.2026) - dies ist der EINZIGE Zweig mit belegtem Boden unter der
+            // Einheit. Genau hier - und nur hier - wird der Rettungsanker nachgefuehrt.
+            CharFragment.LastSafeLocation = FVector(InOutFinalLocation.X, InOutFinalLocation.Y, TargetZ);
+            CharFragment.bHasSafeLocation = true;
+            CharFragment.TimeWithoutGround = 0.f;
+
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
 
             if (CharFragment.GroundAlignment)
@@ -294,6 +433,44 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         }
         else if (!CharFragment.bIsFlying) // Not on a valid ground hit, but not flying (e.g., walking off a ledge, or on another unit)
         {
+            // Der Bodentreffer wurde oben verworfen, weil er zu weit UEBER der Einheit liegt.
+            // Diese Regel verhindert, dass Einheiten auf Klippen oder Bruecken hochschnappen -
+            // sie sperrt aber auch den Rueckweg: wer einmal unter das Gelaende geraten ist,
+            // haelt sich danach an einem veralteten LastGroundLocation fest und kommt nie
+            // wieder hoch. In Leveln, deren begehbare Flaechen weit ueber dem Nullniveau
+            // liegen (Labyrinth: Wege auf Z=900), blieben dadurch ALLE Einheiten unsichtbar
+            // unter dem Boden haengen; im Prologue faellt es nicht auf, weil dort der Boden
+            // ohnehin bei Z=0 liegt.
+            // Unter einer Bruecke oder in einem Tunnel steht feste Geometrie UNTER der
+            // Einheit und die Hoehe stimmt. Haengt sie dagegen im Leeren, ist sie durch das
+            // Gelaende gerutscht - nur dieser Fall wird korrigiert.
+            // Nur die LANDSCHAFT zaehlt hier als Beleg fuer "unter dem Gelaende". Der erste
+            // Anlauf liess jeden Treffer ausser AUnitBase gelten - die sichtbare Darstellung
+            // haengt aber an einem Visual-Manager und nicht am Einheiten-Actor, also traf der
+            // Trace die eigene Darstellung und hob die Einheit schrittweise an (gemessen:
+            // Actor auf 910, Mesh auf 1500-1826 statt auf 988).
+            // LUX-ANPASSUNG (28.08.2026) - die Abwaerts-Probe wird jetzt IMMER gebraucht: sie ist
+            // zugleich der Beleg fuer "haengt im Leeren" und damit die Bedingung, unter der die
+            // Absturz-Uhr laeuft. Auf einer anderen Einheit, unter einer Bruecke oder in einem
+            // Tunnel steht feste Geometrie darunter - dort darf die Uhr NICHT laufen, sonst wuerde
+            // eine voellig gesunde Einheit weggerissen.
+            FHitResult BodenDarunter;
+            const FVector AbwaertsStart(InOutFinalLocation.X, InOutFinalLocation.Y, CurrentZ - 5.f);
+            const FVector AbwaertsEnde(InOutFinalLocation.X, InOutFinalLocation.Y, CurrentZ - 10000.f);
+            const bool bBodenDarunter = GetWorld()->LineTraceSingleByObjectType(
+                BodenDarunter, AbwaertsStart, AbwaertsEnde, ObjectParams, Params);
+
+            if (IsValid(HitActor) && HitActor->IsA(ALandscapeProxy::StaticClass()) && Hit.ImpactPoint.Z > CurrentZ)
+            {
+                if (!bBodenDarunter)
+                {
+                    CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
+                }
+            }
+
+            if (bBodenDarunter) CharFragment.TimeWithoutGround = 0.f;
+            else                CharFragment.TimeWithoutGround += ActualDeltaTime;
+
             const float TargetZ = CharFragment.LastGroundLocation + HeightOffset;
 
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
@@ -368,6 +545,10 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         }
         else // Not flying and no ground hit (e.g., falling or airborne)
         {
+            // LUX-ANPASSUNG (28.08.2026) - der Trace deckt 1000 ueber bis 2000 unter der Einheit ab.
+            // Findet er darin gar nichts, ist unter ihr nachweislich Leere: Absturz-Uhr laeuft.
+            CharFragment.TimeWithoutGround += ActualDeltaTime;
+
             InOutFinalLocation.Z = CharFragment.LastGroundLocation + HeightOffset;
 
             // Revert pitch and roll to zero (level)

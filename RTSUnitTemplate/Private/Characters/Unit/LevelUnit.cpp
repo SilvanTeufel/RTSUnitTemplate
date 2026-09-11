@@ -50,6 +50,8 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 	DOREPLIFETIME(ALevelUnit, CustomEffects);
 	DOREPLIFETIME(ALevelUnit, UnitIndex);
 	DOREPLIFETIME(ALevelUnit, AttributeTreeNodes);
+	DOREPLIFETIME(ALevelUnit, AttributeTreePoints);
+	DOREPLIFETIME(ALevelUnit, UsedAttributeTreePoints);
 }
 
 
@@ -221,6 +223,15 @@ void ALevelUnit::ResetTalents()
 //  Radial Attribute Tree
 // ---------------------------------------------------------------------------
 
+void ALevelUnit::GrantAttributeTreePoints(int32 Anzahl)
+{
+	if (Anzahl <= 0)
+	{
+		return;
+	}
+	AttributeTreePoints += Anzahl;
+}
+
 int32 ALevelUnit::GetAttributeTreeNodePoints(FName NodeId) const
 {
 	for (const FAttributeTreeNodeState& State : AttributeTreeNodes)
@@ -298,7 +309,8 @@ bool ALevelUnit::CanInvestInAttributeTreeNode(FName NodeId) const
 	{
 		return false;
 	}
-	return LevelData.TalentPoints > 0;
+	// Eigener Vorrat, NICHT LevelData.TalentPoints - siehe Kopfkommentar im Header.
+	return AttributeTreePoints > 0;
 }
 
 bool ALevelUnit::ApplyAttributeTreeStat(EAttributeTreeStat Stat)
@@ -314,6 +326,66 @@ bool ALevelUnit::ApplyAttributeTreeStat(EAttributeTreeStat Stat)
 	default: return false;
 	}
 	return true;
+}
+
+bool ALevelUnit::ApplyAttributeTreeEffectOnly(EAttributeTreeStat Stat)
+{
+	if (!Attributes)
+	{
+		return false;
+	}
+
+	const int32 Deckel = LevelUpData.MaxTalentsPerStat;
+
+	switch (Stat)
+	{
+	case EAttributeTreeStat::Stamina:
+		if (StaminaInvestmentEffect && Attributes->GetStamina() < Deckel)
+		{
+			ApplyInvestmentEffect(StaminaInvestmentEffect);
+			return true;
+		}
+		break;
+	case EAttributeTreeStat::AttackPower:
+		if (AttackPowerInvestmentEffect && Attributes->GetAttackPower() < Deckel)
+		{
+			ApplyInvestmentEffect(AttackPowerInvestmentEffect);
+			return true;
+		}
+		break;
+	case EAttributeTreeStat::Willpower:
+		if (WillpowerInvestmentEffect && Attributes->GetWillpower() < Deckel)
+		{
+			ApplyInvestmentEffect(WillpowerInvestmentEffect);
+			return true;
+		}
+		break;
+	case EAttributeTreeStat::Haste:
+		if (HasteInvestmentEffect && Attributes->GetHaste() < Deckel)
+		{
+			ApplyInvestmentEffect(HasteInvestmentEffect);
+			return true;
+		}
+		break;
+	case EAttributeTreeStat::Armor:
+		if (ArmorInvestmentEffect && Attributes->GetArmor() < Deckel)
+		{
+			ApplyInvestmentEffect(ArmorInvestmentEffect);
+			return true;
+		}
+		break;
+	case EAttributeTreeStat::MagicResistance:
+		if (MagicResistanceInvestmentEffect && Attributes->GetMagicResistance() < Deckel)
+		{
+			ApplyInvestmentEffect(MagicResistanceInvestmentEffect);
+			return true;
+		}
+		break;
+	default:
+		break;
+	}
+
+	return false;
 }
 
 bool ALevelUnit::InvestInAttributeTreeNode(FName NodeId)
@@ -337,27 +409,19 @@ bool ALevelUnit::InvestInAttributeTreeNode(FName NodeId)
 	{
 		return false; // prerequisite not satisfied
 	}
-	if (LevelData.TalentPoints <= 0)
+	if (AttributeTreePoints <= 0)
 	{
-		return false; // no talent points to spend
+		return false; // kein Punkt im Vorrat DES BAUMS
 	}
 
-	// Raise the stat (self-capped at MaxTalentsPerStat). InvestPointInto* consumes one talent
-	// point only while the attribute is below its cap.
-	const int32 PointsBefore = LevelData.TalentPoints;
-	if (!ApplyAttributeTreeStat(Row->Attribute))
-	{
-		return false; // invalid stat enum
-	}
-	if (LevelData.TalentPoints >= PointsBefore)
-	{
-		// The attribute is already at MaxTalentsPerStat, so InvestPointInto* spent nothing. Still
-		// consume one talent point so the node (and the branches it gates) can progress - the stat
-		// simply stays at its maximum. This keeps deep trees, where several nodes share one capped
-		// stat, from dead-locking. Raise MaxTalentsPerStat if you never want a point spent this way.
-		LevelData.TalentPoints = FMath::Max(0, LevelData.TalentPoints - 1);
-		LevelData.UsedTalentPoints += 1;
-	}
+	// Attribut anheben, ohne die Talentpunkte anzufassen. Steht das Attribut schon an
+	// MaxTalentsPerStat, passiert nichts - der Knoten waechst trotzdem und kostet trotzdem einen
+	// Punkt, sonst koennten tiefe Zweige, die sich ein gedeckeltes Attribut teilen, nie weiter.
+	// Wer das nicht will, hebt MaxTalentsPerStat an.
+	ApplyAttributeTreeEffectOnly(Row->Attribute);
+
+	AttributeTreePoints = FMath::Max(0, AttributeTreePoints - 1);
+	UsedAttributeTreePoints += 1;
 
 	// Book-keeping: bump the node's invested count.
 	bool bFound = false;
@@ -383,7 +447,16 @@ bool ALevelUnit::InvestInAttributeTreeNode(FName NodeId)
 void ALevelUnit::ResetAttributeTree()
 {
 	AttributeTreeNodes.Empty();
-	ResetTalents(); // refunds talent points + zeroes attributes (shared with the TalentChooser)
+
+	// Eigene Punkte zurueck in den eigenen Vorrat.
+	AttributeTreePoints += UsedAttributeTreePoints;
+	UsedAttributeTreePoints = 0;
+
+	// ResetTalents setzt die ATTRIBUTE auf null und erstattet die Talentpunkte. Beides gehoert
+	// zusammen: Baum und TalentChooser schreiben in dieselben Attribute, ohne dass irgendwo steht,
+	// welcher Punkt welchen Anteil gestellt hat. Wer die Attribute leert, muss also auch die
+	// Talentpunkte erstatten, sonst waeren sie ersatzlos verloren.
+	ResetTalents();
 }
 
 void ALevelUnit::ResetLevel()

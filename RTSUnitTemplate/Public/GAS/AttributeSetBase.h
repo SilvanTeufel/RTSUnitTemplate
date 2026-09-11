@@ -161,15 +161,6 @@ public:
 	virtual void OnRep_IsAttackedSpeed(const FGameplayAttributeData& OldIsAttackedSpeed);
 	// IsAttackedSpeed //
 
-	// RunSpeedScale //
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_RunSpeedScale)
-	FGameplayAttributeData RunSpeedScale;
-	ATTRIBUTE_ACCESSORS(UAttributeSetBase, RunSpeedScale);
-
-	UFUNCTION()
-	virtual void OnRep_RunSpeedScale(const FGameplayAttributeData& OldRunSpeedScale);
-	// RunSpeedScale //
-
 	// ProjectileScaleActorDirectionOffset //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_ProjectileScaleActorDirectionOffset)
 	FGameplayAttributeData ProjectileScaleActorDirectionOffset;
@@ -337,9 +328,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void SetAttributeIsAttackedSpeed(float NewValue);
-
-	UFUNCTION(BlueprintCallable, Category = "Attributes")
-	void SetAttributeRunSpeedScale(float NewValue);
 
 	UFUNCTION(BlueprintCallable, Category = "Attributes")
 	void SetAttributeProjectileScaleActorDirectionOffset(float NewValue);

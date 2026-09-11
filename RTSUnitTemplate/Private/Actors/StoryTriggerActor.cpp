@@ -8,6 +8,8 @@
 #include "Controller/PlayerController/ControllerBase.h"
 #include "System/StoryTriggerQueueSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "Engine/Engine.h"
+#include "Engine/DataTable.h"
 
 AStoryTriggerActor::AStoryTriggerActor()
 {
@@ -29,8 +31,9 @@ void AStoryTriggerActor::BeginPlay()
 {
     Super::BeginPlay();
 
-    // Load row from DataTable: either a random row (if UseRandomRow) or by StoryRowId
-    if (StoryDataTable)
+    // Load row from DataTable: either a random row (if UseRandomRow) or by StoryRowId.
+    // Bei einer Zeilenfolge (StoryRowIds) entfaellt das - die wird erst beim Ausloesen gelesen.
+    if (StoryDataTable && StoryRowIds.Num() == 0)
     {
         static const FString ContextString(TEXT("StoryTriggerActor_Load"));
         const FStoryWidgetTable* Row = nullptr;
@@ -108,7 +111,70 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
         TriggerBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     }
 
-    // Instead of playing immediately, enqueue into the StoryTriggerQueueSubsystem to ensure sequential display
+    StoryEinreihen();
+}
+
+
+void AStoryTriggerActor::TriggerStory()
+{
+    if (bTriggerOnce && bHasTriggered)
+    {
+        return;
+    }
+
+    bHasTriggered = true;
+
+    // Von Hand ausgeloest heisst: kein Team-Tor. Wer den Aufruf setzt, weiss, was er will.
+    // Die Auslaeseflaeche wird trotzdem stillgelegt, damit die Szene nicht spaeter noch einmal
+    // durch Betreten kommt.
+    if (TriggerBox && bTriggerOnce)
+    {
+        TriggerBox->SetGenerateOverlapEvents(false);
+        TriggerBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
+
+    StoryEinreihen();
+}
+
+
+void AStoryTriggerActor::StoryEinreihen()
+{
+    // Mehrere Zeilen? Dann jede einzeln einreihen. Die Warteschlange spielt sie nacheinander
+    // ab und haelt immer nur ein Widget offen - es spricht also nie mehr als eine Figur.
+    if (StoryRowIds.Num() > 0 && StoryDataTable)
+    {
+        static const FString Kontext(TEXT("StoryTriggerActor_Folge"));
+        int32 Eingereiht = 0;
+        for (const FName& ZeilenId : StoryRowIds)
+        {
+            if (ZeilenId.IsNone())
+            {
+                continue;
+            }
+            if (const FStoryWidgetTable* Zeile = StoryDataTable->FindRow<FStoryWidgetTable>(ZeilenId, Kontext, true))
+            {
+                ZeileEinreihen(*Zeile);
+                ++Eingereiht;
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[Story] '%s': Zeile '%s' fehlt in '%s' - uebersprungen."),
+                       *GetName(), *ZeilenId.ToString(), *StoryDataTable->GetName());
+            }
+        }
+
+        if (Eingereiht > 0)
+        {
+            OnStoryTriggered.Broadcast();
+            return;
+        }
+
+        // Keine einzige Zeile gefunden: lieber die gemerkte Einzelzeile zeigen als gar nichts.
+        UE_LOG(LogTemp, Warning, TEXT("[Story] '%s': keine der %d Zeilen gefunden - Rueckfall auf die Einzelzeile."),
+               *GetName(), StoryRowIds.Num());
+    }
+
+    // Altes Verhalten: die eine in BeginPlay gemerkte Zeile.
     if (UWorld* World = GetWorld())
     {
         if (UGameInstance* GI = World->GetGameInstance())
@@ -122,8 +188,6 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
                 Item.Material = StoryMaterial.Get();
                 Item.ImageSoft = StoryImageSoft;
                 Item.MaterialSoft = StoryMaterialSoft;
-                // Item.OffsetX = ScreenOffsetX;
-                // Item.OffsetY = ScreenOffsetY;
                 Item.LifetimeSeconds = WidgetLifetimeSeconds;
                 Item.Sound = TriggerSound;
                 Item.bTillAudioEnds = bTillAudioEnds;
@@ -134,6 +198,82 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
             }
         }
     }
+}
+
+
+void AStoryTriggerActor::EnqueueStoryRows(UObject* WorldContextObject, UDataTable* StoryTable,
+                                          const TArray<FName>& RowIds,
+                                          TSubclassOf<UStoryWidgetBase> FallbackWidgetClass)
+{
+	if (!StoryTable || RowIds.Num() == 0)
+	{
+		return;
+	}
+
+	UWorld* World = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull) : nullptr;
+	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+	UStoryTriggerQueueSubsystem* Queue = GI ? GI->GetSubsystem<UStoryTriggerQueueSubsystem>() : nullptr;
+	if (!Queue)
+	{
+		return;
+	}
+
+	static const FString Kontext(TEXT("StoryTriggerActor_Statisch"));
+	for (const FName& ZeilenId : RowIds)
+	{
+		if (ZeilenId.IsNone())
+		{
+			continue;
+		}
+
+		const FStoryWidgetTable* Zeile = StoryTable->FindRow<FStoryWidgetTable>(ZeilenId, Kontext, true);
+		if (!Zeile)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[Story] Zeile '%s' fehlt in '%s' - uebersprungen."),
+			       *ZeilenId.ToString(), *StoryTable->GetName());
+			continue;
+		}
+
+		FStoryQueueItem Item;
+		Item.WidgetClass = Zeile->StoryWidgetClass ? Zeile->StoryWidgetClass : FallbackWidgetClass;
+		Item.Text = Zeile->StoryText;
+		Item.Image = Zeile->StoryImage;
+		Item.Material = Zeile->StoryMaterial;
+		Item.ImageSoft = Zeile->StoryImageSoft;
+		Item.MaterialSoft = Zeile->StoryMaterialSoft;
+		Item.LifetimeSeconds = Zeile->WidgetLifetimeSeconds;
+		Item.Sound = Zeile->TriggerSound;
+		Item.bTillAudioEnds = Zeile->bTillAudioEnds;
+		Item.AudioEndExtraDelay = Zeile->AudioEndExtraDelay;
+		Queue->EnqueueStory(Item);
+	}
+}
+
+
+void AStoryTriggerActor::ZeileEinreihen(const FStoryWidgetTable& Zeile)
+{
+    UWorld* World = GetWorld();
+    UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+    UStoryTriggerQueueSubsystem* Queue = GI ? GI->GetSubsystem<UStoryTriggerQueueSubsystem>() : nullptr;
+    if (!Queue)
+    {
+        return;
+    }
+
+    FStoryQueueItem Item;
+    // Die Widgetklasse darf in der Tabelle leer bleiben - dann gilt die am Aktor eingestellte.
+    Item.WidgetClass = Zeile.StoryWidgetClass ? Zeile.StoryWidgetClass : StoryWidgetClass;
+    Item.Text = Zeile.StoryText;
+    Item.Image = Zeile.StoryImage;
+    Item.Material = Zeile.StoryMaterial;
+    Item.ImageSoft = Zeile.StoryImageSoft;
+    Item.MaterialSoft = Zeile.StoryMaterialSoft;
+    Item.LifetimeSeconds = Zeile.WidgetLifetimeSeconds;
+    Item.Sound = Zeile.TriggerSound;
+    Item.bTillAudioEnds = Zeile.bTillAudioEnds;
+    Item.AudioEndExtraDelay = Zeile.AudioEndExtraDelay;
+    Item.TriggeringSource = this;
+    Queue->EnqueueStory(Item);
 }
 
 

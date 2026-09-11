@@ -218,10 +218,13 @@ void AExtendedCameraBase::OnTagProgressUpdated(AWinLoseConfigActor* Config)
 
 void AExtendedCameraBase::UpdateTabModeUI()
 {
+	// Die Ressourcenleiste bleibt in JEDEM Tab-Modus sichtbar (02.09.2026). Vorher wurde sie
+	// hier ausgeblendet und nur in Modus 1 wieder eingeschaltet - dadurch verschwand die
+	// wichtigste Anzeige des Spiels, sobald man einmal weitergeschaltet hat.
 	if (ResourceWidget)
 	{
-		ResourceWidget->StopTimer();
-		ResourceWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ResourceWidget->SetVisibility(ESlateVisibility::Visible);
+		ResourceWidget->StartUpdateTimer();
 	}
 	if (WinConditionWidget)
 	{
@@ -313,12 +316,46 @@ void AExtendedCameraBase::UpdateTabModeUI()
 			TabToggled = true;
 		}
 		break;
-	default:{
-			TabToggled = false;
+	default:
+		{
+			// Modus 0 war bisher leer - eine Tab-Stufe, die nichts anzeigte. Hier stehen jetzt
+			// AbilityChooser und TalentChooser. Zieleinheit wie in Modus 4: die Auswahl, sonst
+			// die erste eigene Einheit mit einem Talentbaum, damit die Panels nie leer sind.
+			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+			AUnitBase* TargetUnit = nullptr;
+			if (CameraControllerBase && CameraControllerBase->HUDBase && CameraControllerBase->HUDBase->SelectedUnits.Num())
+			{
+				TargetUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
+			}
+			if (!TargetUnit)
+			{
+				const int32 MyTeam = CameraControllerBase ? CameraControllerBase->SelectableTeamId : -1;
+				for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+				{
+					AUnitBase* U = *It;
+					if (U && U->AttributeTreeDataTable && (MyTeam < 0 || U->TeamId == MyTeam))
+					{
+						TargetUnit = U;
+						break;
+					}
+				}
+			}
+
+			SetUserWidget(TargetUnit);
+			TabToggled = TargetUnit != nullptr;
 		}
 		break;
 	}
 	
+	UpdateViewportBlur(TabToggled);
+}
+
+void AExtendedCameraBase::CloseMapMenu()
+{
+	if (!MapMenuWidget) return;
+
+	MapMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	BlockControls = false;
 	UpdateViewportBlur(TabToggled);
 }
 
@@ -616,10 +653,45 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 
 void AExtendedCameraBase::Server_InvestAttributeTreeNode_Implementation(ALevelUnit* Unit, FName NodeId)
 {
-	if (Unit)
+	if (!Unit)
 	{
-		Unit->InvestInAttributeTreeNode(NodeId);
+		return;
 	}
+
+	// Der Attributbaum gilt fuer die GANZE Fraktion, nicht fuer eine einzelne Einheit.
+	//
+	// Bis zum 10.09.2026 wurde nur in `Unit` investiert - der Baum sah damit aus wie ein
+	// Fraktionsbaum, wirkte aber nur auf die gerade gewaehlte Einheit. Jetzt bekommt jede Einheit
+	// mit derselben Teamnummer den Knoten, und der Tagfilter der Datentabelle entscheidet, welche
+	// davon gemeint ist: DoesAttributeTreeNodeMatchUnit prueft TalentTag und UnitTags, ein Knoten
+	// ohne Tag gilt fuer alle. Diese Pruefung steckt in InvestInAttributeTreeNode selbst, hier
+	// muss also nichts doppelt gefiltert werden.
+	//
+	// Die Punkte bleiben je Einheit: jede zahlt aus ihrem eigenen Vorrat, und wer gerade keinen
+	// hat, bleibt einfach zurueck. Ein gemeinsamer Topf waere die groessere Umstellung und
+	// wuerde die Vergabe im Zeittakt mit umbauen.
+	const int32 Team = Unit->TeamId;
+
+	int32 Erfolgreich = 0;
+	int32 Betrachtet = 0;
+	for (TActorIterator<ALevelUnit> It(GetWorld()); It; ++It)
+	{
+		ALevelUnit* Andere = *It;
+		if (!IsValid(Andere) || Andere->TeamId != Team)
+		{
+			continue;
+		}
+
+		++Betrachtet;
+		if (Andere->InvestInAttributeTreeNode(NodeId))
+		{
+			++Erfolgreich;
+		}
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[Attributbaum] Knoten '%s' fuer Team %d: %d von %d Einheiten aufgewertet (Rest passte nicht zum Tag oder hatte keinen Punkt)."),
+		*NodeId.ToString(), Team, Erfolgreich, Betrachtet);
 }
 
 void AExtendedCameraBase::Server_ResetAttributeTree_Implementation(ALevelUnit* Unit)
@@ -759,6 +831,21 @@ void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& Input
 	// ============================================================================================
 	if (LuxUseLeftClickAsAbility(CameraControllerBase))
 	{
+		// ----------------------------------------------------------------------------------------
+		// LUX-ANPASSUNG (28.08.2026) - Klick beim Zielen gehoert der zielenden Faehigkeit.
+		// Steht der Ziel-Indikator einer Faehigkeit mit bIndicatorClicksAdvanceAbility (Granate),
+		// zaehlt dieser Klick fuer SIE weiter, statt AbilityOne (den Schuss) zu starten. Siehe
+		// ACameraControllerBase::LuxTryAdvanceIndicatorAbilityWithClick.
+		// bLuxLeftClickWasAbility bleibt false: es wurde kein Halten begonnen, also darf das
+		// Loslassen auch keines beenden.
+		// ----------------------------------------------------------------------------------------
+		if (CameraControllerBase->LuxTryAdvanceIndicatorAbilityWithClick())
+		{
+			bLuxLeftClickWasAbility = false;
+			return;
+		}
+		// ===================== ENDE LUX-ANPASSUNG ===============================================
+
 		// Identisch zum Tastendruck 1 (HandleState_AbilityOne). Setzt intern auch
 		// SetAbilityInputHeld(AbilityOne, true), damit Dauerfeuer beim Halten laeuft.
 		ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
