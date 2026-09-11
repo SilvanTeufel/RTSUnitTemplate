@@ -90,7 +90,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HandleTalentButtonClicked(int32 ButtonIndex);
-
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void OnLevelUpClicked();
 
