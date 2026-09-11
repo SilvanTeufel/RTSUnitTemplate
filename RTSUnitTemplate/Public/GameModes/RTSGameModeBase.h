@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -173,6 +173,35 @@ public:
 	virtual void CheckWinLoseCondition(AUnitBase* DestroyedUnit = nullptr);
 
 	void TriggerWinLoseForPlayer(ACameraControllerBase* PC, bool bWon, AWinLoseConfigActor* Config);
+
+	/**
+	 * Ist ausser diesem Spieler noch jemand in der Partie, fuer den Sieg oder Niederlage noch NICHT
+	 * gefallen ist?
+	 *
+	 * Genau die Bedingung, unter der Zuschauen ueberhaupt Sinn ergibt: laeuft fuer niemanden mehr
+	 * ein Spiel, gibt es auch nichts zu sehen. Nur serverseitig sinnvoll - ein Client kennt die
+	 * fremden PlayerController nicht.
+	 *
+	 * @param Ausser  Der Spieler, der fragt; er selbst zaehlt nicht mit.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Spectator")
+	bool AreOtherPlayersStillPlaying(ACameraControllerBase* Ausser) const;
+
+	/**
+	 * Loest Sieg oder Niederlage fuer ein ganzes Team von aussen aus.
+	 *
+	 * Gedacht fuer Siegbedingungen, die sich nicht ueber die Aufzaehlung EWinLoseCondition
+	 * abbilden lassen - etwa "einen bestimmten Punkt der Karte erreichen". Ein Auslaeser im
+	 * Level ruft das hier auf, statt dass die Aufzaehlung fuer jeden Sonderfall waechst.
+	 *
+	 * @param TeamId  Das Team, fuer das gewertet wird.
+	 * @param bWon    true = Sieg, false = Niederlage.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	void TriggerWinLoseForTeam(int32 TeamId, bool bWon);
+
+	/** Traegt die ueberlebte Zeit in die Survival-Bestenliste ein (nur Endlos-Karten). */
+	void MeldeSurvivalZeit(ACameraControllerBase* PC);
 
 	// Enter read-only spectate for the given controller (called on the defeat branch of TriggerWinLoseForPlayer).
 	// Base implementation is an intentional no-op so all existing games are unaffected;

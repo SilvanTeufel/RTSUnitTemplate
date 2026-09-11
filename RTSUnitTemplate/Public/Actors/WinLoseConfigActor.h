@@ -61,6 +61,15 @@ struct FWinConditionData
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	TArray<FGameplayTagCount> TargetTagCounts;
+
+	/** Zielort fuer TeamReachedLocation (Weltkoordinate). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	FVector TargetLocation = FVector::ZeroVector;
+
+	/** Wie nah eine Einheit dem Zielort kommen muss. Gemessen wird in X/Y, damit die Hoehe
+	 *  keine Rolle spielt - sonst zaehlt ein Ziel auf einem Berg erst bei exakter Hoehe. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	float TargetLocationRadius = 900.f;
 };
 
 UCLASS()
@@ -123,6 +132,13 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Replicated, Category = "RTSUnitTemplate|WinLose")
 	FGameplayTagContainer WinLoseTargetTags;
+
+	/**
+	 * Traegt die ueberlebte Zeit am Spielende in die Survival-Bestenliste ein
+	 * (USurvivalScoreSubsystem). Nur fuer Endlos-Karten sinnvoll.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
+	bool bReportSurvivalScore = false;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	TSubclassOf<class UWinLoseWidget> WinLoseWidgetClass;
