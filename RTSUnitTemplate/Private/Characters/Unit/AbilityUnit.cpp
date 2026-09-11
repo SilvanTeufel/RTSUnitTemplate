@@ -764,6 +764,45 @@ void AAbilityUnit::SpendAbilityPoints(EGASAbilityInputID AbilityID, int AbilityI
 }
 
 
+bool AAbilityUnit::ApplyAbilityFromTemplate(EGASAbilityInputID AbilityID, int32 AbilityIndex)
+{
+	if (AbilityIndex < 0 || AbilityIndex > 3)
+	{
+		return false;
+	}
+
+	// Nur echte Faehigkeits-Ids zulassen. Die Punktpruefung aus IsAbilityAllowed entfaellt hier
+	// bewusst - die Vorlage gilt unabhaengig vom Punktestand.
+	switch (AbilityID)
+	{
+	case EGASAbilityInputID::AbilityOne:
+	case EGASAbilityInputID::AbilityTwo:
+	case EGASAbilityInputID::AbilityThree:
+	case EGASAbilityInputID::AbilityFour:
+	case EGASAbilityInputID::AbilityFive:
+	case EGASAbilityInputID::AbilitySix:
+		break;
+	default:
+		return false;
+	}
+
+	EGASAbilityInputID* Ziel = nullptr;
+	switch (AbilityIndex)
+	{
+	case 0:  Ziel = &OffensiveAbilityID; break;
+	case 1:  Ziel = &DefensiveAbilityID; break;
+	case 2:  Ziel = &AttackAbilityID;    break;
+	default: Ziel = &ThrowAbilityID;     break;
+	}
+
+	if (*Ziel == AbilityID)
+	{
+		return false; // steht schon so
+	}
+	*Ziel = AbilityID;
+	return true;
+}
+
 int32 AAbilityUnit::DetermineAbilityID(int32 Level)
 {
 
