@@ -548,6 +548,75 @@ bool URTSRuleBasedDeciderComponent::TryGetAbilityCostForRule(const FRTSRuleRow& 
 	return bFound;
 }
 
+namespace
+{
+	/**
+	 * Ueberschreibt DecisionsPerGameSecond global. Negativ = Wert der Komponente benutzen.
+	 *
+	 * Fuer Messreihen: damit laesst sich die Handlungsdichte der KI verstellen, ohne jedes
+	 * Blueprint anzufassen - und ohne dass zwischen zwei Messungen ein Unterschied bleibt,
+	 * den man nicht in der Kommandozeile sieht.
+	 */
+	static float GRLEntscheidungenJeSpielsekunde = -1.f;
+	static FAutoConsoleVariableRef CVarEntscheidungstakt(
+		TEXT("rts.ai.decision.hz"),
+		GRLEntscheidungenJeSpielsekunde,
+		TEXT("Entscheidungen der KI je Spielsekunde. <0 = Wert der Komponente, 0 = kein Riegel."),
+		ECVF_Default);
+}
+
+bool URTSRuleBasedDeciderComponent::ConsumeDecisionSlot()
+{
+	const float Soll = (GRLEntscheidungenJeSpielsekunde >= 0.f)
+		? GRLEntscheidungenJeSpielsekunde
+		: DecisionsPerGameSecond;
+
+	// 0 = ausgeschaltet: jeder Takt darf entscheiden, also das Verhalten von vor dieser Aenderung.
+	if (Soll <= 0.f)
+	{
+		return true;
+	}
+
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return true;
+	}
+
+	// SPIELZEIT, nicht Realzeit: so wirkt der Riegel unabhaengig von der Zeitdehnung, genauso
+	// wie die Abklingzeiten der einzelnen Regelzeilen weiter unten.
+	const float Jetzt = World->GetTimeSeconds();
+	const float Abstand = 1.f / Soll;
+
+	if (Jetzt - LastDecisionGameTime < Abstand)
+	{
+		++DecisionsBlocked;
+		return false;
+	}
+
+	LastDecisionGameTime = Jetzt;
+	++DecisionsGranted;
+
+	// Der Riegel kann nur deckeln, nicht nachholen. Reicht die Bildrate nicht aus, um den Sollwert
+	// zu bedienen, ist die Handlungsdichte WEITER von der Maschine abhaengig - dann ist die
+	// Messung nicht vergleichbar und muss es erfahren. Einmal je Partie, nicht je Takt.
+	if (!bDecisionStarvationReported && Jetzt > 60.f && DecisionsGranted > 30)
+	{
+		const float Erreicht = DecisionsGranted / FMath::Max(1.f, Jetzt);
+		if (Erreicht < Soll * 0.9f)
+		{
+			bDecisionStarvationReported = true;
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Entscheidungstakt] Team %d erreicht nur %.2f Entscheidungen je Spielsekunde statt %.2f. ")
+				TEXT("Die Bildrate reicht fuer den Sollwert nicht aus - diese Partie ist mit schnelleren ")
+				TEXT("Laeufen NICHT vergleichbar. Sollwert senken oder Zeitdehnung verringern."),
+				ResolveOwningTeamId(), Erreicht, Soll);
+		}
+	}
+
+	return true;
+}
+
 bool URTSRuleBasedDeciderComponent::IsRuleOnCooldown(const FRTSRuleRow& Row, const FName& RowName) const
 {
 	if (Row.MinSecondsBetweenActivations <= 0.f) return false;
@@ -1154,7 +1223,7 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 		float Speed = 300.f;
 		if (Units[i]->Attributes)
 		{
-			Speed = Units[i]->Attributes->GetBaseRunSpeed();
+			Speed = Units[i]->Attributes->GetRunSpeed();
 		}
 		Speeds.Add(Speed);
 		Radii.Add(Units[i]->MovementAcceptanceRadius);
@@ -1167,6 +1236,14 @@ bool URTSRuleBasedDeciderComponent::IssueDirectAttackMove(const TArray<ERTSUnitT
 	Controller->Server_Batch_CorrectSetUnitMoveTargets(World, Units, Targets, Speeds, Radii,
 		/*AttackT*/ true, /*bResetHoldPosition*/ true, /*bResetFollowTarget*/ true,
 		/*bOriginatorPredictsLocally*/ false);
+
+	// Wer jetzt losmarschiert, gehoert bis zum Ablauf des Bindefensters nicht der Verteidigung.
+	// Ohne das zieht TickDefence die Armee auf halbem Weg zurueck (siehe MarschierendeEinheiten).
+	MarschierendeEinheiten.Reset();
+	for (AUnitBase* Unit : Units)
+	{
+		MarschierendeEinheiten.Add(Unit);
+	}
 
 	UE_LOG(LogTemp, Warning,
 		TEXT("[AttackOrder] Team=%d Regel='%s' DIREKT Ziel=(%.0f, %.0f) Einheiten=%d davonArbeiter=%d Spalten=%d"),
@@ -2064,6 +2141,15 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 	// every few seconds would pull them out of combat over and over.
 	TArray<AUnitBase*> Fighters;
 	TArray<AUnitBase*> Workers;
+
+	// Laeuft gerade ein Angriff, dessen Bindefenster noch offen ist? Nur dann werden marschierende
+	// Einheiten der Verteidigung entzogen - nach Ablauf darf sie wieder auf alles zugreifen.
+	bool bAngriffLaeuft = false;
+	if (AttackCommitSeconds > 0.f && LetzteAngriffsBefehlZeit >= 0.f)
+	{
+		bAngriffLaeuft = (World->GetTimeSeconds() - LetzteAngriffsBefehlZeit) < AttackCommitSeconds;
+	}
+	int32 ImAnmarschUebersprungen = 0;
 	for (TActorIterator<AUnitBase> It(World); It; ++It)
 	{
 		AUnitBase* Unit = *It;
@@ -2077,6 +2163,18 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 			continue;
 		}
 
+		// Einheiten, die gerade einen Angriff abmarschieren, bleiben beim Angriff.
+		//
+		// Der Zustandsfilter darueber laesst sie durch: eine marschierende Armee ist im Zustand Run,
+		// nicht Attack. Ohne diese Ausnahme holt die Verteidigung sie auf halbem Weg zurueck, die
+		// naechste Angriffsregel schickt sie wieder los - das vom Nutzer gemeldete Pendeln zwischen
+		// den Basen. Das Bindefenster ist dasselbe, das schon das Umzielen verhindert.
+		if (bAngriffLaeuft && MarschierendeEinheiten.Contains(Unit))
+		{
+			++ImAnmarschUebersprungen;
+			continue;
+		}
+
 		if (Unit->IsWorker)
 		{
 			Workers.Add(Unit);
@@ -2085,6 +2183,13 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 		{
 			Fighters.Add(Unit);
 		}
+	}
+
+	if (ImAnmarschUebersprungen > 0)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Verteidigung] %d Einheiten bleiben im Anmarsch und werden nicht zurueckgerufen."),
+			ImAnmarschUebersprungen);
 	}
 
 	TArray<AUnitBase*>& Defenders = Fighters;

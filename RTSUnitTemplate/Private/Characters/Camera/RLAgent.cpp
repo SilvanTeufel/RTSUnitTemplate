@@ -17,6 +17,19 @@
 #include "Components/SceneComponent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "GameplayTagContainer.h"
+#include "HAL/IConsoleManager.h"
+
+// Gruppenwahl (Aktionen 0-9) und Faehigkeitsdruck (10-15) sind im Aktionsraum getrennt. Zwischen
+// beiden liegen im Schnitt mehrere andere Zuege - 27 % davon Kamerafahrten - und die Auswahl
+// ueberlebt das nicht. Die Regel-KI hat das Problem nicht, weil BuildCompositeActionJSON Wahl und
+// Druck in EINE Entscheidung packt; Verhaltensklonen kann diese Kopplung deshalb gar nicht lernen.
+// 1 = der Druck stellt bei leerer Auswahl die zuletzt erfolgreiche Gruppe wieder her.
+static int32 GRLAbilityReselect = 0;
+static FAutoConsoleVariableRef CVarRLAbilityReselect(
+    TEXT("rts.rl.ability.reselect"),
+    GRLAbilityReselect,
+    TEXT("1 = ein Faehigkeitsdruck des Netzes stellt bei leerer Auswahl die zuletzt gewaehlte Gruppe wieder her (nur KI-Pfad)."),
+    ECVF_Default);
 
 ARLAgent::ARLAgent(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -388,6 +401,27 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 // the worker that took the last build order is exactly the one carrying a BuildArea, so
                 // from then on every further ability action was dropped until it finished. Whole factions
                 // built nothing because of this. Only give up when NOBODY in the selection is free.
+                const bool bIstFaehigkeitsdruck = ActionName.StartsWith("switch_camera_state_ability");
+
+                // Nur eingreifen, wenn die Auswahl leer IST - ein Druck mit gueltiger Auswahl
+                // bleibt unveraendert. Der Eingriff betrifft ausschliesslich den KI-Pfad.
+                if (bIstFaehigkeitsdruck && GRLAbilityReselect != 0
+                    && ExtendedController->SelectedUnits.Num() == 0 && LetzteAuswahlTaste >= 0)
+                {
+                    // Die Gruppenwahl-Aktionen tragen ctrl=true, der Faehigkeitsdruck ctrl=false -
+                    // und ReceiveRLAction hat das oben bereits auf den Controller geschrieben. Ohne
+                    // das Setzen hier druecke ich "1" statt "Ctrl+1", was gar keine Gruppenwahl ist:
+                    // gemessen am 01.09.2026 waren 869 von 869 Nachwahlen erfolglos.
+                    const bool bCtrlVorher = ExtendedController->IsCtrlPressed;
+                    ExtendedController->IsCtrlPressed = true;
+                    SwitchControllerStateMachine(InputActionValue, LetzteAuswahlTaste);
+                    ExtendedController->IsCtrlPressed = bCtrlVorher;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[NetzDruck] Team %d Nachwahl Gruppe=%d -> Auswahl=%d"),
+                        ExtendedController->SelectableTeamId, LetzteAuswahlTaste,
+                        ExtendedController->SelectedUnits.Num());
+                }
+
                 {
                     bool bAnyFree = false;
                     for (AUnitBase* Selected : ExtendedController->SelectedUnits)
@@ -399,8 +433,39 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                         }
                     }
 
+                    // [NetzDruck] Gemessen am 01.09.2026: das Netz waehlt in 24,1 % seiner Zuege eine
+                    // Faehigkeit (Regel-KI: 36,6 %), loest ueber eine ganze Messreihe aber nur 118
+                    // Ablehnungen in ActivateAbilityByInputID aus - gegen 14 710 der Regel-KI. Seine
+                    // Bauwuensche kommen dort also gar nicht erst an. Diese Zeile sagt, wie weit sie
+                    // kommen; ohne sie ist eine leere Auswahl von einem gelungenen Bau nicht zu
+                    // unterscheiden.
+                    if (bIstFaehigkeitsdruck)
+                    {
+                        // Welche Faehigkeit eine Taste ausloest, haengt nicht nur an der Taste,
+                        // sondern am Array-Index - und daran, WELCHE Einheiten ausgewaehlt sind:
+                        // der Druck feuert auf alle. Gemessen am 01.09.2026 loeste das Netz
+                        // ueberwiegend Ein-/Ausgraben aus (4 von 147 Aktivierungen waren ein Bau).
+                        // Diese beiden Felder trennen "falscher Index" von "falsche Einheiten".
+                        int32 Arbeiter = 0;
+                        for (AUnitBase* Selected : ExtendedController->SelectedUnits)
+                        {
+                            if (IsValid(Selected) && Selected->IsWorker) { ++Arbeiter; }
+                        }
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[NetzDruck] Team %d Taste=%d Auswahl=%d frei=%d Index=%d Arbeiter=%d"),
+                            ExtendedController->SelectableTeamId, NewCameraState,
+                            ExtendedController->SelectedUnits.Num(), bAnyFree ? 1 : 0,
+                            ExtendedController->AbilityArrayIndex, Arbeiter);
+                    }
+
                     if (!bAnyFree && ExtendedController->SelectedUnits.Num() > 0)
                     {
+                        if (bIstFaehigkeitsdruck)
+                        {
+                            UE_LOG(LogTemp, Warning,
+                                TEXT("[NetzDruck] Team %d VERWORFEN: alle %d ausgewaehlten Einheiten bauen schon"),
+                                ExtendedController->SelectableTeamId, ExtendedController->SelectedUnits.Num());
+                        }
                         if (bDebug) UE_LOG(LogTemp, Error, TEXT("[ARLAgent] Every selected unit is already building."));
                         return;
                     }
@@ -423,6 +488,20 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                 if (!bSkipSwitch)
                 {
                     SwitchControllerStateMachine(InputActionValue, NewCameraState);
+                }
+
+                // [NetzDruck] Ohne diese Zeile sind zwei Ursachen nicht zu trennen: das Netz waehlt
+                // Gruppen, die gar keine Einheiten haben - oder die Auswahl geht bis zum Druck
+                // wieder verloren. Erst der Vergleich beider Zeilen entscheidet das.
+                if (ActionName == "switch_camera_state")
+                {
+                    const int32 NachDerWahl = ExtendedController->SelectedUnits.Num();
+                    UE_LOG(LogTemp, Warning, TEXT("[NetzDruck] Team %d Gruppenwahl=%d Auswahl=%d"),
+                        ExtendedController->SelectableTeamId, NewCameraState, NachDerWahl);
+                    if (NachDerWahl > 0)
+                    {
+                        LetzteAuswahlTaste = NewCameraState;
+                    }
                 }
 
                 // if (bDebug) UE_LOG(LogTemp, Log, TEXT("[ARLAgent] Post-Switch State: SelectedUnits=%d"), ExtendedController->SelectedUnits.Num());
@@ -470,13 +549,30 @@ void ARLAgent::ReceiveRLAction(FString ActionJSON)
                                     {
                                         if (!WeakController.IsValid() || !WeakWorker.IsValid()) return;
                                         WeakController->SetWorkArea(DropTransform);
-                                        WeakController->DropWorkAreaForUnit(WeakWorker.Get(), false,
-                                            WeakController->DropWorkAreaFailedSound);
+                                        // Ohne Geist gibt es nichts abzuwerfen: dann hat die Faehigkeit
+                                        // oben keine Baustelle erzeugt, der Druck war also schon vorher
+                                        // wirkungslos. DropWorkAreaForUnit verlaesst diesen Fall auf
+                                        // Verbose und damit unsichtbar - gemessen am 01.09.2026 blieben
+                                        // 165 von 210 Fehlschlaegen ohne jeden benannten Grund.
+                                        const bool bHatteGeist = WeakWorker->CurrentDraggedWorkArea != nullptr;
+                                        const bool bAbwurfGelang = WeakController->DropWorkAreaForUnit(
+                                            WeakWorker.Get(), false, WeakController->DropWorkAreaFailedSound);
+                                        // Der Bauplatz ist die Kameraposition des Agenten. Scheitert der
+                                        // Abwurf, war der Druck umsonst - bisher lautlos.
+                                        UE_LOG(LogTemp, Warning,
+                                            TEXT("[NetzDruck] Team %d Abwurf %s Geist=%d bei (%.0f,%.0f)"),
+                                            WeakController->SelectableTeamId,
+                                            bAbwurfGelang ? TEXT("OK") : TEXT("FEHLGESCHLAGEN"),
+                                            bHatteGeist ? 1 : 0,
+                                            DropTransform.GetLocation().X, DropTransform.GetLocation().Y);
                                     }));
                             }
                         }
                         else
                         {
+                            UE_LOG(LogTemp, Warning,
+                                TEXT("[NetzDruck] Team %d VERWORFEN: keine Einheit fuer den Abwurf ausgewaehlt"),
+                                ExtendedController->SelectableTeamId);
                             if (bDebug) UE_LOG(LogTemp, Warning, TEXT("[ARLAgent] switch_camera_state_ability: No unit selected to drop work area for."));
                         }
                     }

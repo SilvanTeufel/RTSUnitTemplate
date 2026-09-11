@@ -619,7 +619,52 @@ public:
 	 */
 	int32 GetLastRecordedActionIndex() const { return LastRecordedActionIndex; }
 
+	/**
+	 * Wie viele Entscheidungen die KI je SPIELSEKUNDE faellen darf. 0 = kein Riegel (Verhalten wie frueher).
+	 *
+	 * VORGABE 0 = AUS. Der Riegel wurde gebaut, um eine vermutete fps-Abhaengigkeit der KI zu
+	 * beheben, und die Messung hat die Vermutung WIDERLEGT. Er bleibt als Werkzeug erhalten.
+	 *
+	 * Gemessen (Zeitdehnung 6, zwei gleichzeitige Instanzen derselben Partie):
+	 *
+	 *   Bildrate    Frames je Spielsekunde    Entscheidungen je Spielsekunde
+	 *     6,5 fps            1,1                        0,21
+	 *   105   fps           17,5                        0,67
+	 *   131   fps (Dehnung 1) 131                       0,80
+	 *
+	 * Die Entscheidungsdichte SAETTIGT bei rund 0,8 - sie waechst nicht mit der Bildrate, sondern
+	 * bricht nur ein, wenn zu wenige Frames da sind. Der Unterschied zwischen den Regimen ist also
+	 * ein MANGEL unten, kein UEBERSCHUSS oben. Ein Deckel kann Mangel nicht beheben.
+	 *
+	 * Zwingt man die Dichte per Riegel gleich (0,13 gegen 0,16 statt 0,21 gegen 0,67), bleibt das
+	 * Ergebnis unveraendert vernichtend. Die eigentliche Ursache ist, dass bei hoher Bildrate die
+	 * gesamte Simulation oefter laeuft - Mass, Kampf, Wegfindung, Wirtschaft - und nicht, dass die
+	 * KI oefter entscheidet. Das liegt ausserhalb der KI.
+	 *
+	 * Der Riegel misst in SPIELZEIT (UWorld::GetTimeSeconds), nicht in Realzeit - damit wirkt er
+	 * unabhaengig von der Zeitdehnung, genau wie die Abklingzeiten der einzelnen Regelzeilen.
+	 * Er kann nur DECKELN, nicht nachholen; reicht die Bildrate nicht, warnt ConsumeDecisionSlot
+	 * einmal je Partie mit Soll- und Istwert.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Takt", meta=(ClampMin="0.0"))
+	float DecisionsPerGameSecond = 0.f;
+
+	/**
+	 * Ist jetzt eine Entscheidung faellig? Verbraucht dabei den Zeitschlitz.
+	 * Gibt true zurueck, wenn seit der letzten Entscheidung genug SPIELZEIT vergangen ist.
+	 */
+	bool ConsumeDecisionSlot();
+
 private:
+
+	// Spielzeitpunkt der letzten gefaellten Entscheidung. Negativ = noch keine, erste ist sofort faellig.
+	float LastDecisionGameTime = -1000000.f;
+
+	// Diagnose: wie oft der Riegel gegriffen bzw. durchgelassen hat, plus die einmalige Warnung.
+	int32 DecisionsGranted = 0;
+	int32 DecisionsBlocked = 0;
+	bool bDecisionStarvationReported = false;
+
 
 	// Timestamp of the last time we attempted to evaluate attack rules (seconds). Initialized so first check is allowed immediately.
 	float LastAttackRuleCheckTimeSeconds = -1000000.f;
@@ -655,6 +700,20 @@ private:
 
 	FVector LetzteAngriffsBefehlPos = FVector::ZeroVector;
 	float LetzteAngriffsBefehlZeit = -1.f;
+
+	/**
+	 * Einheiten, die gerade einen Angriffsbefehl abmarschieren.
+	 *
+	 * Die Verteidigungsroutine sammelt sonst JEDE Einheit ein, die nicht Attack/Chase/Casting/Build
+	 * ist - und eine marschierende Armee hat den Zustand Run. Folge: der Angriff wird auf halbem Weg
+	 * abgebrochen, die Einheiten laufen heim, die naechste Angriffsregel schickt sie wieder los. Genau
+	 * das Pendeln zwischen den Basen, das der Nutzer am 09.09.2026 gemeldet hat.
+	 *
+	 * Solange AttackCommitSeconds seit LetzteAngriffsBefehlZeit nicht abgelaufen sind, bleiben diese
+	 * Einheiten der Verteidigung entzogen. Schwache Zeiger, damit gefallene Einheiten von selbst
+	 * herausfallen.
+	 */
+	TSet<TWeakObjectPtr<AUnitBase>> MarschierendeEinheiten;
 
 	// Helper to handle the return move and post-return actions
 	void FinalizeAttackReturn();

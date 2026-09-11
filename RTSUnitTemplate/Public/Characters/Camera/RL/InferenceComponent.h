@@ -435,7 +435,12 @@ private:
 	 * Turns the network's raw scores into one action - greedily, or by sampling the softmax when
 	 * rts.ai.rl.temperature is above zero. See the CVar for why a cloned policy needs the latter.
 	 */
-	static int32 SelectActionFromScores(const TArray<float>& Scores);
+	// Nicht mehr static: die Aktionsmaske braucht die aktuelle Auswahl des Controllers.
+	int32 SelectActionFromScores(const TArray<float>& Scores);
+
+	/** Trifft dieser Faehigkeitsdruck bei der aktuellen Auswahl ueberhaupt eine Faehigkeit?
+	 *  Nur fuer die Aktionen 10-15 relevant, alles andere ist immer moeglich. */
+	bool IstAktionMoeglich(int32 ActionIndex) const;
 
 	static float GetSamplingTemperature();
 

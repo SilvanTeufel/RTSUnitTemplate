@@ -7,6 +7,7 @@
 #include "GameFramework/Pawn.h"
 #include "GameFramework/Controller.h"
 #include "Characters/Camera/BehaviorTree/RTSRuleBasedDeciderComponent.h"
+#include "Characters/Camera/RLAgent.h"
 
 namespace
 {
@@ -147,7 +148,53 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
         return EBTNodeResult::Failed;
     }
 
+    // ENTSCHEIDUNGSTAKT. Der Verhaltensbaum laeuft einmal je Frame durch, also faellt ohne diesen
+    // Riegel je Frame eine Entscheidung - die Handlungsdichte der KI haengt damit an der Bildrate
+    // und die an der Maschine. Gemessen: zwei gleichzeitige Instanzen derselben Partie bei 7 und
+    // 105 fps, also Faktor 15 in der Entscheidungszahl. Weil die Regel-KI zusaetzliche
+    // Entscheidungen besser verwertet als das Netz, verschob das ganze Kraefteverhaeltnis sich mit
+    // der Bildrate (ausgeglichen bei 1,2 Entscheidungen je Spielsekunde, vernichtend bei 17).
+    //
+    // Der Riegel sitzt bewusst VOR der Zustandserhebung: ein gesperrter Takt soll auch nichts kosten.
+    // Und er sitzt VOR der Verzweigung Netz/Regel-KI, damit er auf BEIDE Hirne gleich wirkt - sonst
+    // waere jeder Vergleich zwischen ihnen wieder verzerrt.
+    if (!Decider->ConsumeDecisionSlot())
+    {
+        // Succeeded, nicht Failed: der Baum soll normal weiterlaufen, nur ohne neue Entscheidung.
+        return EBTNodeResult::Succeeded;
+    }
+
     FGameStateData GS;
+
+    // Der Zustand wird gleich Feld fuer Feld aus dem Blackboard zusammengesetzt. Das Blackboard
+    // traegt aber nur die Schluessel, die weiter unten stehen - Spielzeit, Angriffsstaerke und die
+    // 16 Bauwarteschlangen-Zaehler sind NICHT dabei. StateToArray schreibt sie trotzdem in den
+    // Vektor, sie kamen dort also immer als 0 an: 20 von 55 Eingaengen waren tot.
+    if (ARLAgent* Agent = Cast<ARLAgent>(Pawn))
+    {
+        const FGameStateData Frisch = Agent->GatherGameState(Decider->ResolveOwningTeamId());
+
+        GS.GameTimeSeconds        = Frisch.GameTimeSeconds;
+        GS.MyTotalAttackDamage    = Frisch.MyTotalAttackDamage;
+        GS.EnemyTotalAttackDamage = Frisch.EnemyTotalAttackDamage;
+
+        GS.Alt1TagPendingBuildCount  = Frisch.Alt1TagPendingBuildCount;
+        GS.Alt2TagPendingBuildCount  = Frisch.Alt2TagPendingBuildCount;
+        GS.Alt3TagPendingBuildCount  = Frisch.Alt3TagPendingBuildCount;
+        GS.Alt4TagPendingBuildCount  = Frisch.Alt4TagPendingBuildCount;
+        GS.Alt5TagPendingBuildCount  = Frisch.Alt5TagPendingBuildCount;
+        GS.Alt6TagPendingBuildCount  = Frisch.Alt6TagPendingBuildCount;
+        GS.Ctrl1TagPendingBuildCount = Frisch.Ctrl1TagPendingBuildCount;
+        GS.Ctrl2TagPendingBuildCount = Frisch.Ctrl2TagPendingBuildCount;
+        GS.Ctrl3TagPendingBuildCount = Frisch.Ctrl3TagPendingBuildCount;
+        GS.Ctrl4TagPendingBuildCount = Frisch.Ctrl4TagPendingBuildCount;
+        GS.Ctrl5TagPendingBuildCount = Frisch.Ctrl5TagPendingBuildCount;
+        GS.Ctrl6TagPendingBuildCount = Frisch.Ctrl6TagPendingBuildCount;
+        GS.CtrlQTagPendingBuildCount = Frisch.CtrlQTagPendingBuildCount;
+        GS.CtrlWTagPendingBuildCount = Frisch.CtrlWTagPendingBuildCount;
+        GS.CtrlETagPendingBuildCount = Frisch.CtrlETagPendingBuildCount;
+        GS.CtrlRTagPendingBuildCount = Frisch.CtrlRTagPendingBuildCount;
+    }
 
     auto SafeGetBBFloat = [&](FName KeyName) -> float
     {
