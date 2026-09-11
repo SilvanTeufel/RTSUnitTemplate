@@ -95,6 +95,22 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float FogUpdateRate = 0.1f;
+
+	/**
+	 * Solange gesetzt, ignoriert dieser Nebelaktor die Speisung aus den lebenden Einheiten.
+	 *
+	 * Gebraucht wird das von der Wiedergabe: dort wird die Maske aus der Aufnahme gezeichnet. Laeuft
+	 * daneben noch eine Partie - was nach "Aufgeben" und anschliessendem "Replay ansehen" der Fall
+	 * ist -, dann schreibt UUnitSightProcessor ueber ACustomControllerBase::UpdateFogMaskWithCircles
+	 * weiter in DIESELBE Maske. Zwei Schreiber mit unterschiedlichem Inhalt, zehnmal je Sekunde:
+	 * genau das war das gemeldete Flackern des Post-Process. Ueber den Replay-Browser trat es nicht
+	 * auf, weil dort beim Start der Wiedergabe noch keine Einheiten leben.
+	 *
+	 * Bewusst eine schlichte Flagge und keine Abhaengigkeit zum ReplayModule: RTSUnitTemplate darf
+	 * das Replay nicht kennen. Wer die Maske selbst fuellt, setzt die Flagge und raeumt sie wieder ab.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bExternalFogSource = false;
 private:
 	FTimerHandle FogUpdateTimerHandle;
 	
