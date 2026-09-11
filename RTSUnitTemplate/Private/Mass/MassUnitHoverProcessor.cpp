@@ -3,6 +3,7 @@
 #include "Mass/MassUnitHoverProcessor.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/MassUnitBase.h"
+#include "Characters/Unit/UnitBase.h"
 #include "MassEntityManager.h"
 #include "MassExecutionContext.h"
 #include "MassCommonFragments.h"
@@ -105,6 +106,9 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 	int32 BestInstanceIndex = INDEX_NONE;
 	TWeakObjectPtr<UInstancedStaticMeshComponent> BestISM = nullptr;
 	TWeakObjectPtr<USkeletalMeshComponent> BestMesh = nullptr;
+	// Der Aktor zur besten Entitaet - damit der Klick ihn direkt bekommt, statt ihn ueber
+	// Linienspuren noch einmal zu suchen (siehe ACustomControllerBase::HoveredUnit).
+	TWeakObjectPtr<AUnitBase> BestUnit = nullptr;
 
 	EntityQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ChunkContext)
 	{
@@ -120,6 +124,7 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			int32 CurrentInstanceIndex = INDEX_NONE;
 			TWeakObjectPtr<UInstancedStaticMeshComponent> CurrentISM = nullptr;
 			TWeakObjectPtr<USkeletalMeshComponent> CurrentMesh = nullptr;
+			TWeakObjectPtr<AUnitBase> CurrentUnit = nullptr;
 
 			const FTransform& EntityTransform = Transforms[i].GetTransform();
 			const FMassAgentCharacteristicsFragment& CharFrag = CharFrags[i];
@@ -168,6 +173,8 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 					{
 						CurrentMesh = Char->GetMesh();
 					}
+
+					CurrentUnit = const_cast<AUnitBase*>(Cast<AUnitBase>(Actor));
 				}
 			}
 
@@ -181,10 +188,16 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 					BestInstanceIndex = CurrentInstanceIndex;
 					BestISM = CurrentISM;
 					BestMesh = CurrentMesh;
+					BestUnit = CurrentUnit;
 				}
 			}
 		}
 	}));
+
+	// Jeden Durchlauf melden, nicht nur bei Wechsel: faehrt die Maus ins Leere, muss der Eintrag
+	// geloescht werden, sonst bliebe die zuletzt ueberfahrene Einheit fuer immer bevorzugtes
+	// Klickziel und man koennte nichts anderes mehr anklicken.
+	LocalPC->SetHoveredUnit(BestUnit.Get());
 
 	// Detect if we changed entity OR instance index/mesh for the same entity
 	bool bInstanceChanged = false;

@@ -165,6 +165,11 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "RTSUnitTemplate|Spectator")
 	void Server_EnterSpectate(bool bRevealAll);
 
+	/** Der Spieler gibt auf: loest fuer sein Team die Niederlage aus. Wie Server_EnterSpectate
+	 *  ein Server-Aufruf, damit der Knopf auch beim Client wirkt. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = "RTSUnitTemplate|WinLose")
+	void Server_Surrender();
+
 	// Function called by timer to display FPS
 	void DisplayUnitCount();
 	
@@ -452,6 +457,21 @@ public:
 	
 	UPROPERTY(ReplicatedUsing = OnRep_SelectableTeamId, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int SelectableTeamId = -1;
+
+	/**
+	 * Zuschauer: darf anwaehlen, aber nichts befehlen.
+	 *
+	 * Team 0 ist der Zuschauerplatz - AExodusGameMode::EnterSpectate setzt beim Wechsel
+	 * `Multi_SetControllerTeamId(0)` und sichert das echte Team in OriginalTeamId
+	 * (ExodusGameMode.cpp:112). Ausgewaehlt werden darf weiterhin alles, damit Tooltips und
+	 * Symbole sichtbar bleiben; jeder Befehl - Bewegen, Angreifen, Faehigkeit, Halten - wird
+	 * verworfen.
+	 *
+	 * Die Pruefung sitzt in den Server-Umsetzungen der Befehle, nicht in der Eingabe: ein Client
+	 * koennte die Eingabeschicht umgehen, die RPC-Seite nicht.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Spectator")
+	bool IsSpectatorController() const { return SelectableTeamId == 0; }
 
 	UPROPERTY(ReplicatedUsing = OnRep_AlliedTeamsMask, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int64 AlliedTeamsMask = 0;

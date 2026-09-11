@@ -452,6 +452,22 @@ public:
 	float ExpansionClaimedRadius = 3500.f;
 
 	/**
+	 * Mindestabstand einer Basis zu einem Vorkommen, wenn sie auf einem AIExpansionSite-Marker entsteht.
+	 *
+	 * Der Markerpfad ueberspringt bewusst die allgemeine Abstandsaufloesung und den grossen
+	 * ResourcePlacementDistance-Test (1000 uu), weil ein Marker absichtlich NEBEN eine Lagerstaette
+	 * gesetzt wird und die Basis sonst jedes Mal 1076 uu vom Marker weggeschoben wurde.
+	 *
+	 * Dieser kleinere Wert ist die verbliebene Untergrenze: nah ist erlaubt, DRAUF nicht. Gemessen am
+	 * 09.09.2026 in Helix_Basin_KITraining_AH: alle sechs Marker stehen 190-255 uu von einem
+	 * Primary-Vorkommen, die Basen landeten also direkt darauf und begruben die Lagerstaette.
+	 *
+	 * 0 schaltet die Sperre ab und stellt das alte Verhalten wieder her.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI Placement", meta=(ClampMin="0.0"))
+	float MarkerMinResourceDistance = 600.f;
+
+	/**
 	 * Duerfen Basen NUR auf handgesetzten AIExpansionSite-Markern entstehen?
 	 *
 	 * True (Vorgabe): kein fuer dieses Team freigegebener Marker, keine Expansion. Das ist die
@@ -511,6 +527,16 @@ public:
 
 	// Internal helpers to simplify MoveWorkArea_Local logic (non-UFUNCTION)
 	bool TraceMouseToGround(FVector& OutMouseGround, FHitResult& OutHit) const;
+
+	/** Zieht einen Punkt senkrecht auf die Landschaft herunter. Liefert false, wenn unter dem Punkt
+	 *  keine Landschaft liegt - dann bleibt der Aufrufer beim urspruenglichen Treffer. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool SnapPointToLandscape(FVector InPoint, FVector& OutPoint, ECollisionChannel Kanal = ECC_Visibility) const;
+
+	/** Mausstrahl direkt gegen die LANDSCHAFT. Anders als TraceMouseToGround kein Einzeltreffer und
+	 *  keine Navmesh-Projektion: beides laesst den Punkt an Einheiten haengen bzw. scheitern. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool TraceMouseToLandscape(FVector& OutPoint, FHitResult& OutHit, ECollisionChannel Kanal = ECC_Visibility) const;
 
 	/**
 	 * Schnittpunkt des Mausstrahls mit der waagerechten Ebene auf Hoehe PlaneZ.

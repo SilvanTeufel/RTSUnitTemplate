@@ -2,6 +2,9 @@
 
 
 #include "Controller/PlayerController/WidgetController.h"
+#include "System/AbilityTemplateSubsystem.h"
+#include "Actors/WinLoseConfigActor.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "NavigationSystem.h" // Include this for navigation functions
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Core/UnitData.h"
@@ -413,15 +416,44 @@ void AWidgetController::SpendAbilityPointsByTag_Implementation(EGASAbilityInputI
 		}
 	}
 
-	// Iterate through all units to find those with matching tags and spend ability points
+	// Hat der Chooser eine Tierklasse gewaehlt, gilt DIESE - sonst waere die Auswahl fuer
+	// alle vier Reiter dieselbe, weil der TalentTag an der angeklickten Einheit haengt.
+	if (ChooserTierTag.IsValid())
+	{
+		TargetTag = ChooserTierTag;
+	}
+
+	// Vergabe ohne Punktvorgabe (02.09.2026): der AbilityChooser ist eine Vorlage je Klasse,
+	// keine Ausgabe von Punkten. Frueher wurden punktlose Einheiten stillschweigend
+	// uebersprungen - dann galt die Wahl fuer einen Teil der Klasse und fuer den Rest nicht.
+	int32 Gesetzt = 0, Unveraendert = 0;
 	for (int32 i = 0; i < RTSGameMode->AllUnits.Num(); i++)
 	{
 		AUnitBase* Unit = Cast<AUnitBase>(RTSGameMode->AllUnits[i]);
-		if (Unit && Unit->TalentTag == TargetTag && (Unit->TeamId == TeamId))
+		// Beide Tag-Begriffe zulassen: der TalentTag beschreibt den Einheitentyp, die
+		// Tierklasse steht in UnitTags. ALevelUnit::DoesAttributeTreeNodeMatchUnit prueft
+		// ebenfalls beides.
+		if (Unit && (Unit->TalentTag == TargetTag || Unit->UnitTags.HasTag(TargetTag))
+			&& (Unit->TeamId == TeamId))
 		{
-			Unit->SpendAbilityPoints(AbilityID, Ability);
+			if (Unit->ApplyAbilityFromTemplate(AbilityID, Ability)) ++Gesetzt;
+			else ++Unveraendert;
 		}
 	}
+
+	// Die Wahl merken, damit UAbilityTemplateProcessor sie auf spaeter gebaute Einheiten
+	// nachtraegt. Ohne das musste der Spieler nach jeder neuen Einheit erneut klicken.
+	if (UWorld* Welt = GetWorld())
+	{
+		if (UAbilityTemplateSubsystem* Vorlagen = Welt->GetSubsystem<UAbilityTemplateSubsystem>())
+		{
+			Vorlagen->Merken(TeamId, TargetTag, Ability, AbilityID);
+		}
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[Tiervergabe] Team %d Tag=%s Slot=%d: %d Einheiten gesetzt, %d schon so."),
+		TeamId, *TargetTag.ToString(), Ability, Gesetzt, Unveraendert);
 }
 
 void AWidgetController::ResetAbility_Implementation(const int32 UnitIndex)
@@ -540,4 +572,35 @@ void AWidgetController::RemoveWorkerFromResource_Implementation(EResourceType Re
 	{
 		GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
 	}
+}
+
+// ------------------------------------------------------------------------------------------
+// Entwickler-Hilfe: die aktuelle Siegbedingung erfuellen (siehe UCheatWidget).
+// ------------------------------------------------------------------------------------------
+void AWidgetController::Server_CheatWinCurrentLevel_Implementation()
+{
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(UGameplayStatics::GetGameMode(GetWorld()));
+	if (!GameMode)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Cheat] Sieg nicht ausloesbar: kein RTSGameModeBase"));
+		return;
+	}
+
+	ACameraControllerBase* CamPC = Cast<ACameraControllerBase>(this);
+	AWinLoseConfigActor* Config =
+		AWinLoseConfigActor::GetWinLoseConfigForTeam(GetWorld(), SelectableTeamId);
+	if (!Config)
+	{
+		Config = GameMode->WinLoseConfigActor;
+	}
+
+	if (!CamPC || !Config)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Cheat] Sieg nicht ausloesbar: PC=%d Config=%d"),
+			CamPC ? 1 : 0, Config ? 1 : 0);
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Cheat] Siegbedingung erfuellt fuer Team %d"), SelectableTeamId);
+	GameMode->TriggerWinLoseForPlayer(CamPC, true, Config);
 }
