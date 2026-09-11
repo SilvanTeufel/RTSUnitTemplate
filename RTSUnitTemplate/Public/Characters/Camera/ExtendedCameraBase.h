@@ -220,7 +220,6 @@ public:
 	/** Server-authoritative: invest one talent point through an attribute-tree node. */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_InvestAttributeTreeNode(ALevelUnit* Unit, FName NodeId);
-
 	/** Server-authoritative: reset the unit's attribute tree (refunds talent points). */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void Server_ResetAttributeTree(ALevelUnit* Unit);
@@ -292,6 +291,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateViewportBlur(bool bEnable);
+
+	/**
+	 * Schliesst das Kartenmenue vollstaendig - Sichtbarkeit, Steuerungssperre UND Blur.
+	 *
+	 * Genau diese drei Schritte macht auch Input_Esc_Pressed. Wer nur die Sichtbarkeit
+	 * setzt, laesst den Blur stehen und die Steuerung gesperrt; der Spieler sieht dann ein
+	 * verschwommenes Bild und kommt nicht ans Spiel.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void CloseMapMenu();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetSelectorWidget(int Id, AUnitBase* SelectedActor);
