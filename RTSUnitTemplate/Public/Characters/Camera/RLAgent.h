@@ -35,6 +35,14 @@ protected:
     TObjectPtr<UInferenceComponent> InferenceComponent;
 
     /**
+     * Die zuletzt gewaehlte Gruppe, die tatsaechlich Einheiten hatte (camera_state der Aktionen 0-9).
+     * -1 = noch keine. Gebraucht, weil Gruppenwahl und Faehigkeitsdruck im Aktionsraum getrennt sind:
+     * gemessen am 01.09.2026 treffen 61 % der Faehigkeitsdruecke des Netzes eine leere Auswahl,
+     * bei der Regel-KI kein einziger - die packt beides in EINE Entscheidung.
+     */
+    int32 LetzteAuswahlTaste = -1;
+
+    /**
      * Spawn location, used to pick this agent's own "RLAgentCameraBounds" box when the level contains one
      * per team. Taken once at BeginPlay because the agent wanders far from its base later on, and matching
      * against its current position would let it drift into the enemy's box.
