@@ -12,6 +12,9 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Characters/Unit/MassUnitBase.h"
 #include "MassMovementFragments.h"   // FMassVelocityFragment - diagnostic: wanted vs. actual speed
+#include "Controller/PlayerController/ControllerBase.h"  // Auswahl des Spielers fuer [StandDiag]
+#include "Engine/World.h"
+#include "HAL/IConsoleManager.h"
 
 // All ISM animation custom data lives in indices 1..12 (see the *CustomDataIndex members in
 // UnitAnimationProcessor.h), so every animated ISM needs at least this many custom-data floats.
@@ -110,6 +113,39 @@ static const FUnitAnimData* FindAnimRowForStateOrIdle(UDataTable* Table, TEnumAs
     return ExactMatch ? ExactMatch : IdleMatch;
 }
 
+// Diagnose nur fuer die aktuell AUSGEWAEHLTE Einheit.
+//
+// Am Wegpunkt stehen zwanzig Einheiten beieinander; im Log sind sie nur an ihrem Namen zu
+// unterscheiden, und welche davon der Nutzer gerade laufen SIEHT, geht daraus nicht hervor.
+// Mit diesem Schalter waehlt er die betroffene Einheit im Spiel aus, und nur sie schreibt -
+// dafuer mit allen Zwischenwerten des Stillstandswaechters.
+static TAutoConsoleVariable<int32> CVarRTS_StandDiagNurAuswahl(
+    TEXT("RTS.StandDiagNurAuswahl"), 1,
+    TEXT("[StandDiag] nur fuer die im Spiel ausgewaehlte Einheit schreiben. 0 = alle Einheiten."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_StandDiag(
+    TEXT("RTS.StandDiag"), 1,
+    TEXT("[StandDiag] ueberhaupt schreiben. 0 = aus."),
+    ECVF_Default);
+
+bool RTSDiagIstAusgewaehlt(const AActor* Aktor)
+{
+    if (!Aktor) { return false; }
+    const UWorld* Welt = Aktor->GetWorld();
+    if (!Welt) { return false; }
+    for (FConstPlayerControllerIterator It = Welt->GetPlayerControllerIterator(); It; ++It)
+    {
+        const AControllerBase* Steuerung = Cast<AControllerBase>(It->Get());
+        if (Steuerung && Steuerung->SelectedUnits.Contains(Aktor))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+
 UUnitAnimationProcessor::UUnitAnimationProcessor()
 {
     bRequiresGameThreadExecution = true;
@@ -160,7 +196,14 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
             const FMassUnitVisualFragment& VisualFrag = VisualList[i];
             FUnitAnimationFragment& AnimFrag = AnimList[i];
             const FMassCombatStatsFragment& Stats = StatsList[i];
-            
+
+            // Muss ausserhalb des UnitBase-Blocks liegen: die Ueberblendung der Mischpunkte
+            // weiter unten steht in einem anderen Geltungsbereich und braucht das Ergebnis.
+            bool bStehtStill = false;
+            // Nur ueber die Nettostrecke erkannt - das alte Mass pro Einzelbild haette diese
+            // Einheit fuer laufend gehalten. Wird weiter unten gezaehlt.
+            bool bNurNetto = false;
+
             if (AUnitBase* UnitBase = Cast<AUnitBase>(ActorList[i].GetMutable()))
             {
                 const TEnumAsByte<UnitData::EState> RealState = UnitBase->GetUnitState();
@@ -196,7 +239,21 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 float MeasuredSpeed = -1.f;
                 {
                     const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-                    if (!bMovementState || !TransformList)
+
+                    // Der Waechter laeuft fuer JEDEN Zustand, nicht nur fuer Bewegungszustaende.
+                    //
+                    // Vorher wurde er bei jedem Nicht-Bewegungszustand geloescht - und genau das
+                    // hat die betroffenen Einheiten durchrutschen lassen: am Wegpunkt pendeln sie
+                    // zwischen PatrolRandom und PatrolIdle, und PatrolIdle steht nicht in der
+                    // Liste. Jeder Wechsel loeschte den Waechter, beim naechsten
+                    // PatrolRandom-Frame war bHasLocation wieder false, und SecondsStanding fing
+                    // von vorn an. Pendelt die Einheit schneller als AnimStandMinSeconds (0,5 s),
+                    // wird die Schwelle NIE erreicht und die Laufanimation bleibt stehen.
+                    //
+                    // Gemessen wird deshalb immer; ausgewertet wird nur im Bewegungszustand. Das
+                    // kostet nichts und macht die aufgelaufene Standzeit ueber einen
+                    // Zustandswechsel hinweg haltbar.
+                    if (!TransformList)
                     {
                         AnimStandWatches.Remove(Entity);
                     }
@@ -208,6 +265,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                         if (!Watch.bHasLocation)
                         {
                             Watch.LastLocation = Location;
+                            Watch.FensterStart = Location;
                             Watch.bHasLocation = true;
                         }
                         else
@@ -221,7 +279,27 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             // frame. Asymmetric on purpose: a unit that starts walking has to look
                             // like it immediately, while a single blocked frame must not flip the
                             // animation.
-                            if (MeasuredSpeed <= AnimStandSpeedThreshold)
+                            // STEHEND ist, wer nach EINEM der beiden Masse steht.
+                            //
+                            // Die gemessene Verschiebung allein reicht nicht. Am Wegpunkt draengen
+                            // sich die Einheiten, schieben einander und ueberschreiten dabei
+                            // staendig die 5 uu/s - SecondsStanding wurde dauernd zurueckgesetzt,
+                            // bStehtStill nie wahr, und die Mischpunkte blieben auf halbem Weg
+                            // stehen. Gemessen am 15.09.2026 an sieben Vectoren:
+                            //   Aktor=7 Anzeige=7 Tempo=0.0 Ziel=25 Jetzt=56.2
+                            // Das Geschwindigkeitsfragment sagt 0, die Einheit wird nur geschoben.
+                            //
+                            // Die beiden Masse decken GEGENSAETZLICHE Fehlrichtungen ab:
+                            //   Verschiebung   faengt "Fragment will laufen, Einheit steht" -
+                            //                  deswegen wurde sie urspruenglich gewaehlt.
+                            //   Fragment       faengt "Fragment steht, Einheit wird geschoben" -
+                            //                  Geschobenwerden ist keine Fortbewegung.
+                            // Wer nach einem von beiden steht, steht. Deshalb das Minimum.
+                            const float FragmentTempo = VelocityList
+                                ? VelocityList[i].Value.Size2D() : MeasuredSpeed;
+                            const float MassgeblichesTempo = FMath::Min(MeasuredSpeed, FragmentTempo);
+
+                            if (MassgeblichesTempo <= AnimStandSpeedThreshold)
                             {
                                 Watch.SecondsStanding += ChunkDeltaTime;
                             }
@@ -230,7 +308,119 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                 Watch.SecondsStanding = 0.f;
                             }
 
-                            bStandingStill = (Watch.SecondsStanding >= AnimStandMinSeconds);
+                            // ---- Nettostrecke ueber ein Zeitfenster ---------------------------
+                            //
+                            // Beide Masse oben schauen auf EIN Bild. Am Wegpunkt reicht das nicht:
+                            // der Client rechnet acht Bilder lang vorwaerts und wird vom naechsten
+                            // Serverstand in einem Bild zurueckgeworfen (gemessen 16.09.2026 an
+                            // einem ausgewaehlten Vector: 8 x ~250 uu/s vorwaerts, dann ein Bild
+                            // mit 1700 uu/s zurueck). Jedes einzelne Bild meldet dabei volle
+                            // Laufgeschwindigkeit - die Einheit kommt aber nicht vom Fleck.
+                            //
+                            // Der Server hat Recht: dort ist die Einheit blockiert. Die Diagnose
+                            // [Blockiert] nennt sie im selben Log ("1 von 9 laufwilligen Einheiten
+                            // kommen nicht vom Fleck"). Nur der Client glaubt weiter, sie laufe.
+                            //
+                            // Deshalb die Strecke ueber AnimStandMinSeconds statt die
+                            // Geschwindigkeit pro Bild. Ein echter Laeufer legt in 0,5 s rund
+                            // 125 uu zurueck, der zappelnde kommt auf unter 5.
+                            Watch.FensterZeit += ChunkDeltaTime;
+                            Watch.FensterWunschSumme += FragmentTempo * ChunkDeltaTime;
+                            const float FensterStrecke = FVector::Dist2D(Watch.FensterStart, Location);
+
+                            if (FensterStrecke >= AnimStandAusbruchStrecke)
+                            {
+                                // Wirklich losgelaufen - nicht bis zum Fensterende warten, sonst
+                                // steht eine anlaufende Einheit eine halbe Sekunde in der
+                                // Stillstandspose.
+                                Watch.bFensterStill = false;
+                                Watch.FensterNettoTempo = Watch.FensterZeit > KINDA_SMALL_NUMBER
+                                    ? FensterStrecke / Watch.FensterZeit : 0.f;
+                                Watch.FensterWunschTempo = Watch.FensterZeit > KINDA_SMALL_NUMBER
+                                    ? Watch.FensterWunschSumme / Watch.FensterZeit : 0.f;
+                                Watch.FensterStart = Location;
+                                Watch.FensterZeit = 0.f;
+                                Watch.FensterWunschSumme = 0.f;
+                            }
+                            else if (Watch.FensterZeit >= AnimStandMinSeconds)
+                            {
+                                Watch.FensterNettoTempo = FensterStrecke / Watch.FensterZeit;
+                                Watch.FensterWunschTempo = Watch.FensterWunschSumme / Watch.FensterZeit;
+
+                                // ZWEI Bedingungen, und die zweite ist die entscheidende.
+                                //
+                                // Die erste faengt die wirklich stehende Einheit. Sie reicht nicht:
+                                // gemessen am 16.09.2026 kroch der Vector mit netto 14 bis 37 uu/s
+                                // vorwaerts, waehrend er 300 wollte. Absolut ist das kein
+                                // Stillstand - im Verhaeltnis zur Laufanimation, die 300 zeigt,
+                                // aber sehr wohl. Genau so sieht Laufen auf der Stelle aus: ein
+                                // Kriechen unter voller Laufpose.
+                                //
+                                // Deshalb der Anteil. Ein echter Laeufer erreicht ueber ein halbes
+                                // Sekundenfenster fast 100 Prozent des Gewollten, der Vector kam
+                                // auf 5 bis 12.
+                                const bool bAbsolutStill =
+                                    (Watch.FensterNettoTempo <= AnimStandSpeedThreshold);
+                                const bool bKeinFortschritt =
+                                    (Watch.FensterWunschTempo > AnimStandSpeedThreshold)
+                                    && (Watch.FensterNettoTempo
+                                        < AnimStandFortschrittsAnteil * Watch.FensterWunschTempo);
+
+                                Watch.bFensterStill = bAbsolutStill || bKeinFortschritt;
+                                Watch.FensterStart = Location;
+                                Watch.FensterZeit = 0.f;
+                                Watch.FensterWunschSumme = 0.f;
+                            }
+
+                            // Nur im Bewegungszustand auswerten - im Stillstandszustand ist die
+                            // stehende Darstellung ohnehin die richtige, dort gibt es nichts zu
+                            // korrigieren.
+                            // Wer nach EINEM der beiden Wege steht, steht. Die Masse decken
+                            // verschiedene Fehlbilder ab: SecondsStanding faengt die wirklich
+                            // eingefrorene Einheit sofort, das Nettofenster die zappelnde, bei der
+                            // jedes Einzelbild volle Geschwindigkeit meldet.
+                            const bool bGemessenStill =
+                                (Watch.SecondsStanding >= AnimStandMinSeconds) || Watch.bFensterStill;
+                            bNurNetto = Watch.bFensterStill
+                                && (Watch.SecondsStanding < AnimStandMinSeconds);
+
+                            // Die ANZEIGE wird nur im Bewegungszustand auf Idle gezogen - in einem
+                            // Stillstandszustand ist die stehende Darstellung ohnehin richtig.
+                            bStandingStill = bMovementState && bGemessenStill;
+
+                            // [StandDiag] - jeder Zwischenwert des Waechters fuer EINE Einheit.
+                            //
+                            // Bisher zeigte das Log nur das Ergebnis (Ziel und Jetzt der
+                            // Mischpunkte). Warum das Einschnappen ausbleibt, stand nie darin.
+                            // Diese Zeile nennt alle Groessen, aus denen die Entscheidung faellt,
+                            // und laeuft standardmaessig nur fuer die AUSGEWAEHLTE Einheit - am
+                            // Wegpunkt draengen sich zwanzig Stueck, und welche der Nutzer laufen
+                            // sieht, ist aus Namen allein nicht zu erkennen.
+                            //
+                            // Schalter: RTS.StandDiag 0 schaltet ab, RTS.StandDiagNurAuswahl 0
+                            // schreibt fuer alle Einheiten.
+                            if (CVarRTS_StandDiag.GetValueOnGameThread() != 0
+                                && (CVarRTS_StandDiagNurAuswahl.GetValueOnGameThread() == 0
+                                    || RTSDiagIstAusgewaehlt(UnitBase)))
+                            {
+                                const UWorld* DiagWelt = UnitBase->GetWorld();
+                                const TCHAR* Seite = (DiagWelt && DiagWelt->GetNetMode() == NM_Client)
+                                    ? TEXT("CLIENT") : TEXT("SERVER");
+                            }
+
+                            // Das EINSCHNAPPEN der Mischpunkte haengt dagegen NICHT am Zustand.
+                            //
+                            // Gemessen am 14.09.2026, nachdem CL 456 zu eng gegriffen hatte:
+                            //   [AnimUebergabe] V0 Aktor=7 Anzeige=7 Tempo=0.0 | Jetzt=(54.1,75.0)
+                            //   [AnimUebergabe] V4 Aktor=7 Anzeige=7 Tempo=0.0 | Jetzt=(42.3,75.0)
+                            // Aktor=7 ist PatrolIdle, und PatrolIdle steht nicht in bMovementState.
+                            // Also blieb bStandingStill dort falsch, das Einschnappen griff nicht,
+                            // und der Wert kroch weiter durch die Mitte zwischen Idle (25) und
+                            // Jog_Fwd (75) - also durch eine halbe Laufpose.
+                            //
+                            // Wer STEHT, soll sofort stehend aussehen. Aus welchem Zustand heraus,
+                            // ist dafuer egal.
+                            bStehtStill = bGemessenStill;
                         }
                     }
                 }
@@ -238,40 +428,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 const TEnumAsByte<UnitData::EState> CurrentState =
                     (bAnimStandFix && bStandingStill) ? TEnumAsByte<UnitData::EState>(UnitData::Idle) : RealState;
 
-                if (bAnimStandDiagnostics && bMovementState)
-                {
-                    ++AnimStandObserved;
-                    if (VisualFrag.bUseSkeletalMovement) ++AnimStandObservedSkeletal;
-
-                    if (bStandingStill)
-                    {
-                        ++AnimStandCount;
-                        if (VisualFrag.bUseSkeletalMovement) ++AnimStandSkeletal;
-                        if (UnitBase->IsOnViewport) ++AnimStandOnViewport;
-
-                        // "No velocity fragment" and "fragment wants to move" are different causes
-                        // and must not collapse into one number.
-                        if (!VelocityList)
-                        {
-                            ++AnimStandNoVelocity;
-                        }
-                        else if (VelocityList[i].Value.Size2D() > AnimStandSpeedThreshold)
-                        {
-                            ++AnimStandWantsToMove;
-                        }
-
-                        if (CurrentWorldTime >= AnimStandNextDetailTime)
-                        {
-                            AnimStandNextDetailTime = CurrentWorldTime + 2.f;
-                            UE_LOG(LogTemp, Warning,
-                                TEXT("[LaufAufDerStelle] %s Zustand=%d -> Idle  gemessen=%.1f  soll=%.1f  skelettal=%d  imBild=%d"),
-                                *UnitBase->GetName(), (int32)RealState.GetValue(), MeasuredSpeed,
-                                VelocityList ? VelocityList[i].Value.Size2D() : -1.f,
-                                VisualFrag.bUseSkeletalMovement ? 1 : 0,
-                                UnitBase->IsOnViewport ? 1 : 0);
-                        }
-                    }
-                }
                 // ---- end standing-still handling --------------------------------------------
 
                 // Zieht die Instanz auf eine ANDERE ISM um (der UUnitVisualManager holt sie von der
@@ -290,11 +446,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                         && (AnimFrag.LastWrittenISM.Get() != AktuellesZiel
                             || AnimFrag.LastWrittenInstanceIndex != AktuellerIndex))
                     {
-                        UE_LOG(LogTemp, Log,
-                            TEXT("[ISMAnim] %s: Instanz umgezogen (%s#%d -> %s#%d) - Animationsdaten werden neu geschrieben."),
-                            *UnitBase->GetName(),
-                            *GetNameSafe(AnimFrag.LastWrittenISM.Get()), AnimFrag.LastWrittenInstanceIndex,
-                            *GetNameSafe(AktuellesZiel), AktuellerIndex);
 
                         AnimFrag.LastProcessedState = UnitData::None;
                     }
@@ -328,8 +479,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
                                 if (bUsedIdleFallback)
                                 {
-                                    UE_LOG(LogTemp, Warning, TEXT("[AnimRow] %s: no row for state %d in %s - fell back to Idle"),
-                                        *UnitBase->GetName(), (int32)CurrentState.GetValue(), *GetNameSafe(AnimInst->AnimDataTable));
                                 }
                             }
                         }
@@ -371,10 +520,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                 AnimFrag.ISMAnimationDataTable, CurrentState, &bIdleRuecktritt);
                             if (bIdleRuecktritt)
                             {
-                                UE_LOG(LogTemp, Warning,
-                                    TEXT("[ISMAnim] %s: keine Zeile fuer Zustand %d in %s - Ruecktritt auf Idle."),
-                                    *UnitBase->GetName(), (int32)CurrentState.GetValue(),
-                                    *GetNameSafe(AnimFrag.ISMAnimationDataTable));
                             }
 
                             // Mehrere Zustaende teilen sich denselben Clip: Run/Chase/Patrol laufen alle
@@ -494,11 +639,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             // Frame 0 still, statt ihre Animation zu zeigen.
                             if (AnimFrag.LastProcessedState == UnitData::None)
                             {
-                                UE_LOG(LogTemp, Log,
-                                    TEXT("[ISMAnim] %s: erste Instanzdaten Zustand=%d Frames %.0f..%.0f Rate=%.2f Clip=%.0f"),
-                                    *UnitBase->GetName(), (int32)CurrentState.GetValue(),
-                                    AnimFrag.CurrentStartFrame, AnimFrag.CurrentEndFrame,
-                                    AnimFrag.CurrentPlayRate, AnimFrag.TargetStateCustomDataValue);
                             }
                         }
                         else
@@ -527,9 +667,6 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
                         if (!bCommitted)
                         {
-                            UE_LOG(LogTemp, Verbose,
-                                TEXT("[ISMAnim] %s: Tabelle beim Zustandswechsel noch nicht am Fragment - nachgeholt, Wechsel bleibt offen."),
-                                *UnitBase->GetName());
                         }
                     }
 
@@ -592,8 +729,31 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 AnimFrag.AnimationPosition = 0.f;
             }
 
-            AnimFrag.CurrentBlendPoint_1 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_1, AnimFrag.TargetBlendPoint_1, DeltaTime, AnimFrag.TransitionRate_1);
-            AnimFrag.CurrentBlendPoint_2 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_2, AnimFrag.TargetBlendPoint_2, DeltaTime, AnimFrag.TransitionRate_2);
+            // Steht die Einheit, wird NICHT geblendet, sondern sofort gesetzt.
+            //
+            // Gemessen am 14.09.2026 auf dem Client:
+            //   [AnimUebergabe] V3 Aktor=7 Anzeige=7 Tempo=0.0 | Ziel=(25.0,75.0) Jetzt=(50.1,75.0)
+            //   [AnimUebergabe] V7 Aktor=7 Anzeige=7 Tempo=0.0 | Ziel=(25.0,75.0) Jetzt=(50.4,75.0)
+            //
+            // In BS_Vector liegt (25,75) auf Idle_NonCombat und (75,75) auf Jog_Fwd. Der Wert 50
+            // ist damit exakt die Mitte - eine HALBE Laufpose. Genau so sieht "laeuft auf der
+            // Stelle" aus, und es ist kein Fehler der Zielwerte, sondern der Weg dorthin.
+            //
+            // Die Ueberblendung braucht bei TransitionRate 5 (PatrolIdle/PatrolRandom) spuerbar
+            // Zeit, und sie schnappt erst innerhalb von Resolution ein. Fuer einen Wechsel von
+            // Laufen auf Stehen ist das die falsche Wahl: eine stehende Einheit soll auf der
+            // Stelle stehend aussehen und nicht erst durch eine halbe Laufpose wandern. In die
+            // andere Richtung (Stehen -> Laufen) bleibt die Ueberblendung erhalten.
+            if (bStehtStill)
+            {
+                AnimFrag.CurrentBlendPoint_1 = AnimFrag.TargetBlendPoint_1;
+                AnimFrag.CurrentBlendPoint_2 = AnimFrag.TargetBlendPoint_2;
+            }
+            else
+            {
+                AnimFrag.CurrentBlendPoint_1 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_1, AnimFrag.TargetBlendPoint_1, DeltaTime, AnimFrag.TransitionRate_1);
+                AnimFrag.CurrentBlendPoint_2 = FMath::FInterpTo(AnimFrag.CurrentBlendPoint_2, AnimFrag.TargetBlendPoint_2, DeltaTime, AnimFrag.TransitionRate_2);
+            }
 
             if (FMath::Abs(AnimFrag.CurrentBlendPoint_1 - AnimFrag.TargetBlendPoint_1) <= AnimFrag.Resolution_1)
             {
@@ -634,26 +794,4 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         }
     });
 
-    if (bAnimStandDiagnostics)
-    {
-        AnimStandReportTimer += Context.GetDeltaTimeSeconds();
-        if (AnimStandReportTimer >= 20.f)
-        {
-            const float Share = AnimStandObserved > 0
-                ? 100.f * float(AnimStandCount) / float(AnimStandObserved) : 0.f;
-            UE_LOG(LogTemp, Warning,
-                TEXT("[LaufAufDerStelle] %d von %d Bewegungszustaenden stehen still (%.2f%%)  davon skelettal=%d  soll>0=%d  ohneGeschwindigkeitsfragment=%d  IM BILD=%d   [beobachtet skelettal=%d von %d]"),
-                AnimStandCount, AnimStandObserved, Share, AnimStandSkeletal, AnimStandWantsToMove,
-                AnimStandNoVelocity, AnimStandOnViewport, AnimStandObservedSkeletal, AnimStandObserved);
-
-            AnimStandReportTimer = 0.f;
-            AnimStandObserved = 0;
-            AnimStandObservedSkeletal = 0;
-            AnimStandCount = 0;
-            AnimStandSkeletal = 0;
-            AnimStandWantsToMove = 0;
-            AnimStandNoVelocity = 0;
-            AnimStandOnViewport = 0;
-        }
-    }
 }

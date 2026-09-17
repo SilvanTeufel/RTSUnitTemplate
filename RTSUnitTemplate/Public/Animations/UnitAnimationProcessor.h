@@ -128,6 +128,15 @@ struct RTSUNITTEMPLATE_API FUnitAnimationFragment : public FMassFragment
     class UDataTable* ISMAnimationDataTable = nullptr;
 };
 
+/**
+ * Ist der Aktor in der Auswahl des oertlichen Spielers?
+ *
+ * Nur fuer die Diagnose. Am Wegpunkt draengen sich zwanzig Einheiten; welche davon der Nutzer
+ * laufen SIEHT, geht aus dem Namen im Log nicht hervor. Er waehlt sie im Spiel aus, und nur
+ * sie schreibt dann.
+ */
+RTSUNITTEMPLATE_API bool RTSDiagIstAusgewaehlt(const AActor* Aktor);
+
 UCLASS()
 class RTSUNITTEMPLATE_API UUnitAnimationProcessor : public UMassProcessor
 {
@@ -190,19 +199,34 @@ protected:
         FVector  LastLocation = FVector::ZeroVector;
         float    SecondsStanding = 0.f;
         bool     bHasLocation = false;
+
+        // NETTO-FENSTER: wo die Einheit zu Beginn des laufenden Fensters stand.
+        //
+        // Das Mass pro Einzelbild taugt am Wegpunkt nicht. Gemessen am 16.09.2026 an einem
+        // ausgewaehlten Vector auf dem Client, ueber achtzig aufeinanderfolgende Bilder:
+        //   Verschiebung=241  Fragment=257  massgeblich=241   (x8)
+        //   Verschiebung=1710 Fragment=245  massgeblich=245   <- Ruecksprung
+        // Acht Bilder lang laeuft die Einheit mit ~250 uu/s vorwaerts (rund 33 uu), dann wirft
+        // der naechste Serverstand sie in EINEM Bild wieder zurueck. Netto bleibt sie stehen -
+        // aber jedes Einzelbild meldet volle Laufgeschwindigkeit, und beide Masse (Verschiebung
+        // UND Geschwindigkeitsfragment) melden sie gleichzeitig. Das Minimum aus beiden half
+        // deshalb nicht.
+        //
+        // Nur der Abstand ueber ein ZEITFENSTER trennt "laeuft" von "zappelt auf der Stelle".
+        FVector  FensterStart = FVector::ZeroVector;
+        float    FensterZeit = 0.f;
+        float    FensterNettoTempo = 0.f;
+        // Summe der GEWOLLTEN Geschwindigkeit ueber das Fenster, um daraus den Mittelwert zu
+        // bilden. Der Vergleich Netto gegen Gewollt ist das eigentliche Mass - siehe
+        // AnimStandFortschrittsAnteil.
+        float    FensterWunschSumme = 0.f;
+        float    FensterWunschTempo = 0.f;
+        bool     bFensterStill = false;
     };
     TMap<FMassEntityHandle, FAnimStandWatch> AnimStandWatches;
 
-    float AnimStandReportTimer = 0.f;
 
-    int32 AnimStandObserved = 0;      // entities in a movement state that were looked at
-    int32 AnimStandCount = 0;         // ... of those, standing still long enough to be visible
-    int32 AnimStandSkeletal = 0;      // ... of those, drawn as a real skeletal mesh
-    int32 AnimStandWantsToMove = 0;   // ... of those, whose velocity fragment still asks for speed
-    int32 AnimStandNoVelocity = 0;    // ... of those, that carry no velocity fragment at all
-    int32 AnimStandOnViewport = 0;    // ... of those, that are actually on screen (the visible case)
-    int32 AnimStandObservedSkeletal = 0; // how many of the observed entity-frames were skeletal
-    float AnimStandNextDetailTime = 0.f; // rate limit for the per-case line
+
 
     /**
      * Show a unit that does not move as standing, even while its state says it is walking.
@@ -214,9 +238,6 @@ protected:
     UPROPERTY(EditAnywhere, Category = "Animations")
     bool bAnimStandFix = true;
 
-    /** Switches the diagnostic above off; it costs one map lookup per moving entity. */
-    UPROPERTY(EditAnywhere, Category = "Mass|Diagnostics")
-    bool bAnimStandDiagnostics = true;
 
     /** Below this measured ground speed a unit counts as standing (uu/s). */
     UPROPERTY(EditAnywhere, Category = "Mass|Diagnostics")
@@ -225,4 +246,33 @@ protected:
     /** How long it has to stand before it counts - a single blocked frame is not the problem. */
     UPROPERTY(EditAnywhere, Category = "Mass|Diagnostics")
     float AnimStandMinSeconds = 0.5f;
+
+    /**
+     * Ab dieser Strecke vom Fensteranfang gilt die Einheit sofort wieder als laufend, ohne das
+     * Fenster abzuwarten.
+     *
+     * Sonst haengt eine Einheit, die gerade wirklich losgelaufen ist, bis zu AnimStandMinSeconds
+     * in der Stillstandspose fest. Der Wert muss ueber der gemessenen Zappelweite liegen: der
+     * Vector kam am 16.09.2026 nie weiter als etwa 33 uu vom Fleck, bevor der Ruecksprung kam.
+     * 60 uu liegt darueber und ist fuer einen echten Laeufer (rund 250 uu/s) nach 0,24 s erreicht.
+     */
+    float AnimStandAusbruchStrecke = 60.f;
+
+
+    /**
+     * Anteil der GEWOLLTEN Geschwindigkeit, den eine Einheit ueber das Fenster tatsaechlich
+     * zuruecklegen muss, um als laufend zu gelten.
+     *
+     * Ein fester Schwellwert in uu/s kann den Fehler nicht fangen. Gemessen am 16.09.2026 an
+     * einem ausgewaehlten Vector auf dem Client, drei Fenster hintereinander:
+     *   netto=13.87   netto=36.58   netto=21.40      bei gewollt rund 300 uu/s
+     * Die Einheit steht also NICHT still - sie kriecht mit 5 bis 12 Prozent ihrer Laufgeschwin-
+     * digkeit vorwaerts, waehrend die Animation den vollen Lauf zeigt. Absolut betrachtet liegen
+     * 37 uu/s ueber jeder sinnvollen Stillstandsschwelle; im Verhaeltnis zu den gewollten 300 sind
+     * sie es nicht.
+     *
+     * Ein echter Laeufer erreicht ueber ein halbes Sekundenfenster nahezu 100 Prozent, selbst in
+     * einer Kurve deutlich ueber die Haelfte. 25 Prozent liegt weit von beiden Seiten entfernt.
+     */
+    float AnimStandFortschrittsAnteil = 0.25f;
 };
