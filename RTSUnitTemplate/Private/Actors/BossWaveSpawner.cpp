@@ -7,11 +7,23 @@
 #include "Core/UnitData.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "Components/SceneComponent.h"
 
 ABossWaveSpawner::ABossWaveSpawner()
 {
 	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
+
+	// Ohne Wurzelkomponente hat der Aktor keine Position, und AActor::IsNetRelevantFor kann
+	// die Entfernung zum Betrachter nicht bestimmen. Das Netzwerk warnte deshalb in JEDEM
+	// Relevanztakt ("has no root component in AActor::IsNetRelevantFor") und flutete das Log.
+	// Der Spawner steht ohnehin fest an einem Punkt der Karte - eine leere Szenenkomponente
+	// als Wurzel genuegt und kostet nichts.
+	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Wurzel"));
+
+	// Er spawnt Wellen fuer die ganze Karte, ist also fuer jeden Spieler relevant, unabhaengig
+	// davon wo seine Wurzel steht.
+	bAlwaysRelevant = true;
 }
 
 void ABossWaveSpawner::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
