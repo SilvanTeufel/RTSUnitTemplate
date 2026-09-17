@@ -229,13 +229,35 @@ void AHUDBase::AddClickIndicator(FVector Location, FColor Color, float LifeTime,
 	UMaterialInterface* Mat = MaterialOverride ? MaterialOverride : ClickIndicatorMaterial.Get();
 	if (Mat)
 	{
-		// One MID per click — created here, reused every frame of this indicator's life (no per-frame churn).
-		NewIndicator.MID = UMaterialInstanceDynamic::Create(Mat, this);
-		if (NewIndicator.MID)
+		// Eine Instanz je KLICK, nicht je Indikator - siehe LastClickMID. Ein Rechtsklick legt
+		// einen Indikator je Einheit an; bei 510 Einheiten waren das 510 Materialinstanzen in
+		// einem Bild und der groesste Einzelposten des gemessenen Klick-Rucklers.
+		const bool bMatchesLastClick =
+			LastClickMID
+			&& LastClickMaterial == Mat
+			&& LastClickColor == Color
+			&& FMath::IsNearlyEqual(LastClickRadius, NewIndicator.Radius)
+			&& FMath::IsNearlyEqual(LastClickStartTime, NewIndicator.StartTime);
+
+		if (bMatchesLastClick)
 		{
-			NewIndicator.MID->SetScalarParameterValue(ClickIndicatorProgressParamName, 0.f);
-			NewIndicator.MID->SetScalarParameterValue(ClickIndicatorRadiusParamName, NewIndicator.Radius);
-			NewIndicator.MID->SetVectorParameterValue(ClickIndicatorColorParamName, FLinearColor(Color));
+			NewIndicator.MID = LastClickMID;
+		}
+		else
+		{
+			NewIndicator.MID = UMaterialInstanceDynamic::Create(Mat, this);
+			if (NewIndicator.MID)
+			{
+				NewIndicator.MID->SetScalarParameterValue(ClickIndicatorProgressParamName, 0.f);
+				NewIndicator.MID->SetScalarParameterValue(ClickIndicatorRadiusParamName, NewIndicator.Radius);
+				NewIndicator.MID->SetVectorParameterValue(ClickIndicatorColorParamName, FLinearColor(Color));
+			}
+
+			LastClickMID = NewIndicator.MID;
+			LastClickMaterial = Mat;
+			LastClickColor = Color;
+			LastClickRadius = NewIndicator.Radius;
+			LastClickStartTime = NewIndicator.StartTime;
 		}
 	}
 
@@ -1364,7 +1386,6 @@ void AHUDBase::DrawFormationLinePreview()
 
 void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector2D& RectMax)
 {
-	//UE_LOG(LogTemp, Error, TEXT("SelectISMUnitsInRectangle!!!!!!!!!"));
     APlayerController* PC = GetOwningPlayerController();
     ACameraControllerBase* Controller = Cast<ACameraControllerBase>(PC);
     if (!Controller)
@@ -1464,19 +1485,16 @@ void AHUDBase::SelectUnitsFromSameSquad(AUnitBase* SelectedUnit)
 {
 	if(!bSelectFullSquad || !SelectedUnit)
 	{
-		//UE_LOG(LogTemp, Warning, TEXT("[HUD] SelectUnitsFromSameSquad aborted. bSelectFullSquad=%d SelectedUnit=%s"), bSelectFullSquad ? 1 : 0, SelectedUnit ? *SelectedUnit->GetName() : TEXT("NULL"));
 		return;
 	}
 
 	APlayerController* PC = GetOwningPlayerController();
-	//UE_LOG(LogTemp, Log, TEXT("[HUD] Forwarding SelectUnitsFromSameSquad for %s to PC server RPC. PC=%s HasAuthority=%d"), *SelectedUnit->GetName(), PC ? *PC->GetName() : TEXT("NULL"), HasAuthority());
 	if(ACameraControllerBase* CamPC = Cast<ACameraControllerBase>(PC))
 	{
 		CamPC->Server_SelectUnitsFromSameSquad(SelectedUnit);
 	}
 	else
 	{
-		//UE_LOG(LogTemp, Error, TEXT("[HUD] CameraControllerBase not found on owning PC. Cannot request same-squad selection."));
 	}
 }
 
