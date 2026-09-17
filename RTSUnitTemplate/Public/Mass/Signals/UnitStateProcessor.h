@@ -32,8 +32,14 @@ class RTSUNITTEMPLATE_API UUnitStateProcessor : public UMassProcessor
 public:
 	UUnitStateProcessor();
 
+	/**
+	 * Schreibt den Verlauf der Wegsuche je Einheit ins Log ([UnitStateProcessor][Path]).
+	 *
+	 * VORGABE AUS, ebenfalls berichtigt: sie stand auf true und erzeugte Warnungen je Einheit
+	 * und je Wegpunkt.
+	 */
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	bool Debug = true;
+	bool Debug = false;
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	FVector BuildingSpawnTrace = FVector(0.f, 0.f, 2500.f);

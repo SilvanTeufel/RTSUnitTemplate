@@ -49,6 +49,27 @@ void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 	
 	EntityQuery.RegisterWithProcessor(*this);
 
+	// Signalabfrage: gleiche Anforderungen, aber OHNE die beiden Ausschluesse.
+	//
+	// Belegt am 14.09.2026: die erste gebaute Einheit kam auf dem Client sauber an, jede
+	// weitere nicht. Der Unterschied stand im Log - die erste trug dort den Run-Tag, die
+	// folgenden nicht, und sie blieben mit 400-800 uu Rueckstand auf halbem Weg stehen.
+	//
+	// Grund: UnitSpawned feuert genau EINMAL (MainStateProcessor loest es bei BirthTime aus).
+	// Traegt die Entitaet in diesem einen Frame noch NeedsInitialKick, faellt sie aus
+	// EntityQuery, HandleUnitSpawned laeuft nie, und damit bleiben SetUnitState und
+	// SwitchEntityTagByState auf dem Client aus. Der Kick-Tag wird im selben Prozessor ueber
+	// Defer() entfernt und verschwindet deshalb erst im naechsten Frame - wer in dieses Fenster
+	// faellt, verliert sein Signal endgueltig. Genau das ist ein Wettlauf, und genau so sieht
+	// er aus: mal klappt es, meistens nicht.
+	SpawnSignalQuery.Initialize(EntityManager);
+	SpawnSignalQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
+	SpawnSignalQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+	SpawnSignalQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	SpawnSignalQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+	SpawnSignalQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
+	SpawnSignalQuery.RegisterWithProcessor(*this);
+
 	InitialKickCleanupQuery.Initialize(EntityManager);
 	InitialKickCleanupQuery.AddTagRequirement<FMassStateNeedsInitialKickTag>(EMassFragmentPresence::All);
 	InitialKickCleanupQuery.RegisterWithProcessor(*this);
@@ -178,7 +199,8 @@ void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMa
 void UUnitClientTagSyncProcessor::SignalEntities(FMassEntityManager& EntityManager, FMassExecutionContext& Context,
 	FMassSignalNameLookup& EntitySignals)
 {
-	EntityQuery.ForEachEntityChunk(Context, [this, &EntitySignals, &EntityManager](FMassExecutionContext& ChunkContext)
+	// Bewusst SpawnSignalQuery statt EntityQuery - siehe Begruendung in ConfigureQueries.
+	SpawnSignalQuery.ForEachEntityChunk(Context, [this, &EntitySignals, &EntityManager](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
 		for (int32 i = 0; i < NumEntities; ++i)
@@ -232,6 +254,7 @@ void UUnitClientTagSyncProcessor::HandleUnitSpawned(FMassEntityHandle Entity, FM
 			}
 
 			Unit->SwitchEntityTagByState(Unit->StoredUnitState, Unit->UnitStatePlaceholder);
+
 
 			// A construction site is driven by this unit sitting in Casting, not by a GAS ability, so it
 			// needs FMassCastingFallbackTag to keep re-forcing that state - otherwise the server's initial
