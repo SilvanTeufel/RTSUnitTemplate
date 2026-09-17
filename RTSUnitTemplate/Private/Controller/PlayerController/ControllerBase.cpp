@@ -1168,6 +1168,45 @@ void AControllerBase::DrawCircleAtLocation(UWorld* World, const FVector& Locatio
 }
 
 #define COLLISION_NAVMODIFIER ECC_GameTraceChannel1
+static TAutoConsoleVariable<int32> CVarRTS_TraceRunComplex(
+	TEXT("RTS.TraceRunComplex"),
+	0,
+	TEXT("Bodenspur des Bewegungsbefehls gegen die KOMPLEXE Kollision fuehren (1) oder die einfache (0). ")
+	TEXT("Die komplexe Stufe kostete gemessen ein Vielfaches; 0 ist die Vorgabe."),
+	ECVF_Default);
+
+void AControllerBase::UpdateTraceIgnoreList()
+{
+	UWorld* Welt = GetWorld();
+	if (!Welt)
+	{
+		return;
+	}
+
+	const uint64 Bild = GFrameCounter;
+	if (TraceIgnoreListFrame == Bild && TraceIgnoredActors.Num() > 0)
+	{
+		return;   // In diesem Bild schon gebaut.
+	}
+
+	TraceIgnoredActors.Reset();
+	for (TActorIterator<AWorkArea> It(Welt); It; ++It)
+	{
+		TraceIgnoredActors.Add(*It);
+	}
+
+	// Die Einheiten stehen BEWUSST NICHT mehr drin.
+	//
+	// Die Spur laeuft ueber LineTraceSingleByObjectType mit ausschliesslich ECC_WorldStatic.
+	// Einheiten tragen ECC_Pawn (AUnitBase-Konstruktor), koennen von dieser Abfrage also gar
+	// nicht getroffen werden - sie zu ignorieren war wirkungslos und trotzdem teuer: jede
+	// einzelne Spur musste ihre Trefferkandidaten gegen alle 510 Eintraege pruefen, und die
+	// Spur laeuft einmal JE EINHEIT. Gemessen am 17.09.2026 auf LevelSix mit 510 Einheiten:
+	// 212-248 ms allein fuer die Bodenspuren eines einzigen Rechtsklicks, gegenueber 1-2 ms
+	// fuer die Gitterberechnung und 0,5 ms fuer alles Uebrige.
+	TraceIgnoreListFrame = Bild;
+}
+
 FVector AControllerBase::TraceRunLocation(FVector RunLocation, bool& HitNavModifier)
 {
     // Setup trace start and end positions. A 2000-unit trace (1000 up, 1000 down) is robust.
@@ -1182,21 +1221,16 @@ FVector AControllerBase::TraceRunLocation(FVector RunLocation, bool& HitNavModif
     // ---
 
     FCollisionQueryParams QueryParams;
-    QueryParams.bTraceComplex = true; // Use complex collision for landscapes
+    // Ueber eine CVar schaltbar, weil der Unterschied nur auf dem Landscape auffaellt: die
+    // komplexe Kollision ist dort die hochaufgeloeste Heightfield-Stufe und kostet ein
+    // Vielfaches der einfachen. Vorgabe aus - siehe die Messung in UpdateTraceIgnoreList().
+    QueryParams.bTraceComplex = (CVarRTS_TraceRunComplex.GetValueOnAnyThread() != 0);
 
-    // --- ACTOR IGNORING LOGIC (Unchanged from your original code) ---
-    // Add all AWorkArea actors to the ignore list.
-    for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
-    {
-       QueryParams.AddIgnoredActor(*It);
-    }
-
-    // Add all AUnitBase actors to the ignore list.
-    for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
-    {
-       QueryParams.AddIgnoredActor(*It);
-    }
-    // ---
+    // Die Liste wird hoechstens einmal je Bild gebaut - siehe UpdateTraceIgnoreList().
+    // Vorher standen hier zwei TActorIterator-Schleifen, die bei jedem der 510 Aufrufe eines
+    // Rechtsklicks die komplette Aktorliste der Welt durchliefen.
+    UpdateTraceIgnoreList();
+    QueryParams.AddIgnoredActors(TraceIgnoredActors);
 
     FHitResult HitResult;
 

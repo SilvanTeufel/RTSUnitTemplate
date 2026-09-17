@@ -36,8 +36,15 @@ public:
 	UPROPERTY(EditAnywhere, Category= RTSUnitTemplate)
 	float MaxDistance = 99999.f;
 
+	/**
+	 * Zeichnet die Wegsuche als Linien in die Welt (Dijkstra-Netz, Pfad zum Zentrum, Echtzeitpfad).
+	 *
+	 * VORGABE AUS, und das ist eine Berichtigung: sie stand auf true. Damit sah jeder Spieler
+	 * beim Bewegen von Einheiten Debuglinien - blau mit 50 s Standzeit, gelb und violett mit
+	 * Dicke 10. Ein Entwicklerwerkzeug gehoert nicht in den Auslieferungszustand.
+	 */
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
-	bool Debug = true;
+	bool Debug = false;
 
 	UPROPERTY(EditAnywhere, Category = RTSUnitTemplate)
 	bool StopLoading = true;
