@@ -289,21 +289,10 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 {
 	if (!HealthWidgetComp) return;
 
-	// Deaktivierung bei aktivem HUD-System
-	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	// Eine Entscheidung, eine Stelle - siehe AMassUnitBase::ZeichnetHudDieHealthbars().
+	if (HealthbarWidgetNachHudSchalten())
 	{
-		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
-		{
-			if (HUD->bEnableHealthBars)
-			{
-				if (HealthWidgetComp->IsVisible() || HealthWidgetComp->IsComponentTickEnabled())
-				{
-					HealthWidgetComp->SetVisibility(false);
-					HealthWidgetComp->SetComponentTickEnabled(false);
-				}
-				return;
-			}
-		}
+		return;
 	}
 
 	// Use cached health bar widget pointer to avoid casting every tick
@@ -373,7 +362,10 @@ void APerformanceUnit::HandleSquadHealthBarVisibility()
 		}
 	}
 
-	HealthWidgetComp->SetVisibility(true);
+	if (!ZeichnetHudDieHealthbars())
+	{
+		SetzeHealthbarWidgetAktiv(true);
+	}
 
 	USquadHealthBar* SquadHB = Cast<USquadHealthBar>(CachedHealthBarWidget);
 	if (SquadHB)
@@ -402,21 +394,10 @@ void APerformanceUnit::HandleStandardHealthBarVisibility()
 {
 	if (!HealthWidgetComp) return;
 
-	// Deaktivierung bei aktivem HUD-System
-	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	// Eine Entscheidung, eine Stelle - siehe AMassUnitBase::ZeichnetHudDieHealthbars().
+	if (HealthbarWidgetNachHudSchalten())
 	{
-		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
-		{
-			if (HUD->bEnableHealthBars)
-			{
-				if (HealthWidgetComp->IsVisible() || HealthWidgetComp->IsComponentTickEnabled())
-				{
-					HealthWidgetComp->SetVisibility(false);
-					HealthWidgetComp->SetComponentTickEnabled(false);
-				}
-				return;
-			}
-		}
+		return;
 	}
 
 	// Use cached health bar widget pointer to avoid casting every tick

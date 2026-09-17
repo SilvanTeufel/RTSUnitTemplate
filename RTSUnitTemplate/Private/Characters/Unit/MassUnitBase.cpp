@@ -56,7 +56,21 @@ AMassUnitBase::AMassUnitBase(const FObjectInitializer& ObjectInitializer)
 	
 	HealthWidgetComp = ObjectInitializer.CreateDefaultSubobject<UWidgetComponent>(this, TEXT("Healthbar"));
 	HealthWidgetComp->SetupAttachment(RootComponent);
+	// Sichtbar als Vorgabe, aber OHNE Tick.
+	//
+	// Gemessen am 17.09.2026 mit 510 Einheiten: nachdem der Skelett-Tick weg war, blieben
+	// 510 WidgetComponent-Ticks uebrig - und die waren dann praktisch der ganze TickActors-Posten
+	// (17,31 ms von 24,82 ms Spiel-Thread, rund 34 Mikrosekunden je Widget). Eine WidgetComponent
+	// zeichnet in ein eigenes Render-Target; das kostet auch dann, wenn niemand hinsieht.
+	//
+	// Warum nicht wie bisher erst im BeginPlay abschalten: die Abschaltung dort haengt daran, dass
+	// PlayerController UND HUD erreichbar sind. Sind sie es nicht - und beim BeginPlay der
+	// Einheiten sind sie es oft nicht - lief der Tick fuer die ganze Partie weiter. Genau das
+	// zeigte die Messung. Umgekehrt ist es sicher: aus als Ausgangslage, und wer den Balken
+	// wirklich zeigt, schaltet ihn mit ein (siehe SetzeHealthbarWidgetAktiv).
 	HealthWidgetComp->SetVisibility(true);
+	HealthWidgetComp->SetComponentTickEnabled(false);
+	HealthWidgetComp->PrimaryComponentTick.bStartWithTickEnabled = false;
 	HealthWidgetComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	HealthWidgetComp->SetIsReplicated(false);
 
@@ -88,6 +102,8 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AMassUnitBase, bIsMassUnit);
 	DOREPLIFETIME(AMassUnitBase, SpawnStoredLocation);
+	DOREPLIFETIME(AMassUnitBase, PatrolTargetLocation);
+	DOREPLIFETIME(AMassUnitBase, PatrolDesiredSpeed);
 	DOREPLIFETIME(AMassUnitBase, bUseSkeletalMovement);
 	//DOREPLIFETIME(AMassUnitBase, bUseIsmWithActorMovement);
 
@@ -1027,7 +1043,15 @@ bool AMassUnitBase::UpdateEntityHealth(float NewHealth, float CurrentShield)
 
 				if (bDamageTrigger || bHealTrigger)
 				{
-					Vis->LastHealthChangeTime = GetWorld()->GetTimeSeconds();
+					// Waehrend einer Investition NICHT stempeln: dieser Zeitstempel treibt
+					// bRecentlyDamaged im UMassUnitVisibilityProcessor, und der blendet den Balken
+					// fuer die volle Anzeigedauer ein. Ohne diese Ausnahme haette die Markierung in
+					// OnAttributeChanged nur den halben Weg abgedeckt - der Prozessor ist die
+					// zweite, unabhaengige Stelle, die den Balken einschaltet.
+					if (!IsInvestmentActive())
+					{
+						Vis->LastHealthChangeTime = GetWorld()->GetTimeSeconds();
+					}
 				}
 
 				// Always update LastHealth/LastShield to track current state correctly.
@@ -1260,7 +1284,7 @@ bool AMassUnitBase::SwitchEntityTag(UScriptStruct* TagToAdd)
 	// SwitchEntityTag - und das nullt StateFrag->StateTimer. Ergebnis: der Cast faengt zehnmal pro
 	// Sekunde von vorn an und erreicht seine CastTime nie.
 	//
-	// Belegt am 16.08.2026 durch drei Callstacks am Chokepoint AAbilityUnit::SetUnitState
+	// SlotTaken am 16.08.2026 durch drei Callstacks am Chokepoint AAbilityUnit::SetUnitState
 	// (12 Treffer "Casting -> Run" aus ApplyStateToActor) und "Timer=0.10/15.00" ueber ganze Laeufe.
 	//
 	// Deshalb: ausserhalb der Mass-Phase die Tags SOFORT anwenden. Die Defer()-Aufrufe oben bleiben
@@ -1396,20 +1420,104 @@ bool AMassUnitBase::GetMassEntityData(const FMassEntityManager*& OutEntityManage
 	return true;
 }
 
+bool AMassUnitBase::ZeichnetHudDieHealthbars() const
+{
+	if (HudZeichnetHealthbars >= 0)
+	{
+		return HudZeichnetHealthbars == 1;
+	}
+
+	const UWorld* Welt = GetWorld();
+	if (!Welt)
+	{
+		return false;   // Noch nichts merken - die Antwort waere geraten.
+	}
+	const APlayerController* PC = Welt->GetFirstPlayerController();
+	const AHUDBase* HUD = PC ? Cast<AHUDBase>(PC->GetHUD()) : nullptr;
+	if (!HUD)
+	{
+		// BEWUSST NICHT MERKEN. Beim BeginPlay der Einheiten gibt es das HUD oft noch nicht;
+		// ein hier gemerktes "nein" bliebe fuer die ganze Partie stehen, und genau daran hing
+		// der gemessene Zustand: alle 255 Widgets liefen weiter.
+		return false;
+	}
+
+	HudZeichnetHealthbars = HUD->bEnableHealthBars ? 1 : 0;
+	return HudZeichnetHealthbars == 1;
+}
+
+void AMassUnitBase::SetzeHealthbarWidgetAktiv(bool bAktiv)
+{
+	if (!HealthWidgetComp)
+	{
+		return;
+	}
+	// Sichtbarkeit und Tick gehoeren zusammen: ein sichtbares Widget ohne Tick friert ein, ein
+	// tickendes ohne Sichtbarkeit kostet umsonst. Vorher wurden sie an sieben Stellen getrennt
+	// gesetzt, und genau daraus entstanden beide gemeldeten Fehler.
+	if (HealthWidgetComp->IsVisible() != bAktiv)
+	{
+		HealthWidgetComp->SetVisibility(bAktiv);
+	}
+	if (HealthWidgetComp->IsComponentTickEnabled() != bAktiv)
+	{
+		HealthWidgetComp->SetComponentTickEnabled(bAktiv);
+	}
+}
+
+bool AMassUnitBase::HealthbarWidgetNachHudSchalten()
+{
+	const bool bHud = ZeichnetHudDieHealthbars();
+	if (bHud && HealthWidgetComp
+		&& (HealthWidgetComp->IsVisible() || HealthWidgetComp->IsComponentTickEnabled()))
+	{
+		HealthWidgetComp->SetVisibility(false);
+		HealthWidgetComp->SetComponentTickEnabled(false);
+	}
+	return bHud;
+}
+
 void AMassUnitBase::BeginPlay()
 {
 	Super::BeginPlay();
 
-	// Deaktivierung bei aktivem HUD-System
-	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	HealthbarWidgetNachHudSchalten();
+
+	// Ein Mesh, das nicht gezeichnet wird, muss auch keine Pose auswerten.
+	//
+	// VisibilityBasedAnimTickOption stand nirgends im Projekt, also auf dem Vorgabewert
+	// AlwaysTickPoseAndRefreshBones: die Animation lief auch fuer die ausgeblendete SKM der
+	// ISM-Einheiten jedes Bild weiter. Gemessen am 17.09.2026: 255 SkeletalMeshComponent-Ticks
+	// von 816 Ticks insgesamt, fuer Meshes, die niemand sieht.
+	//
+	// RISIKO, bewusst abschaltbar gehalten: wer Knochen einer NICHT gezeichneten Einheit
+	// braucht - etwa ein Sockel, aus dem ausserhalb des Bildes geschossen wird - bekommt dann
+	// veraltete Posen. Deshalb bOnlyTickPoseWhenRendered als Schalter und nicht als Gesetz.
+	if (USkeletalMeshComponent* Skelett = GetMesh())
 	{
-		if (AHUDBase* HUD = Cast<AHUDBase>(PC->GetHUD()))
+		if (!bUseSkeletalMovement)
 		{
-			if (HUD->bEnableHealthBars && HealthWidgetComp)
-			{
-				HealthWidgetComp->SetVisibility(false);
-				HealthWidgetComp->SetComponentTickEnabled(false);
-			}
+			// Die Einheit wird ueber ISM gezeichnet - das Skelett ist reine Altlast am Aktor.
+			//
+			// Es ganz abschalten statt nur die Pose zu sparen: ohne bUseSkeletalMovement liest
+			// niemand mehr eine Knochenlage, GetMassActorLocation und GetMassActorRotation holen
+			// ihre Werte direkt aus dem Transformfragment. Damit faellt der komplette
+			// SkeletalMeshComponent-Tick weg und nicht nur sein teurer Teil.
+			//
+			// Gemessen am 17.09.2026: 255 von 816 Ticks entfielen auf diese Komponenten.
+			Skelett->SetComponentTickEnabled(false);
+			Skelett->PrimaryComponentTick.bStartWithTickEnabled = false;
+			Skelett->VisibilityBasedAnimTickOption =
+				EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
+			Skelett->bNoSkeletonUpdate = true;
+			Skelett->SetComponentTickInterval(0.f);
+		}
+		else if (bOnlyTickPoseWhenRendered)
+		{
+			// Skelettal gezeichnete Einheiten behalten ihren Tick, werten die Pose aber nur
+			// aus, wenn sie wirklich im Bild sind.
+			Skelett->VisibilityBasedAnimTickOption =
+				EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
 		}
 	}
 }
@@ -1937,7 +2045,7 @@ bool AMassUnitBase::SetTranslationLocation(FVector NewLocation)
 	return true;
 }
 
-bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float DesiredSpeed)
+bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float DesiredSpeed, bool bScharfstellen)
 {
 	if (GetNetMode() != NM_Client ) return false;
 	
@@ -1959,7 +2067,11 @@ bool AMassUnitBase::UpdatePredictionFragment(const FVector& NewLocation, float D
 	{
 		Pred->Location = NewLocation;
 		Pred->PredDesiredSpeed = DesiredSpeed;
-		Pred->bHasData = true;
+		if (bScharfstellen)
+		{
+			Pred->bHasData = true;
+			Pred->PredSource = 2; // [PredDiag]
+		}
 	}
 
 	return true;
