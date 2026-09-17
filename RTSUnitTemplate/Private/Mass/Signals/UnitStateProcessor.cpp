@@ -864,6 +864,16 @@ void UUnitStateProcessor::IdlePatrolSwitcher(FName SignalName, TArray<FMassEntit
 
         	
                     SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed, Entity);
+            // Den gewuerfelten Punkt an die Clients weiterreichen. UPatrolRandomStateProcessor
+            // laeuft mit `Server | Standalone`, auf dem Client verarbeitet also niemand das
+            // PatrolRandom-Tag - dort fehlt nur dieses Ziel, sonst ist alles vorhanden.
+            // Gewuerfelt wird weiterhin ALLEIN hier, sonst liefen Server und Client
+            // auseinander. Der Punkt steht nach dem Aufruf in StoredLocation.
+                    // Den gewuerfelten Punkt an die Clients weiterreichen. UPatrolRandomStateProcessor
+                    // laeuft mit `Server | Standalone`, auf dem Client verarbeitet also niemand das
+                    // PatrolRandom-Tag - dort fehlt nur dieses Ziel, sonst ist alles vorhanden.
+                    // Gewuerfelt wird weiterhin ALLEIN hier, sonst liefen Server und Client
+                    // auseinander. Der Punkt steht nach dem Aufruf in StoredLocation.
                     SignalSubsystem->SignalEntity(UnitSignals::PatrolRandom, Entity);
                     StateFrag.StateTimer = 0.f;
         } // Ende for each entity
@@ -3448,6 +3458,17 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 							PatrolFrag.TargetWaypointLocation = StateFrag.StoredLocation;
 						}
 						SetNewRandomPatrolTarget(PatrolFrag, MoveTarget, StateFragPtr, NavSys, World, StatsFrag.RunSpeed, E);
+						// Hier NICHT mehr an die Clients weiterreichen.
+						//
+						// Das stand frueher hier (CL 433) und war falsch: der Punkt wurde genau einmal
+						// geschrieben, beim Auswuerfeln. Gemessen am 14.09.2026 laufen StoredLocation
+						// und der tatsaechliche Bewegungswille des Servers aber auseinander - er stand
+						// acht Sekunden bewegungslos mit DesiredSpeed=0 und einem MoveTarget.Center auf
+						// einem anderen Punkt, waehrend der replizierte Wert das alte Ziel zeigte.
+						//
+						// Die Weitergabe sitzt jetzt in UUnitActorToFragmentSyncProcessor und liest
+						// jeden Takt das ECHTE MoveTarget samt Tempo. Gewuerfelt wird weiterhin allein
+						// hier, sonst liefen Server und Client auseinander.
 					}
 				}
 				

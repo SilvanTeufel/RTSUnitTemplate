@@ -29,6 +29,14 @@ protected:
 
 private:
 	FMassEntityQuery EntityQuery;
+
+	// Eigene Abfrage fuer die Signalbehandlung.
+	//
+	// EntityQuery schliesst NeedsInitialKick und Frozen aus - fuer den Taktbetrieb ist das
+	// richtig, fuer ein EINMALIGES Signal aber toedlich: UnitSpawned feuert genau einmal, und
+	// wer es verpasst, bekommt es nie wieder. Traegt die Entitaet in diesem Frame noch den
+	// Kick-Tag, faellt sie aus der Abfrage und bleibt auf dem Client ohne Zustand und ohne Tags.
+	FMassEntityQuery SpawnSignalQuery;
 	FMassEntityQuery InitialKickCleanupQuery;
 	FMassEntityQuery LoadingTagCleanupQuery;
 
