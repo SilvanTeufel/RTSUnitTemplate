@@ -7,6 +7,7 @@
 #include "Components/BoxComponent.h"
 #include "NavModifierComponent.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "Blueprint/PCGClearingBlueprintLibrary.h"
 #include "NavAreas/NavArea_EnergyWall.h"
 #include "NavigationSystem.h"
 #include "Net/UnrealNetwork.h"
@@ -56,6 +57,19 @@ AEnergyWall::AEnergyWall()
 	NavModifier->SetActive(false);
 	//NavModifier->SetAreaClass(UNavArea_Obstacle::StaticClass());
 
+	// Der Tag, an dem die PCG-Graphen die Bepflanzung aussparen.
+	//
+	// Nachgesehen in PCG_Landscape_3 (und gleichlautend in den uebrigen unter
+	// /Game/RTSUnits/Material/Landscape/PCG): der Knoten GetActorData waehlt
+	// actorFilter=AllWorldActors, actorSelection=ByTag, actorSelectionTag="Obstacle" und geht
+	// von dort in einen Difference-Knoten - alles mit diesem Tag wird also aus der Streuung
+	// herausgeschnitten. Jedes Gebaeude traegt ihn bereits.
+	//
+	// Hier im Konstruktor und nicht nur im Blueprint, damit er nicht an einer Asset-Aenderung
+	// haengt: verschwindet er dort einmal, waechst die Vegetation stumm wieder durch die Wand,
+	// und niemand sucht den Grund in einer Tag-Liste. AddUnique, damit ein Blueprint, der ihn
+	// ebenfalls setzt, keinen doppelten Eintrag erzeugt.
+	Tags.AddUnique(FName(TEXT("Obstacle")));
 }
 
 void AEnergyWall::BeginPlay()
@@ -537,6 +551,49 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 			}
 		}
 	}
+
+	// Erst HIER, nicht frueher: vorher steht die Box noch nicht in ihrer endgueltigen Groesse,
+	// und ein Freiraeumen nach einer halben Laenge liesse die zweite Haelfte bewachsen.
+	RaeumePCGEntlangDerWand();
+}
+
+int32 AEnergyWall::RaeumePCGEntlangDerWand()
+{
+	if (!bClearPCGAlongWall || !NavObstacleBox)
+	{
+		return 0;
+	}
+
+	// Ort und Drehung der Box, aber OHNE ihre Skalierung.
+	//
+	// Das ist kein Schoenheitsfehler, sondern der Unterschied zwischen richtig und falsch:
+	// TransformPosition mit der Inversen einer SKALIERTEN Transformation rechnet die Skalierung
+	// heraus - die lokalen Koordinaten kaemen dann unskaliert heraus und wuerden gegen ein
+	// skaliertes Halbmass geprueft. Bei Skalierung 1 faellt das nicht auf, bei jeder anderen
+	// raeumt die Wand einen um genau diesen Faktor falschen Streifen frei. Und das Polster
+	// waere ebenfalls nicht mehr in Zentimetern.
+	//
+	// Also: unskalierte Transformation plus skaliertes Halbmass. Beides dann in Weltmassstab.
+	const FTransform BoxOrt(NavObstacleBox->GetComponentQuat(),
+	                        NavObstacleBox->GetComponentLocation());
+	const FVector Ausdehnung = NavObstacleBox->GetScaledBoxExtent();
+
+	// Nicht repliziert und auf jeder Maschine ausgefuehrt - die Bepflanzung ist rein sichtbar,
+	// jede Seite traegt ihre eigenen Instanzen. Genauso macht es der Radius-Weg der Gebaeude.
+	const int32 Entfernt = UPCGClearingBlueprintLibrary::ClearPCGInstancesInBox(
+		this,
+		BoxOrt,
+		Ausdehnung,
+		PCGClearPadding,
+		/*bIncludeVertical=*/false);
+
+	// Verbose und nicht Warning: im Normalbetrieb unsichtbar, aber auf Wunsch nachpruefbar mit
+	// -LogCmds="LogTemp Verbose". Ohne eine solche Zeile laesst sich "es wurde nichts geraeumt"
+	// nicht von "es stand dort nichts" unterscheiden.
+	UE_LOG(LogTemp, Verbose,
+		TEXT("[PCGWand] %s: %d Instanzen entfernt, Box %.0f x %.0f (Halbmass) + %.0f Rand."),
+		*GetName(), Entfernt, Ausdehnung.X, Ausdehnung.Y, PCGClearPadding);
+	return Entfernt;
 }
 
 void AEnergyWall::DeactivateNavigation()
