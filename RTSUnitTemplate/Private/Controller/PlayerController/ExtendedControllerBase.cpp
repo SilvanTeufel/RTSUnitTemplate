@@ -438,6 +438,31 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		return;
 	}
 
+	// Die StartAbility zuerst - aber nur der KI gegenueber.
+	//
+	// Der BroodHive traegt GA_UpgradeBuildingExtension_Slime_Free als StartAbility. Die KI drueckt
+	// eigene Faehigkeiten auf demselben Gebaeude, sobald sie Rohstoffe hat, und weil
+	// ActivateAbilityByInputID jede weitere ablehnt, solange eine laeuft, kam die StartAbility
+	// nicht zum Zug. Sie soll EINMAL durchlaufen.
+	//
+	// Nur fuer bIsAi: einen menschlichen Spieler unangekuendigt fuer ein paar Sekunden
+	// auszusperren waere schlimmer als das Problem. AreStartAbilitiesPending() traegt ein
+	// Zeitfenster in sich, damit eine nie aktivierende StartAbility die KI nicht dauerhaft
+	// aussperrt.
+	if (bIsAi)
+	{
+		if (const AAbilityUnit* AbilityUnit = Cast<AAbilityUnit>(UnitBase))
+		{
+			if (AbilityUnit->AreStartAbilitiesPending())
+			{
+				UE_LOG(LogTemp, Verbose,
+					TEXT("[StartAbility] %s: KI-Faehigkeit InputID=%d zurueckgestellt, StartAbility laeuft noch"),
+					*UnitBase->GetName(), (int32)InputID);
+				return;
+			}
+		}
+	}
+
 	// bIsAi is exempt: this throttle exists to stop a remote client from spamming the server RPCs, but an AI
 	// controller is not remote and reaches these functions through a local call chain that stamps
 	// LastAbilityRequestTime on the way in. The next link then measures a delta of 0 against its own stamp and

@@ -905,6 +905,48 @@ void AAbilityUnit::RollRandomAbilitys()
 	ThrowAbilityID = AbilityIDs[FMath::RandRange(0, AbilityIDs.Num() - 1)];
 }
 
+bool AAbilityUnit::AreStartAbilitiesPending() const
+{
+	// Ohne StartAbilities gibt es nichts abzuwarten.
+	if (StartAbilities.Num() == 0)
+	{
+		return false;
+	}
+
+	// Das Nachversuchen hat aufgegeben - dann gibt es nichts mehr abzuwarten.
+	if (bStartAbilitiesGaveUp)
+	{
+		return false;
+	}
+
+	// Noch nicht losgelaufen - der Timer steht noch aus oder alle Versuche scheiterten bisher.
+	if (!bStartAbilitiesLaunched)
+	{
+		if (StartAbilitiesBlockTimeout <= 0.f)
+		{
+			return true;   // ausdruecklich unbegrenzt blockieren
+		}
+
+		const float Jetzt = GetGameTimeSinceCreation();
+
+		// Die Uhr laeuft ab dem ERSTEN Versuch, nicht ab dem Erschaffen: PossessedBy und
+		// BeginPlay rechnen GatherControllerTimer auf die Verzoegerung drauf, der erste Versuch
+		// kommt also womoeglich erst nach 20 s.
+		if (StartAbilitiesFirstAttemptTime >= 0.f)
+		{
+			return (Jetzt - StartAbilitiesFirstAttemptTime) <= StartAbilitiesBlockTimeout;
+		}
+
+		// Noch gar kein Versuch gelaufen. Sicherheitsnetz gegen einen Timer, der nie feuert:
+		// nach einer Minute wird nicht mehr blockiert. Die Zahl ist bewusst grosszuegig - sie
+		// soll nur einen Totalausfall abfangen, nicht den Normalfall regeln.
+		return Jetzt <= 60.f;
+	}
+
+	// Losgelaufen: fertig ist sie erst, wenn keine Faehigkeit mehr aktiv ist.
+	return ActivatedAbilityInstance != nullptr;
+}
+
 void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 {
 	// Server only
@@ -927,6 +969,13 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 		return;
 	}
 
+	// Startpunkt fuer beide Uhren (Nachversuchsfenster und KI-Riegel) - siehe die Erklaerung an
+	// StartAbilitiesFirstAttemptTime. Nur beim allerersten Versuch setzen.
+	if (StartAbilitiesFirstAttemptTime < 0.f)
+	{
+		StartAbilitiesFirstAttemptTime = GetGameTimeSinceCreation();
+	}
+
 	int32 Attempts = 0;
 	int32 Success = 0;
 
@@ -943,23 +992,53 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 		if (bActivated)
 		{
 			Success++;
+			// Ab hier darf AreStartAbilitiesPending() ueberhaupt "fertig" melden koennen.
+			bStartAbilitiesLaunched = true;
 		}
 	}
 
-	// If nothing activated, it may be because specs are not yet granted; try once more after the configured delay.
+	// Nichts aktiviert? Dann weiter versuchen, bis es klappt - befristet.
+	//
+	// Hier stand vorher GENAU EIN Nachversuch (bStartAbilitiesRetryScheduled). Die Annahme war,
+	// dass die Faehigkeits-Specs nach einer weiteren Verzoegerung schon vergeben sind. Das ist
+	// eine Wette auf die Uhr: StartAbilitiesActivationDelay ist mit 0,1 s eingestellt, zwei
+	// Versuche decken also 0,2 s ab. Braucht der Spielstart laenger - viele Einheiten, ein
+	// Client, der spaeter beitritt, eine langsame Maschine - waren beide Versuche verbraucht und
+	// die StartAbility lief NIE. Bei GA_ActivateAbilities_Build_Barracks heisst das: die
+	// Faehigkeiten werden nicht freigeschaltet, und zwar fuer alle.
+	//
+	// Jetzt wird bis StartAbilitiesRetryWindow Sekunden nach dem Erschaffen weiter versucht. Der
+	// Takt bleibt StartAbilitiesActivationDelay, also aendert sich im Normalfall nichts - nur der
+	// Ausnahmefall wird abgefangen. Klappt es bis dahin nicht, steht es im Log statt lautlos zu
+	// scheitern.
 	if (Success == 0 && StartAbilities.Num() > 0)
 	{
-		if (!bStartAbilitiesRetryScheduled)
+		const float RetryDelay = FMath::Max(0.05f, StartAbilitiesActivationDelay);
+		// Ab dem ERSTEN Versuch gerechnet, nicht ab dem Erschaffen - sonst waere das Fenster
+		// schon zu, bevor der erste Versuch ueberhaupt lief (GatherControllerTimer).
+		const float SeitErstemVersuch = GetGameTimeSinceCreation() - StartAbilitiesFirstAttemptTime;
+		const bool bImFenster = (StartAbilitiesRetryWindow <= 0.f)
+			|| (SeitErstemVersuch + RetryDelay <= StartAbilitiesRetryWindow);
+
+		if (bImFenster)
 		{
-			bStartAbilitiesRetryScheduled = true;
 			if (UWorld* World = GetWorld())
 			{
-				const float RetryDelay = FMath::Max(0.0f, StartAbilitiesActivationDelay);
-
 				FTimerDelegate Delegate;
 				Delegate.BindUFunction(this, FName("ActivateStartAbilitiesOnSpawn"));
 				World->GetTimerManager().SetTimer(StartAbilitiesActivationTimer, Delegate, RetryDelay, false);
 			}
+		}
+		else
+		{
+			// Aufgegeben: den Riegel fuer die KI loesen, sonst bliebe dieses Gebaeude fuer den
+			// Rest der Partie gesperrt.
+			bStartAbilitiesGaveUp = true;
+			UE_LOG(LogTemp, Warning,
+				TEXT("[StartAbility] %s (Team %d): keine der %d StartAbilities liess sich innerhalb "
+					 "von %.1f s aktivieren - sie laufen nicht. Faehigkeiten, die sie freischalten "
+					 "sollten, fehlen damit auch auf den Clients."),
+				*GetName(), TeamId, StartAbilities.Num(), StartAbilitiesRetryWindow);
 		}
 	}
 }

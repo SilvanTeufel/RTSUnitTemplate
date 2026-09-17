@@ -16,8 +16,20 @@ class RTSUNITTEMPLATE_API AAbilityUnit : public ALevelUnit
 private:
 	FTimerHandle AccelerationTimerHandle;
 	FTimerHandle StartAbilitiesActivationTimer;
-	bool bStartAbilitiesRetryScheduled = false;
 	bool bStartAbilitiesActivationScheduled = false;
+	/** Ist mindestens eine StartAbility wirklich angelaufen? Erst danach kann sie "fertig" sein. */
+	bool bStartAbilitiesLaunched = false;
+	/**
+	 * Spielzeit seit dem Erschaffen beim ERSTEN Aktivierungsversuch, -1 = noch keiner.
+	 *
+	 * Die Uhr fuer Nachversuche und fuer den KI-Riegel laeuft ab hier und NICHT ab dem
+	 * Erschaffen: PossessedBy und BeginPlay rechnen GatherControllerTimer auf die Verzoegerung
+	 * drauf, der erste Versuch kann also erst nach 20 s und mehr kommen. Ein Fenster ab
+	 * Erschaffungszeit waere dann laengst abgelaufen, bevor ueberhaupt etwas versucht wurde.
+	 */
+	float StartAbilitiesFirstAttemptTime = -1.f;
+	/** Das Nachversuchsfenster ist abgelaufen, ohne dass etwas aktivierte. */
+	bool bStartAbilitiesGaveUp = false;
 	bool bAbilitiesGranted = false;
 	FVector TargetVelocity;
 	FVector CurrentVelocity;
@@ -180,6 +192,48 @@ public:
 	// Delay before attempting to activate StartAbilities on spawn (server-only). Adjustable in Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability, meta=(ClampMin="0.0"))
 	float StartAbilitiesActivationDelay = 0.1f;
+
+	/**
+	 * Wie lange nach dem Erschaffen die Aktivierung nachversucht wird, in Sekunden.
+	 *
+	 * StartAbilitiesActivationDelay ist eine Wette auf die Uhr. Frueher gab es genau EINEN
+	 * Nachversuch, zusammen also 0,2 s - braucht der Spielstart laenger (viele Einheiten, ein
+	 * spaeter beitretender Client, langsame Maschine), lief die StartAbility nie. Bei
+	 * GA_ActivateAbilities_Build_Barracks bedeutet das: die Faehigkeiten werden nicht
+	 * freigeschaltet, und zwar fuer alle.
+	 *
+	 * Im Normalfall aendert das nichts - der erste Versuch klappt. 0 schaltet das Nachversuchen
+	 * ab und stellt das alte Verhalten wieder her.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability, meta=(ClampMin="0.0"))
+	float StartAbilitiesRetryWindow = 10.0f;
+
+	/**
+	 * Laufen die StartAbilities noch? Solange das stimmt, laesst die KI die Einheit in Ruhe.
+	 *
+	 * Der BroodHive hat GA_UpgradeBuildingExtension_Slime_Free als StartAbility. Die KI drueckte
+	 * aber, sobald sie Rohstoffe hatte, eigene Faehigkeiten auf demselben Gebaeude - und weil
+	 * ActivateAbilityByInputID jede weitere Faehigkeit ablehnt, solange eine laeuft, kam die
+	 * StartAbility nicht zum Zug. Sie soll EINMAL durchlaufen, bevor die KI eingreift.
+	 *
+	 * Drei Zustaende, in dieser Reihenfolge geprueft:
+	 *   keine StartAbilities        -> nie blockieren
+	 *   Zeitfenster abgelaufen      -> nicht mehr blockieren (siehe StartAbilitiesBlockTimeout)
+	 *   noch nicht losgelaufen      -> blockieren
+	 *   losgelaufen und noch aktiv  -> blockieren
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = Ability)
+	bool AreStartAbilitiesPending() const;
+
+	/**
+	 * Nach so vielen Sekunden seit dem Erschaffen wird nicht mehr blockiert - Sicherheitsnetz.
+	 *
+	 * Ohne das koennte eine StartAbility, die nie aktiviert (fehlende Vorbedingung, kaputte
+	 * Klasse), die KI fuer den Rest der Partie von diesem Gebaeude aussperren. 0 schaltet das
+	 * Netz ab und blockiert dann wirklich unbegrenzt.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability, meta=(ClampMin="0.0"))
+	float StartAbilitiesBlockTimeout = 15.0f;
 
 	UFUNCTION(BlueprintCallable, Category = Ability)
 	bool IsAbilityAllowed(EGASAbilityInputID AbilityID, int Ability);
