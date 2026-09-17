@@ -331,7 +331,25 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 			if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(MyOwner))
 			{
 				MassUnit->bIsMassUnit = true;
-				MassUnit->UpdatePredictionFragment(MassUnit->GetMassActorLocation(), 0);
+				// NICHT scharfstellen. Gemessen am 14.09.2026 auf dem Client:
+				//
+				//   V0 (laeuft)        Vorhersage: aus         Pfadziel = echtes Ziel
+				//   V1 (laeuft nicht)  Vorhersage: AN, Tempo=0 Pfadziel = Spawnpunkt
+				//
+				// Hier entstand eine scharfe "bleib hier"-Vorhersage auf den eigenen Spawnpunkt.
+				// Sie ueberstimmt im UnitMovementProcessor das Serverziel, ihr Tempo 0 wird dort
+				// auf 100 angehoben, und der Pfad wird fuer den Spawnpunkt gesucht - die Einheit
+				// laeuft also zurueck statt los.
+				//
+				// Geloescht wird eine Vorhersage nur, wenn die Einheit BEIDE Punkte erreicht hat:
+				// ihre Pred.Location UND das Serverziel. Beim Spawn steht sie auf Pred.Location,
+				// also entscheidet allein, ob das Serverziel schon eingetroffen ist. War es noch
+				// der Spawnpunkt, loest sich die Vorhersage sofort auf; lag das Patrouillenziel
+				// schon an, ist die Bedingung nie wieder erfuellbar und sie lebt ewig. Genau das
+				// ist der Wettlauf hinter "die erste Einheit klappt, die zweite nicht".
+				//
+				// Ort und Tempo werden weiter vorbelegt, damit das Fragment nicht auf Null steht.
+				MassUnit->UpdatePredictionFragment(MassUnit->GetMassActorLocation(), 0, /*bScharfstellen=*/false);
 				MassUnit->SyncTranslation();
 
 				if (MassUnit->RegisterVisualsToMass() && MassUnit->RegisterAdditionalVisualsToMass())

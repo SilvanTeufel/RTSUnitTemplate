@@ -1,5 +1,91 @@
 ﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/UnitMovementProcessor.h"
+#include "Mass/Traits/UnitReplicationFragments.h"   // FUnitReplicatedTransformFragment
+#include "Animations/UnitAnimationProcessor.h"        // RTSDiagIstAusgewaehlt
+#include "HAL/IConsoleManager.h"
+
+/**
+ * Wie weit der Client vor der autoritativen Position herlaufen darf, bevor er anhaelt (uu, 2D).
+ *
+ * WARUM: gemessen am 16.09.2026 an einer ausgewaehlten Einheit auf dem Client stand
+ *   [WackelDiag] istBewegung=0.00 sollBewegung=48.34 (0%) Abstand=179.8 Korrektur=29.9
+ * ueber die ganze Messreihe. Der Abstand zur echten Serverposition betrug DAUERHAFT rund
+ * 180 uu und pendelte nicht etwa um 0. Die Einheit wurde also die ganze Zeit an einer Stelle
+ * gezeichnet, an der sie gar nicht steht.
+ *
+ * Es ist ein Kraeftegleichgewicht: der Mover schiebt je 10-Hz-Takt rund 30 uu vom Server weg,
+ * der Reconciler zieht je Takt dieselben 30 uu zurueck. Beide arbeiten dauerhaft gegeneinander,
+ * und genau dieses Ziehen ist das sichtbare Wackeln.
+ *
+ * Die vorhandene Daempfung im ClientReplicationProcessor greift dagegen NICHT, und zwar aus zwei
+ * Gruenden gleichzeitig (beide im selben Log belegt):
+ *   - sie verlangt frische Replikationsdaten (ActualAuthMove > 1 cm). Eine Einheit, die auf dem
+ *     Server blockiert ist, bewegt sich aber exakt 0,00 - genau der Fall, fuer den die Daempfung
+ *     gedacht ist, sperrt sie sich selbst aus.
+ *   - sie verlangt zusaetzlich Abstand < 75 uu ("blockiert und schon nah dran"). Bei 180 uu
+ *     Abstand ist das nie erfuellt - dabei ist ein GROSSER Abstand der staerkere Grund zu bremsen,
+ *     nicht der schwaechere.
+ *
+ * Die Bremse hier ist bewusst NICHT an die Blockiert-Erkennung gebunden. Bei grossem Abstand ist
+ * die Mehrdeutigkeit ("keine Daten" gegen "Server steht") naemlich egal: 180 uu vor einer
+ * Position herzulaufen, die man nicht kennt, ist in BEIDEN Lesarten falsch. Deshalb kann diese
+ * Bremse den Einfrier-Rueckfall nicht ausloesen, gegen den der Frischedaten-Schutz eingebaut wurde.
+ *
+ * 120 uu entsprechen rund vier Reconcile-Takten Rueckstand bei voller Laufgeschwindigkeit - weit
+ * ueber normalem Netzversatz, weit unter den gemessenen 180.
+ */
+static TAutoConsoleVariable<float> CVarRTS_ClientMaxVoraus(
+    TEXT("RTS.ClientMaxVoraus"),
+    120.f,
+    TEXT("Client: bei diesem Abstand (uu, 2D) zur autoritativen Position ist das lokale Tempo auf 0 heruntergefahren. 0 = aus."),
+    ECVF_Default);
+
+/**
+ * Ab diesem Abstand beginnt das lokale Tempo zu sinken (uu, 2D).
+ *
+ * NACHTRAG 16.09.2026: die erste Fassung war eine harte Schaltschwelle bei 120 uu - und sie hat
+ * das Wackeln nicht beseitigt, sondern nur verschoben. Gemessen danach:
+ *   Abstandsbremse haelt an: Abstand=120.3 > 120.0
+ *   Abstandsbremse haelt an: Abstand=127.0 > 120.0
+ *   [WackelDiag] Abstand=123.7 ... 132.0
+ * Der Abstand fiel von 180 auf 130 und PENDELTE dort um die Schwelle. Der Grund ist ein
+ * Entwurfsfehler von mir: die Bremse loeste auf DERSELBEN Groesse aus, die sie regelt. Ueber der
+ * Schwelle haelt sie an, der Reconciler zieht unter die Schwelle, sie gibt frei, der Mover
+ * schiebt wieder darueber - ein Zweipunktregler, der um seinen eigenen Schaltpunkt schwingt.
+ *
+ * Deshalb jetzt eine KENNLINIE statt einer Schwelle: zwischen Weich und MaxVoraus faellt das
+ * Tempo linear auf 0. Es gibt keinen Schaltpunkt mehr, um den etwas pendeln koennte.
+ */
+static TAutoConsoleVariable<float> CVarRTS_ClientVorausWeich(
+    TEXT("RTS.ClientVorausWeich"),
+    45.f,
+    TEXT("Client: ab diesem Abstand (uu, 2D) faellt das lokale Tempo linear ab, bis es bei RTS.ClientMaxVoraus 0 erreicht."),
+    ECVF_Default);
+
+/**
+ * Soviele Reconcile-Takte muss die autoritative Position stillstehen, bevor der Mover ganz haelt.
+ *
+ * Die Kennlinie allein beseitigt das Wackeln NICHT vollstaendig: der Reconciler korrigiert in
+ * 10-Hz-Spruengen, und solange ueberhaupt ein Restabstand bleibt, bleibt auch ein Saegezahn.
+ * Nullen laesst sich der Restabstand nur, wenn der Mover aufhoert zu druecken.
+ *
+ * Genau dafuer dieser Halt - und er loest bewusst auf einer ANDEREN Groesse aus als der, die er
+ * beeinflusst: er haengt daran, ob der SERVER sich bewegt, nicht daran, wie weit der Client weg
+ * ist. Freigegeben wird erst, wenn die autoritative Position sich wieder ruehrt. Damit kann er
+ * nicht um seinen eigenen Schaltpunkt pendeln - das war der Fehler der ersten Fassung.
+ */
+static TAutoConsoleVariable<int32> CVarRTS_ClientAuthStillTakte(
+    TEXT("RTS.ClientAuthStillTakte"),
+    5,
+    TEXT("Client: soviele Reconcile-Takte ohne jede Serverbewegung, bevor der lokale Mover ganz haelt (0 = aus)."),
+    ECVF_Default);
+
+/** Restabstand, ab dem der Halt bei stehendem Server ueberhaupt greift (uu, 2D). */
+static TAutoConsoleVariable<float> CVarRTS_ClientAuthStillToleranz(
+    TEXT("RTS.ClientAuthStillToleranz"),
+    25.f,
+    TEXT("Client: unter diesem Abstand haelt der Mover auch bei stehendem Server nicht an - so nah ist die Abweichung unsichtbar."),
+    ECVF_Default);
 
 // ... other includes ...
 #include "MassExecutionContext.h"
@@ -128,6 +214,9 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
 	ClientEntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
 	ClientEntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	ClientEntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadWrite);
+	// Optional: fehlt das Fragment, entfaellt nur die Bremse - die Einheit darf deswegen nicht
+	// aus der Bewegung herausgefiltert werden.
+	ClientEntityQuery.AddRequirement<FUnitReplicatedTransformFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 
     ClientEntityQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
     
@@ -214,6 +303,8 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassActorFragment> ActorList = ChunkContext.GetFragmentView<FMassActorFragment>();
         TArrayView<FMassClientPredictionFragment> PredList = ChunkContext.GetMutableFragmentView<FMassClientPredictionFragment>();
+        const FUnitReplicatedTransformFragment* ReplXfList =
+            ChunkContext.GetFragmentView<FUnitReplicatedTransformFragment>().GetData();
 
         for (int32 i = 0; i < NumEntities; ++i)
         {
@@ -276,7 +367,23 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 }
                 else if (DesiredSpeedUsed <= KINDA_SMALL_NUMBER)
                 {
-                    DesiredSpeedUsed = 100.f;
+                    // Nur anheben, wenn es ueberhaupt etwas zu fahren gibt.
+                    //
+                    // AttackStateProcessor, ChaseStateProcessor und IdleStateProcessor legen
+                    // bewusst eine Vorhersage auf die EIGENE Position mit PredDesiredSpeed=0 an -
+                    // das heisst "hier stehen bleiben". Wurde das pauschal auf 100 angehoben,
+                    // fuhr die Einheit staendig ueber ihren eigenen Punkt hinaus und wieder
+                    // zurueck: das auf dem Client sichtbare Zittern (gemessen am 14.09.2026,
+                    // Vorhersage AN auf der eigenen Position mit Tempo=0).
+                    //
+                    // Steht sie schon auf dem vorhergesagten Punkt, bleibt 0 also 0. Nur wenn sie
+                    // wirklich weg davon ist, greift der Notbehelf wie bisher.
+                    const float HalteRadius = (Pred.PredAcceptanceRadius > KINDA_SMALL_NUMBER)
+                        ? Pred.PredAcceptanceRadius : 100.f;
+                    if (FVector::DistSquared2D(CurrentLocation, Pred.Location) > FMath::Square(HalteRadius))
+                    {
+                        DesiredSpeedUsed = 100.f;
+                    }
                 }
                 if (Pred.PredAcceptanceRadius > KINDA_SMALL_NUMBER)
                 {
@@ -300,9 +407,88 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                 {
                     Pred.bHasData = false;
                 }
+
+                // HINWEIS zu einem Rueckbau vom 14.09.2026:
+                //
+                // Hier stand kurzzeitig ein zweiter Ausgang, der die Vorhersage geloescht hat,
+                // sobald der Server ihr erst zugestimmt und danach wieder abgewichen ist. Er hat
+                // die gemessene Rueckwaertsdrift in PatrolIdle zwar beendet, aber etwas
+                // Schlimmeres freigelegt: ohne Vorhersage faellt der Client auf
+                // MoveTarget.Center zurueck - und danach liefen ALLE Einheiten zum Wegpunkt
+                // zurueck, auch nach einem Bewegungsbefehl aus dem CustomController.
+                //
+                // Das heisst: die alte Vorhersage hat die Einheit nur FESTGEHALTEN. Der
+                // eigentliche Defekt ist, dass MoveTarget.Center auf dem Client auf den Wegpunkt
+                // zeigt. Wer die Vorhersage entfernt, ohne das zu beheben, macht es schlimmer.
+                // Nicht erneut versuchen, bevor die Herkunft von MoveTarget.Center auf dem
+                // Client geklaert ist.
             }
 
             
+            // ---- Abstandsbremse ------------------------------------------------------
+            // Nie weit vor der autoritativen Position herlaufen. Die Begruendung steht oben am
+            // Schalter RTS.ClientMaxVoraus; kurz: gemessen liefen Einheiten dauerhaft 180 uu
+            // neben ihrer echten Position her, weil Mover und Reconciler sich die Waage hielten.
+            if (ReplXfList)
+            {
+                const FVector AutoritativOrt = ReplXfList[i].Transform.GetLocation();
+                const float MaxVoraus = CVarRTS_ClientMaxVoraus.GetValueOnAnyThread();
+                if (MaxVoraus > 0.f && !AutoritativOrt.IsNearlyZero())
+                {
+                    const float VorausAbstand = FVector::Dist2D(CurrentLocation, AutoritativOrt);
+
+                    // Ein frisch client-kommandierter Zug DARF vorauslaufen - das ist die
+                    // Sofortreaktion auf den eigenen Klick, bevor der Server ihn bestaetigt.
+                    const bool bFrischBefohlen = Pred.CommandPredictTime >= 0.f
+                        && (World->GetTimeSeconds() - Pred.CommandPredictTime) < 0.6f;
+
+                    // (1) Der SERVER steht - dann hat der Client nichts vorzurechnen.
+                    //     Loest auf einer anderen Groesse aus als der, die es beeinflusst, und
+                    //     kann deshalb nicht um seinen eigenen Schaltpunkt pendeln.
+                    const int32 StillTakte = CVarRTS_ClientAuthStillTakte.GetValueOnAnyThread();
+
+                    // EINRASTEN. Anschalten darf den Abstand pruefen - das passiert einmal.
+                    // Ausschalten haengt NUR daran, ob der Server sich wieder ruehrt. Siehe die
+                    // Begruendung an FMassClientPredictionFragment::bAuthStillHalt: v2 hat genau
+                    // hier noch den Abstand geprueft und deshalb um die Toleranz gependelt.
+                    if (Pred.AuthStillStreak == 0)
+                    {
+                        Pred.bAuthStillHalt = false;
+                    }
+                    else if (StillTakte > 0
+                        && Pred.AuthStillStreak >= StillTakte
+                        && VorausAbstand > CVarRTS_ClientAuthStillToleranz.GetValueOnAnyThread())
+                    {
+                        Pred.bAuthStillHalt = true;
+                    }
+                    const bool bServerRuehrtSichNicht = Pred.bAuthStillHalt;
+
+                    // (2) Weiche Kennlinie statt Schaltschwelle. Zwischen Weich und MaxVoraus
+                    //     faellt das Tempo linear auf 0 - es gibt keinen Punkt mehr, um den
+                    //     etwas schwingen koennte.
+                    const float Weich = FMath::Min(CVarRTS_ClientVorausWeich.GetValueOnAnyThread(),
+                                                   MaxVoraus - 1.f);
+                    const float Anteil = FMath::Clamp(
+                        1.f - (VorausAbstand - Weich) / FMath::Max(MaxVoraus - Weich, 1.f), 0.f, 1.f);
+
+                    if (!bFrischBefohlen && (bServerRuehrtSichNicht || Anteil < 1.f))
+                    {
+                        const float VorherTempo = DesiredSpeedUsed;
+                        DesiredSpeedUsed = bServerRuehrtSichNicht ? 0.f : DesiredSpeedUsed * Anteil;
+
+                        if (RTSDiagIstAusgewaehlt(ActorList[i].Get()))
+                        {
+                        }
+
+                        if (DesiredSpeedUsed <= KINDA_SMALL_NUMBER)
+                        {
+                            Steering.DesiredVelocity = FVector::ZeroVector;
+                            continue;
+                        }
+                    }
+                }
+            }
+
             if (CharFrag.bIsFlying)
             {
                 if (FVector::DistSquared(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadiusUsed))
