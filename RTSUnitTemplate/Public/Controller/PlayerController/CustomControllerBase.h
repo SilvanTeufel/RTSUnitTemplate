@@ -26,6 +26,8 @@ class AMinimapActor;
 /**
  * 
  */
+
+
 UCLASS()
 class RTSUNITTEMPLATE_API ACustomControllerBase : public AExtendedControllerBase
 {
@@ -74,10 +76,37 @@ protected:
 	 */
 	void ClearWaypointForManualOrder(const TArray<AUnitBase*>& Units);
 
+	/**
+	 * Die eigentliche Arbeit, OHNE Berechtigungspruefung - laeuft auf Server UND Client.
+	 *
+	 * Der befehlende Client sagt die Bewegung lokal voraus und haelt dabei seine eigene Kopie von
+	 * NextWaypoint und FMassPatrolFragment. Wird die nicht mitgeloescht, schickt sein eigener
+	 * IdleStateProcessor die Einheit wieder nach Hause, obwohl der Server sauber ist.
+	 */
+	void ClearWaypointForManualOrderInternal(const TArray<AUnitBase*>& Units);
+
 	// Tries to cancel active abilities for selected units. Returns true if any ability was canceled.
 	bool TryCancelActiveAbilities();
 
 public:
+	/**
+	 * Traegt das Loesen vom Wegpunkt auf den Server - ohne das wirkt es beim Client NICHT.
+	 *
+	 * RunUnitsAndSetWaypointsMass laeuft auf dem befehlenden Client (es sagt die Bewegung dort
+	 * sogar lokal voraus) und schickt den Marschbefehl ueber
+	 * Server_Batch_CorrectSetUnitMoveTargets weiter. ClearWaypointForManualOrder wurde daneben
+	 * direkt gerufen und steigt bei !HasAuthority() aus: der Befehl kam beim Server an, das
+	 * Loesen vom Wegpunkt nicht. Der Server behielt NextWaypoint und TargetWaypointLocation, und
+	 * der naechste Idle-Takt holte die Einheit wieder nach Hause. Beim Listen-Server faellt das
+	 * nicht auf, weil der lokale Controller dort die Autoritaet IST.
+	 *
+	 * Bewusst ein eigener RPC und nicht in Server_Batch_CorrectSetUnitMoveTargets eingebaut: den
+	 * rufen auch die Regel-KI, die Angriffsbewegung und der Transporter. Dort den Wegpunkt zu
+	 * loeschen wuerde das Patrouillenverhalten der KI zerstoeren.
+	 */
+	UFUNCTION(Server, Reliable, Category = RTSUnitTemplate)
+	void Server_ClearWaypointForManualOrder(const TArray<AUnitBase*>& Units);
+
 
 	/**
 	 * Multi_SetMyTeamUnits selects the whole army once controllers are gathered. Turn this off
@@ -187,9 +216,48 @@ public:
 	// the server moved them, when a formation slot landed off-nav/dirty).
 	TArray<FVector> AdjustBatchTargetsForNav(const TArray<AUnitBase*>& Units, const TArray<FVector>& InTargets);
 
+	/**
+	 * Obergrenze je Client-Vorhersage-RPC. 0 = unbegrenzt, ein Paket fuer den ganzen Befehl.
+	 *
+	 * Frueher stand hier eine feste Teilung bei 200 Einheiten. Sie zerlegte einen einzigen
+	 * Bewegungsbefehl ohne Not in mehrere Pakete; 510 Einheiten ergeben rund 12 KB und passen
+	 * bequem in eine RPC. Nur setzen, wenn ein Befehl tatsaechlich an eine Bunch-Grenze stoesst.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 ClientPredictMaxPerRPC = 0;
+
+	/**
+	 * Setzt einen Batch-Bewegungsbefehl um.
+	 *
+	 * @param bTargetsAlreadyValidated  Der Aufrufer hat AdjustBatchTargetsForNav schon laufen
+	 *        lassen. Ohne dieses Kennzeichen lief die Navmesh-Pruefung im Serverpfad ZWEIMAL ueber
+	 *        alle Ziele - je Ziel eine Projektion, der teuerste Einzelposten des Befehls.
+	 */
+	void ExecuteBatchMove(UObject* WorldContextObject,
+		const TArray<AUnitBase*>& Units,
+		const TArray<FVector>& NewTargetLocations,
+		const TArray<float>& DesiredSpeeds,
+		const TArray<float>& AcceptanceRadii,
+		bool AttackT,
+		bool bResetHoldPosition,
+		bool bResetFollowTarget,
+		bool bTargetsAlreadyValidated = false);
+
+	/** Schickt die Vorhersage eines Befehls an alle Clients. Siehe ClientPredictMaxPerRPC. */
+	void NotifyClientsOfBatchMove(
+		const TArray<AUnitBase*>& Units,
+		const TArray<FVector>& UsedTargets,
+		const TArray<float>& DesiredSpeeds,
+		const TArray<float>& AcceptanceRadii,
+		bool AttackT,
+		bool bResetHoldPosition,
+		bool bResetFollowTarget,
+		bool bOriginatorPredictsLocally);
+
 	// Batched version to reduce per-unit RPC spamming when issuing group move orders
 	// Now multicast so that all clients receive the movement updates, but invoked by a server wrapper
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+
 	void Batch_CorrectSetUnitMoveTargets(
 		UObject* WorldContextObject,
 		const TArray<AUnitBase*>& Units,
@@ -315,6 +383,31 @@ public:
 	
 	/** Solves the assignment problem (Hungarian) on the given cost matrix. */
 	TArray<int32> SolveHungarian(const TArray<TArray<float>>& Matrix) const;
+
+	/**
+	 * Ab wievielen Einheiten die Assignment gierig statt optimal geloest wird.
+	 *
+	 * WOFUER: SolveHungarian loest die Assignment Einheit->Formationsplatz OPTIMAL, braucht dafuer
+	 * aber O(n^3). Bei 510 Einheiten sind das rund 133 Millionen Schritte - gemessen am
+	 * 17.09.2026 auf LevelSix: ein Rechtsklick kostete 200-242 ms, und davon entfielen 238 ms auf
+	 * genau diesen Aufruf. Alle uebrigen Teile des Klicks zusammen lagen bei 2,6 ms.
+	 *
+	 * Das erklaert auch, warum es nur bei VIELEN Einheiten auffiel: halbe Anzahl heisst ein
+	 * Achtel der Zeit. Bei 255 Einheiten sind es noch rund 25 ms, bei 100 keine 2 ms mehr.
+	 *
+	 * Unterhalb der Schwelle bleibt es bei der optimalen Loesung - dort ist sie billig und ihr
+	 * Vorteil am ehesten sichtbar. Darueber ordnet SolveAssignmentGreedy zu: jede Einheit bekommt
+	 * den billigsten noch freien Platz. Das ist O(n^2), also bei 510 Einheiten rund 260.000
+	 * Schritte statt 133 Millionen, und liefert bei einem Formationsgitter ein sehr aehnliches
+	 * Bild - die Plaetze sind ohnehin nach Radius vorsortiert.
+	 *
+	 * 0 oder kleiner erzwingt immer die optimale Loesung (altes Verhalten).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 FormationHungarianMaxUnits = 120;
+
+	/** Gierige Assignment: jede Einheit nimmt den billigsten freien Platz. Siehe FormationHungarianMaxUnits. */
+	TArray<int32> SolveAssignmentGreedy(const TArray<TArray<float>>& Matrix) const;
 	/** Determines if the formation needs to be recalculated. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool ShouldRecalculateFormation() const;

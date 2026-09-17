@@ -226,6 +226,16 @@ private:
 	/** What this actor last asked the engine for, so the call is made only on a real change. */
 	bool bFogHidden = false;
 
+	/**
+	 * Das bHiddenInGame, das jede Komponente von sich aus mitbrachte - einmal gemerkt.
+	 *
+	 * Ohne das setzt das Aufdecken alles pauschal auf sichtbar und macht die TriggerCapsule
+	 * mit, die aus UShapeComponent mit bHiddenInGame=true kommt. Genau so wurde die
+	 * Kollisionskapsel im Spiel sichtbar.
+	 */
+	TMap<TObjectPtr<USceneComponent>, bool> FogEigenzustand;
+	bool bFogEigenzustandGemerkt = false;
+
 	/** Single point where the hidden flag is written, so the change test cannot be forgotten. */
 	void ApplyFogHidden(bool bHide);
 

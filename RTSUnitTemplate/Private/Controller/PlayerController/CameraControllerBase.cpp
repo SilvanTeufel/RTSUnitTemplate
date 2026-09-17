@@ -153,6 +153,7 @@ void ACameraControllerBase::Server_StopCameraUnitDirect_Implementation()
 		PredFrag->Location = StopLoc;
 		PredFrag->PredDesiredSpeed = 0.f;
 		PredFrag->bHasData = true;
+		PredFrag->PredSource = 3; // [PredDiag]
 	}
 
 	CameraUnitWithTag->AddStopMovementTagToEntity();
@@ -295,6 +296,7 @@ void ACameraControllerBase::ApplyDirectMovePredictionLocally(const FVector& Targ
 		? CameraUnitWithTag->MovementAcceptanceRadius
 		: 50.f;
 	Pred->bHasData = true;
+	Pred->PredSource = 4; // [PredDiag]
 	Pred->CommandPredictTime = World ? World->GetTimeSeconds() : 0.f;
 
 	// ============================================================================================
@@ -438,6 +440,7 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 					PredFrag->PredDesiredSpeed = CameraUnitWithTag->Attributes->GetRunSpeed();
 					PredFrag->PredAcceptanceRadius = 50.f;
 					PredFrag->bHasData = true;
+					PredFrag->PredSource = 5; // [PredDiag]
 				}
 			}
 			CameraUnitWithTag->AddStopMovementTagToEntity();
@@ -1396,9 +1399,27 @@ void ACameraControllerBase::GrantPeriodicTalentPoints()
 		{
 			continue;
 		}
-		Unit->LevelData.TalentPoints += TalentPointsPerInterval;
+		// BEWUSST NICHT MEHR: Unit->LevelData.TalentPoints += TalentPointsPerInterval;
+		//
+		// Der Attributbaum hat mit LevelData nichts zu tun - er fuehrt seinen eigenen Vorrat.
+		// Die Zeile fuetterte aber den Topf, den AutoLevelUp() im Regenerationstakt (jede Sekunde)
+		// leerraeumt, und zwar ueber InvestPointIntoStamina() und Geschwister. Deren
+		// GameplayEffects sind aggregierte Modifikatoren: bei jeder Anwendung rechnet GAS
+		// CurrentValue = BaseValue + Summe der Modifikatoren NEU und verwirft dabei alles, was
+		// UAttributeSetBase::SetAttributeHealth per SetCurrentValue direkt geschrieben hat - also
+		// die gesamte zwischenzeitliche Regeneration.
+		//
+		// Gemessen am 17.09.2026, dieselbe Einheit, zwei Vergaben:
+		//   MaxHealth 100 -> 110 | Health  51.8 -> 60.0
+		//   MaxHealth 110 -> 120 | Health 110.0 -> 70.0
+		// Die Gesundheit landet unabhaengig vom Vorwert auf BaseValue + N*10. Die Healthbars, die
+		// im Minutentakt aufpoppten, meldeten also echten Schaden - 40 Punkte, jede Minute, auf
+		// jeder eigenen Einheit.
+		//
+		// Wer den TalentChooser wieder periodisch fuettern will, braucht dafuer einen eigenen
+		// Schalter - aber erst, wenn die Investitionseffekte auf Instant stehen.
 
-		// Und derselbe Betrag in den EIGENEN Vorrat des Attributbaums.
+		// Nur noch der EIGENE Vorrat des Attributbaums.
 		//
 		// Zwei getrennte Zaehler, nicht ein geteilter: der TalentChooser bekommt seine Punkte
 		// unveraendert wie bisher, und der Baum bekommt seine eigenen, an die AutoLevelUp() nicht

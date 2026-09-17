@@ -58,6 +58,31 @@ public:
 	UPROPERTY(EditAnywhere, Category = "EnergyWall|Effects")
 	TSubclassOf<class UGameplayEffect> EnemyEffectClass;
 
+	/**
+	 * Bepflanzung entlang der NavObstacleBox entfernen.
+	 *
+	 * WARUM DER TAG "Obstacle" HIER NICHT REICHT: die PCG-Graphen unter
+	 * /Game/RTSUnits/Material/Landscape/PCG holen sich ueber GetActorData alle Aktoren mit diesem
+	 * Tag und ziehen sie per Difference von der Streuflaeche ab - abgezogen werden dabei die
+	 * BOUNDS des Aktors. Bei einem Gebaeude passt das. Bei einer Wand nicht: was den Boden
+	 * versperrt, ist die NavObstacleBox, die sich zwischen die beiden Tuerme spannt, und die
+	 * entsteht erst, wenn die Wand ihre Laenge kennt.
+	 *
+	 * Zweitens fragt PCG die Aktoren nur beim Erzeugen ab (bAlwaysRequeryActors = false). Eine im
+	 * Spiel gebaute Wand erreicht den Graphen also ohnehin nicht mehr - deshalb wird hier direkt
+	 * geraeumt, wie es die Gebaeude ueber ClearPCGInstancesInRadius auch tun.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "EnergyWall|PCG")
+	int32 RaeumePCGEntlangDerWand();
+
+	/** Zusaetzliche Breite beim Freiraeumen, damit nichts direkt an der Wand klebt (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|PCG")
+	float PCGClearPadding = 120.f;
+
+	/** Freiraeumen ueberhaupt durchfuehren. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|PCG")
+	bool bClearPCGAlongWall = true;
+
 	UFUNCTION()
 	void OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 

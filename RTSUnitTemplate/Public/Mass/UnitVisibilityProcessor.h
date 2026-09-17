@@ -44,6 +44,7 @@ private:
 	UPROPERTY(EditAnywhere, Category="RTS|Visibility")
 	float DefaultHealthbarVisibleTime = 3.0f;
 
+
 	// Minimum positive health/shield change to trigger a healthbar popup
 	UPROPERTY(EditAnywhere, Category="RTS|Visibility")
 	float PositiveChangeThreshold = 100.0f;

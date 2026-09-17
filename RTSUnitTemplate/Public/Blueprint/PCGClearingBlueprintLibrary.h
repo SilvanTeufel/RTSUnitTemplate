@@ -49,4 +49,41 @@ public:
 		FVector Center,
 		float Radius,
 		bool bIncludeVertical = false);
+
+	/**
+	 * Removes every PCG-generated instance inside an ORIENTED box.
+	 *
+	 * Why a box and not the radius version above: a radius fits a building, which is roughly as wide
+	 * as it is deep. It does not fit an energy wall, which is a long thin thing spanning the gap
+	 * between two towers. A radius large enough to cover the span would also strip everything to the
+	 * sides of it; one small enough not to would leave the middle of the wall overgrown.
+	 *
+	 * This is also why the actor tag "Obstacle" alone does not solve it for a wall: the PCG graph
+	 * subtracts the actor's BOUNDS, and the wall's own bounds are not what blocks the ground - the
+	 * NavObstacleBox that stretches between the towers is.
+	 *
+	 * Same constraints as the radius version: only touches ISMs carrying PCG's "PCG Generated
+	 * Component" tag, purely visual, not replicated, run it on every machine.
+	 *
+	 * @param WorldContextObject  Any object in the world to operate on.
+	 * @param BoxTransform        World transform of the box centre. Pass it WITHOUT scale - the test
+	 *                            inverts this transform, and an inverse that carries scale would
+	 *                            divide it back out of the point while BoxExtent still carries it.
+	 *                            At scale 1 that is invisible; at any other scale the cleared strip
+	 *                            is wrong by exactly that factor, and Padding is no longer in cm.
+	 *                            From a UBoxComponent: FTransform(GetComponentQuat(), GetComponentLocation()).
+	 * @param BoxExtent           HALF-extent in WORLD units, i.e. UBoxComponent::GetScaledBoxExtent().
+	 * @param Padding             Extra cm added to the extent on every axis. Negative values shrink.
+	 * @param bIncludeVertical    If false (default) the height axis is ignored, so instances are
+	 *                            cleared regardless of terrain height under the wall. See the radius
+	 *                            version for why that is the useful default.
+	 * @return Number of instances removed.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|PCG", meta = (WorldContext = "WorldContextObject"))
+	static int32 ClearPCGInstancesInBox(
+		const UObject* WorldContextObject,
+		FTransform BoxTransform,
+		FVector BoxExtent,
+		float Padding = 0.f,
+		bool bIncludeVertical = false);
 };

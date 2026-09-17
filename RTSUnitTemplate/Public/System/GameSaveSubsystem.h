@@ -20,7 +20,58 @@ class RTSUNITTEMPLATE_API UGameSaveSubsystem : public UGameInstanceSubsystem
     GENERATED_BODY()
 
 public:
+    virtual void Initialize(FSubsystemCollectionBase& Collection) override;
     virtual void Deinitialize() override;
+
+    /**
+     * Holt NUR die Freischaltungen der MapSwitch-Ziele aus dem juengsten Spielstand.
+     *
+     * Wofuer: startet man das Spiel neu, steht man im Menue wieder vor verschlossenen Portalen,
+     * obwohl der Fortschritt laengst gespeichert ist. Der Zustand liegt im UMapSwitchSubsystem
+     * und wandert zwar in jeden Spielstand, aber bisher kam er nur ueber LoadGameFromSlot
+     * zurueck - und das REIST zur gespeicherten Karte. Wer im Menue bleiben will, kann ihn also
+     * gar nicht holen.
+     *
+     * Deshalb dieser schmale Weg: er liest ausschliesslich MapEnabledSwitchTags und ruehrt
+     * Einheiten, Ressourcen und Karte nicht an. Das Menuelevel bleibt stehen.
+     *
+     * "Juengster" heisst hier woertlich der groesste SavedUnixTimeSeconds - NICHT der
+     * Spielstand mit dem weitesten Fortschritt. Wer zurueckspringt, soll auch zurueckspringen.
+     *
+     * @return true, wenn ein Spielstand gefunden und uebernommen wurde.
+     */
+    UFUNCTION(BlueprintCallable, Category="Save")
+    bool RestoreUnlocksFromLatestSave();
+
+    /**
+     * Beginnt ein neues Spiel, OHNE etwas zu loeschen.
+     *
+     * Legt einen frischen Spielstand ohne Fortschritt an. Weil er den juengsten Zeitstempel
+     * traegt, ist er der, den RestoreUnlocksFromLatestSave beim naechsten Start findet - die
+     * Portale stehen also wieder zu. Die bisherigen Spielstaende bleiben liegen und lassen sich
+     * jederzeit wieder laden.
+     *
+     * Bewusst NICHT ueber SaveCurrentGame: das schriebe den Zustand der gerade offenen Karte
+     * mit hinein - im Menue also dessen Aktoren. Ein neues Spiel soll leer sein, nicht ein
+     * Abbild des Menues.
+     *
+     * @param SlotName Name des neuen Spielstands. Leer nimmt einen eindeutigen "NewGame"-Namen.
+     * @return Der tatsaechlich verwendete Name, oder leer bei Fehlschlag.
+     */
+    UFUNCTION(BlueprintCallable, Category="Save")
+    FString StartNewGame(const FString& SlotName);
+
+    /**
+     * Loescht ALLE Spielstaende und setzt die Freischaltungen zurueck - neues Spiel.
+     *
+     * Entfernt die .sav-Dateien, die IstSpielstandDatei als Spielstand erkennt. Alles andere im
+     * Ordner (Faehigkeiten je Einheit, Replays, Indexdateien) bleibt unberuehrt; dort liegen
+     * gemessen ueber siebentausend Dateien, von denen die wenigsten Spielstaende sind.
+     *
+     * @return Anzahl der geloeschten Spielstaende.
+     */
+    UFUNCTION(BlueprintCallable, Category="Save")
+    int32 ResetAllProgress();
 
     FOnUnitSaveLoad OnUnitSave;
     FOnUnitSaveLoad OnUnitLoad;
@@ -66,6 +117,9 @@ private:
     bool bPendingQuickSave = false;
 
     void ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* SaveData);
+
+    /** Einmal je Sitzung: die Freischaltungen sind schon geholt. */
+    bool bUnlocksRestored = false;
 
     // Callback wenn eine Map geladen wurde
     void OnPostLoadMapWithWorld(UWorld* LoadedWorld);

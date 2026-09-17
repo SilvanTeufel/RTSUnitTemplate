@@ -171,6 +171,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         Pred.PredAcceptanceRadius = MoveTarget.SlackRadius;
                         Pred.PredDesiredSpeed = StatsFrag.RunSpeed;
                         Pred.bHasData = true;
+                        Pred.PredSource = 7; // [PredDiag]
                     }
                     SwitchToRunState(EntityManager, ChunkContext, Entity, StateFrag);
                     continue;
@@ -228,6 +229,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
                         Pred.PredAcceptanceRadius = MoveTarget.SlackRadius;
                         Pred.PredDesiredSpeed = StatsFrag.RunSpeed;
                         Pred.bHasData = true;
+                        Pred.PredSource = 8; // [PredDiag]
                     }
                     if (!StateFrag.SwitchingStateClient)
                     {
@@ -448,6 +450,7 @@ void UIdleStateProcessor::SwitchToChaseState(FMassEntityManager& EntityManager, 
                     Pred->PredDesiredSpeed = Stats->RunSpeed;
                 }
                 Pred->bHasData = true;
+                Pred->PredSource = 9; // [PredDiag]
             }
         }
         
@@ -489,6 +492,7 @@ void UIdleStateProcessor::SwitchToPauseState(FMassEntityManager& EntityManager, 
             }
             Pred->PredDesiredSpeed = 0.f;
             Pred->bHasData = true;
+            Pred->PredSource = 10; // [PredDiag]
         }
         
         StateFrag.SwitchingStateClient = true;
@@ -534,6 +538,7 @@ void UIdleStateProcessor::SwitchToRunState(FMassEntityManager& EntityManager, FM
                     Pred->PredDesiredSpeed = Stats->RunSpeed;
                 }
                 Pred->bHasData = true;
+                Pred->PredSource = 11; // [PredDiag]
             }
         }
         

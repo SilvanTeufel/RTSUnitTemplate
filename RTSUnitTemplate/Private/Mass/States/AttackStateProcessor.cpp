@@ -179,6 +179,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
             Pred.Location = Transform.GetLocation();
             Pred.PredDesiredSpeed = 0.f;
             Pred.bHasData = true;
+            Pred.PredSource = 20; // [PredDiag]
         }
     }
 
@@ -265,6 +266,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
                         Pred.Location = Transform.GetLocation();
                         Pred.PredDesiredSpeed = 0.f;
                         Pred.bHasData = true;
+                        Pred.PredSource = 21; // [PredDiag]
                     }
                 }
                 Defer.RemoveTag<FMassStateAttackTag>(Entity);
@@ -292,6 +294,7 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
             }
             Pred.PredDesiredSpeed = Stats.RunSpeed;
             Pred.bHasData = true;
+            Pred.PredSource = 22; // [PredDiag]
         }
         Defer.RemoveTag<FMassStateAttackTag>(Entity);
         

@@ -170,9 +170,6 @@ void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType
 					const float Wanted = Before - Amount; // Inverted logic for Supply
 					if (Wanted < 0.f)
 					{
-						UE_LOG(LogTemp, Warning,
-							TEXT("[Versorgung] Team %d: Rueckgabe von %.0f wuerde den Verbrauch auf %.0f druecken (vorher %.0f) - auf 0 begrenzt."),
-							TeamId, Amount, Wanted, Before);
 					}
 					ResourceArray.Resources[TeamId] = FMath::Max(0.f, Wanted);
 				}
@@ -773,9 +770,6 @@ bool AResourceGameMode::ModifyResourceCCost(const FBuildingCost& ConstructionCos
 				const float Wanted = ResourceArray.Resources[TeamId] + CostMap[ResourceArray.ResourceType];
 				if (Wanted < 0.f)
 				{
-					UE_LOG(LogTemp, Warning,
-						TEXT("[Versorgung] Team %d: Kostenerstattung wuerde den Verbrauch auf %.0f druecken - auf 0 begrenzt."),
-						TeamId, Wanted);
 				}
 				ResourceArray.Resources[TeamId] = FMath::Max(0.f, Wanted);
 			}

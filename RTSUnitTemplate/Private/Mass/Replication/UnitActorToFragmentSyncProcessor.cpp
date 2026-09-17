@@ -10,6 +10,7 @@
 #include "MassExecutionContext.h"
 #include "MassReplicationFragments.h"
 #include "Mass/UnitMassTag.h"
+#include "Mass/UnitNavigationFragments.h"
 #include "Mass/Signals/MySignals.h"                 // UnitSignals::* used by the PlaceholderSignal refresh
 #include "Mass/MassUnitVisualFragments.h"
 #include "MassEntitySubsystem.h"
@@ -119,6 +120,25 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				if (FMassPatrolFragment* PatrolFrag = EntityManager.GetFragmentDataPtr<FMassPatrolFragment>(EntityHandle))
 				{
 					SyncPatrol(*Unit, *PatrolFrag, EntityManager, EntityHandle);
+				}
+
+				// Das vom Server gewuerfelte Patrouillenziel auf dem Client nachfahren.
+				//
+				// UPatrolRandomStateProcessor laeuft mit `Server | Standalone`, auf dem Client
+				// verarbeitet also NIEMAND das PatrolRandom-Tag - die Einheit bleibt stehen. Sie
+				// hat dort alles ausser dem Ziel (am 14.09.2026 gemessen: Zustand, NextWaypoint
+				// und TargetWaypointLocation waren vollstaendig da).
+				//
+				// Den Punkt hier selbst zu wuerfeln waere falsch: Server und Client liefen zu
+				// verschiedenen Stellen. Der Server waehlt ihn in SetNewRandomPatrolTarget und
+				// legt ihn auf AMassUnitBase::PatrolTargetLocation ab; hier wird nur gefolgt.
+				//
+				// Nur bei Aenderung: MoveTarget.CreateNewAction startet die Bewegung neu, und das
+				// jeden Takt zu tun laesst eine Einheit endlos von vorn losgehen.
+				if (MoveTargetList.Num() > 0 && AIStateList.Num() > 0 && CombatStatsList.Num() > 0)
+				{
+					SyncClientPatrolTarget(*Unit, MoveTargetList[EntityIndex],
+						AIStateList[EntityIndex], CombatStatsList[EntityIndex]);
 				}
 
 				if (FMassWorkerStatsFragment* WorkerStats = EntityManager.GetFragmentDataPtr<FMassWorkerStatsFragment>(EntityHandle))
@@ -472,6 +492,97 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 	VisualEffect.DishSpeedMax = MassUnit->Rep_VE_DishSpeedMax;
 	VisualEffect.DishDurationMin = MassUnit->Rep_VE_DishDurationMin;
 	VisualEffect.DishDurationMax = MassUnit->Rep_VE_DishDurationMax;
+}
+
+
+void UUnitActorToFragmentSyncProcessor::SyncClientPatrolTarget(const AUnitBase& Unit,
+	FMassMoveTargetFragment& MoveTarget, FMassAIStateFragment& StateFrag,
+	const FMassCombatStatsFragment& Stats)
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+
+	AMassUnitBase* SchreibUnit = const_cast<AMassUnitBase*>(Cast<AMassUnitBase>(&Unit));
+
+	// SERVERSEITE: den TATSAECHLICHEN Bewegungswillen hinausreichen, nicht den einmal
+	// ausgewuerfelten Punkt.
+	//
+	// CL 433 schrieb PatrolTargetLocation in SetNewRandomPatrolTarget - also genau einmal, beim
+	// Auswuerfeln. Gemessen am 14.09.2026 laufen die beiden aber auseinander: der Server stand
+	// acht Sekunden bewegungslos mit DesiredSpeed=0 und einem MoveTarget.Center auf einem ganz
+	// anderen Punkt, waehrend der replizierte Wert weiter das alte Ziel zeigte. Der Client rannte
+	// dorthin, der Positionsabgleich riss ihn zurueck - Zappeln und endlose Laufanimation.
+	//
+	// Die einzige verlaessliche Quelle ist das, was der Server in diesem Moment wirklich tut.
+	if (World->GetNetMode() != NM_Client)
+	{
+		if (SchreibUnit && Unit.StoredUnitState == UnitData::PatrolRandom)
+		{
+			SchreibUnit->PatrolTargetLocation = MoveTarget.Center;
+			SchreibUnit->PatrolDesiredSpeed = MoveTarget.DesiredSpeed.Get();
+		}
+		return;
+	}
+
+	// NUR im Patrouillenzustand. Diese Synchronisierung gibt es allein deshalb, weil
+	// UPatrolRandomStateProcessor mit Server|Standalone laeuft und auf dem Client niemand das
+	// PatrolRandom-Tag bearbeitet. In jedem ANDEREN Zustand hat sie nichts zu suchen.
+	//
+	// Ohne diese Pruefung (gemessen am 14.09.2026): nach einem Bewegungsbefehl stand die
+	// Einheit auf Zustand=3 (Run), Pfad und Vorhersage zeigten korrekt auf das neue Ziel - aber
+	// MoveTarget.Center wurde hier weiter auf den alten Patrouillenpunkt gezogen. Sobald die
+	// Vorhersage verbraucht war, fiel der Client darauf zurueck und lief zum Wegpunkt zurueck.
+	// Schlimmer noch: StoredLocation wurde mitgezogen, also holte auch der Leerlauf sie dorthin.
+	if (Unit.StoredUnitState != UnitData::PatrolRandom)
+	{
+		return;
+	}
+
+	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(&Unit);
+	if (!MassUnit || MassUnit->PatrolTargetLocation.IsNearlyZero())
+	{
+		return;
+	}
+
+	// Nur uebernehmen, wenn der Server wirklich ein neues Ziel gewaehlt hat. CreateNewAction
+	// startet die Bewegung neu - jeden Takt aufgerufen liefe die Einheit endlos von vorn los und
+	// kaeme nie an.
+	if (MoveTarget.Center.Equals(MassUnit->PatrolTargetLocation, 1.f))
+	{
+		return;
+	}
+
+	// Nicht ueber UpdateMoveTarget: das traegt ein ensureMsgf gegen Aufrufe auf dem Client.
+	// Dieselben Felder, ohne die serverseitige Navigationspruefung - das Ziel ist bereits vom
+	// Server auf dem Navigationsnetz gewaehlt worden.
+	const FVector Richtung = MassUnit->PatrolTargetLocation - MoveTarget.Center;
+
+	// CreateNewAction ist ebenfalls AUTORITAETS-ONLY und hat auf dem Client ein ensure
+	// ausgeloest ("This version of SetDesiredAction should only be called on the authority",
+	// MassNavigationFragments.cpp:13). Die Engine hat fuer genau diesen Fall
+	// CreateReplicatedAction - dieselbe Wirkung, ohne die Autoritaetspruefung, gedacht fuer
+	// Zustaende die von aussen hereingereicht werden. Genau das ist hier der Fall: der Punkt
+	// kommt vom Server.
+	const double Jetzt = World->GetTimeSeconds();
+	MoveTarget.CreateReplicatedAction(EMassMovementAction::Move,
+		MoveTarget.GetCurrentActionID() + 1, Jetzt, Jetzt);
+	if (!Richtung.IsNearlyZero())
+	{
+		MoveTarget.Forward = Richtung.GetSafeNormal();
+	}
+	MoveTarget.Center = MassUnit->PatrolTargetLocation;
+
+	// Das Tempo des SERVERS uebernehmen, nicht pauschal RunSpeed. Steht er (DesiredSpeed 0),
+	// muss der Client auch stehen - sonst rennt er gegen einen aufgegebenen Punkt an.
+	MoveTarget.DesiredSpeed.Set(MassUnit->PatrolDesiredSpeed);
+	MoveTarget.IntentAtGoal = EMassMovementAction::Stand;
+
+	// Der Heimatanker muss mitwandern, sonst zieht der IdleStateProcessor die Einheit beim
+	// naechsten Leerlauf wieder zum alten Punkt zurueck.
+	StateFrag.StoredLocation = MassUnit->PatrolTargetLocation;
 }
 
 void UUnitActorToFragmentSyncProcessor::SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFrag, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle)

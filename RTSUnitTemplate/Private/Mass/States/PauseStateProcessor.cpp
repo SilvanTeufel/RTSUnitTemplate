@@ -440,6 +440,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                             Pred.Location = TargetFrag.LastKnownLocation;
                             Pred.PredDesiredSpeed = 0.f;
                             Pred.bHasData = true;
+                            Pred.PredSource = 12; // [PredDiag]
                         }
                     }
                     Context.Defer().RemoveTag<FMassStatePauseTag>(Entity);
@@ -468,6 +469,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                     }
                     Pred.PredDesiredSpeed = Stats.RunSpeed;
                     Pred.bHasData = true;
+                    Pred.PredSource = 13; // [PredDiag]
                 }
                 if (StateFrag.CanAttack && StateFrag.IsInitialized)
                 {
@@ -511,6 +513,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                     Pred.PredDesiredSpeed = 0.f;
                 }
                 Pred.bHasData = true;
+                Pred.PredSource = 14; // [PredDiag]
             }
             
             Defer.RemoveTag<FMassStatePauseTag>(Entity);
@@ -544,6 +547,7 @@ void UPauseStateProcessor::ApplyAttackStopLogic(FMassExecutionContext& Context,
             Pred.Location = TransformList[EntityIdx].GetTransform().GetLocation();
             Pred.PredDesiredSpeed = 0.f;
             Pred.bHasData = true;
+            Pred.PredSource = 15; // [PredDiag]
         }
     }
 }
