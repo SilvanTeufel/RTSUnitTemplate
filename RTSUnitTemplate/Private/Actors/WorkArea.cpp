@@ -581,16 +581,63 @@ void AWorkArea::ApplyFogHidden(bool bHide)
 	if (bFogHidden == bHide) return;
 	bFogHidden = bHide;
 
-	// SetActorHiddenInGame and not a component call: the Blueprint hides the mesh itself once
-	// construction starts, and hidden-in-game sits above that - switching it back off restores
-	// whatever the Blueprint had set instead of overwriting it. Collision is untouched, so the
-	// ECC_Visibility click channel keeps working.
-	SetActorHiddenInGame(bHide);
+	// Ueber die KOMPONENTEN und nicht ueber SetActorHiddenInGame - der Unterschied ist die
+	// Replikation.
+	//
+	// Nebelsichtbarkeit ist eine Entscheidung PRO ZUSCHAUER: zwei Spieler in verschiedenen Teams
+	// muessen dieselbe Baustelle unterschiedlich sehen. AActor::bHidden ist aber ein Wert pro
+	// AKTOR und in Actor.h als `Replicated` deklariert - was der Server schreibt, bekommen alle.
+	// Beim Dedicated Server war das fatal: BeginPlay versteckt jede Baustelle, und die einzige
+	// Ruecknahmestelle (UpdateFogVisibility) steigt fuer NM_DedicatedServer aus - zu Recht, denn
+	// ohne Rendering gibt es keine Nebelmaske. Der Server hielt bHidden dauerhaft fest und
+	// schickte es an jeden Client.
+	//
+	// Ein Versuch, das ueber DISABLE_REPLICATED_PRIVATE_PROPERTY(AActor, bHidden) zu loesen und
+	// SetActorHiddenInGame zu behalten, hat NICHT gewirkt - die Baustellen blieben unsichtbar.
+	// USceneComponent::bHiddenInGame traegt dagegen keinen Replicated-Vermerk und bleibt lokal.
+	//
+	// Die urspruengliche Eigenschaft bleibt erhalten: der Schalter liegt UEBER der Sichtbarkeit,
+	// die das Blueprint beim Baubeginn selbst setzt (das nutzt bVisible, nicht bHiddenInGame).
+	// Die Kollision bleibt unberuehrt, der ECC_Visibility-Klickkanal funktioniert weiter.
+	//
+	// SetHiddenInGame(..., Propagate) allein reicht NICHT: es UEBERSCHREIBT das Flag jedes Kindes
+	// (SceneComponent.cpp) und loeschte damit das bHiddenInGame=true, das die TriggerCapsule aus
+	// UShapeComponent mitbringt - die Kollisionskapsel wurde im Spiel sichtbar. Deshalb wird der
+	// Ausgangszustand jeder Komponente einmal gemerkt und beim Aufdecken wiederhergestellt,
+	// statt ihn pauschal auf "sichtbar" zu setzen.
+	TInlineComponentArray<USceneComponent*> Komponenten;
+	GetComponents(Komponenten);
+
+	if (!bFogEigenzustandGemerkt)
+	{
+		FogEigenzustand.Reset();
+		for (USceneComponent* K : Komponenten)
+		{
+			if (K) FogEigenzustand.Add(K, K->bHiddenInGame);
+		}
+		bFogEigenzustandGemerkt = true;
+	}
+
+	for (USceneComponent* K : Komponenten)
+	{
+		if (!K) continue;
+		// Beim Verstecken alles aus; beim Aufdecken zurueck auf das, was die Komponente selbst
+		// wollte. Nach dem Merken hinzugekommene Komponenten kennen wir nicht - die gelten als
+		// sichtbar, was dem alten Verhalten von SetActorHiddenInGame entspricht.
+		const bool* Eigen = FogEigenzustand.Find(K);
+		K->SetHiddenInGame(bHide ? true : (Eigen ? *Eigen : false), /*bPropagateToChildren=*/false);
+	}
 }
 
 void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	// Hier stand einmal DISABLE_REPLICATED_PRIVATE_PROPERTY(AActor, bHidden), um bHidden aus der
+	// Replikation zu nehmen und SetActorHiddenInGame behalten zu koennen. Das hat NICHT gewirkt -
+	// die Baustellen blieben beim Dedicated Server unsichtbar. Die Loesung sitzt jetzt in
+	// ApplyFogHidden, das gar kein repliziertes Flag mehr anfasst.
+
 	DOREPLIFETIME(AWorkArea, AreaEffect);
 	DOREPLIFETIME(AWorkArea, Mesh);
 	DOREPLIFETIME(AWorkArea, TeamId);
