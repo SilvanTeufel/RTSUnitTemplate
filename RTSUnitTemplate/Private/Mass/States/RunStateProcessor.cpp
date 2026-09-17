@@ -165,6 +165,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                         Pred.PredDesiredSpeed = Stats.RunSpeed;
                         Pred.PredAcceptanceRadius = 100.f;
                         Pred.bHasData = true;
+                        Pred.PredSource = 16; // [PredDiag]
                     }
                     
                     SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
@@ -183,6 +184,65 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             float AcceptanceRadius = bClientPredicting
                 ? FMath::Max(PredictionList[i].PredAcceptanceRadius, MoveTarget.SlackRadius)
                 : MoveTarget.SlackRadius;
+
+            // Fortschrittswaechter - dasselbe wie im Serverzweig, das dem Client bisher fehlte.
+            //
+            // Der Client kannte nur ZWEI Ausgaenge aus Run: "nah genug am Ziel" oder "nah genug
+            // UND Geschwindigkeit null". Haelt eine Kollision die Einheit WEIT vom Ziel fest,
+            // greift keiner von beiden - der RunTag bleibt fuer immer, die Laufanimation spielt
+            // weiter, und die Einheit bewegt sich nie wieder. Genau das passiert beim Wechsel
+            // zwischen PatrolRandom und PatrolIdle, wenn zwei Einheiten zusammenstossen.
+            //
+            // Fortschritt heisst NAEHER AM ZIEL, nicht "irgendwie bewegt": wer vor einem
+            // Hindernis hin- und herzappelt, verschiebt sich jeden Takt und wuerde einen
+            // Wegstrecken-Timer dauernd zuruecksetzen.
+            if (RunStallTimeout > 0.f)
+            {
+                const float DistZumZiel = FVector::Dist2D(CurrentLocation, FinalDestination);
+
+                if (FVector::Dist2D(StateFrag.BestTargetRefDestination, FinalDestination) > 250.f)
+                {
+                    // Neues Ziel - die alte Bestmarke ist bedeutungslos.
+                    StateFrag.BestTargetRefDestination = FinalDestination;
+                    StateFrag.BestTargetDistance = DistZumZiel;
+                    StateFrag.LastProgressLocation = CurrentLocation;
+                    StateFrag.NoProgressTimer = 0.f;
+                }
+                else if (DistZumZiel < StateFrag.BestTargetDistance - RunStallProgressDistance)
+                {
+                    StateFrag.BestTargetDistance = DistZumZiel;
+                    StateFrag.LastProgressLocation = CurrentLocation;
+                    StateFrag.NoProgressTimer = 0.f;
+                }
+                else
+                {
+                    StateFrag.NoProgressTimer += ExecutionInterval;
+                    if (StateFrag.NoProgressTimer >= RunStallTimeout && !StateFrag.SwitchingStateClient)
+                    {
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[RunStallClient] %s DistZiel=%.0f Versatz=%.0f Vorhersage=%d"),
+                            ActorList[i].Get() ? *ActorList[i].Get()->GetName() : TEXT("?"),
+                            DistZumZiel,
+                            FVector::Dist2D(CurrentLocation, StateFrag.LastProgressLocation),
+                            bClientPredicting ? 1 : 0);
+
+                        StateFrag.NoProgressTimer = 0.f;
+                        StateFrag.BestTargetDistance = TNumericLimits<float>::Max();
+                        StateFrag.LastProgressLocation = CurrentLocation;
+
+                        // Die Vorhersage muss mit weg. Sie ueberstimmt im UnitMovementProcessor
+                        // das Serverziel - bleibt sie stehen, laeuft die Einheit sofort wieder
+                        // gegen denselben unerreichbaren Punkt und haengt erneut.
+                        if (bHasPredList)
+                        {
+                            PredictionList[i].bHasData = false;
+                        }
+                        VelocityList[i].Value = FVector::ZeroVector;
+                        SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                        continue;
+                    }
+                }
+            }
 
             // Only arrival check on client (skip if following a unit)
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
@@ -466,6 +526,7 @@ void URunStateProcessor::SwitchToIdleState(FMassEntityManager& EntityManager, FM
             }
             Pred->PredDesiredSpeed = 0.f;
             Pred->bHasData = true;
+            Pred->PredSource = 17; // [PredDiag]
         }
 
         StateFrag.SwitchingStateClient = true;
@@ -515,6 +576,7 @@ void URunStateProcessor::SwitchToChaseState(FMassEntityManager& EntityManager, F
                     Pred->PredDesiredSpeed = Stats->RunSpeed;
                 }
                 Pred->bHasData = true;
+                Pred->PredSource = 18; // [PredDiag]
             }
         }
         
@@ -559,6 +621,7 @@ void URunStateProcessor::SwitchToPauseState(FMassEntityManager& EntityManager, F
                 }
                 Pred->PredDesiredSpeed = 0.f;
                 Pred->bHasData = true;
+                Pred->PredSource = 19; // [PredDiag]
             }
         }
         

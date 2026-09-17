@@ -270,6 +270,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                         Pred.Location = TargetFrag.LastKnownLocation;
                         Pred.PredDesiredSpeed = Stats.RunSpeed;
                         Pred.bHasData = true;
+                        Pred.PredSource = 23; // [PredDiag]
                     }
                 }
             }
@@ -616,6 +617,7 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassEntityManager& EntityMa
                         Pred->PredDesiredSpeed = StatsPtr->RunSpeed;
                     }
                     Pred->bHasData = true;
+                    Pred->PredSource = 24; // [PredDiag]
                 }
                 else if (const FTransformFragment* TF = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
                 {
@@ -623,6 +625,7 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassEntityManager& EntityMa
                     Pred->Location = TF->GetTransform().GetLocation();
                     Pred->PredDesiredSpeed = 0.f;
                     Pred->bHasData = true;
+                    Pred->PredSource = 25; // [PredDiag]
                 }
             }
             else
@@ -633,6 +636,7 @@ void UChaseStateProcessor::SwitchToPlaceholderState(FMassEntityManager& EntityMa
                 }
                 Pred->PredDesiredSpeed = 0.f;
                 Pred->bHasData = true;
+                Pred->PredSource = 26; // [PredDiag]
             }
         }
 
