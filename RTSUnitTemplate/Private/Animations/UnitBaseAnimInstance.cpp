@@ -11,7 +11,8 @@
 #include "MassEntitySubsystem.h"
 #include "MassMovementFragments.h" // LUX-ANPASSUNG (16.08.2026): FMassVelocityFragment fuer MassSpeed
 #include "Mass/MassActorBindingComponent.h"
-#include "Animations/UnitAnimationProcessor.h"
+#include "Animations/UnitAnimationProcessor.h"   // RTSDiagIstAusgewaehlt
+#include "HAL/IConsoleManager.h"
 #include "MassExecutionContext.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimMontage.h"
@@ -100,13 +101,11 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 								/*
 								if (World && World->GetNetMode() == NM_Client)
 								{
-									UE_LOG(LogTemp, VeryVerbose, TEXT("[AnimInstance] %s: Updated from Mass. CBP1: %.2f"), *UnitBase->GetName(), CurrentBlendPoint_1);
 								}
 								*/
 							}
 							else
 							{
-								UE_LOG(LogTemp, Warning, TEXT("[AnimInstance] %s: No AnimFrag found on Entity!"), *UnitBase->GetName());
 							}
 						}
 					}
@@ -161,6 +160,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			// stillsteht: die Pfadsuche laeuft, das Ziel ist erreicht, oder der Weg ist versperrt.
 			// Das AnimBP zeigte trotzdem die Laufanimation - Laufen auf der Stelle. Geaendert wird
 			// nur die an das AnimBP gemeldete Anzeige, der Zustand der Einheit bleibt unberuehrt.
+			bool bAufIdleKorrigiert = false;
 			if (bMassSpeedValid && MassSpeed <= IdleAnimSpeedThreshold)
 			{
 				switch (CharAnimState.GetValue())
@@ -173,9 +173,43 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 				case UnitData::GoToBuild:
 				case UnitData::GoToResourceExtraction:
 					CharAnimState = UnitData::Idle;
+					bAufIdleKorrigiert = true;
 					break;
 				default:
 					break;
+				}
+			}
+
+			// Die Mischpunkte MUESSEN mit, sonst ist die Korrektur darueber wirkungslos.
+			//
+			// Am 14.09.2026 am AnimBP nachgesehen: der General-Zustand von BP_UnitBaseAnimVector
+			// enthaelt genau drei Knoten - CurrentBlendPoint_1 auf X, CurrentBlendPoint_2 auf Y,
+			// und den Blendspace. CharAnimState kommt darin NICHT vor. Die Laufpose haengt also
+			// allein an den Mischpunkten; ein umgeschriebenes CharAnimState aendert an ihr nichts.
+			// Im Blendspace BS_Vector liegt (25,75) auf Idle_NonCombat und (75,75) auf Jog_Fwd.
+			//
+			// Gemessen sah das so aus:
+			//   [AnimUebergabe] V0 Aktor=6 Anzeige=0 Tempo=4.0 | Ziel=(75.0,75.0) Jetzt=(75.0,75.0)
+			// Anzeige stand also bereits auf Idle, die Mischpunkte aber weiter auf Laufen - und
+			// gespielt wird, was in den Mischpunkten steht.
+			//
+			// Der Grund fuer die Luecke: die Mischpunkte setzt der UUnitAnimationProcessor, und
+			// dessen Stillstandserkennung verlangt 0,5 s durchgehend gemessenen Stillstand. Die
+			// Erkennung hier arbeitet dagegen sofort auf dem Geschwindigkeitsfragment. In dem
+			// Fenster dazwischen widersprechen sich beide - und die Mischpunkte gewinnen.
+			//
+			// Deshalb hier dieselbe Zeile ziehen, aus der die Einheit auch sonst ihre Werte
+			// bezieht: die Idle-Zeile ihrer eigenen Animationstabelle. Keine festen Zahlen, damit
+			// Einheiten mit abweichendem Blendspace weiter stimmen.
+			if (bAufIdleKorrigiert && AnimDataTable)
+			{
+				static const FString Kontext(TEXT("UnitBaseAnimInstance Idle"));
+				if (const FUnitAnimData* IdleZeile = AnimDataTable->FindRow<FUnitAnimData>(FName("Idle"), Kontext, false))
+				{
+					BlendPoint_1 = IdleZeile->BlendPoint_1;
+					BlendPoint_2 = IdleZeile->BlendPoint_2;
+					CurrentBlendPoint_1 = IdleZeile->BlendPoint_1;
+					CurrentBlendPoint_2 = IdleZeile->BlendPoint_2;
 				}
 			}
 			// ================================================================================
@@ -190,6 +224,31 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			// Bewusst an den Casting-Zustand gebunden und nicht an "irgendeine Montage": das
 			// Schiessen laeuft ebenfalls ueber eine Montage, darf aber im Laufen stattfinden.
 			// ================================================================================
+			// [AnimUebergabe] - das LETZTE Glied der Kette, alle 2 s je Einheit.
+			//
+			// Bis hierher ist am 14.09.2026 alles nachgewiesen richtig: das Fragment liefert die
+			// Idle-Zeile (25,75), LastProcessedState steht auf Idle, die Ueberblendung ist
+			// durchgelaufen, und die Korrektur oben setzt CharAnimState ebenfalls auf Idle.
+			// Trotzdem laeuft die Laufanimation. Was hier ausgegeben wird, ist genau das, was das
+			// AnimBP bekommt - steht darin Idle und es laeuft dennoch, liegt es im AnimBP-Graph.
+			{
+				static TMap<TWeakObjectPtr<AUnitBase>, float> NaechsteAusgabe;
+				const float Jetzt = UnitBase->GetWorld() ? UnitBase->GetWorld()->GetTimeSeconds() : 0.f;
+				float& Faellig = NaechsteAusgabe.FindOrAdd(UnitBase);
+				// Seit 16.09.2026 standardmaessig NUR fuer die ausgewaehlte Einheit (Schalter
+				// RTS.StandDiagNurAuswahl, geteilt mit [StandDiag] im Processor). Dafuer haeufiger:
+				// bei einer einzelnen Einheit kostet ein halbsekuendlicher Takt nichts und zeigt
+				// den Verlauf, statt nur alle 2 s eine Momentaufnahme.
+				static IConsoleVariable* CVarNurAuswahl =
+					IConsoleManager::Get().FindConsoleVariable(TEXT("RTS.StandDiagNurAuswahl"));
+				const bool bNurAuswahl = !CVarNurAuswahl || CVarNurAuswahl->GetInt() != 0;
+				const bool bDarfSchreiben = !bNurAuswahl || RTSDiagIstAusgewaehlt(UnitBase);
+				if (bDarfSchreiben && bMassSpeedValid && MassSpeed <= IdleAnimSpeedThreshold && Jetzt >= Faellig)
+				{
+					Faellig = Jetzt + (bNurAuswahl ? 0.5f : 2.f);
+				}
+			}
+
 			if (CharAnimState == UnitData::Casting && IsAnyMontagePlaying())
 			{
 				if (!bMontageHaltActive)
