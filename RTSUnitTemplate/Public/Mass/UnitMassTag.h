@@ -200,8 +200,18 @@ struct FMassClientPredictionFragment : public FMassFragment
 	UPROPERTY()
 	bool bHasData = false;
 
+	// WOHER diese Vorhersage stammt - reine Diagnose.
+	//
+	// Es gibt zwanzig Stellen, die bHasData scharfstellen. Welche davon eine bestimmte Einheit
+	// festhaelt, laesst sich am Ergebnis nicht ablesen, und Raten hat am 14.09.2026 mehrfach in
+	// die falsche Richtung gefuehrt. Die Nummer wird an jeder Schreibstelle gesetzt und von
+	// [PatrolDiag] ausgegeben; die Zuordnung steht in der Legende dort.
+	UPROPERTY()
+	uint8 PredSource = 0;
+
 	UPROPERTY()
 	FVector Location = FVector::ZeroVector;
+
 
 	// World time (seconds) when the player last issued a client-predicted MOVE command for this unit.
 	// Used as a bounded grace window so a freshly predicted Run can beat stale replicated worker bits
@@ -215,6 +225,42 @@ struct FMassClientPredictionFragment : public FMassFragment
 	// not mistaken for a clump block (which would re-anchor the target + damp -> a corner stall).
 	UPROPERTY()
 	int32 ServerBlockedStreak = 0;
+
+	/**
+	 * Wieviele Reconcile-Takte in Folge sich die AUTORITATIVE Position gar nicht bewegt hat.
+	 *
+	 * Bewusst OHNE den Frischedaten-Schutz gezaehlt, anders als ServerBlockedStreak. Der Schutz
+	 * verlangt eine Serverbewegung ueber 1 cm, damit ein Takt ueberhaupt zaehlt - eine auf dem
+	 * Server stehende Einheit bewegt sich aber exakt 0,00 und sperrt sich damit selbst aus.
+	 * Genau diese Einheit soll hier erfasst werden.
+	 *
+	 * Die Mehrdeutigkeit (keine Daten angekommen gegen Server steht wirklich) ist fuer den
+	 * einzigen Verbraucher - die Abstandsbremse im Client-Mover - unerheblich: laeuft der Client
+	 * sichtbar vor einer Position her, die sich seit einer halben Sekunde nicht geruehrt hat, ist
+	 * Weiterlaufen in BEIDEN Lesarten falsch.
+	 */
+	int32 AuthStillStreak = 0;
+
+	/**
+	 * Der Halt bei stehendem Server ist EINGERASTET.
+	 *
+	 * NACHTRAG 16.09.2026, dritter Anlauf am selben Fehler. v2 hat den Abstand von 130 auf 25
+	 * gedrueckt - und dort pendelte er wieder, diesmal um die Toleranz von 25:
+	 *   Abstand=25.5 ... 25.0 ... 25.8 ... 25.0
+	 * Die Ursache ist dieselbe wie bei v1, nur eine Ebene tiefer: der Halt PRUEFTE den Abstand,
+	 * den er selbst beeinflusst. Ueber der Toleranz haelt er, der Reconciler zieht darunter, er
+	 * gibt frei, der Mover schiebt wieder darueber.
+	 *
+	 * Das erklaert auch das Vor-und-Zurueck-Drehen: die Einheit richtet sich nach ihrer
+	 * Fahrtrichtung, und die kehrt sich bei jedem Zyklus um.
+	 *
+	 * Deshalb wird der Halt jetzt eingerastet. ANSCHALTEN darf weiter den Abstand pruefen - das
+	 * passiert einmal. AUSSCHALTEN haengt ausschliesslich daran, ob sich die autoritative Position
+	 * wieder RUEHRT (AuthStillStreak == 0), also an einer Groesse, die der Halt nicht beeinflusst.
+	 * Ein Regelkreis kann nur schwingen, wenn seine Ausschaltbedingung von seiner eigenen Wirkung
+	 * abhaengt - genau das ist hier jetzt nicht mehr der Fall.
+	 */
+	bool bAuthStillHalt = false;
 
 	// Eased 0..1 weight for context-aware reconciliation softening (#2b): rises toward 1 while the unit
 	// is in a tight/dense spot (FMassSoftAvoidanceTag present), falls toward 0 otherwise. Smoothly faded
@@ -1393,6 +1439,7 @@ inline void PredictWorkerStop(
 	}
 	Pred.PredAcceptanceRadius = FMath::Max(1.f, AcceptanceRadius);
 	Pred.bHasData = true;
+	Pred.PredSource = 1; // [PredDiag]
 }
 
 /**
@@ -2146,6 +2193,13 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		}
 	}
 	SetTag(UnitTagBits::ContinuousAttack,    FMassStateContinuousAttackTag());
+	// HINWEIS zu einem Rueckbau vom 14.09.2026:
+	//
+	// Hier stand kurz ein Block, der zum RunAnimation-Tag auch das FRunAnimationFragment angelegt
+	// hat - in der Annahme, der Client bekaeme nur den Tag. Das war falsch: das Fragment wird
+	// rund dreissig Zeilen weiter unten in DERSELBEN Funktion bereits angelegt und geraeumt. Der
+	// Block war also ein Duplikat und hat nichts geheilt, sondern nur doppelte Defer-Befehle
+	// erzeugt. Nicht erneut hinzufuegen.
 	SetTag(UnitTagBits::RunAnimation,        FRunAnimationTag());
 	SetTag(UnitTagBits::YawFollow,           FMassUnitYawFollowTag());
 	SetTag(UnitTagBits::Detect,              FMassStateDetectTag());
