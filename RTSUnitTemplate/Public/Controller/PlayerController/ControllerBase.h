@@ -362,6 +362,31 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector TraceRunLocation(FVector RunLocation, bool& HitNavModifier);
 
+	/**
+	 * Ignorierliste fuer TraceRunLocation, EINMAL je Bild gebaut.
+	 *
+	 * WOFUER: TraceRunLocation laeuft einmal JE EINHEIT. Es baute dabei jedes Mal seine
+	 * Ignorierliste neu, und zwar mit zwei vollstaendigen TActorIterator-Durchlaeufen ueber die
+	 * Aktorliste der Welt. Bei 510 ausgewaehlten Einheiten sind das 510 Weltdurchlaeufe und rund
+	 * 260.000 Eintraege in die Ignorierliste - in EINEM Bild, direkt auf den Rechtsklick.
+	 *
+	 * Gemessen am 17.09.2026: der eigentliche Bewegungsbefehl
+	 * (Batch_CorrectSetUnitMoveTargets) kostet nur 0,26 ms je 100 Einheiten. Der spuerbare
+	 * Ruckler sass also NICHT dort, sondern hier davor - deshalb hatte die Stueckelung des
+	 * Befehls auch keine messbare Wirkung auf die Bildrate.
+	 *
+	 * Die Liste aendert sich innerhalb eines Bildes nicht, also reicht ein Aufbau je Bild. Der
+	 * Bildzaehler als Schluessel und nicht die Zeit: bei Zeitdehnung oder Pause waere eine
+	 * Zeitschwelle entweder wirkungslos oder zu grob.
+	 */
+	void UpdateTraceIgnoreList();
+
+	/** Aktoren, die der Bodentrace ueberspringt. Siehe UpdateTraceIgnoreList(). */
+	TArray<AActor*> TraceIgnoredActors;
+
+	/** Bildnummer, zu der TraceIgnoredActors zuletzt gebaut wurde. */
+	uint64 TraceIgnoreListFrame = 0;
+
 	bool IsLocationInDirtyArea(const FVector& Location) const;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

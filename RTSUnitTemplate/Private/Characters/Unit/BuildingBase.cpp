@@ -158,6 +158,7 @@ void ABuildingBase::ApplyRallyPointToUnit(AUnitBase* NewUnit)
 	NewUnit->SetUEPathfinding = true;
 	NewUnit->SetUnitState(UnitData::Run);
 	NewUnit->SwitchEntityTagByState(UnitData::Run, NewUnit->UnitStatePlaceholder);
+
 }
 
 void ABuildingBase::ApplySupplyCapacity()
@@ -419,10 +420,6 @@ void ABuildingBase::Destroyed()
 	if (HasAuthority())
 	{
 		const FVector Where = GetActorLocation();
-		UE_LOG(LogTemp, Warning, TEXT("[BuildingGone] %s team=%d at (%.0f, %.0f) health=%.1f time=%.1f"),
-		       *GetName(), TeamId, Where.X, Where.Y,
-		       Attributes ? Attributes->GetHealth() : -1.f,
-		       GetWorld() ? GetWorld()->GetTimeSeconds() : -1.f);
 	}
 
 	ReleaseSupplyCapacity();

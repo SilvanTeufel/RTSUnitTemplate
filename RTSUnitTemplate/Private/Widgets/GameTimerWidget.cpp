@@ -9,6 +9,29 @@ void UGameTimerWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
+	if (KillCount)
+	{
+		// Das eigene Team steht am PlayerController, nicht am Widget - und erst recht nicht
+		// im GameState, der die Verluste ja nur je Team fuehrt.
+		int32 Abschuesse = 0;
+		if (const AResourceGameState* GS = Cast<AResourceGameState>(GetWorld() ? GetWorld()->GetGameState() : nullptr))
+		{
+			int32 MeinTeam = 0;
+			if (const ACameraControllerBase* PC = Cast<ACameraControllerBase>(GetOwningPlayer()))
+			{
+				MeinTeam = PC->SelectableTeamId;
+			}
+			Abschuesse = GS->GetKillsForTeam(MeinTeam);
+		}
+
+		if (Abschuesse != ZuletztAngezeigt)
+		{
+			ZuletztAngezeigt = Abschuesse;
+			KillCount->SetText(FText::FromString(
+				KillCountPrefix.ToString() + FString::FromInt(Abschuesse)));
+		}
+	}
+
 	if (GameTime)
 	{
 		float StartTime = 0.f;

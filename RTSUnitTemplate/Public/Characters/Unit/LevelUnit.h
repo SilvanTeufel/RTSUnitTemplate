@@ -331,6 +331,29 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
 	bool OpenHealthWidget = false;
 
+	/**
+	 * Laeuft gerade eine bewusste Talent-/Attributbaum-Investition auf dieser Einheit?
+	 *
+	 * WOFUER: eine Investition aendert echte Attribute, und ueber die Ausdauer auch die
+	 * Gesundheit. Fuer AUnitBase::OnAttributeChanged und den Sichtbarkeitsprozessor sieht das aus
+	 * wie Schaden oder Heilung - schlagartig standen ueberall Healthbars. Am Attribut allein ist
+	 * der Anlass nicht unterscheidbar; den kennt nur die investierende Stelle. Also markiert sie
+	 * ihn, statt dass die Anzeige raet.
+	 *
+	 * KEIN ZEITFENSTER, sondern ein Klammergriff um den Aufruf: die Attributaenderung passiert
+	 * synchron in ApplyGameplayEffectToSelf. Ein frueherer Versuch mit einer Sekunde Sperrzeit ging
+	 * daneben, weil AutoLevelUp() im Regenerationstakt laeuft und damit ausserhalb des Fensters
+	 * landen konnte. Ein Zaehler statt eines bool, damit verschachtelte Investitionen
+	 * (AutoLevelUp investiert mehrfach hintereinander) sich nicht gegenseitig freigeben.
+	 *
+	 * Schaden und Heilung im Gefecht bleiben unberuehrt - dort steht der Zaehler auf 0.
+	 */
+	int32 ActiveInvestments = 0;
+
+	/** true, solange eine Investition laeuft. Fuer Blueprints und den Sichtbarkeitsprozessor. */
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	bool IsInvestmentActive() const { return ActiveInvestments > 0; }
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Leveling")
 	bool bShowLevelOnly = false;
 

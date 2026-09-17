@@ -94,7 +94,12 @@ UInstancedStaticMeshComponent* UEnergyWallBatchSubsystem::HoleOderBaue(EEnergyWa
 			return nullptr;
 		}
 
+#if WITH_EDITOR
+		// SetActorLabel gibt es NUR im Editor. Ohne die Klammer scheitert RunUAT BuildPlugin
+		// beim Game-Target mit C2039 - im Editorbuild faellt das nie auf, weil dort gebaut wird,
+		// was der Editor braucht. Die vier anderen ISM-Managerklassen sind seit jeher so geklammert.
 		BatchAktor->SetActorLabel(TEXT("EnergyWallBatch"));
+#endif
 		// Der Aktor ist eine reine Zeichenhuelle: keine Replikation, keine Kollision, kein Speichern.
 		BatchAktor->SetReplicates(false);
 		USceneComponent* Wurzel = NewObject<USceneComponent>(BatchAktor, TEXT("BatchRoot"));

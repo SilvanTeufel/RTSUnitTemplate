@@ -419,6 +419,13 @@ TArray<FVector> ACustomControllerBase::AdjustBatchTargetsForNav(const TArray<AUn
 	// in a dirty (UNavArea_Obstacle) area. The common case (all points valid) returns the input unchanged.
 	bool bNeedsFormationAdjust = false;
 	FVector FormationCenter = InTargets[0];
+
+	// EINMAL vor der Schleife, nicht je Punkt: GetNavDataForProps durchsucht die Liste der
+	// Navigationsdaten und der Cast kostet eine Typpruefung. Bei 510 Zielen lief beides 510-mal,
+	// obwohl das Ergebnis fuer alle Punkte dasselbe ist.
+	const ANavigationData* NavDataEinmal = NavSys->GetNavDataForProps(FNavAgentProperties());
+	const ARecastNavMesh* RecastEinmal = Cast<ARecastNavMesh>(NavDataEinmal);
+
 	for (const FVector& Loc : InTargets)
 	{
 		FNavLocation NavLoc;
@@ -426,8 +433,7 @@ TArray<FVector> ACustomControllerBase::AdjustBatchTargetsForNav(const TArray<AUn
 		bool bDirty = false;
 		if (bOnNav)
 		{
-			const ANavigationData* NavData = NavSys->GetNavDataForProps(FNavAgentProperties());
-			if (const ARecastNavMesh* Recast = Cast<ARecastNavMesh>(NavData))
+			if (const ARecastNavMesh* Recast = RecastEinmal)
 			{
 				const uint32 PolyAreaID = Recast->GetPolyAreaID(NavLoc.NodeRef);
 				const UClass* PolyAreaClass = Recast->GetAreaClass(PolyAreaID);
@@ -479,6 +485,16 @@ TArray<FVector> ACustomControllerBase::AdjustBatchTargetsForNav(const TArray<AUn
 	return Result;
 }
 
+/**
+ * Entry point for every batched move order.
+ *
+ * Verteilt die Ziele in EINEM Durchgang. Eine frueher hier eingebaute Stueckelung (100 Einheiten
+ * je halbe Sekunde) ist wieder entfernt: gemessen am 17.09.2026 auf LevelSix kostete der Befehl
+ * selbst nur 0,26 ms je 100 Einheiten, also rund 1,5 ms fuer 510. Der spuerbare Klick-Ruckler kam
+ * aus RecalculateFormation (die kubische Assignment in SolveHungarian, ~238 ms) und hatte mit
+ * diesem Befehl nichts zu tun. Die Stueckelung kaufte also nichts, kostete aber einen
+ * Sekunden-Nachlauf und zerlegte das Ergebnis in mehrere Netzwerkpakete.
+ */
 void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContextObject,
 	const TArray<AUnitBase*>& Units,
 	const TArray<FVector>& NewTargetLocations,
@@ -488,6 +504,20 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	bool bResetHoldPosition,
 	bool bResetFollowTarget)
 {
+	ExecuteBatchMove(WorldContextObject, Units, NewTargetLocations, DesiredSpeeds, AcceptanceRadii,
+		AttackT, bResetHoldPosition, bResetFollowTarget, /*bTargetsAlreadyValidated=*/false);
+}
+
+void ACustomControllerBase::ExecuteBatchMove(UObject* WorldContextObject,
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& NewTargetLocations,
+	const TArray<float>& DesiredSpeeds,
+	const TArray<float>& AcceptanceRadii,
+	bool AttackT,
+	bool bResetHoldPosition,
+	bool bResetFollowTarget,
+	bool bTargetsAlreadyValidated)
+{
 
 	UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull);
 	if (!World)
@@ -495,6 +525,8 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		UE_LOG(LogTemp, Error, TEXT("[BatchMove] Invalid WorldContextObject (World == nullptr)."));
 		return;
 	}
+
+	const TArray<AUnitBase*>& Einheiten = Units;
 	
 	UMassEntitySubsystem* MassSubsystem = World->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem)
@@ -511,40 +543,41 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 	// (attack-move/transporter/path) get validated here. Server_Batch_... forwards these same UsedTargets
 	// to every client, so the server and all clients steer toward identical destinations (the off-nav /
 	// dirty-area divergence that left client units stuck while the server moved them).
-	const TArray<FVector> UsedTargets = AdjustBatchTargetsForNav(Units, NewTargetLocations);
+	// Die Pruefung ist der teuerste Einzelposten des Befehls: je Ziel eine Projektion auf das
+	// Navmesh. Wer sie schon gemacht hat, reicht bTargetsAlreadyValidated durch - sonst lief sie im
+	// Serverpfad ZWEIMAL ueber alle Ziele (einmal hier, einmal beim Aufrufer).
+	const TArray<FVector> UsedTargets = bTargetsAlreadyValidated
+		? NewTargetLocations
+		: AdjustBatchTargetsForNav(Einheiten, NewTargetLocations);
 
-	if (Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num() || Units.Num() != AcceptanceRadii.Num())
+	if ((Units.Num() != NewTargetLocations.Num() || Units.Num() != DesiredSpeeds.Num() || Units.Num() != AcceptanceRadii.Num()))
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[BatchMove] Array size mismatch. Units:%d Locs:%d Speeds:%d Radii:%d (processing min count)"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadii.Num());
 	}
 
-	const int32 Count = FMath::Min(Units.Num(), FMath::Min3(NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadii.Num()));
+	const int32 Count = FMath::Min(Einheiten.Num(), FMath::Min3(NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadii.Num()));
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
-		AUnitBase* Unit = Units[Index];
+		AUnitBase* Unit = Einheiten[Index];
 		FVector UseLocation = UsedTargets.IsValidIndex(Index) ? UsedTargets[Index] : NewTargetLocations[Index];
 		const float DesiredSpeed = DesiredSpeeds[Index];
 		const float AcceptanceRadius = AcceptanceRadii[Index];
 
 		if (!Unit)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%d] Unit is null. Skipping."), Index);
 			continue;
 		}
 		
 		if (!Unit->IsInitialized)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Not initialized. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 		if (!Unit->CanMove)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] CanMove == false. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 		if (Unit->UnitState == UnitData::Dead)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] UnitState == Dead. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 
@@ -554,7 +587,6 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 			const bool bCancelable = !(AbilityCDO && !AbilityCDO->AbilityCanBeCanceled);
 			if (!bCancelable)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Ability cannot be canceled. Skipping."), *GetNameSafe(Unit));
 				continue;
 			}
 			CancelCurrentAbility(Unit);
@@ -601,7 +633,6 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		
 		if (!EntityManager.IsEntityActive(MassEntityHandle))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] MassEntityHandle is not active. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 
@@ -610,7 +641,6 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 		// Skip if Mass has Dead tag
 		if (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateDeadTag::StaticStruct()))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Mass entity has Dead tag. Skipping."), *GetNameSafe(Unit));
 			continue;
 		}
 
@@ -642,13 +672,11 @@ void ACustomControllerBase::Batch_CorrectSetUnitMoveTargets(UObject* WorldContex
 					if (AttackT || (CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking)) EntityManager.Defer().AddTag<FMassStateDetectTag>(MassEntityHandle);
 					else EntityManager.Defer().RemoveTag<FMassStateDetectTag>(MassEntityHandle);
 
-					UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Appended to path (Total=%d) Mode=%s"), *GetNameSafe(Unit), PathFrag->Waypoints.Num(), AttackT ? TEXT("AttackMove") : TEXT("Move"));
 					continue; // Skip setting MoveTarget now; UpdateUnitArrayMovement will pick it up
 				}
 			}
 			else
 			{
-				UE_LOG(LogTemp, Warning, TEXT("[BatchMove][%s] Path limit reached (10). Ignoring."), *GetNameSafe(Unit));
 				continue;
 			}
 		}
@@ -777,64 +805,77 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 	bool bResetFollowTarget,
 	bool bOriginatorPredictsLocally)
 {
-	// Diagnostics: server received batch move
-	//UE_LOG(LogTemp, Warning, TEXT("[Server][BatchMove] Server_Batch_CorrectSetUnitMoveTargets: Units=%d"), Units.Num());
-	// Single source of truth: nav-validate the targets ONCE here, use them for the authoritative move
-	// AND forward the SAME points to every client below (the right-click path already pre-adjusted on the
-	// commanding client, so this is a no-op for it; attack-move/transporter/path callers get validated
-	// here). This guarantees server and all clients steer toward identical destinations.
-	const TArray<FVector> UsedTargets = AdjustBatchTargetsForNav(Units, NewTargetLocations);
+	// Die Navmesh-Pruefung EINMAL hier, und dasselbe Ergebnis geht sowohl in die autoritative
+	// Anwendung als auch an die Clients - Server und Clients steuern damit denselben Punkt an.
+	// Frueher lief sie zweimal ueber alle Ziele: einmal hier und gleich nochmal im Ausfuehrer.
+	const TArray<FVector> ValidatedTargets = AdjustBatchTargetsForNav(Units, NewTargetLocations);
 
-	// Apply authoritative changes on the server
-	Batch_CorrectSetUnitMoveTargets(WorldContextObject, Units, UsedTargets, DesiredSpeeds, AcceptanceRadii, AttackT, bResetHoldPosition, bResetFollowTarget);
+	ExecuteBatchMove(WorldContextObject, Units, ValidatedTargets, DesiredSpeeds, AcceptanceRadii,
+		AttackT, bResetHoldPosition, bResetFollowTarget, /*bTargetsAlreadyValidated=*/true);
 
+	NotifyClientsOfBatchMove(Units, ValidatedTargets, DesiredSpeeds, AcceptanceRadii,
+		AttackT, bResetHoldPosition, bResetFollowTarget, bOriginatorPredictsLocally);
+}
 
-	// Inform every client to predict locally (adds Run tag and updates MoveTarget on the client)
-	if (UWorld* PCWorld = GetWorld())
+void ACustomControllerBase::NotifyClientsOfBatchMove(
+	const TArray<AUnitBase*>& Units,
+	const TArray<FVector>& UsedTargets,
+	const TArray<float>& DesiredSpeeds,
+	const TArray<float>& AcceptanceRadii,
+	bool AttackT,
+	bool bResetHoldPosition,
+	bool bResetFollowTarget,
+	bool bOriginatorPredictsLocally)
+{
+	UWorld* PCWorld = GetWorld();
+	if (!PCWorld || Units.Num() == 0)
 	{
-		const int32 MaxBatchSize = 200;
-		for (int32 i = 0; i < Units.Num(); i += MaxBatchSize)
+		return;
+	}
+
+	// Eine RPC fuer den ganzen Befehl. ClientPredictMaxPerRPC = 0 heisst unbegrenzt; frueher stand
+	// hier eine feste Teilung bei 200, die einen Befehl ohne Not auf mehrere Pakete verteilte.
+	const int32 MaxPerRPC = (ClientPredictMaxPerRPC > 0) ? ClientPredictMaxPerRPC : Units.Num();
+
+	for (int32 i = 0; i < Units.Num(); i += MaxPerRPC)
+	{
+		const int32 CurrentBatchNum = FMath::Min(MaxPerRPC, Units.Num() - i);
+
+		// Replizierte UnitIndices statt Aktorzeiger: Objektverweise in RPCs koennen auf dem
+		// Empfaenger null werden, wenn ihre NetGUID dort nicht aufgeloest ist (der "steckende
+		// Einheit im Kampf"-Fehler). Die Clients loesen die Einheiten lokal ueber den Bindungscache auf.
+		TArray<int32> BatchIndices;
+		TArray<FVector> BatchLocations;
+		TArray<float> BatchSpeeds;
+		TArray<float> BatchRadii;
+
+		BatchIndices.Reserve(CurrentBatchNum);
+		BatchLocations.Reserve(CurrentBatchNum);
+		BatchSpeeds.Reserve(CurrentBatchNum);
+		BatchRadii.Reserve(CurrentBatchNum);
+
+		for (int32 j = 0; j < CurrentBatchNum; ++j)
 		{
-			int32 CurrentBatchNum = FMath::Min(MaxBatchSize, Units.Num() - i);
+			const int32 GlobalIdx = i + j;
+			const AUnitBase* U = Units[GlobalIdx];
+			// INDEX_NONE haelt die Reihen buendig; der Client ueberspringt diese Eintraege.
+			BatchIndices.Add(U ? U->UnitIndex : INDEX_NONE);
+			BatchLocations.Add(UsedTargets.IsValidIndex(GlobalIdx) ? UsedTargets[GlobalIdx] : FVector::ZeroVector);
+			BatchSpeeds.Add(DesiredSpeeds.IsValidIndex(GlobalIdx) ? DesiredSpeeds[GlobalIdx] : 0.f);
+			BatchRadii.Add(AcceptanceRadii.IsValidIndex(GlobalIdx) ? AcceptanceRadii[GlobalIdx] : 0.f);
+		}
 
-			// Send replicated UnitIndices (not actor pointers) so clients resolve units locally
-			// via the binding cache; this avoids RPC object refs nulling out when their NetGUID
-			// isn't mapped on the receiving client (the "stuck unit in combat" bug).
-			TArray<int32> BatchIndices;
-			TArray<FVector> BatchLocations;
-			TArray<float> BatchSpeeds;
-			TArray<float> BatchRadii;
-
-			BatchIndices.Reserve(CurrentBatchNum);
-			BatchLocations.Reserve(CurrentBatchNum);
-			BatchSpeeds.Reserve(CurrentBatchNum);
-			BatchRadii.Reserve(CurrentBatchNum);
-
-			for (int32 j = 0; j < CurrentBatchNum; ++j)
+		for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
 			{
-				int32 GlobalIdx = i + j;
-				const AUnitBase* U = Units[GlobalIdx];
-				// INDEX_NONE keeps arrays aligned; the client skips those entries.
-				BatchIndices.Add(U ? U->UnitIndex : INDEX_NONE);
-				// Forward the nav-VALIDATED target (not the raw one) so every client predicts to the same
-				// point the server actually moves the unit to (fixes off-nav/dirty client prediction stall).
-				BatchLocations.Add(UsedTargets.IsValidIndex(GlobalIdx) ? UsedTargets[GlobalIdx] : NewTargetLocations[GlobalIdx]);
-				BatchSpeeds.Add(DesiredSpeeds[GlobalIdx]);
-				BatchRadii.Add(AcceptanceRadii[GlobalIdx]);
-			}
-
-			for (FConstPlayerControllerIterator It = PCWorld->GetPlayerControllerIterator(); It; ++It)
-			{
-				if (ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get()))
+				// Den Umweg ueber den Absender sparen, wenn der schon lokal vorhergesagt hat -
+				// sonst wird bei ihm doppelt angewendet.
+				if (bOriginatorPredictsLocally && PC == this)
 				{
-					// Skip the originator's round-trip when it already predicted locally (this == the
-					// commanding client's server-side PC), so its units aren't double-applied.
-					if (bOriginatorPredictsLocally && PC == this)
-					{
-						continue;
-					}
-					PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, BatchIndices, BatchLocations, BatchSpeeds, BatchRadii, AttackT, bResetHoldPosition, bResetFollowTarget);
+					continue;
 				}
+				PC->Client_Predict_Batch_CorrectSetUnitMoveTargets(nullptr, BatchIndices, BatchLocations, BatchSpeeds, BatchRadii, AttackT, bResetHoldPosition, bResetFollowTarget);
 			}
 		}
 	}
@@ -1050,6 +1091,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 		PredFrag->PredDesiredSpeed = DesiredSpeed;
 		PredFrag->PredAcceptanceRadius = AcceptanceRadius;
 		PredFrag->bHasData = true;
+		PredFrag->PredSource = 6; // [PredDiag]
 		// Stamp the command time so ApplyReplicatedTagBits can let this predicted Run beat the
 		// stale replicated worker bits for a bounded grace window (see bSuppressWorkerStomp).
 		PredFrag->CommandPredictTime = World->GetTimeSeconds();
@@ -2070,13 +2112,37 @@ bool ACustomControllerBase::GetSelectableHitUnderCursor(FHitResult& OutHit) cons
 
 bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPawn)
 {
+	// Denselben Rueckfall benutzen wie die Auswahl per Linksklick (siehe
+	// GetSelectableHitUnderCursor): zuerst die Einheit, die UMassUnitHoverProcessor ohnehin schon
+	// markiert hat.
+	//
+	// WOFUER: der Prozessor prueft den Mausstrahl mit 10 Hz GEOMETRISCH gegen Kapsel bzw. Box jeder
+	// Mass-Einheit - ganz ohne Kollision. Wer hier nur die Pawn-Spur auswertet, braucht auf jeder
+	// Einheit eine Kollisionsform, nur damit ein Rechtsklick sie trifft. Mit dem Rueckfall koennen
+	// die Einheiten-Parents auf NoCollision stehen; Kollision braucht dann nur noch, wer sie
+	// wirklich benutzt - etwa eine Heldeneinheit, die einen MapSwitchActor ausloesen soll.
+	//
+	// Der Bodenpunkt der urspruenglichen Spur bleibt erhalten: bodenzielende Zweige weiter unten
+	// lesen Location, und die soll bei einem Treffer auf die Einheit zeigen, sonst auf den Boden.
+	FHitResult ResolvedHit = HitPawn;
+	if (AUnitBase* HoveredMarked = HoveredUnit.Get())
+	{
+		if (IsValid(HoveredMarked))
+		{
+			ResolvedHit.HitObjectHandle = FActorInstanceHandle(HoveredMarked);
+			ResolvedHit.Location = HoveredMarked->GetActorLocation();
+			ResolvedHit.ImpactPoint = ResolvedHit.Location;
+			ResolvedHit.bBlockingHit = true;
+		}
+	}
+
 
 	// If we clicked on a unit while having a selection, assign follow or attack and early return
-	if (SelectedUnits.Num() > 0 && HitPawn.bBlockingHit)
+	if (SelectedUnits.Num() > 0 && ResolvedHit.bBlockingHit)
 	{
-		if (!Cast<AConstructionUnit>(HitPawn.GetActor()))
+		if (!Cast<AConstructionUnit>(ResolvedHit.GetActor()))
 		{
-			if (AUnitBase* HitUnit = GetUnitFromHitResult(HitPawn))
+			if (AUnitBase* HitUnit = GetUnitFromHitResult(ResolvedHit))
 			{
 				const bool bFriendly = (HitUnit->TeamId == SelectableTeamId);
 				if (bFriendly)
@@ -2123,7 +2189,7 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 					TArray<FVector> Locations;
 					for (int32 i = 0; i < SelectedUnits.Num(); ++i)
 					{
-						Locations.Add(HitPawn.Location);
+						Locations.Add(ResolvedHit.Location);
 					}
 					LeftClickAttackMass(SelectedUnits, Locations, false, HitUnit);
 
@@ -2905,6 +2971,45 @@ bool ACustomControllerBase::ShouldRecalculateFormation() const
     return false;
 }
 
+TArray<int32> ACustomControllerBase::SolveAssignmentGreedy(const TArray<TArray<float>>& Matrix) const
+{
+    const int32 n = Matrix.Num();
+    TArray<int32> Assignment;
+    Assignment.Init(0, n);
+    if (n == 0)
+    {
+        return Assignment;
+    }
+
+    const int32 m = Matrix[0].Num();
+    TArray<bool> SlotTaken;
+    SlotTaken.Init(false, m);
+
+    for (int32 i = 0; i < n; ++i)
+    {
+        int32 BestSlot = INDEX_NONE;
+        float BestCost = FLT_MAX;
+        for (int32 j = 0; j < m; ++j)
+        {
+            if (!SlotTaken[j] && Matrix[i][j] < BestCost)
+            {
+                BestCost = Matrix[i][j];
+                BestSlot = j;
+            }
+        }
+
+        // Mehr Einheiten als Plaetze: der Rest bekommt reihum einen gueltigen Index, damit der
+        // Aufrufer (Offsets[Assign[i]]) nicht ins Leere greift.
+        Assignment[i] = (BestSlot != INDEX_NONE) ? BestSlot : FMath::Min(i, m - 1);
+        if (BestSlot != INDEX_NONE)
+        {
+            SlotTaken[BestSlot] = true;
+        }
+    }
+
+    return Assignment;
+}
+
 void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter, float Spacing)
 {
     int32 N = SelectedUnits.Num();
@@ -2930,7 +3035,11 @@ void ACustomControllerBase::RecalculateFormation(const FVector& TargetCenter, fl
 
     // 3. Match units to slots. By including radius info in BuildCostMatrix, we ensure big units get big slots.
     auto Cost = BuildCostMatrix(SortedUnits, Offsets, TargetCenter, SlotCapacities);
-    auto Assign = SolveHungarian(Cost);
+
+    // Siehe FormationHungarianMaxUnits: die optimale Loesung ist kubisch und war bei grossen
+    // Gruppen der gesamte Klick-Ruckler.
+    const bool bUseGreedy = (FormationHungarianMaxUnits > 0 && N > FormationHungarianMaxUnits);
+    auto Assign = bUseGreedy ? SolveAssignmentGreedy(Cost) : SolveHungarian(Cost);
 
     for (int32 i = 0; i < N; ++i)
     {
@@ -3178,12 +3287,30 @@ void ACustomControllerBase::SetHoldPositionOnUnit_Implementation(AUnitBase* Unit
 	Unit->bHoldPosition = true;
 }
 
+void ACustomControllerBase::Server_ClearWaypointForManualOrder_Implementation(
+	const TArray<AUnitBase*>& Units)
+{
+	// Auf dem Listen-Server fuehrt die Engine den Aufruf direkt aus, dort aendert sich nichts.
+	ClearWaypointForManualOrderInternal(Units);
+}
+
 void ACustomControllerBase::ClearWaypointForManualOrder(const TArray<AUnitBase*>& Units)
 {
+	// Waechter fuer die Aufrufer, die nur auf dem Server etwas bewirken sollen.
 	if (!HasAuthority())
 	{
 		return;
 	}
+	ClearWaypointForManualOrderInternal(Units);
+}
+
+void ACustomControllerBase::ClearWaypointForManualOrderInternal(const TArray<AUnitBase*>& Units)
+{
+	// BEWUSST ohne Berechtigungspruefung: der befehlende Client sagt die Bewegung lokal voraus
+	// (siehe ApplyMovePredictionToUnit in RunUnitsAndSetWaypointsMass) und haelt dabei seine
+	// EIGENE Kopie von NextWaypoint und FMassPatrolFragment. Wird die nicht mitgeloescht, schickt
+	// der IdleStateProcessor des Clients die Einheit lokal wieder nach Hause - auch wenn der
+	// Server laengst sauber ist. Deshalb laeuft diese Funktion auf BEIDEN Seiten.
 
 	UMassEntitySubsystem* MassSubsystem = GetWorld() ? GetWorld()->GetSubsystem<UMassEntitySubsystem>() : nullptr;
 	FMassEntityManager* EntityManager = MassSubsystem ? &MassSubsystem->GetMutableEntityManager() : nullptr;
@@ -3235,9 +3362,28 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     // 1. Setup
     if (SelectedUnits.Num() == 0) return;
 
+
 	// Vom Wegpunkt loesen, BEVOR der Befehl ergeht - sonst holt der naechste Idle-Takt die
 	// Einheit ueber StoredLocation wieder nach Hause.
-	ClearWaypointForManualOrder(SelectedUnits);
+	//
+	// BEIDE Seiten, und das ist kein Versehen:
+	//
+	// Der RPC raeumt den Server auf - ohne ihn behielt der Server NextWaypoint und
+	// TargetWaypointLocation, weil diese Funktion auf dem befehlenden CLIENT laeuft und
+	// ClearWaypointForManualOrder bei !HasAuthority() aussteigt.
+	//
+	// Der lokale Aufruf raeumt den Client auf. Der sagt die Bewegung gleich unten selbst voraus
+	// (ApplyMovePredictionToUnit) und haelt dafuer eine eigene Kopie der Fragmente. Bleibt die
+	// stehen, schickt sein eigener IdleStateProcessor die Einheit trotzdem wieder nach Hause -
+	// genau das war nach dem ersten Anlauf noch zu sehen.
+	//
+	// Beim Listen-Server fuehrt die Engine den RPC direkt aus und HasAuthority() ist wahr, der
+	// zweite Aufruf entfaellt dort also.
+	Server_ClearWaypointForManualOrder(SelectedUnits);
+	if (!HasAuthority())
+	{
+		ClearWaypointForManualOrderInternal(SelectedUnits);
+	}
 
 	UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
 	if (!MassSubsystem) return;
@@ -3333,12 +3479,13 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     		&& (DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct())
     		 || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct()));
     	bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
-    	
+
         if (!bIsMovingWhileAttacking) U->RemoveFocusEntityTarget();
-    	
+
         U->SetRdyForTransport(false);
 
         float Speed = U->Attributes->GetRunSpeed();
+
         bool bSuccess = false;
         SetBuildingWaypoint(Loc, U, BWaypoint, PlayWaypoint, bSuccess);
         if (bSuccess)
@@ -3437,6 +3584,7 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         LastRunSoundTime = GetWorld()->GetTimeSeconds();
     }
 	
+
 }
 
 

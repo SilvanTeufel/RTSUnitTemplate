@@ -236,9 +236,6 @@ void AUnitBase::ReleaseUnitSupply()
 		// self-limiting: this runs once per unit, at death.
 		if (UnitSpaceNeeded > 0)
 		{
-			UE_LOG(LogTemp, Verbose,
-				TEXT("[Versorgung] %s (Team %d) hat nie Versorgung bezahlt - keine Rueckgabe (UnitSpaceNeeded=%d)."),
-				*GetName(), TeamId, UnitSpaceNeeded);
 		}
 		return;
 	}
@@ -274,9 +271,6 @@ void AUnitBase::ReleaseUnitSupply()
 		const float UsedBefore = ResourceGameMode->GetResource(TeamId, SupplyType);
 		if (UsedBefore < (float)Amount)
 		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("[Versorgung] %s (%s, Team %d) gibt %d zurueck, verbraucht sind aber nur %.0f."),
-				*GetName(), *GetClass()->GetName(), TeamId, Amount, UsedBefore);
 		}
 		ResourceGameMode->ModifyResource(SupplyType, TeamId, (float)Amount);
 	}
@@ -307,15 +301,27 @@ void AUnitBase::Destroyed()
 	// haben hier nicht getragen: bei 0,41 Spawns/s liegt die Zufallserwartung
 	// fuer ein 3-s-Fenster schon bei ~70 %, ein Trefferanteil ist damit wertlos.
 	const FVector Ort = GetActorLocation();
-	UE_LOG(LogTemp, Warning, TEXT("[EinheitAb] %s %d %d %s Zustand %d Health %.0f"),
-		*GetClass()->GetName(), FMath::RoundToInt(Ort.X), FMath::RoundToInt(Ort.Y),
-		*GetName(), (int32)UnitState, Attributes ? Attributes->GetHealth() : -1.f);
 
 	Super::Destroyed();
 }
 
 void AUnitBase::BeginPlay()
 {
+	// Den Takt HIER setzen und nicht nur im Konstruktor.
+	//
+	// WARUM: der Konstruktor schreibt PrimaryActorTick.TickInterval aus dem C++-Wert (0,25 s).
+	// Danach legt der Blueprint seine eigenen Vorgaben darueber - steht dort im Feld "Tick
+	// Interval" eine 0, tickt die Einheit wieder JEDES Bild, und der C++-Wert ist wirkungslos.
+	// Genau dieser Fall wurde am 17.09.2026 im Einheiten-Blueprint gefunden. Dieselbe Falle ist
+	// im Projekt schon mehrfach aufgetreten: eine Blueprint-Vorgabe verdeckt stumm den Code.
+	//
+	// Der Aktor-Tick traegt keine Bewegung - die kommt aus den Mass-Prozessoren. 0,25 s genuegt
+	// also. Wer fuer eine einzelne Einheit mehr braucht, setzt TickInterval auf ihr kleiner.
+	if (TickInterval > 0.f)
+	{
+		SetActorTickInterval(TickInterval);
+	}
+
 	Super::BeginPlay();
 
 	// Messung: ENTSTEHEN einer Einheit. Gegenstueck ist [EinheitAb] im Todespfad
@@ -326,8 +332,6 @@ void AUnitBase::BeginPlay()
 	// Bestandszahl - Verlust und Neubau heben sich im Abtastintervall sonst auf.
 	// Aktorname wie in [EinheitAb] - erst das Paar erlaubt, EINEN Actor ueber
 	// seine Lebensdauer zu verfolgen (siehe Begruendung dort).
-	UE_LOG(LogTemp, Warning, TEXT("[EinheitAuf] %s %s"),
-		*GetClass()->GetName(), *GetName());
 
 	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
 
@@ -467,8 +471,14 @@ void AUnitBase::EnsureSquadHealthbarState()
 				}
 			}
 		}
-		// Ensure the component itself is visible so the widget can render
-		HealthWidgetComp->SetVisibility(true);
+		// Ensure the component itself is visible so the widget can render.
+		// ABER NUR, wenn das HUD die Balken nicht ohnehin selbst zeichnet - sonst schaltet diese
+		// Stelle wieder ein, was BeginPlay gerade abgeschaltet hat. Genau daraus entstand das
+		// gemeldete "die Healthbars poppen manchmal auf".
+		if (!ZeichnetHudDieHealthbars())
+		{
+			SetzeHealthbarWidgetAktiv(true);
+		}
 	}
 	else
 	{
@@ -605,7 +615,7 @@ void AUnitBase::SetDeathVisualState(bool bShouldHide)
 	{
 		// Restore if needed (not typically used in this flow)
 		if (GetMesh()) GetMesh()->SetHiddenInGame(false);
-		if (HealthWidgetComp) HealthWidgetComp->SetVisibility(true);
+		if (!ZeichnetHudDieHealthbars()) SetzeHealthbarWidgetAktiv(true);
 		
 		TArray<USceneComponent*> Components;
 		GetComponents<USceneComponent>(Components);
@@ -1146,8 +1156,9 @@ void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
 	}
 
 	// 2. Immediate UI Reaction (The "Signal")
-	// Only trigger popup if it's not the initial sync (OldValue > 0)
-	if (Data.OldValue > 0.5f)
+	//
+	// Eine gewollte Investition ist kein Schaden - siehe ALevelUnit::ActiveInvestments.
+	if (Data.OldValue > 0.5f && !IsInvestmentActive())
 	{
 		const float Delta = Data.NewValue - Data.OldValue;
 		if (Delta < -1.0f || Delta > 10.0f) // Damage or significant heal

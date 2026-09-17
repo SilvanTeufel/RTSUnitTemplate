@@ -442,6 +442,14 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 			TagsDestroyedCountMap.FindOrAdd(*TagIt)++;
 			TeamTagsDestroyedCountMap.FindOrAdd(DestroyedUnit->TeamId).TagCounts.FindOrAdd(*TagIt)++;
 		}
+
+		// Abschusszaehler. Genau hier, weil DeadEffectsAndEvents() die einzige Stelle ist, an
+		// der ein Tod serverseitig und dank DeadEffectsExecuted genau EINMAL durchlaeuft.
+		// Die Zahl landet im GameState, damit sie auch auf dem Client ankommt.
+		if (AResourceGameState* GS = GetGameState<AResourceGameState>())
+		{
+			GS->AddUnitLoss(DestroyedUnit->TeamId);
+		}
 	}
 
 	if (bWinLoseTriggered) return;

@@ -52,5 +52,17 @@ private:
 	void SyncVisibility(const AUnitBase& Unit, FMassVisibilityFragment& VisibilityFragment);
 	void SyncVisualEffect(const AUnitBase& Unit, FMassVisualEffectFragment& VisualEffectFragment);
 	void SyncPatrol(const AUnitBase& Unit, FMassPatrolFragment& PatrolFragment, FMassEntityManager& EntityManager, FMassEntityHandle EntityHandle);
+
+	/**
+	 * Faehrt auf dem CLIENT das vom Server gewuerfelte Patrouillenziel nach.
+	 *
+	 * UPatrolRandomStateProcessor laeuft mit `Server | Standalone` - auf dem Client verarbeitet
+	 * niemand das PatrolRandom-Tag, die Einheit bleibt stehen. Alles ausser dem Ziel ist dort
+	 * vorhanden. Der Server waehlt den Punkt allein und legt ihn auf
+	 * AMassUnitBase::PatrolTargetLocation ab; hier wird nur gefolgt.
+	 */
+	void SyncClientPatrolTarget(const AUnitBase& Unit, FMassMoveTargetFragment& MoveTarget,
+		FMassAIStateFragment& StateFrag, const FMassCombatStatsFragment& Stats);
+
 	void SyncEffectArea(const AEffectArea& Area, FEffectAreaImpactFragment& ImpactFragment, FMassCombatStatsFragment* CombatStatsFragment, FMassAgentCharacteristicsFragment* CharacteristicsFragment, FTransformFragment* TransformFragment);
 };

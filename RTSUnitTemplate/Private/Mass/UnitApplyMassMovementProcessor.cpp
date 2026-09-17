@@ -695,22 +695,13 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
         if (JetztWelt - LetzteStandMeldung > 5.0 || JetztWelt < LetzteStandMeldung)
         {
             LetzteStandMeldung = JetztWelt;
-            UE_LOG(LogTemp, Warning, TEXT("[Standwache] %d von %d Einheiten stehen seit ueber 30 s praktisch still, davon Gebaeude %d - Arbeiter %d von %d"),
-                LongStationary, Observed, StationaryBuildings, StationaryWorkers, WorkersTotal);
 
             if (MovingWorkers > 0)
             {
-                UE_LOG(LogTemp, Warning, TEXT("[Haengerquote] %d von %d laufwilligen Arbeitern stehen fest"),
-                    StalledMovingWorkers, MovingWorkers);
 
-                UE_LOG(LogTemp, Warning, TEXT("[Gebaeudenaehe] Haenger nah/mittel/fern %d/%d/%d - alle Laufwilligen %d/%d/%d"),
-                    StalledNear, StalledMid, StalledFar, AllNear, AllMid, AllFar);
 
                 if (ForceNearCount > 0 || ForceFarCount > 0)
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[KraftNachNaehe] nah %.0f (n=%d), fern %.0f (n=%d)"),
-                        ForceNearCount > 0 ? ForceNearSum / ForceNearCount : 0.0, ForceNearCount,
-                        ForceFarCount > 0 ? ForceFarSum / ForceFarCount : 0.0, ForceFarCount);
                 }
             }
 
@@ -728,7 +719,6 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             }
             if (!Aufschluesselung.IsEmpty())
             {
-                UE_LOG(LogTemp, Warning, TEXT("[StandZustand] stehende Arbeiter je Zustand: %s"), *Aufschluesselung);
             }
         }
     }
@@ -740,24 +730,14 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
         if (Jetzt - LetzteMeldung > 1.0 || Jetzt < LetzteMeldung)
         {
             LetzteMeldung = Jetzt;
-            UE_LOG(LogTemp, Warning, TEXT("[Blockiert] %d von %d laufwilligen Einheiten kommen nicht vom Fleck, davon frisch gespawnt %d von %d"),
-                BlockedUnits, MovingUnits, BlockedYoung, MovingYoung);
 
             if (WithAvoidanceForce > 0)
             {
-                UE_LOG(LogTemp, Warning, TEXT("[Kraftbilanz] %d blockierte mit Ausweichkraft, mittlere Staerke %.0f, mittlerer Kosinus %.2f, davon gegenlaeufig %d - mit Bewegungssperre %d von %d"),
-                    WithAvoidanceForce, AvoidanceForceSum / WithAvoidanceForce, CosineSum / WithAvoidanceForce, OpposingForceCount, BlockedWithFreeze, BlockedUnits);
 
-                UE_LOG(LogTemp, Warning, TEXT("[Tempobilanz] blockiert: Soll %.0f, vorher %.0f, berechnet %.0f"),
-                    DesiredSpeedSum / WithAvoidanceForce, PreviousSpeedSum / WithAvoidanceForce, ResultSpeedSum / WithAvoidanceForce);
 
                 if (WithTravel > 0)
                 {
-                    UE_LOG(LogTemp, Warning, TEXT("[Winkelbilanz] Kraft gegen Fahrt %.2f, Soll gegen Fahrt %.2f (n=%d)"),
-                        ForceVsTravelSum / WithTravel, DesiredVsTravelSum / WithTravel, WithTravel);
 
-                    UE_LOG(LogTemp, Warning, TEXT("[Kraftverhaeltnis] Ausweichkraft %.0f zu Zielbeschleunigung %.0f"),
-                        AvoidanceForceSum / WithAvoidanceForce, AccelSum / WithAvoidanceForce);
 
                     UE_LOG(LogTemp, Warning, TEXT("[Zeitschritt] DeltaTime %.3f s, Tempoaenderung je Takt %.0f (Soll %.0f, vorher %.0f)"),
                         DeltaTimeSum / WithAvoidanceForce, StepSum / WithAvoidanceForce,

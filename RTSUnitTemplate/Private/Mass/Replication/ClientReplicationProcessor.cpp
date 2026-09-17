@@ -96,6 +96,7 @@ static TAutoConsoleVariable<float> CVarRTS_ClientReplFreshEps(
 #include "Mass/Replication/UnitClientBubbleInfo.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/MassUnitVisualFragments.h"
+#include "Animations/UnitAnimationProcessor.h"   // RTSDiagIstAusgewaehlt
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/SpawnerUnit.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
@@ -605,6 +606,9 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						//CurrentKp *= 0.75f;
 					//}
 
+					// Wie weit der Reconciler die Einheit in DIESEM Tick gezogen hat. Genau das ist
+					// der sichtbare Ruck; ohne diese Zahl bleibt das Wackeln eine Vermutung.
+					float DiagKorrekturStrecke = 0.f;
 					const float ErrorRatio = DistanceSq / CurrentMinErrorSq;
 					if (!bLetPredictionRun && ErrorRatio > 1.0f)
 					{
@@ -630,6 +634,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						}
 
 						ClientXf.SetLocation(NewLocation);
+						DiagKorrekturStrecke = FVector::Dist2D(NewLocation, CurrentLocation);
 
 						// NEU: Verhindert, dass die lokale Physik die Korrektur sofort wieder aushebelt
 						// KORREKTUR: Nur dÃƒÂ¤mpfen, wenn die Einheit laut Replikation NICHT in Bewegung ist oder stationÃƒÂ¤r angreift.
@@ -671,6 +676,15 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						// tick (ActualAuthMove==0 under load) resets the streak instead of falsely building it.
 						const bool bBlockedThisTick = !bServerStopped && bFreshAuthData && DistanceSq < FMath::Square(75.f) &&
 							ActualAuthMove < (ExpectedAuthMove * 0.25f);
+						// UNGEFILTERT mitzaehlen, wie lange die autoritative Position steht. Siehe
+						// FMassClientPredictionFragment::AuthStillStreak: der Frischedaten-Schutz
+						// darunter schliesst genau den Fall aus, um den es hier geht.
+						if (PredList.IsValidIndex(EntityIdx))
+						{
+							PredList[EntityIdx].AuthStillStreak = (ActualAuthMove <= FreshAuthEps)
+								? FMath::Min(PredList[EntityIdx].AuthStillStreak + 1, 1000)
+								: 0;
+						}
 						if (PredList.IsValidIndex(EntityIdx))
 						{
 							PredList[EntityIdx].ServerBlockedStreak = bBlockedThisTick
@@ -693,6 +707,34 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							if (SteeringList.IsValidIndex(EntityIdx)) SteeringList[EntityIdx].DesiredVelocity = FVector::ZeroVector;
 					}
 
+						// [WackelDiag] - warum die Daempfung oben nicht greift.
+						//
+						// Der Reconciler laeuft mit 10 Hz (net.RTS.ClientReplication.ReconcileInterval)
+						// gegen einen Mover, der jedes Bild rechnet. Zwischen zwei Ticks schiebt der
+						// Mover die Einheit rund DesiredSpeed*0.1 = 29 uu vor, dann zieht der
+						// Reconciler sie in EINEM Bild zurueck. Genau dieser Takt ist das Wackeln
+						// (gemessen 16.09.2026: sieben Bilder mit 290 uu/s, dann eines mit 1500).
+						//
+						// Gegen genau diesen Fall gibt es die Daempfung oben - sie greift aber nicht.
+						// Zwei Verdaechtige, und die Zeile hier trennt sie:
+						//
+						//  1. bFrisch: ActualAuthMove muss ueber RTS.ClientReplFreshEps (1 cm) liegen,
+						//     damit ein Tick ueberhaupt als blockiert GEZAEHLT wird. Eine blockierte
+						//     Einheit bewegt sich aber per Definition kaum - der gemessene Kriechgang
+						//     lag bei rund 1,6 cm je Tick, also GENAU auf der Schwelle. Jeder Tick
+						//     darunter setzt die Strecke wieder auf 0, und sie erreicht die
+						//     geforderten 5 nie. Dann ist die Freigabe der Daempfung unerreichbar.
+						//
+						//  2. Die Daempfung greift, verpufft aber: sie setzt MoveTarget.Center auf die
+						//     autoritative Position - der Mover steuert bei Pred.bHasData jedoch nach
+						//     Pred.Location und ignoriert Center. Die gedaempfte Geschwindigkeit baut
+						//     er im naechsten Bild wieder auf.
+						//
+						// Steht Strecke dauerhaft bei 0 bis 4, ist es der erste Fall. Erreicht sie 5
+						// und die Korrektur bleibt trotzdem gross, ist es der zweite.
+						if (RTSDiagIstAusgewaehlt(ActorList.IsValidIndex(EntityIdx) ? ActorList[EntityIdx].Get() : nullptr))
+						{
+						}
 					}
 
 						// --- Rotation Reconciliation ---
@@ -852,13 +894,6 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 						const bool bDrehtZuFaeh = AITargetList.IsValidIndex(EntityIdx)
 							&& AITargetList[EntityIdx].bRotateTowardsAbility;
 
-						UE_LOG(LogTemp, Warning,
-							TEXT("[RotDiag] KORREKTUR MausTag=%d CastTag=%d StatAngriff=%d Folgt=%d NurYaw=%d | ClientYaw=%.1f ServerYaw=%.1f Fehler=%.1f KpRot=%.2f Toleranz=%.1f | DrehtZuFaeh=%d FaehZiel=%s"),
-							// Hinweis: KpRot=0.00 bei eigener Einheit = lokale Drehhoheit greift.
-							(int32)bZieltMitMaus, (int32)bCastet, (int32)bIsStationaryAttack,
-							(int32)(bIsFollowTarget || bHasAITarget || bIsFollowing), (int32)bRotationYawOnly,
-							ClientYaw, ServerYaw, FRotator::NormalizeAxis(ServerYaw - ClientYaw), FinalKpRot,
-							WirksameToleranz, (int32)bDrehtZuFaeh, *FaehZiel.ToCompactString());
 					}
 
 

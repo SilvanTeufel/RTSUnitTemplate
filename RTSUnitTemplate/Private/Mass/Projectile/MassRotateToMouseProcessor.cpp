@@ -183,12 +183,6 @@ void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				const FTransform& XfDiag = Transforms[i].GetTransform();
 				FVector DirDiag = TargetLocation - XfDiag.GetLocation();
 				DirDiag.Z = 0.f;
-				UE_LOG(LogTemp, Warning,
-					TEXT("[RotDiag] %s Zweig=%d RotId=%d LokId=%d IstYaw=%.1f ZielYaw=%.1f Ziel=%s"),
-					bHasAuthority ? TEXT("SRV") : TEXT("CLI"), Zweig, RotatorId, LocalPlayerId,
-					XfDiag.GetRotation().Rotator().Yaw,
-					DirDiag.IsNearlyZero() ? -999.f : DirDiag.ToOrientationRotator().Yaw,
-					*TargetLocation.ToCompactString());
 			}
 
 			if (bFoundTarget)

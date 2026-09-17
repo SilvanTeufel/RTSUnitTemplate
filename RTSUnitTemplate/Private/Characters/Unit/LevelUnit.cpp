@@ -5,6 +5,7 @@
 #include "Core/TalentSaveGame.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "Misc/ScopeExit.h"   // ON_SCOPE_EXIT in ApplyInvestmentEffect
 
 void ALevelUnit::Tick(float DeltaTime)
 {
@@ -483,11 +484,17 @@ void ALevelUnit::ResetLevel()
 
 void ALevelUnit::ApplyInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect)
 {
-	//UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!"));
 	if (AbilitySystemComponent && InvestmentEffect)
 	{
+		// Siehe ActiveInvestments: markiert die Aenderung als gewollt, damit die Healthbars
+		// nicht darauf anspringen. Der Zaehler faellt am Ende des Gueltigkeitsbereichs zurueck,
+		// auch wenn der Effekt unterwegs etwas ausloest, das hier wieder hereinspringt.
+		++ActiveInvestments;
+		ON_SCOPE_EXIT { --ActiveInvestments; };
+
 		//UE_LOG(LogTemp, Warning, TEXT("ApplyTalentPointInvestmentEffect!2"));
 		AbilitySystemComponent->ApplyGameplayEffectToSelf(InvestmentEffect.GetDefaultObject(), 1, AbilitySystemComponent->MakeEffectContext());
+
 	}
 }
 

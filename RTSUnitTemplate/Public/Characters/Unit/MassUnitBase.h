@@ -28,6 +28,48 @@ class RTSUNITTEMPLATE_API AMassUnitBase : public AAbilityUnit
 	GENERATED_BODY()
 
 public:
+
+	/**
+	 * Zeichnet das HUD die Healthbars selbst (AHUDBase::bEnableHealthBars)?
+	 *
+	 * WOFUER: ist das der Fall, darf die Healthbar-WidgetComponent je Einheit weder sichtbar
+	 * sein noch ticken - sie zeigte sonst denselben Balken ein zweites Mal und kostet dabei
+	 * das Meiste. Gemessen am 17.09.2026 auf LevelSix mit 255 Einheiten: der Spiel-Thread
+	 * braucht 16,37 ms von 16,39 ms Bildzeit, davon 11,59 ms in TickActors, und von den 816
+	 * Ticks entfallen 255 auf genau diese WidgetComponents. Eine WidgetComponent kostet nicht
+	 * nur den Tick, sondern ein eigenes Render-Target.
+	 *
+	 * WARUM ALS EIGENE FUNKTION: die Entscheidung stand bisher an vier Stellen verteilt, und
+	 * drei weitere Stellen setzten die Sichtbarkeit wieder auf true, ohne sie zu pruefen -
+	 * unter anderem der Besitzer einer Squad-Healthbar. Genau daraus entstand das gemeldete
+	 * "die Balken poppen manchmal auf": eine Stelle schaltet aus, eine andere wieder ein.
+	 *
+	 * Das Ergebnis wird nach dem ersten Treffer gemerkt. Beim BeginPlay der Einheiten gibt es
+	 * den PlayerController samt HUD naemlich oft noch nicht - die Pruefung lief dann ins Leere
+	 * und die Widgets blieben an.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Performance")
+	bool ZeichnetHudDieHealthbars() const;
+
+	/** Schaltet die Healthbar-WidgetComponent passend zum HUD. Liefert true, wenn das HUD zeichnet. */
+	bool HealthbarWidgetNachHudSchalten();
+
+	/** Sichtbarkeit UND Tick der Healthbar-WidgetComponent gemeinsam setzen. */
+	void SetzeHealthbarWidgetAktiv(bool bAktiv);
+
+protected:
+	/**
+	 * Die Pose nur auswerten, wenn das Mesh tatsaechlich gezeichnet wird.
+	 *
+	 * Aus fuer Einheiten, deren Knochen auch unsichtbar gebraucht werden. Siehe BeginPlay().
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Performance")
+	bool bOnlyTickPoseWhenRendered = true;
+
+	/** -1 = noch nicht ermittelt, 0 = nein, 1 = ja. Siehe ZeichnetHudDieHealthbars(). */
+	mutable int8 HudZeichnetHealthbars = -1;
+
+public:
 	// Helper to apply/clear follow target from parent class
 	static void ApplyFollowTargetForUnit(class AUnitBase* ThisUnit, class AUnitBase* NewFollowTarget);
 	
@@ -103,6 +145,35 @@ public:
 	 */
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FVector SpawnStoredLocation = FVector::ZeroVector;
+
+	/**
+	 * Der Patrouillenpunkt, den der SERVER gewuerfelt hat - damit der Client denselben ansteuert.
+	 *
+	 * Warum das noetig ist: UPatrolRandomStateProcessor und UUnitStateProcessor laufen mit
+	 * `Server | Standalone`, also NICHT auf dem Client. Eine Einheit im Zustand PatrolRandom
+	 * bekommt dort zwar das Tag (HandleUnitSpawned setzt es), aber kein Prozessor verarbeitet
+	 * es - sie bleibt stehen. Gemessen am 14.09.2026: Zustand, NextWaypoint und
+	 * TargetWaypointLocation waren auf dem Client vollstaendig vorhanden, es fehlte
+	 * ausschliesslich das Ziel.
+	 *
+	 * Den Punkt auf dem Client selbst zu wuerfeln waere falsch - Server und Client liefen zu
+	 * verschiedenen Zielen. Deshalb waehlt ihn weiterhin allein der Server
+	 * (SetNewRandomPatrolTarget) und schickt ihn hierueber; der Client folgt nur.
+	 *
+	 * ZeroVector = kein Patrouillenziel gesetzt.
+	 */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
+	FVector PatrolTargetLocation = FVector::ZeroVector;
+
+	// Das WUNSCHTEMPO, mit dem der Server gerade zu diesem Punkt laeuft.
+	//
+	// Ohne diesen Wert kann der Client nicht unterscheiden, ob der Server unterwegs ist oder
+	// steht. Gemessen am 14.09.2026: der Server stand acht Sekunden lang bewegungslos in
+	// PatrolRandom mit DesiredSpeed=0, waehrend der replizierte Punkt weiter auf ein laengst
+	// aufgegebenes Ziel zeigte - der Client rannte dorthin und wurde vom Positionsabgleich
+	// staendig zurueckgerissen. Das war das Zappeln und die endlose Laufanimation.
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float PatrolDesiredSpeed = 0.f;
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool IsFlying = false;
@@ -273,7 +344,10 @@ public:
 	
 	// Updates MoveTarget and ClientPrediction fragments to reflect a new location and desired speed
 	UFUNCTION(BlueprintCallable, Category = Mass)
-	bool UpdatePredictionFragment(const FVector& NewLocation, float DesiredSpeed = 0.f);
+	// bScharfstellen=false schreibt nur Ziel und Tempo, laesst bHasData aber unangetastet.
+	// Eine scharfe Vorhersage UEBERSTIMMT das Serverziel im UnitMovementProcessor - sie darf
+	// deshalb nur entstehen, wenn es wirklich etwas vorherzusagen gibt.
+	bool UpdatePredictionFragment(const FVector& NewLocation, float DesiredSpeed = 0.f, bool bScharfstellen = true);
 
 	// Stops Mass movement for this unit by setting MoveTarget to Stand on the server
 	UFUNCTION(BlueprintCallable, Category = Mass)

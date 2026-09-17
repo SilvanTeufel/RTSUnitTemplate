@@ -33,6 +33,19 @@
 #include "GameModes/ResourceGameMode.h"
 #include "GameStates/ResourceGameState.h"
 
+void UGameSaveSubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+    Super::Initialize(Collection);
+
+    // Die Freischaltungen erst holen, wenn die erste Karte steht.
+    //
+    // Hier direkt geht es nicht: waehrend Initialize() laufen die uebrigen
+    // GameInstance-Subsysteme unter Umstaenden noch gar nicht, und ohne UMapSwitchSubsystem
+    // gaebe es nichts, wohin der Zustand geschrieben werden koennte. PostLoadMapWithWorld
+    // feuert dagegen sicher danach - und das Menue ist die erste Karte, die geladen wird.
+    FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UGameSaveSubsystem::OnPostLoadMapWithWorld);
+}
+
 void UGameSaveSubsystem::Deinitialize()
 {
     // Never leave a dangling PostLoadMapWithWorld binding across GameInstance / PIE teardown.
@@ -327,6 +340,13 @@ void UGameSaveSubsystem::OnPostLoadMapWithWorld(UWorld* LoadedWorld)
         ApplyLoadedData(LoadedWorld, PendingLoadedSave);
         PendingLoadedSave = nullptr;
         PendingSlotName.Reset();
+    }
+    else
+    {
+        // Kein angefordertes Laden - also der ganz normale Programmstart ins Menue.
+        // Nur die Freischaltungen holen, sonst nichts. Bei einem echten Ladevorgang oben
+        // waere das doppelt: ApplyLoadedData bringt sie ohnehin mit.
+        RestoreUnlocksFromLatestSave();
     }
 
     if (bPendingQuickSave)
@@ -899,6 +919,193 @@ TArray<FString> UGameSaveSubsystem::GetAllSaveSlots() const
     Result.Sort();
     Result.SetNum(Algo::Unique(Result));
     return Result;
+}
+
+bool UGameSaveSubsystem::RestoreUnlocksFromLatestSave()
+{
+    if (bUnlocksRestored)
+    {
+        return false;
+    }
+
+    UGameInstance* GI = GetGameInstance();
+    UMapSwitchSubsystem* MapSub = GI ? GI->GetSubsystem<UMapSwitchSubsystem>() : nullptr;
+    if (!MapSub)
+    {
+        return false;
+    }
+
+    // Den juengsten Spielstand suchen - groesster Zeitstempel, nicht weitester Fortschritt.
+    //
+    // ACHTUNG, daran ist der erste Entwurf gescheitert: im Speicherordner liegen NICHT nur
+    // Spielstaende. Gemessen am 16.09.2026 waren es 7860 Dateien, fast alle davon
+    // Faehigkeitsdateien je Einheit, dazu Replays von ueber 30 MB. Jede davon anzufassen
+    // kostet beim Betreten des Menues spuerbar Zeit - genau daran hing frueher schon die
+    // lange Wartezeit des SaveGame-Widgets.
+    //
+    // Deshalb zuerst nach Aenderungsdatum der DATEI vorsortieren und nur die neuesten
+    // MaxKandidaten oeffnen. Das Aenderungsdatum ist nur die Vorauswahl; entschieden wird
+    // danach weiter ueber den im Spielstand gespeicherten Zeitstempel. Eine zurueckkopierte
+    // Datei mit frischem Dateidatum kann also hoechstens in die Vorauswahl rutschen, nicht
+    // faelschlich gewinnen.
+    const FString SpeicherOrdner = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"));
+    constexpr int32 MaxKandidaten = 50;
+
+    TArray<TPair<FDateTime, FString>> NachDatum;
+    for (const FString& Slot : GetAllSaveSlots())
+    {
+        const FString Pfad = FPaths::Combine(SpeicherOrdner, Slot + TEXT(".sav"));
+        NachDatum.Emplace(IFileManager::Get().GetTimeStamp(*Pfad), Slot);
+    }
+    NachDatum.Sort([](const TPair<FDateTime, FString>& A, const TPair<FDateTime, FString>& B)
+    {
+        return A.Key > B.Key;
+    });
+
+    FString BesterSlot;
+    int64 BesteZeit = -1;
+    int32 Geprueft = 0;
+    for (const TPair<FDateTime, FString>& Eintrag : NachDatum)
+    {
+        if (Geprueft >= MaxKandidaten)
+        {
+            break;
+        }
+        if (!IstSpielstandDatei(Eintrag.Value))
+        {
+            continue;   // Kostet nur den Dateikopf, nicht die ganze Datei.
+        }
+        ++Geprueft;
+
+        FString MapAsset, LongName;
+        int64 Zeit = 0;
+        if (LoadSaveSummary(Eintrag.Value, MapAsset, LongName, Zeit) && Zeit > BesteZeit)
+        {
+            BesteZeit = Zeit;
+            BesterSlot = Eintrag.Value;
+        }
+    }
+
+    if (BesterSlot.IsEmpty())
+    {
+        bUnlocksRestored = true;   // Kein Spielstand da - nicht bei jedem Kartenwechsel erneut suchen.
+        return false;
+    }
+
+    URTSSaveGame* Save = Cast<URTSSaveGame>(UGameplayStatics::LoadGameFromSlot(BesterSlot, 0));
+    if (!Save)
+    {
+        bUnlocksRestored = true;
+        return false;
+    }
+
+    TMap<FString, TArray<FName>> Freigeschaltet;
+    int32 AnzahlTags = 0;
+    for (const FMapSwitchTagsForMap& Eintrag : Save->MapEnabledSwitchTags)
+    {
+        Freigeschaltet.Add(Eintrag.MapKey, Eintrag.Tags);
+        AnzahlTags += Eintrag.Tags.Num();
+    }
+    MapSub->ImportStateFromSave(Freigeschaltet);
+    bUnlocksRestored = true;
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[Spielstand] Freischaltungen aus '%s' uebernommen (%d Karten, %d Ziele, gespeichert %s). "
+             "Karte und Einheiten wurden NICHT geladen."),
+        *BesterSlot, Freigeschaltet.Num(), AnzahlTags,
+        *FDateTime::FromUnixTimestamp(BesteZeit).ToString());
+    UE_LOG(LogTemp, Log, TEXT("[Spielstand] Dafuer %d von %d Dateien geoeffnet."),
+        Geprueft, NachDatum.Num());
+    return true;
+}
+
+FString UGameSaveSubsystem::StartNewGame(const FString& SlotName)
+{
+    UWorld* World = GetWorld();
+    if (!World || World->GetNetMode() == NM_Client)
+    {
+        return FString();
+    }
+
+    URTSSaveGame* Save = Cast<URTSSaveGame>(UGameplayStatics::CreateSaveGameObject(URTSSaveGame::StaticClass()));
+    if (!Save)
+    {
+        return FString();
+    }
+
+    // Absichtlich ein LEERER Spielstand: kein Einheitenbestand, keine Ressourcen, keine
+    // Freischaltungen. Nur Karte und Zeitstempel, damit er in der Liste auftaucht und der
+    // juengste ist.
+    Save->SavedMapLongPackageName = World->GetOutermost()->GetName();
+    Save->SavedUnixTimeSeconds = FDateTime::UtcNow().ToUnixTimestamp();
+    Save->MapEnabledSwitchTags.Empty();
+
+    const FString Ziel = SlotName.IsEmpty() ? GetUniqueSaveSlotName(TEXT("NewGame")) : SlotName;
+    if (!UGameplayStatics::SaveGameToSlot(Save, Ziel, 0))
+    {
+        return FString();
+    }
+
+    // Auch den laufenden Zustand leeren, sonst bleiben die Portale bis zum naechsten
+    // Programmstart offen - der Spieler klickt "New Game" und sieht keinen Unterschied.
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UMapSwitchSubsystem* MapSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+        {
+            MapSub->ImportStateFromSave(TMap<FString, TArray<FName>>());
+        }
+    }
+    // Nichts mehr nachladen: sonst holte der naechste Kartenwechsel die Freischaltungen aus
+    // einem AELTEREN Spielstand zurueck, und das neue Spiel waere sofort wieder durchgespielt.
+    bUnlocksRestored = true;
+
+    UE_LOG(LogTemp, Log, TEXT("[Spielstand] Neues Spiel '%s' angelegt. Bisherige Spielstaende bleiben erhalten."),
+        *Ziel);
+    return Ziel;
+}
+
+int32 UGameSaveSubsystem::ResetAllProgress()
+{
+    const FString Ordner = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"));
+    int32 Geloescht = 0;
+    for (const FString& Slot : GetAllSaveSlots())
+    {
+        // Nur was wirklich ein Spielstand ist. Im selben Ordner liegen Replays und
+        // Faehigkeitsdateien; die haette ein pauschales Loeschen mitgenommen.
+        if (!IstSpielstandDatei(Slot))
+        {
+            continue;
+        }
+        if (UGameplayStatics::DeleteGameInSlot(Slot, 0))
+        {
+            ++Geloescht;
+        }
+        else if (IFileManager::Get().Delete(*FPaths::Combine(Ordner, Slot + TEXT(".sav"))))
+        {
+            ++Geloescht;
+        }
+    }
+
+    // Auch den laufenden Zustand leeren, sonst bleiben die Portale bis zum naechsten
+    // Programmstart offen, obwohl die Dateien weg sind.
+    if (UGameInstance* GI = GetGameInstance())
+    {
+        if (UMapSwitchSubsystem* MapSub = GI->GetSubsystem<UMapSwitchSubsystem>())
+        {
+            MapSub->ImportStateFromSave(TMap<FString, TArray<FName>>());
+        }
+    }
+    PendingLoadedSave = nullptr;
+    PendingSlotName.Reset();
+    bPendingQuickSave = false;
+    // Nach dem Zuruecksetzen darf nichts mehr nachgeladen werden - sonst holte der naechste
+    // Kartenwechsel die eben geloeschten Freischaltungen aus einem Spielstand zurueck, den es
+    // nicht mehr gibt.
+    bUnlocksRestored = true;
+
+    UE_LOG(LogTemp, Warning, TEXT("[Spielstand] %d Spielstaende geloescht, Freischaltungen zurueckgesetzt."),
+        Geloescht);
+    return Geloescht;
 }
 
 bool UGameSaveSubsystem::IstSpielstandDatei(const FString& SlotName) const

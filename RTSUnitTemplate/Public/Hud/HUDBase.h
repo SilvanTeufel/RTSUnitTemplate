@@ -219,6 +219,32 @@ public:
 private:
 	UPROPERTY(Transient)
 	TArray<FClickIndicator> ClickIndicators;
+
+	/**
+	 * Zuletzt erzeugte Klick-Materialinstanz, zur Wiederverwendung innerhalb EINES Klicks.
+	 *
+	 * WOFUER: AddClickIndicator legte je Indikator eine eigene UMaterialInstanceDynamic an. Ein
+	 * Rechtsklick erzeugt aber einen Indikator JE EINHEIT - bei 510 ausgewaehlten Einheiten also
+	 * 510 Materialinstanzen in einem einzigen Bild.
+	 *
+	 * Gemessen am 17.09.2026 auf LevelSix: ein Rechtsklick kostete 202-276 ms. Davon entfielen
+	 * nur rund 21 ms auf die Bodenspuren (eine einzelne Spur: 0,042 ms) - der weitaus groesste
+	 * Teil ging fuer diese Materialinstanzen drauf.
+	 *
+	 * WARUM TEILEN ERLAUBT IST: die Instanz traegt nur Progress, Radius und Farbe. Alle
+	 * Indikatoren desselben Klicks haben dieselbe Startzeit, denselben Radius und dieselbe Farbe,
+	 * also auch denselben Progress in jedem Bild. Das Ergebnis ist Pixel fuer Pixel dasselbe.
+	 * Sobald sich einer der drei Werte unterscheidet, entsteht wieder eine neue Instanz.
+	 */
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInstanceDynamic> LastClickMID = nullptr;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UMaterialInterface> LastClickMaterial = nullptr;
+
+	FColor LastClickColor = FColor::Transparent;
+	float LastClickRadius = -1.f;
+	float LastClickStartTime = -1.f;
 	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f, int32 InSegments = -1, bool bDisableSizeCulling = false);
 	void DrawMaterialDisc(const FClickIndicator& Indicator);
 	
@@ -474,7 +500,7 @@ public:
 
 	// ================================================================================================
 	// LUX-ANPASSUNG (17.08.2026) - jeder Spieler soll nur SEINE CameraUnit selektieren koennen.
-	// Die Zuordnung macht bereits der GameMode ueber "Character.CameraUnit.<Spielerindex>"
+	// Die Assignment macht bereits der GameMode ueber "Character.CameraUnit.<Spielerindex>"
 	// (RTSGameModeBase, SetCameraUnitWithTag) - Spieler 1 bekommt .0, Spieler 2 bekommt .1 usw.
 	// Diese Pruefung setzt das in der Auswahl durch: Einheiten mit einem CameraUnit-Tag sind nur
 	// fuer den Spieler waehlbar, dem sie zugewiesen wurden. Alle anderen Einheiten bleiben
