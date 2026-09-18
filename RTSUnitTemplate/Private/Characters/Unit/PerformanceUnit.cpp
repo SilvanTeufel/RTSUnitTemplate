@@ -556,7 +556,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                         if (APerformanceUnit* Unit = WeakThis.Get())
                         {
                             FVector Location = Unit->GetMassActorLocation();
-                            FRotator Rotation = Unit->GetActorRotation();
+                            FRotator Rotation = Unit->GetMassActorRotation();
                             if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(Unit->GetWorld(), ImpactVFX, Location, Rotation, ScaleVFX))
                             {
                                 Unit->ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
@@ -590,7 +590,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                         if (APerformanceUnit* Unit = WeakThis.Get())
                         {
                             FVector Location = Unit->GetMassActorLocation();
-                            FRotator Rotation = Unit->GetActorRotation();
+                            FRotator Rotation = Unit->GetMassActorRotation();
 
                             float Multiplier = ScaleSound;
                             if (UGameInstance* GI = Unit->GetGameInstance())

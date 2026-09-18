@@ -11,6 +11,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Mass/Abilitys/EffectAreaVisualManager.h"
 #include "MassReplicationFragments.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassEffectAreaHoverProcessor::UMassEffectAreaHoverProcessor()
 {
@@ -37,6 +38,10 @@ void UMassEffectAreaHoverProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 
 void UMassEffectAreaHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassEffectAreaHoverProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassEffectAreaHoverProcessor);
+
 	UWorld* World = EntityManager.GetWorld();
 	if (!World) return;
 

@@ -11,6 +11,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/UnitBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UGoToRepairStateProcessor::UGoToRepairStateProcessor(): EntityQuery()
 {
@@ -64,6 +65,10 @@ void UGoToRepairStateProcessor::InitializeInternal(UObject& Owner, const TShared
 
 void UGoToRepairStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UGoToRepairStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UGoToRepairStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

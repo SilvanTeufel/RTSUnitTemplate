@@ -27,6 +27,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/ExternalSubsystemTraits.h"
 #include "HAL/IConsoleManager.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // CLIENT-ONLY multiplier for the moving-avoidance (predictive agent/obstacle) steering force. Weakened on the
 // client (server stays authoritative & smooth) so this local avoidance doesn't fight the reconciler. Separate
@@ -343,6 +344,18 @@ static TAutoConsoleVariable<float> CVarRTS_ClientMovingAvoidanceForceScale(
 
 
 
+static TAutoConsoleVariable<int32> CVarRTS_AvoidanceParallel(
+	TEXT("RTS.Avoidance.Parallel"),
+	1,
+	TEXT("1 = Ausweichrechnung laeuft ueber ParallelForEachEntityChunk, 0 = seriell auf dem ")
+	TEXT("Spielthread. WOFUER: UUnitMovingAvoidanceProcessor kostete 3,32 ms je Bild und war der ")
+	TEXT("drittgroesste Posten. Er hing am Spielthread, weil er je Nachbar FUENF Fremdzugriffe ")
+	TEXT("machte (IsEntityValid, TransformFragment, Velocity, MoveTarget, Collider/Radius). Diese ")
+	TEXT("Angaben kommen jetzt aus UUnitObstacleSnapshotSubsystem. Der Schalter wird JE DURCHLAUF ")
+	TEXT("gelesen und wirkt sofort - im Konstruktor gelesen waere er nicht messbar, weil der beim ")
+	TEXT("Laden des Moduls laeuft, also bevor -ExecCmds oder die Konsole ausgewertet werden."),
+	ECVF_Default);
+
 UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 {
 	// Execute in the same group as the old MassMovingAvoidanceProcessor
@@ -367,15 +380,30 @@ UUnitMovingAvoidanceProcessor::UUnitMovingAvoidanceProcessor(): EntityQuery()
 	// Runs on Server + Client + Standalone (same as default)
 	ExecutionFlags = static_cast<uint8>(EProcessorExecutionFlags::Standalone | EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Client);
 
-	// Safe off the game thread again: the mutable part of the obstacle grid is read from
-	// UUnitObstacleSnapshotSubsystem, an immutable per-frame copy taken on the game thread.
-	// Builds FMassEntityView over neighbouring obstacle entities and reads their velocity,
-	// move-target and collider fragments - a cross-entity read like the state processors.
-	// This was deliberately set to false once for throughput; that removed a de-facto
-	// serialization barrier and is what let the CurrentArchetype race surface under heavy
-	// combat. Correctness wins here; if the throughput is needed back, the obstacle data has
-	// to come from the snapshot subsystem instead of live entity views.
-	bRequiresGameThreadExecution = true;
+	// FRUEHER: bRequiresGameThreadExecution = true, mit dieser Begruendung -
+	//   "Builds FMassEntityView over neighbouring obstacle entities and reads their velocity,
+	//    move-target and collider fragments - a cross-entity read like the state processors.
+	//    This was deliberately set to false once for throughput; that removed a de-facto
+	//    serialization barrier and is what let the CurrentArchetype race surface under heavy
+	//    combat. Correctness wins here; if the throughput is needed back, the obstacle data has
+	//    to come from the snapshot subsystem instead of live entity views."
+	//
+	// GENAU DAS ist jetzt geschehen (18.09.2026). UUnitObstacleSnapshotProcessor sammelt Lage,
+	// Blickrichtung, Geschwindigkeit, Bewegungszustand, Collider und Radius aller Hindernisse
+	// einmal je Bild auf dem Spielthread in FUnitObstacleAgentSnapshot. Die Schleife hier baut
+	// keine EntityView mehr ueber fremde Entitaeten und fasst den EntityManager nicht mehr an -
+	// damit ist die Ursache des CurrentArchetype-Wettlaufs beseitigt, nicht nur verdeckt.
+	//
+	// SO WIRD ES RUECKGAENGIG GEMACHT: RTS.Avoidance.Parallel auf 0 setzen und neu starten.
+	// Das stellt den alten Zustand her, ohne den Schnappschuss abzubauen.
+	//
+	// Debugzeichnen erzwingt seriellen Lauf: DrawDebugLine ist nicht threadsicher. Der Schalter
+	// ist ECVF_Cheat und im Normalfall aus, die Abfrage kostet also nichts.
+	// Der Prozessorrumpf ist jetzt threadsicher, deshalb steht das hier fest auf false. Die
+	// Entscheidung parallel/seriell faellt dagegen JE DURCHLAUF in Execute - der Konstruktor laeuft
+	// beim Laden des Moduls, also bevor -ExecCmds oder die Konsole ueberhaupt gelesen werden, und
+	// ein dort gelesener Schalter waere nicht messbar.
+	bRequiresGameThreadExecution = false;
 }
 
 void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
@@ -426,6 +454,11 @@ void UUnitMovingAvoidanceProcessor::InitializeInternal(UObject& Owner, const TSh
 
 void UUnitMovingAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitMovingAvoidanceProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitMovingAvoidanceProcessor);
+
+
+
 QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
 	const UMassNavigationSubsystem* ContextNavSubsystem = Context.GetSubsystem<UMassNavigationSubsystem>();
@@ -442,12 +475,36 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		return;
 	}
 
+	// DIE NACHBARTABELLE IST EINE ZWEITE, GETRENNTE BEDINGUNG.
+	//
+	// IsValidSnapshot() prueft nur das GITTER. Die Fragmentdaten der Nachbarn stehen in einer
+	// eigenen Tabelle, die derselbe Prozessor fuellt. Faellt die aus - weil die Reihenfolge kippt,
+	// die Abfrage nichts mehr trifft oder der Prozessor nicht laeuft - liefert FindAgent fuer JEDEN
+	// Nachbarn nullptr. Die Ausweichrechnung haette dann schlicht KEINE Hindernisse mehr: die
+	// Einheiten liefen durcheinander, nichts wuerde abstuerzen, und im Profil saehe es wie ein
+	// weiterer Performancegewinn aus. Genau diese Sorte stiller Fehler hat heute schon dreimal
+	// Zeit gekostet, deshalb sagt sie hier einmal Bescheid.
+	if (!ObstacleSnapshot->HasAgentTable())
+	{
+		static bool bSchonGemeldet = false;
+		if (!bSchonGemeldet)
+		{
+			bSchonGemeldet = true;
+			UE_LOG(LogTemp, Error,
+				TEXT("[Avoidance] Nachbartabelle fehlt - UUnitObstacleSnapshotProcessor hat sie nicht ")
+				TEXT("gefuellt. Es wird NICHT ausgewichen. Reihenfolge und Abfrage dieses Prozessors pruefen."));
+		}
+		return;
+	}
+
 	if (World->GetTimeSeconds() < AvoidanceStartDelay)
 	{
 		return;
 	}
 
-		EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager, ContextNavSubsystem, ObstacleSnapshot](FMassExecutionContext& Context)
+	// Der Rumpf steht EINMAL da und wird je nach Schalter parallel oder seriell ausgefuehrt.
+	// Zwei Kopien waeren 760 Zeilen Doppelung und damit die naechste Fehlerquelle.
+	auto AvoidanceLoop = [this, &EntityManager, ContextNavSubsystem, ObstacleSnapshot](FMassExecutionContext& Context)
 	{
 		const float DeltaTime = Context.GetDeltaTimeSeconds();
 		const double CurrentTime = World->GetTimeSeconds();
@@ -485,6 +542,9 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 			FVector Forward;
 			FMassNavigationObstacleItem ObstacleItem;
 			FVector::FReal SqDist;
+			// Zeigt in die unveraenderliche Schnappschusstabelle. Einmal nachgeschlagen statt
+			// zweimal: der Eintrag wird beim Aussortieren gebraucht UND beim Fuellen der Collider.
+			const FUnitObstacleAgentSnapshot* Agent = nullptr;
 		};
 		TArray<FSortedObstacle, TFixedAllocator<UE::UnitMassAvoidance::MaxObstacleResults>> ClosestObstacles;
 
@@ -914,16 +974,19 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 					continue;
 				}
 
-				// Skip invalid entities.
-				if (!EntityManager.IsEntityValid(OtherEntity.Entity))
+				// Nachbardaten aus dem Schnappschuss statt aus der lebenden Entitaet. Ein
+				// fehlender Eintrag bedeutet dasselbe wie frueher IsEntityValid == false: die
+				// Entitaet war zum Zeitpunkt des Schnappschusses nicht da (oder der Index wurde
+				// inzwischen neu vergeben, was die Seriennummer abfaengt).
+				const FUnitObstacleAgentSnapshot* OtherAgent = ObstacleSnapshot->FindAgent(OtherEntity.Entity);
+				if (OtherAgent == nullptr)
 				{
 					UE_LOG(LogAvoidanceObstacles, VeryVerbose, TEXT("Close entity is invalid, skipped."));
 					continue;
 				}
-				
+
 				// Skip too far
-				const FTransform& Transform = EntityManager.GetFragmentDataChecked<FTransformFragment>(OtherEntity.Entity).GetTransform();
-				const FVector OtherLocation = Transform.GetLocation();
+				const FVector OtherLocation = OtherAgent->Location;
 				
 				const FVector::FReal SqDist = FVector::DistSquared(AgentLocation, OtherLocation);
 				if (SqDist > DistanceCutOffSqr)
@@ -939,9 +1002,10 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
 				FSortedObstacle Obstacle;
 				Obstacle.LocationCached = OtherLocation;
-				Obstacle.Forward = Transform.GetRotation().GetForwardVector();
+				Obstacle.Forward = OtherAgent->Forward;
 				Obstacle.ObstacleItem = OtherEntity;
 				Obstacle.SqDist = SqDist;
+				Obstacle.Agent = OtherAgent;
 				ClosestObstacles.Add(Obstacle);
 			}
 			ClosestObstacles.Sort([](const FSortedObstacle& A, const FSortedObstacle& B) { return A.SqDist < B.SqDist; });
@@ -961,42 +1025,38 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 				}
 
 				FSortedObstacle& Obstacle = ClosestObstacles[Index];
-				FMassEntityView OtherEntityView(EntityManager, Obstacle.ObstacleItem.Entity);
 
-				const FMassVelocityFragment* OtherVelocityFragment = OtherEntityView.GetFragmentDataPtr<FMassVelocityFragment>();
-				const FVector OtherVelocity = OtherVelocityFragment != nullptr ? OtherVelocityFragment->Value : FVector::ZeroVector; // Get velocity from FAvoidanceComponent
+				// Alles aus dem Schnappschuss - der Zeiger steht seit dem Aussortieren fest und
+				// wurde dort bereits auf Gueltigkeit geprueft. Frueher stand hier eine
+				// FMassEntityView ueber eine FREMDE Entitaet, und genau die hat diesen Prozessor
+				// auf dem Spielthread festgehalten.
+				const FUnitObstacleAgentSnapshot& Other = *Obstacle.Agent;
+				const FVector OtherVelocity = Other.Velocity;
+				const bool bCanAvoid = Other.bCanAvoid;
+				const bool bOtherIsMoving = Other.bIsMoving;
 
-				// @todo: this is heavy fragment to access, see if we could handle this differently.
-				const FMassMoveTargetFragment* OtherMoveTarget = OtherEntityView.GetFragmentDataPtr<FMassMoveTargetFragment>();
-				const bool bCanAvoid = OtherMoveTarget != nullptr;
-				const bool bOtherIsMoving = OtherMoveTarget ? OtherMoveTarget->GetCurrentAction() == EMassMovementAction::Move : true; // Assume moving if other does not have move target.
-				
 				// Check for colliders data
 				if (EnumHasAnyFlags(Obstacle.ObstacleItem.ItemFlags, EMassNavigationObstacleFlags::HasColliderData))
 				{
-					if (const FMassAvoidanceColliderFragment* ColliderFragment = OtherEntityView.GetFragmentDataPtr<FMassAvoidanceColliderFragment>())
+					if (Other.bHasCollider)
 					{
-						if (ColliderFragment->Type == EMassColliderType::Circle)
+						if (Other.ColliderType == 0) // Kreis
 						{
-							const FMassCircleCollider Circle = ColliderFragment->GetCircleCollider();
-							
 							FCollider& Collider = Colliders.Add_GetRef(FCollider{});
 							Collider.Velocity = OtherVelocity;
 							Collider.bCanAvoid = bCanAvoid;
 							Collider.bIsMoving = bOtherIsMoving;
-							Collider.Radius = Circle.Radius;
+							Collider.Radius = Other.ColliderRadius;
 							Collider.Location = Obstacle.LocationCached;
 						}
-						else if (ColliderFragment->Type == EMassColliderType::Pill)
+						else // Pille
 						{
-							const FMassPillCollider Pill = ColliderFragment->GetPillCollider(); 
-
 							FCollider& Collider = Colliders.Add_GetRef(FCollider{});
 							Collider.Velocity = OtherVelocity;
 							Collider.bCanAvoid = bCanAvoid;
 							Collider.bIsMoving = bOtherIsMoving;
-							Collider.Radius = Pill.Radius;
-							Collider.Location = Obstacle.LocationCached + (Pill.HalfLength * Obstacle.Forward);
+							Collider.Radius = Other.ColliderRadius;
+							Collider.Location = Obstacle.LocationCached + (Other.PillHalfLength * Obstacle.Forward);
 
 							if (Colliders.Num() < MaxColliders)
 							{
@@ -1004,8 +1064,8 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 								Collider2.Velocity = OtherVelocity;
 								Collider2.bCanAvoid = bCanAvoid;
 								Collider2.bIsMoving = bOtherIsMoving;
-								Collider2.Radius = Pill.Radius;
-								Collider2.Location = Obstacle.LocationCached + (-Pill.HalfLength * Obstacle.Forward);
+								Collider2.Radius = Other.ColliderRadius;
+								Collider2.Location = Obstacle.LocationCached + (-Other.PillHalfLength * Obstacle.Forward);
 							}
 						}
 					}
@@ -1015,7 +1075,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 					FCollider& Collider = Colliders.Add_GetRef(FCollider{});
 					Collider.Location = Obstacle.LocationCached;
 					Collider.Velocity = OtherVelocity;
-					Collider.Radius = OtherEntityView.GetFragmentData<FAgentRadiusFragment>().Radius;
+					Collider.Radius = Other.AgentRadius;
 					Collider.bCanAvoid = bCanAvoid;
 					Collider.bIsMoving = bOtherIsMoving;
 				}
@@ -1200,5 +1260,20 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 				UE::UnitMassAvoidance::FinalSteeringForceColor, UE::UnitMassAvoidance::SteeringArrowHeadSize, UE::UnitMassAvoidance::SteeringThickness);
 #endif // WITH_MASSGAMEPLAY_DEBUG
 		}
-	});
+	};
+
+	// Debugzeichnen erzwingt den seriellen Weg: DrawDebugLine ist nicht threadsicher.
+	// Der Schalter ist ECVF_Cheat und im Normalfall aus, die Abfrage kostet nichts.
+	const bool bParallel = CVarRTS_AvoidanceParallel.GetValueOnAnyThread() != 0
+		&& !UE::UnitMassAvoidance::Tweakables::bUseDrawDebugHelpers;
+
+	if (bParallel)
+	{
+		EntityQuery.ParallelForEachEntityChunk(Context, AvoidanceLoop);
+	}
+	else
+	{
+		// Seriell: RTS.Avoidance.Parallel 0 oder ai.mass.avoidance.UseDrawDebugHelpers an.
+		EntityQuery.ForEachEntityChunk(Context, AvoidanceLoop);
+	}
 }

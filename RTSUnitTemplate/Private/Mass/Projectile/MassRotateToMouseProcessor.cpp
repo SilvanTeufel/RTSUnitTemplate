@@ -14,6 +14,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Mass/Replication/RTSWorldCacheSubsystem.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassRotateToMouseProcessor::UMassRotateToMouseProcessor()
 {
@@ -56,6 +57,10 @@ void UMassRotateToMouseProcessor::HandleMouseUpdateSignal(FName SignalName, TCon
 
 void UMassRotateToMouseProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassRotateToMouseProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassRotateToMouseProcessor);
+
 	if (EntityQuery.GetNumMatchingEntities() == 0)
 	{
 		return;

@@ -11,6 +11,7 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Actors/EffectArea.h"
 #include "Mass/Abilitys/DecalScalingFragments.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassDecalScalingProcessor::UMassDecalScalingProcessor()
 {
@@ -32,6 +33,10 @@ void UMassDecalScalingProcessor::ConfigureQueries(const TSharedRef<FMassEntityMa
 
 void UMassDecalScalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassDecalScalingProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassDecalScalingProcessor);
+
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)
 	{

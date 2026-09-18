@@ -1,6 +1,8 @@
 ﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
+#include <initializer_list>
+#include "MassExecutionContext.h"
 #include "CoreMinimal.h"
 #include "MassEntityTypes.h"
 #include "MassCommonFragments.h"
@@ -1535,6 +1537,65 @@ inline void SetNewRandomPatrolTarget(FMassPatrolFragment& PatrolFrag, FMassMoveT
 	}
 }
 
+/**
+ * Tag-Abfrage fuer einen ganzen Chunk, einmal statt einmal je Einheit.
+ *
+ * WOFUER: DoesEntityHaveTag macht JE AUFRUF eine Gueltigkeitspruefung, eine Archetyp-Suche und
+ * eine Kompositions-Abfrage. In UActorTransformSyncProcessor stand es 27-mal, ausgefuehrt je
+ * Einheit - bei 510 Einheiten ueber 5000 Suchen pro Bild. Gemessen am 17.09.2026 auf LevelSix:
+ * dieser Prozessor kostete 4,25 ms von 16,57 ms Spiel-Thread und war der groesste Einzelposten.
+ *
+ * WARUM DAS ZULAESSIG IST: Tags sind in Mass Bestandteil des Archetyps. Ein Tag hinzuzufuegen
+ * oder zu entfernen verschiebt die Entitaet in einen ANDEREN Archetyp. Innerhalb eines Chunks
+ * teilen sich deshalb alle Entitaeten dieselben Tags - einmal ermitteln genuegt.
+ *
+ * Die Komposition wird als Kopie gehalten, weil GetArchetypeComposition sie als Wert liefert.
+ * Eine Kopie je Chunk statt einer Suche je Einheit und Tag.
+ */
+struct FChunkTagLookup
+{
+	FChunkTagLookup(const FMassEntityManager& EntityManager, const FMassExecutionContext& Context)
+	{
+		if (Context.GetNumEntities() <= 0)
+		{
+			return;
+		}
+		const FMassArchetypeHandle ArchetypeHandle = EntityManager.GetArchetypeForEntity(Context.GetEntity(0));
+		if (!ArchetypeHandle.IsValid())
+		{
+			return;
+		}
+		Composition = EntityManager.GetArchetypeComposition(ArchetypeHandle);
+		bValid = true;
+	}
+
+	bool Has(const UScriptStruct* TagType) const
+	{
+		return bValid && Composition.Contains(TagType);
+	}
+
+private:
+	FMassArchetypeCompositionDescriptor Composition;
+	bool bValid = false;
+};
+
+inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEntityHandle Entity, const UScriptStruct* TagType);
+
+/**
+ * Prueft die Chunk-Annahme gegen die Wahrheit je Entitaet und meldet jede Abweichung.
+ *
+ * WOFUER: FChunkTagLookup beruht darauf, dass alle Entitaeten eines Chunks denselben Archetyp
+ * und damit dieselben Tags tragen. Das ist die Mass-Lehrbuchlage - aber Tags werden in diesem
+ * Projekt an ueber 100 Stellen EINZELN vergeben (EM.Defer().AddTag<T>(Entity)), und der Archetyp
+ * entsteht je Einheit in UMassActorBindingComponent::BuildArchetypeAndSharedValues. Eine
+ * Annahme, die an so vielen Stellen brechen koennte, gehoert belegt und nicht geglaubt.
+ *
+ * Eine falsche Antwort waere hier teuer: die geprueften Tags steuern Drehung, Totenbehandlung
+ * und Zielausrichtung. Deshalb pruefen statt vertrauen.
+ */
+inline void VerifyChunkTags(const FMassEntityManager& EntityManager, const FMassExecutionContext& Context,
+	const struct FChunkTagLookup& Lookup, std::initializer_list<const UScriptStruct*> TagTypes);
+
 inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEntityHandle Entity, const UScriptStruct* TagType)
 {
 	if (!EntityManager.IsEntityValid(Entity)) // Optional: Check entity validity first
@@ -1557,29 +1618,6 @@ inline bool DoesEntityHaveTag(const FMassEntityManager& EntityManager, FMassEnti
 	return Composition.Contains(TagType);
 }
 
-// === BatchDiag (TEMP) ===========================================================================
-// Temporary diagnostic logging for the "combat-engaged units don't move on client after BatchMove"
-// bug. Gated on FMassClientPredictionFragment::CommandPredictTime so only units that received a
-// move command within the last few seconds are logged (avoids per-frame spam). Remove by deleting
-// every `[BatchDiag]` reference (grep). Pass UnitIndex from the call site (actor cast lives there).
-inline void RTS_BatchDiagLog(const TCHAR* Where, const UWorld* World, const FMassEntityManager& EM,
-	const FMassEntityHandle& Entity, int32 UnitIndex, const FMassClientPredictionFragment* Pred)
-{
-	if (!World || !Pred) return;
-	const float Since = World->GetTimeSeconds() - Pred->CommandPredictTime;
-	if (Since < 0.f || Since > -1.0f) return; // [BatchDiag] DISABLED (too noisy at 120 units). Re-enable: change -1.0f back to 3.0f.
-	UE_LOG(LogTemp, Warning,
-		TEXT("[BatchDiag] %-20s Idx=%d Run=%d Chase=%d Atk=%d Pause=%d Idle=%d Det=%d | Pred has=%d spd=%.0f loc=%s | since=%.2f"),
-		Where, UnitIndex,
-		DoesEntityHaveTag(EM, Entity, FMassStateRunTag::StaticStruct())    ? 1 : 0,
-		DoesEntityHaveTag(EM, Entity, FMassStateChaseTag::StaticStruct())  ? 1 : 0,
-		DoesEntityHaveTag(EM, Entity, FMassStateAttackTag::StaticStruct()) ? 1 : 0,
-		DoesEntityHaveTag(EM, Entity, FMassStatePauseTag::StaticStruct())  ? 1 : 0,
-		DoesEntityHaveTag(EM, Entity, FMassStateIdleTag::StaticStruct())   ? 1 : 0,
-		DoesEntityHaveTag(EM, Entity, FMassStateDetectTag::StaticStruct()) ? 1 : 0,
-		Pred->bHasData ? 1 : 0, Pred->PredDesiredSpeed, *Pred->Location.ToString(), Since);
-}
-// === /BatchDiag =================================================================================
 
 template<typename FragmentType>
 bool DoesEntityHaveFragment(
@@ -2371,5 +2409,61 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 		{
 			// Skip syncing Idle tag while predicting so local fast-start isn't overridden
 		}
+	}
+}
+
+
+inline void VerifyChunkTags(const FMassEntityManager& EntityManager, const FMassExecutionContext& Context,
+	const FChunkTagLookup& Lookup, std::initializer_list<const UScriptStruct*> TagTypes)
+{
+	static int32 Deviations = 0;
+	static int32 CheckedChunks = 0;
+	static int32 CheckedEntities = 0;
+	static double LastReport = 0.0;
+
+	const int32 Anzahl = Context.GetNumEntities();
+	++CheckedChunks;
+
+	for (int32 i = 0; i < Anzahl; ++i)
+	{
+		const FMassEntityHandle Entity = Context.GetEntity(i);
+		++CheckedEntities;
+		for (const UScriptStruct* TagType : TagTypes)
+		{
+			if (DoesEntityHaveTag(EntityManager, Entity, TagType) != Lookup.Has(TagType))
+			{
+				++Deviations;
+				UE_LOG(LogTemp, Error,
+					TEXT("[ChunkTagVerify] ABWEICHUNG: Tag %s, Entitaet %d von %d"),
+					*GetNameSafe(TagType), i, Anzahl);
+			}
+		}
+	}
+
+	// Wieviele VERSCHIEDENE Tag-Kombinationen kamen ueberhaupt vor?
+	//
+	// WOFUER: eine Pruefung ohne Aussagekraft ist schlimmer als keine. Tun im Messfall alle
+	// Einheiten dasselbe, ist jeder Chunk trivial einheitlich und "0 Deviations" belegt nichts.
+	// Diese Zahl sagt, ob der Lauf die Annahme ueberhaupt auf die Probe gestellt hat: erst wenn
+	// mehrere verschiedene Kombinationen auftauchen, hatten die Einheiten wirklich
+	// unterschiedliche Tags - und die Chunk-Antwort stimmte trotzdem fuer jede einzelne.
+	static TSet<uint32> SeenCombinations;
+	uint32 Mask = 0;
+	uint32 Bit = 1;
+	for (const UScriptStruct* TagType : TagTypes)
+	{
+		if (Lookup.Has(TagType)) { Mask |= Bit; }
+		Bit <<= 1;
+	}
+	SeenCombinations.Add(Mask);
+
+	const double Now = FPlatformTime::Seconds();
+	if (Now - LastReport > 5.0)
+	{
+		LastReport = Now;
+		UE_LOG(LogTemp, Warning,
+			TEXT("[ChunkTagVerify] %d Chunks / %d Entitaeten geprueft, %d ABWEICHUNGEN, %d verschiedene Tag-Kombinationen"),
+			CheckedChunks, CheckedEntities, Deviations, SeenCombinations.Num());
+		CheckedChunks = 0; CheckedEntities = 0;
 	}
 }

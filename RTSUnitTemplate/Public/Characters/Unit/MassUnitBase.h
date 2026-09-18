@@ -85,6 +85,29 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = ISM)
 	virtual FTransform GetMassActorTransform() const override;
+
+	/**
+	 * Zieht den Aktor SOFORT auf die Mass-Lage nach, unabhaengig von der Drosselung.
+	 *
+	 * WOFUER: UActorTransformSyncProcessor uebertraegt die Mass-Lage bei hohen Einheitenzahlen nur
+	 * noch alle bis zu 0,5 s auf den Aktor (siehe ActorSyncScaleStartUnits). Fuer das ZEICHNEN ist
+	 * das folgenlos - ISM-Einheiten werden ueber die Instanz gezeichnet, nicht ueber den Aktor.
+	 * Wer nur eine POSITION braucht, nimmt GetMassActorLocation() und ist damit immer exakt.
+	 *
+	 * Diese Funktion ist fuer den dritten Fall: wenn der Aktor SELBST an der richtigen Stelle stehen
+	 * muss, weil etwas an ihm haengt oder von ihm ausgeht - ein Projektil aus einem Mesh-Socket, ein
+	 * angehefteter Effekt, eine Fahrzeugverladung. Einmal vorher aufgerufen kostet sie nichts
+	 * Nennenswertes, weil sie je Schuss und nicht je Bild laeuft.
+	 *
+	 * Fuer DAUERHAFT angeheftete Sichtbares (Niagara_A/Niagara_B) reicht ein einmaliges Nachziehen
+	 * NICHT - solche Einheiten werden stattdessen gar nicht erst gedrosselt, siehe
+	 * UActorTransformSyncProcessor::BrauchtAktorJedesBild.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SyncActorTransformFromMass();
+
+	/** Wahr, wenn ein angehefteter Niagara-Effekt sichtbar ist und deshalb jedes Bild mitgefuehrt werden muss. */
+	bool HasActiveAttachedEffect() const;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Visual")
 	class UDataTable* ISMAnimationDataTable = nullptr;
 

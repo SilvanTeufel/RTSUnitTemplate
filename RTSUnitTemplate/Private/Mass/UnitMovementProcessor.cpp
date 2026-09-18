@@ -3,6 +3,7 @@
 #include "Mass/Traits/UnitReplicationFragments.h"   // FUnitReplicatedTransformFragment
 #include "Animations/UnitAnimationProcessor.h"        // RTSDiagIstAusgewaehlt
 #include "HAL/IConsoleManager.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 /**
  * Wie weit der Client vor der autoritativen Position herlaufen darf, bevor er anhaelt (uu, 2D).
@@ -259,6 +260,11 @@ void UUnitMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
 
 void UUnitMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitMovementProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitMovementProcessor);
+
+
+
     UWorld* World = GetWorld();
     if (!World) return;
     

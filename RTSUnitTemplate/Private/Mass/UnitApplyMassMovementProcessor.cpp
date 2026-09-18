@@ -44,6 +44,7 @@ FVector UUnitApplyMassMovementProcessor::RedirectedAvoidanceForce(const FVector&
 #include "AI/Navigation/NavigationTypes.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // NOTE: client-side avoidance weakening is now done PER-PROCESSOR at the source (UnitSeparationProcessor,
 // UnitSoftAvoidanceProcessor, UnitMovingAvoidanceProcessor) so separation (the lateral-push jitter culprit)
@@ -62,6 +63,19 @@ UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery(
 	bAutoRegisterWithProcessingPhases = true;
 	bRequiresGameThreadExecution = true;
 }
+
+static TAutoConsoleVariable<int32> CVarRTS_MoveDiag(
+	TEXT("RTS.MoveDiag"),
+	0,
+	TEXT("Belegzeilen der Bewegungsuntersuchung ([Zeitschritt], Standwache, Blockiert-Quote). ")
+	TEXT("0 = aus (Vorgabe seit 18.09.2026), 1 = an.")
+	TEXT("")
+	TEXT("WOFUER: diese Zeilen stammen aus der Arbeiter-Haenger-Untersuchung und liefen seitdem ")
+	TEXT("dauerhaft mit - im normalen Spiel neun Meldungen in 90 Sekunden. Sie sitzen auf rund ")
+	TEXT("40 Zaehlern, die in der heissen Schleife je Einheit mitgefuehrt werden. Der Schalter ")
+	TEXT("legt die MELDUNGEN still; die Zaehler selbst bleiben vorerst stehen, weil sie aus der ")
+	TEXT("Chunk-Lambda herauszuloesen ein eigener, zu messender Eingriff waere und kein Aufraeumen."),
+	ECVF_Default);
 
 void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
@@ -159,6 +173,11 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 
 void UUnitApplyMassMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitApplyMassMovementProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitApplyMassMovementProcessor);
+
+
+
     const float DeltaTime = FMath::Min(0.1f, Context.GetDeltaTimeSeconds());
     if (DeltaTime <= 0.0f)
     {
@@ -233,11 +252,11 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
             if (DoesEntityHaveTag(EntityManager, LocalContext.GetEntity(EntityIndex),
                                   FMassDirectControlTag::StaticStruct()))
             {
-                static double LetzteAusgabe = 0.0;
-                const double Jetzt = FPlatformTime::Seconds();
-                if (Jetzt - LetzteAusgabe > 0.33)
+                static double LastOutput = 0.0;
+                const double Now = FPlatformTime::Seconds();
+                if (CVarRTS_MoveDiag.GetValueOnAnyThread() != 0 && Now - LastOutput > 0.33)
                 {
-                    LetzteAusgabe = Jetzt;
+                    LastOutput = Now;
                     UE_LOG(LogTemp, Warning,
                         TEXT("[ApplierDiag] CLIENT laeuft: Vel=%.0f Desired=%.0f Force=%.0f MaxSpeed=%.0f Accel=%.0f CanMove=%d"),
                         Velocity.Value.Size2D(), Steering.DesiredVelocity.Size2D(), Force.Value.Size2D(),
@@ -684,6 +703,13 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
             Force.Value = FVector::ZeroVector;
         }
     });
+
+    // Ab hier nur noch Belegzeilen - siehe RTS.MoveDiag. Im Normalfall wird der ganze Abschnitt
+    // uebersprungen, damit das Ausgabeprotokoll im Spiel leer bleibt.
+    if (CVarRTS_MoveDiag.GetValueOnGameThread() == 0)
+    {
+        return;
+    }
 
     // Belegzeile, hoechstens einmal pro Sekunde: Anteil der Einheiten, die laufen wollen, aber
     // stehen. Steigt diese Zahl, klemmt es an der Bewegung - genau das beobachtete Bild.

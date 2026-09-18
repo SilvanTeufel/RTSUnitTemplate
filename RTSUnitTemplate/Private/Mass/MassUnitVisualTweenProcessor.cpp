@@ -9,6 +9,7 @@
 #include "Actors/WorkArea.h"
 #include "MassNavigationFragments.h"
 #include <type_traits>
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassUnitVisualTweenProcessor::UMassUnitVisualTweenProcessor() {
     ExecutionFlags = (int32)EProcessorExecutionFlags::All;
@@ -31,6 +32,10 @@ void UMassUnitVisualTweenProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 }
 
 void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassUnitVisualTweenProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassUnitVisualTweenProcessor);
+
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 
     static double LastLogTime = 0.0;

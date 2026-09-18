@@ -125,8 +125,9 @@ static TAutoConsoleVariable<int32> CVarRTS_StandDiagNurAuswahl(
     ECVF_Default);
 
 static TAutoConsoleVariable<int32> CVarRTS_StandDiag(
-    TEXT("RTS.StandDiag"), 1,
-    TEXT("[StandDiag] ueberhaupt schreiben. 0 = aus."),
+    TEXT("RTS.StandDiag"), 0,
+    TEXT("[StandDiag] ueberhaupt schreiben. 0 = aus (Vorgabe seit 18.09.2026 - die Diagnose der ")
+    TEXT("Laufanimationsarbeit lief seitdem dauerhaft mit). 1 schaltet sie wieder ein."),
     ECVF_Default);
 
 bool RTSDiagIstAusgewaehlt(const AActor* Aktor)

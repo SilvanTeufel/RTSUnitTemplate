@@ -795,7 +795,7 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 		return;
 	}
 
-	const FVector BaseLocation = IsValid(UnitBase->Base) ? UnitBase->Base->GetActorLocation() : UnitBase->GetActorLocation();
+	const FVector BaseLocation = IsValid(UnitBase->Base) ? UnitBase->Base->GetActorLocation() : UnitBase->GetMassActorLocation();
 	const float ClosestDistance = FVector::Dist(BaseLocation, AllWorkPlaces[0]->GetActorLocation());
 	const float DistanceThreshold = ClosestDistance * ResourceGameMode->ResourceDistanceMultiplier;
 

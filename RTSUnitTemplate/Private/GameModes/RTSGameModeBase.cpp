@@ -677,7 +677,7 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 						{
 							continue;
 						}
-						const FVector Delta = Einheit->GetActorLocation() - CurrentWinData.TargetLocation;
+						const FVector Delta = Einheit->GetMassActorLocation() - CurrentWinData.TargetLocation;
 						if (FVector2D(Delta.X, Delta.Y).SizeSquared() <= RadiusQuadrat)
 						{
 							bStepMet = true;

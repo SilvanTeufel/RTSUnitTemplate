@@ -404,19 +404,25 @@ void AControllerBase::LeftClickAMove_Implementation(AUnitBase* Unit, FVector Loc
 }
 
 
-void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Location)
+void AControllerBase::LeftClickAttack_Implementation(AUnitBase* Unit, FVector Location, AUnitBase* TargetUnit)
 {
 	// Zuschauer duerfen anwaehlen, aber nicht befehlen (siehe IsSpectatorController).
 	if (IsSpectatorController()) return;
 
 	if (Unit && Unit->UnitState != UnitData::Dead) {
 	
+		// Das vom Client aufgeloeste Ziel hat Vorrang - siehe den Parameter im Header. Nur wenn
+		// keines mitkam, bleibt es bei der alten Spur; die liest hier allerdings den Cursor des
+		// Servers und taugt deshalb nur im Einzelspieler oder auf dem Host.
 		FHitResult Hit_Pawn;
-		GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
-
-		if (Hit_Pawn.bBlockingHit)
+		if (!TargetUnit)
 		{
-			AUnitBase* UnitBase = Cast<AUnitBase>(Hit_Pawn.GetActor());
+			GetHitResultUnderCursor(ECollisionChannel::ECC_Pawn, false, Hit_Pawn);
+		}
+
+		if (TargetUnit || Hit_Pawn.bBlockingHit)
+		{
+			AUnitBase* UnitBase = TargetUnit ? TargetUnit : Cast<AUnitBase>(Hit_Pawn.GetActor());
 					
 			if(UnitBase && !UnitBase->TeamId)
 			{
@@ -826,7 +832,7 @@ void AControllerBase::RightClickRunDijkstraPF_Implementation(AUnitBase* Unit, FV
 	
 	TArray<FPathPoint> PathPoints;
 
-	FVector UnitLocation = Unit->GetActorLocation();
+	FVector UnitLocation = Unit->GetMassActorLocation();
 	
 	if(Unit->GetUnitState() != UnitData::Run)
 		Unit->SetWalkSpeed(0.f);

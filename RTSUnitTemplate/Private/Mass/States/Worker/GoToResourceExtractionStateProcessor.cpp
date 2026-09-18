@@ -17,6 +17,7 @@
 #include "NavigationData.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/UnitBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 
 UGoToResourceExtractionStateProcessor::UGoToResourceExtractionStateProcessor(): EntityQuery()
@@ -81,6 +82,10 @@ void UGoToResourceExtractionStateProcessor::InitializeInternal(UObject& Owner, c
 
 void UGoToResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UGoToResourceExtractionStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UGoToResourceExtractionStateProcessor);
+
     //QUICK_SCOPE_CYCLE_COUNTER(STAT_UGoToResourceExtractionStateProcessor_Execute);
     //TRACE_CPUPROFILER_EVENT_SCOPE(UGoToResourceExtractionStateProcessor_Execute);
     

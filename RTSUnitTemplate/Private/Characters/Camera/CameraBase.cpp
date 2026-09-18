@@ -515,7 +515,7 @@ bool ACameraBase::ZoomInToPosition(float Distance, const FVector SelectedActorPo
 void ACameraBase::LockOnUnit(AUnitBase* Unit)
 {
 	if (Unit && Unit->GetUnitState() != UnitData::Dead) {
-		FVector ActorLocation = Unit->GetActorLocation();
+		FVector ActorLocation = Unit->GetMassActorLocation();
 
 		float ZLocation = GetActorLocation().Z;
 

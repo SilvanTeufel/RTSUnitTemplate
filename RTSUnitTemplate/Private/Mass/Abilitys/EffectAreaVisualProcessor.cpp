@@ -13,6 +13,7 @@
 #include "NiagaraComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Core/ViewportUtils.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassEffectAreaVisualProcessor::UMassEffectAreaVisualProcessor()
 {
@@ -44,6 +45,10 @@ void UMassEffectAreaVisualProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 
 void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassEffectAreaVisualProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassEffectAreaVisualProcessor);
+
 	// 1. Visual Updates
 	VisualQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& VisualContext)
 	{

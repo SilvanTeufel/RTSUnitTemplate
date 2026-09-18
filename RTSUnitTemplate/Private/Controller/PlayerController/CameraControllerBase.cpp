@@ -2766,7 +2766,7 @@ void ACameraControllerBase::LockCamToSpecificUnit(AUnitBase* SUnit)
 	
 	if( Unit)
 	{
-		FVector SelectedActorLocation = Unit->GetActorLocation();
+		FVector SelectedActorLocation = Unit->GetMassActorLocation();
 		
 		CameraBase->LockOnUnit(Unit);
 
@@ -2813,7 +2813,7 @@ void ACameraControllerBase::LockCamToSpecificUnit(AUnitBase* SUnit)
 			if (IsLocalController())
 			{
 				CameraBase->ZoomInToPosition(Unit->SpeakZoomPosition, SelectedActorLocation);
-				CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - Unit->GetActorLocation().Z);
+				CameraBase->CameraDistanceToCharacter = (CameraBase->GetActorLocation().Z - Unit->GetMassActorLocation().Z);
 			}
 		}
 
@@ -2829,7 +2829,7 @@ void ACameraControllerBase::LockCamToCharacter(int Index)
 	if( SelectedUnits.Num() && SelectedUnits[Index])
 	{
 		AUnitBase* TargetUnit = SelectedUnits[Index];
-		FVector TargetLocation = TargetUnit->GetActorLocation();
+		FVector TargetLocation = TargetUnit->GetMassActorLocation();
 
 		// --- Interpolation Logic ---
 		if(CameraBase)
@@ -3108,7 +3108,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
         	{
         		if (IsLocalController() && CameraBase)
         		{
-        			const FVector UnitLoc = CameraUnitWithTag->GetActorLocation();
+        			const FVector UnitLoc = CameraUnitWithTag->GetMassActorLocation();
         			const FVector DesiredCamLoc = FVector(UnitLoc.X, UnitLoc.Y, CameraBase->GetActorLocation().Z);
         			// Bei Direktsteuerung zieht die Kamera straffer nach, sonst haengt sie der
         			// selbst gesteuerten Einheit sichtbar hinterher.
@@ -3362,7 +3362,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
                 }
                 else if (IsLocalController() && CameraBase)
                 {
-                    const float ZielYaw = CameraUnitWithTag->GetActorRotation().Yaw + RotateCamBehindYawOffset;
+                    const float ZielYaw = CameraUnitWithTag->GetMassActorRotation().Yaw + RotateCamBehindYawOffset;
                     CameraBase->RotateCamYawTowards(ZielYaw, RotateCamBehindSpeed, DeltaTime, RotateCamBehindDeadzone);
                 }
             }
@@ -3370,7 +3370,7 @@ void ACameraControllerBase::LockCamToCharacterWithTag(float DeltaTime)
             if (RotateBehindCharacterIfLocked)
             {
                 float CameraYaw = FMath::Fmod(static_cast<float>(CameraBase->SpringArmRotator.Yaw) + 360.f, 360.f);
-                float ActorYaw = FMath::Fmod(static_cast<float>(CameraUnitWithTag->GetActorRotation().Yaw) + 360.f, 360.f);
+                float ActorYaw = FMath::Fmod(static_cast<float>(CameraUnitWithTag->GetMassActorRotation().Yaw) + 360.f, 360.f);
                 float DeltaYaw = FMath::Fmod(FMath::Fmod(static_cast<float>(ActorYaw + 180.f), 360.f) - CameraYaw + 540.f, 360.f) - 180.f;
 
                 if (!FMath::IsNearlyEqual(CameraYaw, ActorYaw, 10.f))

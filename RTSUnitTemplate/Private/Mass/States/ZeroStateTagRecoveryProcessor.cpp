@@ -8,6 +8,7 @@
 #include "MassNavigationFragments.h"                // FMassMoveTargetFragment (replicated move slot)
 #include "Mass/UnitMassTag.h"                       // FMassAIStateFragment + FMassClientPredictionFragment + all FMassState* tags
 #include "Mass/Replication/ReplicationSettings.h"   // RTSReplicationSettings
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UZeroStateTagRecoveryProcessor::UZeroStateTagRecoveryProcessor(): EntityQuery()
 {
@@ -66,6 +67,10 @@ void UZeroStateTagRecoveryProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 
 void UZeroStateTagRecoveryProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UZeroStateTagRecoveryProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UZeroStateTagRecoveryProcessor);
+
 	// Only relevant to the Mass replication path (mirrors UnitClientTagSyncProcessor / ClientReplicationProcessor).
 	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass)
 	{

@@ -191,6 +191,47 @@ FTransform AMassUnitBase::GetMassActorTransform() const
 	return Super::GetMassActorTransform();
 }
 
+void AMassUnitBase::SyncActorTransformFromMass()
+{
+	// Siehe Kommentar am Header. Skelett-Einheiten werden nie gedrosselt, fuer sie ist der Aktor
+	// ohnehin die Wahrheit - dort waere das Nachziehen nicht nur unnoetig, sondern falsch.
+	if (bUseSkeletalMovement)
+	{
+		return;
+	}
+
+	const FTransform MassXf = GetMassActorTransform();
+	if (!MassXf.GetLocation().Equals(GetActorLocation(), 0.01f)
+		|| !MassXf.GetRotation().Equals(GetActorQuat(), 0.0001f))
+	{
+		SetActorTransform(MassXf, false, nullptr, ETeleportType::TeleportPhysics);
+	}
+}
+
+bool AMassUnitBase::HasActiveAttachedEffect() const
+{
+	// DIE ASSET-PRUEFUNG IST DER ENTSCHEIDENDE TEIL, nicht IsActive().
+	//
+	// UnitBase.cpp legt Niagara_A/Niagara_B als Standardunterobjekte an und schaltet - anders als
+	// AProjectile, das SetAutoActivate(false) ruft - die Selbstaktivierung NICHT ab. Die Voreinstellung
+	// von UNiagaraComponent ist bAutoActivate = true. Ohne die Asset-Pruefung meldete deshalb JEDE
+	// Einheit einen aktiven Effekt, jede war von der Drosselung ausgenommen, und die Drosselung war
+	// faktisch abgeschaltet: gemessen 507 Uebertraege je Bild statt der erwarteten 18.
+	//
+	// Eine Component ohne zugewiesenes System zeichnet nichts und muss folglich auch nichts
+	// mitfuehren. Nur ein Effekt mit System, sichtbar und laufend, zwingt den Aktor jedes Bild
+	// nachzuziehen.
+	auto FollowsActor = [](const UNiagaraComponent* Component)
+	{
+		return Component != nullptr
+			&& Component->GetAsset() != nullptr
+			&& !Component->bHiddenInGame
+			&& Component->IsActive();
+	};
+
+	return FollowsActor(Niagara_A) || FollowsActor(Niagara_B);
+}
+
 bool AMassUnitBase::SetInvisibility(bool NewInvisibility)
 {
 	

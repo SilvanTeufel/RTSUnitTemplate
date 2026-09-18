@@ -25,6 +25,7 @@
 #include "MassReplicationFragments.h"
 #include "Async/Async.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 
 UChaseStateProcessor::UChaseStateProcessor(): EntityQuery()
@@ -110,6 +111,10 @@ FVector CalculateChaseOffset(const FMassEntityHandle& Entity, float MinRadius = 
 
 void UChaseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UChaseStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UChaseStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
@@ -153,10 +158,6 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
-            // === BatchDiag (TEMP): unit still in Chase tag after a move command => command didn't strip Chase ===
-            RTS_BatchDiagLog(TEXT("CHASE-CLIENT"), World, EntityManager, Entity,
-                Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
-                bHasPrediction ? &PredictionList[i] : nullptr);
 
             if (StateFrag.SwitchingStateClient)
             {

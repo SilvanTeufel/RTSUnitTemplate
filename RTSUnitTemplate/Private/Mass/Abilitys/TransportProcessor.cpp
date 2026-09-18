@@ -6,6 +6,7 @@
 #include "MassSignalSubsystem.h"
 #include "MassExecutionContext.h"
 #include "Mass/Signals/MySignals.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UTransportProcessor::UTransportProcessor()
 {
@@ -43,6 +44,10 @@ void UTransportProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
 void UTransportProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UTransportProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UTransportProcessor);
+
 	TMap<FMassEntityHandle, FVector> TransporterLocations;
 	TMap<FMassEntityHandle, float> TransporterLoadRangesSq;
 	TSet<FMassEntityHandle> TransportersWithFollowers;

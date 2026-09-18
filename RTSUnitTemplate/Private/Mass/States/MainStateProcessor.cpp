@@ -10,6 +10,7 @@
 #include "Async/Async.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMainStateProcessor::UMainStateProcessor(): EntityQuery()
 {
@@ -49,6 +50,10 @@ void UMainStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
 void UMainStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMainStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMainStateProcessor);
+
     // --- Throttling Check ---
     TimeSinceLastRunA += Context.GetDeltaTimeSeconds();
 

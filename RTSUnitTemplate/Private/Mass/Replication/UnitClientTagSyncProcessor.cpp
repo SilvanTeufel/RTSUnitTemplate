@@ -16,6 +16,7 @@
 #include "Mass/Signals/MySignals.h"
 #include "Mass/Abilitys/CastingFallBackProcessor.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UUnitClientTagSyncProcessor::UUnitClientTagSyncProcessor()
 	: EntityQuery(*this)
@@ -81,6 +82,10 @@ void UUnitClientTagSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 
 void UUnitClientTagSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitClientTagSyncProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitClientTagSyncProcessor);
+
 	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass)
 	{
 		return;

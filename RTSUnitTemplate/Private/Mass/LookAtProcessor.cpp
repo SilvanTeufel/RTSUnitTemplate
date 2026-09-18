@@ -8,6 +8,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Steering/MassSteeringFragments.h"
 #include "Async/Async.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 /*
 ULookAtProcessor::ULookAtProcessor(): EntityQuery()
 {
@@ -51,6 +52,10 @@ void ULookAtProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& En
 
 void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/ULookAtProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(ULookAtProcessor);
+
  
     const float DeltaTime = Context.GetDeltaTimeSeconds();
 

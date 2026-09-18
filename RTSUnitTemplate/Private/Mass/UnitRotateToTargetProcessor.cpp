@@ -10,6 +10,7 @@
 #include "MassRepresentationFragments.h"
 #include "MassRepresentationTypes.h"
 #include "Async/Async.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UUnitRotateToTargetProcessor::UUnitRotateToTargetProcessor()
 {
@@ -43,6 +44,10 @@ void UUnitRotateToTargetProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 
 void UUnitRotateToTargetProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitRotateToTargetProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitRotateToTargetProcessor);
+
 	EntityQuery.ForEachEntityChunk(Context, [this, &EntityManager](FMassExecutionContext& ChunkContext)
 	{
 		const int32 NumEntities = ChunkContext.GetNumEntities();
