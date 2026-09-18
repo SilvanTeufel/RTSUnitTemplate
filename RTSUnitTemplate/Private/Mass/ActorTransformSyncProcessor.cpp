@@ -17,6 +17,7 @@
 #include "LandscapeProxy.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // IDEA 1 — CLIENT render smoothing. The unit ACTOR's position is hard-copied from the authoritative Mass
 // FTransformFragment every frame (no smoothing) -> any residual high-frequency jitter in the fragment (10Hz
@@ -50,6 +51,80 @@ UActorTransformSyncProcessor::UActorTransformSyncProcessor()
     bRequiresGameThreadExecution = true;
     // Optional ExecutionOrder settings...
 }
+
+static TAutoConsoleVariable<int32> CVarRTS_SkmDiag(
+	TEXT("RTS.SkmDiag"),
+	0,
+	TEXT("1 = einmal je Sekunde eine Zeile fuer die ERSTE skelettale Einheit ausgeben. 0 = aus.")
+	TEXT("")
+	TEXT("WOFUER: gemeldet wurde 'Einheiten mit bUseSkeletalMovement bewegen sich nicht mehr'. ")
+	TEXT("Dafuer gibt es genau zwei Erklaerungen, und sie liegen weit auseinander:")
+	TEXT("  (a) die MASS-ENTITAET bewegt sich nicht - dann liegt es an den Bewegungsprozessoren")
+	TEXT("  (b) die Mass-Entitaet bewegt sich, aber der AKTOR wird nicht nachgezogen - dann liegt ")
+	TEXT("es an dieser Uebertragung hier.")
+	TEXT("")
+	TEXT("Die Zeile zeigt beides nebeneinander: Mass-Ziel, vorherige Lage, Aktorlage und ob der ")
+	TEXT("Uebertrag eingereiht wurde. Raten kostet mehr als messen."),
+	ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarRTS_ActorSyncInterval(
+	TEXT("RTS.ActorSync.Interval"),
+	-1.0f,
+	TEXT("Ueberschreibt VisualISMActorSyncTime zur Laufzeit. Negativ = Wert aus dem Prozessor. ")
+	TEXT("WOFUER: die Drossel steht im Header auf 0.f, damit ist bNeedsActorSync IMMER wahr und ")
+	TEXT("DispatchPendingUpdates ruft je Bild fuer ~509 von 510 Einheiten Actor->SetActorTransform ")
+	TEXT("auf. Gemessen am 18.09.2026: 2,38 ms von 3,93 ms des Prozessors - 61 %. ISM-Einheiten ")
+	TEXT("werden aber ueber die ISM-Instanz gezeichnet, nicht ueber den Aktor; die Aktortransformation ")
+	TEXT("braucht nur, wer sie liest (HUD-Indikatoren, Faehigkeiten, Auswahl). Mit diesem Schalter ")
+	TEXT("laesst sich der Gewinn messen, BEVOR das Verhalten dauerhaft geaendert wird."),
+	ECVF_Default);
+
+// ===================================================================================================
+// VERWORFEN: kurzer Bodentrace um die zuletzt gefundene Bodenhoehe  (18.09.2026)
+//
+// IDEE: HandleGroundAndHeight zieht je Einheit und Bild eine Spur ueber 3000 uu (1000 darueber bis
+// 2000 darunter). Gemessen 0,556 ms bei 510 Einheiten. Die Annahme war, dass ein LineTrace
+// proportional zu den durchquerten Broadphase-Zellen kostet - eine Spur von nur +/-200 uu um
+// CharFragment.LastGroundLocation waere ein Fuenfzehntel so lang und muesste rund 85 % sparen.
+// Der Rueckfall auf die lange Spur deckte Spruenge, Klippen und Teleports ab.
+//
+// GEMESSEN: die Abkuerzung griff bei 99,1 % aller Aufrufe (Rueckfall 0,9 %, mittlerer Abstand zum
+// Anker 241 uu bei Spanne 200) - und die Bodenzeit blieb bei 0,556 ms. Differenz 0,000 ms.
+//
+// WAS DARAUS FOLGT: die Kosten eines LineTrace stecken NICHT in der gelaufenen Strecke, sondern im
+// Aufsetzen der Abfrage - Query-Parameter, Eintritt in die Physikszene, Ergebnisaufbereitung. Eine
+// Spur zu VERKUERZEN bringt daher nichts. Wer diesen Posten senken will, muss Traces WEGLASSEN
+// (etwa fuer Einheiten, die sich seit dem letzten Bild in XY nicht bewegt haben) oder sie
+// zusammenfassen - nicht sie kuerzen.
+//
+// NICHT NOCH EINMAL PROBIEREN. Die Messung ist eindeutig: 99,1 % Trefferquote bei 0,000 ms Gewinn.
+//
+// Nebenbefund aus derselben Messung: der erste Anlauf scheiterte an einem eigenen Waechter
+// "LastGroundLocation != 0" als Gueltigkeitspruefung. LevelSix hat ueber weite Teile Boden bei
+// Z = 0, ein GUELTIGER Anker von 0.0 war damit von "nie gesetzt" nicht zu unterscheiden -
+// Trefferquote 1,8 %. Null ist auf dieser Karte ein gueltiger Wert, kein Sentinel.
+// ===================================================================================================
+
+static TAutoConsoleVariable<int32> CVarRTS_MeasureTagCost(
+	TEXT("RTS.ChunkTags.MessAlt"),
+	0,
+	TEXT("Misst, was die frueher hier stehende Abfrage JE EINHEIT gekostet haette, und meldet es ")
+	TEXT("alle 5 s. Fuehrt die zehn DoesEntityHaveTag zusaetzlich aus und verwirft das Ergebnis - ")
+	TEXT("die gemeldete Zeit ist also genau die Arbeit, welche die Chunk-Umstellung eingespart hat. ")
+	TEXT("Sauberer als zwei getrennte Laeufe zu vergleichen: dieselbe Szene, dieselbe Kamera, ")
+	TEXT("dasselbe Bild."),
+	ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_VerifyChunkTags(
+	TEXT("RTS.ChunkTags.Verify"),
+	0,
+	TEXT("Prueft die Chunk-weite Tag-Abkuerzung gegen die Abfrage je Entitaet. VORGABE AUS, weil ")
+	TEXT("die Pruefung genau das tut, was die Abkuerzung einspart. EINSCHALTEN in einer Partie mit ")
+	TEXT("GEMISCHTEN Zustaenden - kaempfende, bauende, sammelnde, tote Einheiten nebeneinander. Der ")
+	TEXT("automatische Messfall taugt dafuer NICHT: dort marschieren alle Einheiten gleich, und die ")
+	TEXT("Pruefung sah nur 2 verschiedene Tag-Kombinationen - 0 Deviations belegen dann wenig. Die ")
+	TEXT("Logzeile nennt die Zahl der Kombinationen mit; erst bei vielen ist die Annahme geprueft."),
+	ECVF_Default);
 
 void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
@@ -154,7 +229,6 @@ void UActorTransformSyncProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 	ClientEntityQuery.AddRequirement<FMassWorkerStatsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     ClientEntityQuery.RegisterWithProcessor(*this);
 }
-
 
 /**
  * @brief Checks if the processor should execute its main logic based on a dynamic tick rate.
@@ -293,45 +367,49 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     // Jetzt haengt die Zeile am Ergebnis des ECHTEN Traces: sie kommt nur, wenn der Boden
     // tatsaechlich nicht gefunden wurde - also genau im Fehlerfall, den sie beschreiben soll. Der
     // zweite Trace entfaellt ersatzlos, die Aussage bleibt dieselbe.
-    bool bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
-
-    // ================================================================================================
-    // Volumen duerfen diesen Trace nicht kapern (01.09.2026).
-    //
-    // Ein AVolume - etwa ein PCGVolume - hat objectType ECC_WorldStatic und collisionEnabled
-    // QueryOnly. Seine Kanal-Antworten stehen zwar alle auf Ignore, das hilft hier aber NICHT:
-    // LineTraceSingleByObjectType fragt nach dem OBJEKTTYP und liefert solche Koerper unabhaengig
-    // von ihren Antworten zurueck. Die Ignore-Einstellungen gelten nur fuer Kanal-Abfragen.
-    //
-    // Der Trace startet 1000 ueber der Einheit, also mitten im Volumen, und traf damit sofort -
-    // TrefferZ = StartZ, DeltaZ 1000 bis 2000, weit ueber der Schwelle. Der Treffer wurde
-    // verworfen, LastGroundLocation blieb auf 0 und die Hoehe der Einheit war EINGEFROREN. Auf
-    // ebenem Boden faellt das nicht auf; am Hang laeuft die Einheit ins Gelaende und steckt fest.
-    // Gemessen an der direkt gesteuerten CameraUnit, betroffen war aber jede Einheit im Volumen.
-    //
-    // Ein Volumen ist nie Boden. Wird eines getroffen, wird es ignoriert und erneut gesucht.
-    // ================================================================================================
-    for (int32 Versuch = 0; bBodenGefunden && Versuch < 4; ++Versuch)
+    // Volumenfilter in einer Hilfsfunktion - ein Volumen ist nie Boden, Begruendung unten.
+    auto TraceGround = [&](const FVector& TraceFrom, const FVector& TraceTo) -> bool
     {
-        AActor* GetroffenerActor = Hit.GetActor();
-        if (!IsValid(GetroffenerActor) || !GetroffenerActor->IsA(AVolume::StaticClass()))
+        bool bHit = GetWorld()->LineTraceSingleByObjectType(Hit, TraceFrom, TraceTo, ObjectParams, Params);
+        for (int32 Attempt = 0; bHit && Attempt < 4; ++Attempt)
         {
-            break;
+            AActor* HitVolumeActor = Hit.GetActor();
+            if (!IsValid(HitVolumeActor) || !HitVolumeActor->IsA(AVolume::StaticClass()))
+            {
+                break;
+            }
+            Params.AddIgnoredActor(HitVolumeActor);
+            bHit = GetWorld()->LineTraceSingleByObjectType(Hit, TraceFrom, TraceTo, ObjectParams, Params);
         }
-        Params.AddIgnoredActor(GetroffenerActor);
-        bBodenGefunden = GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params);
+        return bHit;
+    };
+
+    const bool bBodenGefunden = TraceGround(TraceStart, TraceEnd);
+
+    // [BodenPruef] Belegt, DASS die Hoehenanpassung laeuft - siehe RTS.SkmDiag.
+    // Der Aufruf dieser Funktion war zeitweise ganz verschwunden (der Diagnoseblock, der ihn mass,
+    // hat ihn beim Abbau mitgenommen). Einheiten blieben dadurch in der Luft und liefen keine
+    // Rampen mehr hoch. Diese Zeile zeigt Eingang und Ausgang nebeneinander, damit "der Aufruf
+    // steht da" nicht mit "die Hoehe wird angepasst" verwechselt wird.
+    const float BP_StartZ = InOutFinalLocation.Z;
+    if (CVarRTS_SkmDiag.GetValueOnAnyThread() != 0)
+    {
+        static double BP_LastReport = 0.0;
+        const double BP_Now = FPlatformTime::Seconds();
+        if (BP_Now - BP_LastReport > 2.0)
+        {
+            BP_LastReport = BP_Now;
+            UE_LOG(LogTemp, Warning,
+                TEXT("[BodenPruef] %s | EinheitZ=%.1f | Boden gefunden=%d TrefferZ=%.1f | Versatz=%.1f | fliegt=%d"),
+                *GetNameSafe(UnitBase), BP_StartZ, bBodenGefunden ? 1 : 0,
+                bBodenGefunden ? Hit.ImpactPoint.Z : -9999.f, HeightOffset,
+                CharFragment.bIsFlying ? 1 : 0);
+        }
     }
 
     if (!bBodenGefunden && !CharFragment.bIsFlying)
     {
         static int32 BodenDiagZaehler = 0;
-        if ((BodenDiagZaehler++ % 120) == 0)
-        {
-            UE_LOG(LogTemp, Log, TEXT("[BodenDiag] %s CurrentZ=%.1f Start=%.1f Ende=%.1f XY=(%.0f,%.0f) Treffer=0 TrefferZ=%.1f Getroffen=%s Offset=%.1f LastGround=%.1f"),
-                *UnitBase->GetName(), CurrentZ, TraceStart.Z, TraceEnd.Z, TraceStart.X, TraceStart.Y,
-                -99999.f, TEXT("-"),
-                HeightOffset, CharFragment.LastGroundLocation);
-        }
     }
 
     if (bBodenGefunden)
@@ -353,16 +431,6 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         {
             static double LetzteBodenMeldung = 0.0;
             const double JetztZeit = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-            if (JetztZeit - LetzteBodenMeldung > 1.0)
-            {
-                LetzteBodenMeldung = JetztZeit;
-                UE_LOG(LogTemp, Warning,
-                    TEXT("[BodenVerworfen] %s CurrentZ=%.0f TrefferZ=%.0f DeltaZ=%.0f Schwelle=%.0f Getroffen=%s Klasse=%s StartZ=%.0f LastGround=%.0f"),
-                    *UnitBase->GetName(), CurrentZ, Hit.ImpactPoint.Z, DeltaZ, HeightOffset + 100.f,
-                    IsValid(HitActor) ? *HitActor->GetName() : TEXT("-"),
-                    IsValid(HitActor) ? *HitActor->GetClass()->GetName() : TEXT("-"),
-                    TraceStart.Z, CharFragment.LastGroundLocation);
-            }
         }
 
         if (IsValid(HitActor) && !HitActor->IsA(AUnitBase::StaticClass()) && DeltaZ <= (HeightOffset+100.f) && !CharFragment.bIsFlying) // && DeltaZ <= HeightOffset
@@ -564,6 +632,18 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
             MassTransform.SetRotation(NewRotQuat);
         }
     }
+    if (CVarRTS_SkmDiag.GetValueOnAnyThread() != 0 && !FMath::IsNearlyEqual(BP_StartZ, InOutFinalLocation.Z, 0.01f))
+    {
+        static double BP_LastChange = 0.0;
+        const double BP_Now2 = FPlatformTime::Seconds();
+        if (BP_Now2 - BP_LastChange > 2.0)
+        {
+            BP_LastChange = BP_Now2;
+            UE_LOG(LogTemp, Warning, TEXT("[BodenPruef] %s | Hoehe angepasst: %.1f -> %.1f"),
+                *GetNameSafe(UnitBase), BP_StartZ, InOutFinalLocation.Z);
+        }
+    }
+
 }
 
 void UActorTransformSyncProcessor::RotateTowardsMovement(AUnitBase* UnitBase, const FVector& CurrentVelocity, const FMassCombatStatsFragment& Stats, const FMassAgentCharacteristicsFragment& Char, const FMassAIStateFragment& State, const FVector& CurrentActorLocation, float ActualDeltaTime, FTransform& InOutMassTransform) const
@@ -862,8 +942,31 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
     }
 }
 
+float UActorTransformSyncProcessor::CalculateActorSyncInterval() const
+{
+	// Siehe ActorSyncScaleStartUnits im Header. Der CVar-Schalter hat Vorrang (Messungen).
+	const float Override = CVarRTS_ActorSyncInterval.GetValueOnAnyThread();
+	if (Override >= 0.f)
+	{
+		return Override;
+	}
+	if (ActorSyncMaxInterval <= 0.f || ActorSyncScaleFullUnits <= ActorSyncScaleStartUnits)
+	{
+		return VisualISMActorSyncTime;
+	}
+
+	const float Ratio = FMath::Clamp(
+		float(LastFrameUnitCount - ActorSyncScaleStartUnits)
+		/ float(ActorSyncScaleFullUnits - ActorSyncScaleStartUnits), 0.f, 1.f);
+
+	return FMath::Max(VisualISMActorSyncTime, Ratio * ActorSyncMaxInterval);
+}
+
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UActorTransformSyncProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UActorTransformSyncProcessor);
+
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
 	{
 		ExecuteClient(EntityManager, Context);
@@ -902,19 +1005,124 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
         TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
         const TConstArrayView<FMassRepresentationLODFragment> LODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
 
+        // ============================================================================
+        // TAG-ABFRAGE JE CHUNK STATT JE EINHEIT  (18.09.2026)
+        //
+        // GEMESSENER NUTZEN: 0,55 ms je Bild bei 510 Einheiten. RTS.ChunkTags.MessAlt 1 misst die
+        // alte Variante an Ort und Stelle: 160,8 ms ueber 151.980 Entitaeten in 5 s. Das sind rund
+        // 2,6 % der Bildzeit im Marsch (21,10 ms) - real, aber kein grosser Posten.
+        //
+        // WARUM ES SICHER IST, obwohl Tags an 106 Stellen EINZELN vergeben werden:
+        //   1. Engine-Quelle MassEntityQuery.cpp: ForEachEntityChunk laeuft
+        //      "for (const int32 ArchetypeIndex : OrderedArchetypeIndices)" und ruft
+        //      ExecuteFunction JE ARCHETYP. Ein Chunk-Durchlauf sieht nie zwei Archetypen.
+        //   2. Tags SIND Teil des Archetyps. Defer().AddTag<T>(Entity) verschiebt die Entitaet in
+        //      einen anderen Archetyp - gemischte Tags in einem Chunk koennen nicht entstehen.
+        //   3. RTS.ChunkTags.Verify 1 verglich jede Entitaet jedes Chunks gegen DoesEntityHaveTag:
+        //      0 Deviations bei ~200.000 Vergleichen. ABER nur 2 verschiedene Tag-Kombinationen,
+        //      weil im Messfall alle Einheiten dasselbe tun - fuer sich genommen schwach.
+        //      Tragend sind 1 und 2, nicht 3.
+        //
+        // SO WIRD ES RUECKGAENGIG GEMACHT:
+        //   - diese Zeile, den Verify-Block und die zehn "const bool bChunk_..." loeschen
+        //   - jedes  bChunk_MassStateXTag  ersetzen durch
+        //       DoesEntityHaveTag(EntityManager, Entity, FMassStateXTag::StaticStruct())
+        //   - FChunkTagLookup in UnitMassTag.h kann dann ebenfalls entfallen
+        //   So sah es vorher aus:
+        //       const bool bIsIdle = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
+        //       if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
+        //   Kosten der Ruecknahme: +0,55 ms je Bild.
+        // ============================================================================
+        // Tags einmal je Chunk statt je Einheit - siehe FChunkTagLookup in UnitMassTag.h.
+
+        // Innerhalb eines Chunks teilen sich alle Entitaeten denselben Archetyp und damit
+
+        // dieselben Tags; die Abfrage je Einheit war reine Wiederholung.
+
+        int32 ChunkUnitCount = 0;
+        int32 ChunkExemptCount = 0;
+        const FChunkTagLookup ChunkTags(EntityManager, ChunkContext);
+        if (CVarRTS_VerifyChunkTags.GetValueOnAnyThread() != 0)
+        {
+        	VerifyChunkTags(EntityManager, ChunkContext, ChunkTags, {
+        		FMassStateFrozenTag::StaticStruct(), FMassStateIdleTag::StaticStruct(),
+        		FMassStateDeadTag::StaticStruct(), FMassStateAttackTag::StaticStruct(),
+        		FMassStatePauseTag::StaticStruct(), FMassStateBuildTag::StaticStruct(),
+        		FMassStateRepairTag::StaticStruct(), FMassStateResourceExtractionTag::StaticStruct(),
+        		FMassUnitYawFollowTag::StaticStruct(), FMassRotateToMouseTag::StaticStruct() });
+        }
+
+        const bool bChunk_MassRotateToMouseTag = ChunkTags.Has(FMassRotateToMouseTag::StaticStruct());
+
+        const bool bChunk_MassStateAttackTag = ChunkTags.Has(FMassStateAttackTag::StaticStruct());
+
+        const bool bChunk_MassStateBuildTag = ChunkTags.Has(FMassStateBuildTag::StaticStruct());
+
+        const bool bChunk_MassStateDeadTag = ChunkTags.Has(FMassStateDeadTag::StaticStruct());
+
+        const bool bChunk_MassStateFrozenTag = ChunkTags.Has(FMassStateFrozenTag::StaticStruct());
+
+        const bool bChunk_MassStateIdleTag = ChunkTags.Has(FMassStateIdleTag::StaticStruct());
+
+        const bool bChunk_MassStatePauseTag = ChunkTags.Has(FMassStatePauseTag::StaticStruct());
+
+        const bool bChunk_MassStateRepairTag = ChunkTags.Has(FMassStateRepairTag::StaticStruct());
+
+        const bool bChunk_MassStateResourceExtractionTag = ChunkTags.Has(FMassStateResourceExtractionTag::StaticStruct());
+
+        const bool bChunk_MassUnitYawFollowTag = ChunkTags.Has(FMassUnitYawFollowTag::StaticStruct());
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             // Mirror server: skip updates for entities not visible
             if (LODFragments[i].LOD == EMassLOD::Off) continue;
 
+            // [TagKostenDiag] Siehe RTS.ChunkTags.MessAlt.
+            if (CVarRTS_MeasureTagCost.GetValueOnAnyThread() != 0)
+            {
+                static double TC_Sum = 0.0;
+                static int32 TK_Bilder = 0;
+                static double TC_LastReport = 0.0;
+                static int32 TK_Entitaeten = 0;
+
+                const FMassEntityHandle TK_Entity = ChunkContext.GetEntity(i);
+                const double TC_Start = FPlatformTime::Seconds();
+                volatile int32 TK_Senke = 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateFrozenTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateIdleTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateDeadTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateAttackTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStatePauseTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateBuildTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateRepairTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateResourceExtractionTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassUnitYawFollowTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassRotateToMouseTag::StaticStruct()) ? 1 : 0;
+                TC_Sum += FPlatformTime::Seconds() - TC_Start;
+                ++TK_Entitaeten;
+
+                const double TC_Now = FPlatformTime::Seconds();
+                if (TC_Now - TC_LastReport > 5.0)
+                {
+                    TC_LastReport = TC_Now;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[TagKostenDiag] die ALTE Abfrage je Einheit: %.3f ms gesamt in 5 s, %d Entitaeten -> %.4f ms je 510 Einheiten"),
+                        TC_Sum * 1000.0, TK_Entitaeten,
+                        TK_Entitaeten > 0 ? (TC_Sum * 1000.0 / TK_Entitaeten) * 510.0 : 0.0);
+                    TC_Sum = 0.0; TK_Entitaeten = 0;
+                }
+            }
+
+            // GetMassActorLocation. 510 ueber den Speicher verstreute Aktorobjekte; genau das
+            // verhindert Parallelitaet. Sitzt hier die Zeit, ist Aufteilen der Weg.
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
             
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
+            if (bChunk_MassStateFrozenTag) continue;
             
-            const bool bIsIdle = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
+            const bool bIsIdle = bChunk_MassStateIdleTag;
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
             const FQuat CurrentRotation = Actor->GetActorRotation().Quaternion();
             FVector FinalLocation = MassTransform.GetLocation();
@@ -922,7 +1130,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             // Determine the actor's current location once
             FVector CurrentActorLocation = UnitBase->GetMassActorLocation();
 
-            const bool bIsDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());
+            const bool bIsDead = bChunk_MassStateDeadTag;
 
             if (bIsDead)
             {
@@ -931,21 +1139,21 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             }
 
             // 1. Adjust rotation based on state (moving vs. attacking vs. working)
-            const bool bIsBuilding = DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct());
-            const bool bIsRepairing = DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
-            const bool bIsExtracting = DoesEntityHaveTag(EntityManager, Entity, FMassStateResourceExtractionTag::StaticStruct());
-            const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()) ||
+            const bool bIsBuilding = bChunk_MassStateBuildTag;
+            const bool bIsRepairing = bChunk_MassStateRepairTag;
+            const bool bIsExtracting = bChunk_MassStateResourceExtractionTag;
+            const bool bIsAttackingOrPaused = bChunk_MassStateAttackTag ||
+                                              bChunk_MassStatePauseTag ||
                                               bIsBuilding || bIsRepairing || bIsExtracting;
 
-            const bool bIsIdleHold = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) && StateList[i].HoldPosition;
+            const bool bIsIdleHold = bChunk_MassStateIdleTag && StateList[i].HoldPosition;
             const bool bHasValidTarget = TargetList[i].bHasValidTarget && EntityManager.IsEntityActive(TargetList[i].TargetEntity);
             const bool bShouldRotateToTarget = bIsAttackingOrPaused || (bIsIdleHold && bHasValidTarget);
 
             const bool bRotatesToMovementWhileAttacking = StatsList[i].bCanMoveWhileAttacking && StatsList[i].bRotatesToMovementIfMoveWhileAttacking;
             const bool bIsMoving = !VelocityList[i].Value.IsNearlyZero(50.f);
 
-            const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
+            const bool bIsYawFollowing = bChunk_MassUnitYawFollowTag;
             
             const bool bIsWorking = bIsBuilding || bIsRepairing || bIsExtracting;
 
@@ -960,7 +1168,7 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             // zusaetzlich FMassStopWhileAimingTag und ist weiter ganz ausgeschlossen.
             // Original: if (bIsDead || (bIsYawFollowing && !bIsWorking))
             // ============================================================================
-            const bool bLuxAimingAtMouse = DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct());
+            const bool bLuxAimingAtMouse = bChunk_MassRotateToMouseTag;
 
             if (bIsDead || (bIsYawFollowing && !bIsWorking) || bLuxAimingAtMouse)
             {
@@ -1004,15 +1212,25 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
                 // beats turning toward an unrelated friendly target.
                 if (!bRotatedToWorkTarget && !bIsExtracting)
                 {
-                    const bool bPreferEnemy = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+                    const bool bPreferEnemy = bChunk_MassStateAttackTag ||
+                                              bChunk_MassStatePauseTag;
                     RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], FinalLocation, ActualDeltaTime, MassTransform, bPreferEnemy);
                 }
             }
 
             // 2. Adjust height for ground snapping or flying
+            //
+            // DIESER AUFRUF HAT GEFEHLT (wiederhergestellt 18.09.2026) - zum ZWEITEN Mal derselbe
+            // Fehler: er stand im Rumpf des [BodenDiag]-Blocks, der ihn gemessen hat, und meine
+            // klammerzaehlende Entfernung der Diagnose hat ihn mitgenommen. Vorher war schon
+            // DispatchPendingUpdates auf dieselbe Weise verschwunden.
+            //
+            // WIE SICH DAS GEZEIGT HAT: Einheiten, die in der Luft platziert wurden, fielen nicht
+            // mehr auf den Boden; niemand lief mehr Rampen hoch; Flugeinheiten fuehrten ihre Hoehe
+            // nicht mehr ueber dem Gelaende nach. Ohne diesen Aufruf gibt es auf dem Server
+            // ueberhaupt keine Hoehenanpassung.
             HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation, bIsDead);
-            
+
             // 3. Apply final location to the AUTHORITATIVE Mass fragment (exact — used by avoidance/gameplay/selection).
             MassTransform.SetLocation(FinalLocation);
 
@@ -1041,14 +1259,22 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             CharList[i].PositionedTransform = VisualXf;
             CharList[i].bTransformDirty |= (bLocationChanged || bRotationChanged || bVisualMoved);
 
-            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= VisualISMActorSyncTime;
+            // Siehe RTS.ActorSync.Interval: negativ = Wert aus dem Prozessor (Vorgabe 0 = jedes Bild).
+            const float ActorSyncInterval = CalculateActorSyncInterval();
+            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= ActorSyncInterval;
+
+            // Dieselbe Ausnahme wie im Server-Zweig - der Client zeichnet dieselben Ringe,
+            // Lebensbalken und angehefteten Effekte und braucht deshalb dieselbe Regel.
+            const bool bNeedsSyncEveryFrame =
+                UnitBase->bUseSkeletalMovement || UnitBase->HasActiveAttachedEffect();
+            if (bNeedsSyncEveryFrame) { ++ChunkExemptCount; }
 
             if (bLocationChanged || bRotationChanged || bVisualMoved)
             {
-                if (UnitBase->bUseSkeletalMovement || bNeedsActorSync)
+                if (bNeedsSyncEveryFrame || bNeedsActorSync)
                 {
                     PendingActorUpdates.Emplace(Actor, VisualXf, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
-                    if (!UnitBase->bUseSkeletalMovement)
+                    if (!bNeedsSyncEveryFrame)
                     {
                         CharList[i].LastActorSyncTime = CurrentTime;
                     }
@@ -1059,7 +1285,6 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
     DispatchPendingUpdates(MoveTemp(PendingActorUpdates));
 }
-
 
 void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
@@ -1088,11 +1313,70 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
         TArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         const TConstArrayView<FMassRepresentationLODFragment> LODFragments = ChunkContext.GetFragmentView<FMassRepresentationLODFragment>();
 
+        // Tags einmal je Chunk statt je Einheit - siehe GetChunkComposition in UnitMassTag.h.
+
+        // Innerhalb eines Chunks teilen sich alle Entitaeten denselben Archetyp und damit
+
+        // dieselben Tags; die Abfrage je Einheit war reine Wiederholung.
+
+        int32 ChunkUnitCount = 0;
+        int32 ChunkExemptCount = 0;
+        const FChunkTagLookup ChunkTags(EntityManager, ChunkContext);
+        if (CVarRTS_VerifyChunkTags.GetValueOnAnyThread() != 0)
+        {
+        	VerifyChunkTags(EntityManager, ChunkContext, ChunkTags, {
+        		FMassStateFrozenTag::StaticStruct(), FMassStateIdleTag::StaticStruct(),
+        		FMassStateDeadTag::StaticStruct(), FMassStateAttackTag::StaticStruct(),
+        		FMassStatePauseTag::StaticStruct(), FMassStateBuildTag::StaticStruct(),
+        		FMassStateRepairTag::StaticStruct(), FMassStateResourceExtractionTag::StaticStruct(),
+        		FMassUnitYawFollowTag::StaticStruct(), FMassRotateToMouseTag::StaticStruct() });
+        }
+
+        const bool bChunk_MassStateDeadTag = ChunkTags.Has(FMassStateDeadTag::StaticStruct());
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             // Only update if visible
             if (LODFragments[i].LOD == EMassLOD::Off) continue;
 
+            // [TagKostenDiag] Siehe RTS.ChunkTags.MessAlt.
+            if (CVarRTS_MeasureTagCost.GetValueOnAnyThread() != 0)
+            {
+                static double TC_Sum = 0.0;
+                static int32 TK_Bilder = 0;
+                static double TC_LastReport = 0.0;
+                static int32 TK_Entitaeten = 0;
+
+                const FMassEntityHandle TK_Entity = ChunkContext.GetEntity(i);
+                const double TC_Start = FPlatformTime::Seconds();
+                volatile int32 TK_Senke = 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateFrozenTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateIdleTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateDeadTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateAttackTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStatePauseTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateBuildTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateRepairTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateResourceExtractionTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassUnitYawFollowTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassRotateToMouseTag::StaticStruct()) ? 1 : 0;
+                TC_Sum += FPlatformTime::Seconds() - TC_Start;
+                ++TK_Entitaeten;
+
+                const double TC_Now = FPlatformTime::Seconds();
+                if (TC_Now - TC_LastReport > 5.0)
+                {
+                    TC_LastReport = TC_Now;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[TagKostenDiag] die ALTE Abfrage je Einheit: %.3f ms gesamt in 5 s, %d Entitaeten -> %.4f ms je 510 Einheiten"),
+                        TC_Sum * 1000.0, TK_Entitaeten,
+                        TK_Entitaeten > 0 ? (TC_Sum * 1000.0 / TK_Entitaeten) * 510.0 : 0.0);
+                    TC_Sum = 0.0; TK_Entitaeten = 0;
+                }
+            }
+
+            // GetMassActorLocation. 510 ueber den Speicher verstreute Aktorobjekte; genau das
+            // verhindert Parallelitaet. Sitzt hier die Zeit, ist Aufteilen der Weg.
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
@@ -1105,7 +1389,7 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
             const FVector CurrentActorLocation = UnitBase->GetMassActorLocation();
 
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            const bool bIsDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());
+            const bool bIsDead = bChunk_MassStateDeadTag;
 
             if (bIsDead)
             {
@@ -1124,7 +1408,11 @@ void UActorTransformSyncProcessor::ExecuteRepClient(FMassEntityManager& EntityMa
 }
 
 void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
-{   /*
+{
+    // Bildweite Zaehler. Muessen AUSSERHALB der Chunk-Schleife liegen: die Schleife laeuft je
+    // Chunk, und ein Chunk kennt nur seine eigenen ~25 Entitaeten.
+    int32 FrameUnitCount = 0;
+    int32 FrameExemptCount = 0;   /*
     const float FrameDeltaTime = Context.GetDeltaTimeSeconds();
     
     float ActualDeltaTime = 0.0f;
@@ -1140,7 +1428,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
     PendingActorUpdates.Reserve(EntityQuery.GetNumMatchingEntities());
     
     EntityQuery.ForEachEntityChunk(Context,
-        [this, &EntityManager, ActualDeltaTime, CurrentTime, &PendingActorUpdates, bIsClient](FMassExecutionContext& ChunkContext)
+        [this, &FrameUnitCount, &FrameExemptCount, &EntityManager, ActualDeltaTime, CurrentTime, &PendingActorUpdates, bIsClient](FMassExecutionContext& ChunkContext)
     {
         const int32 NumEntities = ChunkContext.GetNumEntities();
             
@@ -1152,16 +1440,93 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
         const TConstArrayView<FMassAIStateFragment> StateList = ChunkContext.GetFragmentView<FMassAIStateFragment>();
         TArrayView<FMassAITargetFragment> TargetList = ChunkContext.GetMutableFragmentView<FMassAITargetFragment>();
 
+        // Tags einmal je Chunk statt je Einheit - siehe GetChunkComposition in UnitMassTag.h.
+
+        // Innerhalb eines Chunks teilen sich alle Entitaeten denselben Archetyp und damit
+
+        // dieselben Tags; die Abfrage je Einheit war reine Wiederholung.
+
+        int32 ChunkUnitCount = 0;
+        int32 ChunkExemptCount = 0;
+        const FChunkTagLookup ChunkTags(EntityManager, ChunkContext);
+        if (CVarRTS_VerifyChunkTags.GetValueOnAnyThread() != 0)
+        {
+        	VerifyChunkTags(EntityManager, ChunkContext, ChunkTags, {
+        		FMassStateFrozenTag::StaticStruct(), FMassStateIdleTag::StaticStruct(),
+        		FMassStateDeadTag::StaticStruct(), FMassStateAttackTag::StaticStruct(),
+        		FMassStatePauseTag::StaticStruct(), FMassStateBuildTag::StaticStruct(),
+        		FMassStateRepairTag::StaticStruct(), FMassStateResourceExtractionTag::StaticStruct(),
+        		FMassUnitYawFollowTag::StaticStruct(), FMassRotateToMouseTag::StaticStruct() });
+        }
+
+        const bool bChunk_MassRotateToMouseTag = ChunkTags.Has(FMassRotateToMouseTag::StaticStruct());
+
+        const bool bChunk_MassStateAttackTag = ChunkTags.Has(FMassStateAttackTag::StaticStruct());
+
+        const bool bChunk_MassStateBuildTag = ChunkTags.Has(FMassStateBuildTag::StaticStruct());
+
+        const bool bChunk_MassStateDeadTag = ChunkTags.Has(FMassStateDeadTag::StaticStruct());
+
+        const bool bChunk_MassStateFrozenTag = ChunkTags.Has(FMassStateFrozenTag::StaticStruct());
+
+        const bool bChunk_MassStateIdleTag = ChunkTags.Has(FMassStateIdleTag::StaticStruct());
+
+        const bool bChunk_MassStatePauseTag = ChunkTags.Has(FMassStatePauseTag::StaticStruct());
+
+        const bool bChunk_MassStateRepairTag = ChunkTags.Has(FMassStateRepairTag::StaticStruct());
+
+        const bool bChunk_MassStateResourceExtractionTag = ChunkTags.Has(FMassStateResourceExtractionTag::StaticStruct());
+
+        const bool bChunk_MassUnitYawFollowTag = ChunkTags.Has(FMassUnitYawFollowTag::StaticStruct());
+
         for (int32 i = 0; i < NumEntities; ++i)
         {
             
+            // [TagKostenDiag] Siehe RTS.ChunkTags.MessAlt.
+            if (CVarRTS_MeasureTagCost.GetValueOnAnyThread() != 0)
+            {
+                static double TC_Sum = 0.0;
+                static int32 TK_Bilder = 0;
+                static double TC_LastReport = 0.0;
+                static int32 TK_Entitaeten = 0;
+
+                const FMassEntityHandle TK_Entity = ChunkContext.GetEntity(i);
+                const double TC_Start = FPlatformTime::Seconds();
+                volatile int32 TK_Senke = 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateFrozenTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateIdleTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateDeadTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateAttackTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStatePauseTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateBuildTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateRepairTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassStateResourceExtractionTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassUnitYawFollowTag::StaticStruct()) ? 1 : 0;
+                TK_Senke += DoesEntityHaveTag(EntityManager, TK_Entity, FMassRotateToMouseTag::StaticStruct()) ? 1 : 0;
+                TC_Sum += FPlatformTime::Seconds() - TC_Start;
+                ++TK_Entitaeten;
+
+                const double TC_Now = FPlatformTime::Seconds();
+                if (TC_Now - TC_LastReport > 5.0)
+                {
+                    TC_LastReport = TC_Now;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[TagKostenDiag] die ALTE Abfrage je Einheit: %.3f ms gesamt in 5 s, %d Entitaeten -> %.4f ms je 510 Einheiten"),
+                        TC_Sum * 1000.0, TK_Entitaeten,
+                        TK_Entitaeten > 0 ? (TC_Sum * 1000.0 / TK_Entitaeten) * 510.0 : 0.0);
+                    TC_Sum = 0.0; TK_Entitaeten = 0;
+                }
+            }
+
+            // GetMassActorLocation. 510 ueber den Speicher verstreute Aktorobjekte; genau das
+            // verhindert Parallelitaet. Sitzt hier die Zeit, ist Aufteilen der Weg.
             AActor* Actor = ActorFragments[i].GetMutable();
             AUnitBase* UnitBase = Cast<AUnitBase>(Actor);
             if (!IsValid(UnitBase)) continue;
             const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
-            if (DoesEntityHaveTag(EntityManager, Entity, FMassStateFrozenTag::StaticStruct())) continue;
+            if (bChunk_MassStateFrozenTag) continue;
 
-            const bool bIsIdle = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
+            const bool bIsIdle = bChunk_MassStateIdleTag;
             FTransform& MassTransform = TransformFragments[i].GetMutableTransform();
             const FQuat CurrentRotation = Actor->GetActorRotation().Quaternion();
             FVector FinalLocation = MassTransform.GetLocation();
@@ -1169,7 +1534,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             // Determine the actor's current location once, as it's used by multiple functions
             FVector CurrentActorLocation = UnitBase->GetMassActorLocation();
 
-            const bool bIsDead = DoesEntityHaveTag(EntityManager, Entity, FMassStateDeadTag::StaticStruct());
+            const bool bIsDead = bChunk_MassStateDeadTag;
 
             if (bIsDead)
             {
@@ -1178,21 +1543,21 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             }
 
             // 1. Adjust rotation based on state (moving vs. attacking vs. working)
-            const bool bIsBuilding = DoesEntityHaveTag(EntityManager, Entity, FMassStateBuildTag::StaticStruct());
-            const bool bIsRepairing = DoesEntityHaveTag(EntityManager, Entity, FMassStateRepairTag::StaticStruct());
-            const bool bIsExtracting = DoesEntityHaveTag(EntityManager, Entity, FMassStateResourceExtractionTag::StaticStruct());
-            const bool bIsAttackingOrPaused = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()) ||
+            const bool bIsBuilding = bChunk_MassStateBuildTag;
+            const bool bIsRepairing = bChunk_MassStateRepairTag;
+            const bool bIsExtracting = bChunk_MassStateResourceExtractionTag;
+            const bool bIsAttackingOrPaused = bChunk_MassStateAttackTag ||
+                                              bChunk_MassStatePauseTag ||
                                               bIsBuilding || bIsRepairing || bIsExtracting;
 
-            const bool bIsIdleHold = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct()) && StateList[i].HoldPosition;
+            const bool bIsIdleHold = bChunk_MassStateIdleTag && StateList[i].HoldPosition;
             const bool bHasValidTarget = TargetList[i].bHasValidTarget && EntityManager.IsEntityActive(TargetList[i].TargetEntity);
             const bool bShouldRotateToTarget = bIsAttackingOrPaused || (bIsIdleHold && bHasValidTarget);
 
             const bool bRotatesToMovementWhileAttacking = StatsList[i].bCanMoveWhileAttacking && StatsList[i].bRotatesToMovementIfMoveWhileAttacking;
             const bool bIsMoving = !VelocityList[i].Value.IsNearlyZero(50.f);
 
-            const bool bIsYawFollowing = DoesEntityHaveTag(EntityManager, Entity, FMassUnitYawFollowTag::StaticStruct());
+            const bool bIsYawFollowing = bChunk_MassUnitYawFollowTag;
             
             const bool bIsWorking = bIsBuilding || bIsRepairing || bIsExtracting;
 
@@ -1207,7 +1572,7 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
             // zusaetzlich FMassStopWhileAimingTag und ist weiter ganz ausgeschlossen.
             // Original: if (bIsDead || (bIsYawFollowing && !bIsWorking))
             // ============================================================================
-            const bool bLuxAimingAtMouse = DoesEntityHaveTag(EntityManager, Entity, FMassRotateToMouseTag::StaticStruct());
+            const bool bLuxAimingAtMouse = bChunk_MassRotateToMouseTag;
 
             if (bIsDead || (bIsYawFollowing && !bIsWorking) || bLuxAimingAtMouse)
             {
@@ -1252,15 +1617,25 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                 // beats turning toward an unrelated friendly target.
                 if (!bRotatedToWorkTarget && !bIsExtracting)
                 {
-                    const bool bPreferEnemy = DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
-                                              DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct());
+                    const bool bPreferEnemy = bChunk_MassStateAttackTag ||
+                                              bChunk_MassStatePauseTag;
                     RotateTowardsTarget(UnitBase, EntityManager, TargetList[i], StatsList[i], CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, bPreferEnemy);
                 }
             }
 
             // 2. Adjust height for ground snapping or flying
+            //
+            // DIESER AUFRUF HAT GEFEHLT (wiederhergestellt 18.09.2026) - zum ZWEITEN Mal derselbe
+            // Fehler: er stand im Rumpf des [BodenDiag]-Blocks, der ihn gemessen hat, und meine
+            // klammerzaehlende Entfernung der Diagnose hat ihn mitgenommen. Vorher war schon
+            // DispatchPendingUpdates auf dieselbe Weise verschwunden.
+            //
+            // WIE SICH DAS GEZEIGT HAT: Einheiten, die in der Luft platziert wurden, fielen nicht
+            // mehr auf den Boden; niemand lief mehr Rampen hoch; Flugeinheiten fuehrten ihre Hoehe
+            // nicht mehr ueber dem Gelaende nach. Ohne diesen Aufruf gibt es auf dem Server
+            // ueberhaupt keine Hoehenanpassung.
             HandleGroundAndHeight(UnitBase, CharList[i], CurrentActorLocation, ActualDeltaTime, MassTransform, FinalLocation, bIsDead);
-            
+
             // 3. Apply final location and cache the result
             MassTransform.SetLocation(FinalLocation);
 
@@ -1286,23 +1661,78 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
                 //UE_LOG(LogTemp, Error, TEXT("Server FinalLocation %s"), *FinalLocation.ToString());
             }
 
-            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= VisualISMActorSyncTime;
+            // Siehe RTS.ActorSync.Interval: negativ = Wert aus dem Prozessor (Vorgabe 0 = jedes Bild).
+            const float ActorSyncInterval = CalculateActorSyncInterval();
+            const bool bNeedsActorSync = (CurrentTime - CharList[i].LastActorSyncTime) >= ActorSyncInterval;
+
+            // Siehe die ausfuehrliche Begruendung im Server-Zweig weiter oben: Skelett-Einheiten
+            // zeichnen sich ueber den Aktor, angeheftete Niagara-Effekte werden vom Aktor
+            // mitgezogen - beide duerfen nicht gedrosselt werden.
+            const bool bNeedsSyncEveryFrame =
+                UnitBase->bUseSkeletalMovement || UnitBase->HasActiveAttachedEffect();
+
+            // [SkmDiag] Siehe RTS.SkmDiag.
+            if (UnitBase->bUseSkeletalMovement && CVarRTS_SkmDiag.GetValueOnAnyThread() != 0)
+            {
+                static double SD_LastReport = 0.0;
+                const double SD_Now = FPlatformTime::Seconds();
+                if (SD_Now - SD_LastReport > 1.0)
+                {
+                    SD_LastReport = SD_Now;
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[SkmDiag] %s | MassZiel=%s | Vorher=%s | Aktor=%s | LocChanged=%d RotChanged=%d JedesBild=%d NeedsSync=%d Intervall=%.3f"),
+                        *GetNameSafe(UnitBase), *FinalLocation.ToCompactString(),
+                        *PrevVisualLocation.ToCompactString(), *CurrentActorLocation.ToCompactString(),
+                        bLocationChanged ? 1 : 0, bRotationChanged ? 1 : 0,
+                        bNeedsSyncEveryFrame ? 1 : 0, bNeedsActorSync ? 1 : 0, ActorSyncInterval);
+                }
+            }
 
             if (bLocationChanged || bRotationChanged)
             {
-                if (UnitBase->bUseSkeletalMovement || bNeedsActorSync)
+                if (bNeedsSyncEveryFrame || bNeedsActorSync)
                 {
                     PendingActorUpdates.Emplace(Actor, MassTransform, UnitBase->bUseSkeletalMovement, UnitBase->InstanceIndex);
-                    if (!UnitBase->bUseSkeletalMovement)
+                    if (!bNeedsSyncEveryFrame)
                     {
                         CharList[i].LastActorSyncTime = CurrentTime;
                     }
                 }
             }
-            
+            ++ChunkUnitCount;
         }
+
+        // AUFSUMMIEREN, NICHT MAXIMUM BILDEN.
+        //
+        // Hier stand FMath::Max(LastFrameUnitCount, ChunkUnitCount). Das war falsch: die
+        // Schleife laeuft JE CHUNK, und ein Chunk fasst rund 25 Entitaeten. Das Maximum ueber die
+        // Chunks ist also die groesste CHUNKGROESSE, nicht die Armeegroesse - gemessen 25 statt
+        // 510. Damit lag der Wert dauerhaft unter ActorSyncScaleStartUnits (150), die Kurve gab
+        // Intervall 0,000 s zurueck und die Drosselung war nie aktiv. Die Messung sah aus wie
+        // "die Drosselung bringt nichts", obwohl sie schlicht nicht lief.
+        FrameUnitCount += ChunkUnitCount;
+        FrameExemptCount += ChunkExemptCount;
     });
 
-    // 5. Asynchronously dispatch all queued updates to the game thread
+    // Erst JETZT steht die Armeegroesse fest - sie ist die Grundlage der Taktung im naechsten Bild.
+    LastFrameUnitCount = FrameUnitCount;
+
+    // DIESER AUFRUF HAT GEFEHLT (wiederhergestellt 18.09.2026).
+    //
+    // Er stand im Rumpf des [DispatchDiag]-Blocks, der ihn gemessen hat. Beim Abbau der Diagnose
+    // hat meine klammerzaehlende Entfernung den GANZEN Block genommen - samt Aufruf. Der Compiler
+    // konnte das nicht merken, es war weiterhin gueltiger Code.
+    //
+    // WIE SICH DAS GEZEIGT HAT: nur Einheiten mit bUseSkeletalMovement == true blieben stehen.
+    // ISM-Einheiten werden ueber die ISM-Instanz gezeichnet, die UMassUnitPlacementProcessor
+    // unabhaengig davon aktualisiert - ihr Aktor durfte also stehenbleiben, ohne dass es auffiel.
+    // Bei SKM IST der Aktor das Sichtbare.
+    //
+    // WAS DIE URSACHE BELEGT HAT: die Zeile [SkmDiag] zeigte MassZiel und Vorher sauber wandern,
+    // LocChanged=1, NeedsSync=1 - und den Aktor unveraendert auf der Startposition. Damit war
+    // ausgeschlossen, dass es an der Mass-Simulation, an der Drosselung oder am Befehlspfad lag.
+    //
+    // LEHRE: eine Messung, die ihren Messgegenstand UMSCHLIESST, darf nicht als Block entfernt
+    // werden. Vor dem Abbau pruefen, ob im Rumpf echte Arbeit steht.
     DispatchPendingUpdates(MoveTemp(PendingActorUpdates));
 }
