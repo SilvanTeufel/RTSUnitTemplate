@@ -15,6 +15,7 @@
 #include "Actors/Waypoint.h"      // Für Waypoint-Interaktion (falls noch nötig)
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UPatrolRandomStateProcessor::UPatrolRandomStateProcessor(): EntityQuery()
 {
@@ -59,6 +60,10 @@ void UPatrolRandomStateProcessor::InitializeInternal(UObject& Owner, const TShar
 
 void UPatrolRandomStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UPatrolRandomStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UPatrolRandomStateProcessor);
+
     // --- Throttling Check ---
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)

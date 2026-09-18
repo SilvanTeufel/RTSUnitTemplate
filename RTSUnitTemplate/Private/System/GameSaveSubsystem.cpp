@@ -121,8 +121,8 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
         // Zustand speichern
         Data.UnitState = Unit->GetUnitState();
         Data.UnitStatePlaceholder = Unit->UnitStatePlaceholder;
-        Data.Location = Unit->GetActorLocation();
-        Data.Rotation = Unit->GetActorRotation();
+        Data.Location = Unit->GetMassActorLocation();
+        Data.Rotation = Unit->GetMassActorRotation();
 
         // Wenn ALevelUnit: UnitIndex, Level- und Attributsdaten direkt mitspeichern
         if (ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit))

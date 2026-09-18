@@ -9,6 +9,7 @@
 #include "Async/Async.h"
 #include "MassActorSubsystem.h"
 #include "MassEntitySubsystem.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UCastingFallBackProcessor::UCastingFallBackProcessor()
 {
@@ -42,6 +43,10 @@ void UCastingFallBackProcessor::InitializeInternal(UObject& Owner, const TShared
 
 void UCastingFallBackProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UCastingFallBackProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UCastingFallBackProcessor);
+
     const UWorld* World = EntityManager.GetWorld();
     if (!EntityQuery.IsInitialized() || !World || World->GetNetMode() == NM_Client)
     {

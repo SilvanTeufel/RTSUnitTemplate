@@ -585,7 +585,8 @@ void AMinimapActor::CaptureMapTopography()
         CleanupFunction
     );
 
-    UE_LOG(LogTemp, Log, TEXT("Minimap topography safely updated (Async Copy)."));
+    // Belegzeile entfernt (18.09.2026): kam im normalen Spiel viermal je 90 s und gehoerte damit
+    // zum Lograuschen. Der Vorgang selbst ist unveraendert.
 }
 
 void AMinimapActor::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

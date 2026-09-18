@@ -244,8 +244,8 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{
 								FTransform& Current = TransformFrag->GetMutableTransform();
-								Current.SetTranslation(Unit->GetActorLocation());
-								Current.SetRotation(Unit->GetActorRotation().Quaternion());
+								Current.SetTranslation(Unit->GetMassActorLocation());
+								Current.SetRotation(Unit->GetMassActorRotation().Quaternion());
 								Current.SetScale3D(Unit->GetActorScale3D());
 
 								if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
@@ -622,8 +622,8 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{
 								FTransform& Current = TransformFrag->GetMutableTransform();
-								Current.SetTranslation(Unit->GetActorLocation());
-								Current.SetRotation(Unit->GetActorRotation().Quaternion());
+								Current.SetTranslation(Unit->GetMassActorLocation());
+								Current.SetRotation(Unit->GetMassActorRotation().Quaternion());
 								Current.SetScale3D(Unit->GetActorScale3D());
 
 								if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity))
@@ -1050,12 +1050,12 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 
 	for(int Count = 0; Count < ProjectileCount; Count++){
 		int  MultiAngle = (Count == 0) ? 0 : (Count % 2 == 0 ? -1 : 1);
-		FVector ShootDirection = UKismetMathLibrary::GetDirectionUnitVector(ShootingUnit->GetActorLocation(), Aim);
+		FVector ShootDirection = UKismetMathLibrary::GetDirectionUnitVector(ShootingUnit->GetMassActorLocation(), Aim);
 		FVector ShootOffset = FRotator(0.f,MultiAngle*90.f,0.f).RotateVector(ShootDirection);
 		
 		FVector LocationToShoot = Aim+ShootOffset*Spread;
 		
-		LocationToShoot.Z += ShootingUnit->GetActorLocation().Z;
+		LocationToShoot.Z += ShootingUnit->GetMassActorLocation().Z;
 		LocationToShoot.Z += ZOffset;
 		
 		if(ShootingUnit)
@@ -1063,7 +1063,7 @@ void UGameplayAbilityBase::SpawnProjectileFromClass(FVector Aim, AActor* Attacke
 			FTransform Transform;
 			Transform.SetLocation(ShootingUnit->GetProjectileSpawnLocation());
 
-			FVector Direction = (LocationToShoot - Transform.GetLocation()).GetSafeNormal(); // Target->GetActorLocation()
+			FVector Direction = (LocationToShoot - Transform.GetLocation()).GetSafeNormal(); // Target->GetMassActorLocation()
 			FRotator InitialRotation = Direction.Rotation() + ShootingUnit->ProjectileRotationOffset;
 			
 			Transform.SetRotation(FQuat(InitialRotation));

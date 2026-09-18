@@ -10,6 +10,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/CapsuleComponent.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 static void SpawnUnitsForEffectArea(FMassExecutionContext& Ctx, AEffectArea& Area, const FVector& SpawnCenter, const FEffectAreaImpactFragment& Impact)
 {
@@ -132,6 +133,10 @@ void UMassEffectAreaImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 
 void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassEffectAreaImpactProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassEffectAreaImpactProcessor);
+
 	TArray<FMassEntityHandle> UnitEntities;
 	TArray<FVector> UnitLocations;
 	TArray<int32> UnitTeams;

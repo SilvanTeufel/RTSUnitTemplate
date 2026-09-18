@@ -6,6 +6,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UIsAttackedStateProcessor::UIsAttackedStateProcessor(): EntityQuery()
 {
@@ -40,6 +41,10 @@ void UIsAttackedStateProcessor::InitializeInternal(UObject& Owner, const TShared
 
 void UIsAttackedStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UIsAttackedStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UIsAttackedStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

@@ -8,6 +8,7 @@
 #include "Avoidance/MassAvoidanceFragments.h"
 #include "Mass/UnitMassTag.h"
 #include "NavigationSystem.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 
 namespace
@@ -68,6 +69,10 @@ void UDynamicObstacleRegProcessor::ConfigureQueries(const TSharedRef<FMassEntity
 
 void UDynamicObstacleRegProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UDynamicObstacleRegProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UDynamicObstacleRegProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

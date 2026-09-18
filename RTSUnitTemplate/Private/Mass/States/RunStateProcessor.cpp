@@ -18,6 +18,7 @@
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 URunStateProcessor::URunStateProcessor(): EntityQuery()
 {
@@ -77,6 +78,10 @@ void URunStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FMa
 
 void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/URunStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(URunStateProcessor);
+
  TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
@@ -126,10 +131,6 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             const FMassCombatStatsFragment& Stats = StatsList[i];
             const FMassAITargetFragment& TargetFrag = TargetList[i];
 
-            // === BatchDiag (TEMP): commanded unit being processed in Run. Watch Det flag + whether it re-engages below. ===
-            RTS_BatchDiagLog(TEXT("RUN-CLIENT"), World, EntityManager, Entity,
-                Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
-                bHasPredList ? &PredictionList[i] : nullptr);
 
             if (StateFrag.SwitchingStateClient)
             {
@@ -269,10 +270,6 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                     {
                         if (!StateFrag.SwitchingStateClient)
                         {
-                            // === BatchDiag (TEMP): RUN re-engages a commanded unit back into Chase (Detect + valid target survived). ===
-                            RTS_BatchDiagLog(TEXT("RUN-REENGAGE->Chase"), World, EntityManager, Entity,
-                                Cast<AUnitBase>(ActorList[i].Get()) ? Cast<AUnitBase>(ActorList[i].Get())->UnitIndex : -1,
-                                bHasPredList ? &PredictionList[i] : nullptr);
                             SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                         }
                         continue;

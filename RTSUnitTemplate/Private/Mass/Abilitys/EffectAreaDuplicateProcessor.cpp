@@ -15,6 +15,7 @@
 #include "CollisionQueryParams.h"
 #include "Engine/HitResult.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassEffectAreaDuplicateProcessor::UMassEffectAreaDuplicateProcessor()
 {
@@ -61,6 +62,10 @@ void UMassEffectAreaDuplicateProcessor::ConfigureQueries(const TSharedRef<FMassE
 
 void UMassEffectAreaDuplicateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassEffectAreaDuplicateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassEffectAreaDuplicateProcessor);
+
 	const float DeltaTime = Context.GetDeltaTimeSeconds();
 	ProcessingTime += DeltaTime;
 

@@ -17,6 +17,7 @@
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // No Actor includes, no Movement includes needed
 
@@ -83,6 +84,10 @@ void UBuildStateProcessor::BeginDestroy()
 
 void UBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UBuildStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UBuildStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

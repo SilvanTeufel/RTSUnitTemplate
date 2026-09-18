@@ -9,6 +9,7 @@
 #include "MassRepresentationFragments.h"
 #include "GameFramework/Actor.h"
 #include "Characters/Unit/UnitBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassUnitPlacementProcessor::UMassUnitPlacementProcessor() {
     ExecutionFlags = (int32)EProcessorExecutionFlags::All;
@@ -40,6 +41,10 @@ struct FISMInstanceUpdate
 };
 
 void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassUnitPlacementProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassUnitPlacementProcessor);
+
     // Batch-Update: collect updates per ISM component instead of calling UpdateInstanceTransform individually
     TMap<UInstancedStaticMeshComponent*, TArray<FISMInstanceUpdate>> BatchedUpdates;
 

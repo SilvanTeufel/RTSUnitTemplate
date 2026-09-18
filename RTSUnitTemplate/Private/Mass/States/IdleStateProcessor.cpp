@@ -16,6 +16,7 @@
 #include "NavigationSystem.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Obstacle.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // ...
 
@@ -77,6 +78,10 @@ void UIdleStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<FM
 
 void UIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UIdleStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UIdleStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

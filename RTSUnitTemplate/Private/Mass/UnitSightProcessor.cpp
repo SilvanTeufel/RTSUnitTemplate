@@ -11,6 +11,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/PerformanceUnit.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UUnitSightProcessor::UUnitSightProcessor(): EntityQuery()
 {
@@ -120,6 +121,10 @@ void UUnitSightProcessor::Execute(
     FMassEntityManager&   EntityManager,
     FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitSightProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitSightProcessor);
+
         ExecuteServer(EntityManager, Context);
 }
 

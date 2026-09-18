@@ -29,6 +29,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // Forward-declare slice control API implemented in MassUnitReplicatorBase.cpp
 namespace ReplicationSliceControl
@@ -228,6 +229,10 @@ void UServerReplicationKickProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 
 void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UServerReplicationKickProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UServerReplicationKickProcessor);
+
 	if (bSkipReplication) return;
 
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();

@@ -21,6 +21,7 @@
 #include "GameModes/ResourceGameMode.h"
 #include "Core/RTSUnitUtils.h"
 #include "HAL/IConsoleManager.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 using namespace RTSUnitUtils;
 
 // When a unit is FOLLOWING (FollowUnit set) the client must steer toward the replicated formation position
@@ -67,6 +68,10 @@ void UUnitActorToFragmentSyncProcessor::ConfigureQueries(const TSharedRef<FMassE
 
 void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitActorToFragmentSyncProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitActorToFragmentSyncProcessor);
+
 	
 	EntityQuery.ForEachEntityChunk(Context, [&, this](FMassExecutionContext& ChunkContext)
 	{

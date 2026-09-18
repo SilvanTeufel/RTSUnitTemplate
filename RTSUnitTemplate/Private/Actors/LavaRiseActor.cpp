@@ -123,7 +123,7 @@ void ALavaRiseActor::VerschlungeneToeten(float OberflaechenZ)
 		// gegen die Oberflaeche haelt, laesst sie erst sterben, wenn die Lava ihr bis zur
 		// Huefte steht - bei einer Standardkapsel rund 88 Einheiten zu spaet. Sichtbare
 		// Oberflaeche und Schaden liefen dadurch sichtbar auseinander.
-		const float FussZ = Einheit->GetActorLocation().Z - Einheit->GetSimpleCollisionHalfHeight();
+		const float FussZ = Einheit->GetMassActorLocation().Z - Einheit->GetSimpleCollisionHalfHeight();
 		if (FussZ >= Schwelle)
 		{
 			continue;

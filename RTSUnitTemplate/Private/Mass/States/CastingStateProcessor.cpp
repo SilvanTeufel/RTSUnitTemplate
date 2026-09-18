@@ -11,6 +11,7 @@
 #include "MassEntityManager.h"
 #include "MassCommonFragments.h"
 #include "MassActorSubsystem.h"   // FMassActorFragment - nur fuer die Casting-Haenger-Diagnose
+#include "ProfilingDebugging/CsvProfiler.h"
 
 
 UCastingStateProcessor::UCastingStateProcessor(): EntityQuery()
@@ -78,6 +79,10 @@ void UCastingStateProcessor::BeginDestroy()
 
 void UCastingStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UCastingStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UCastingStateProcessor);
+
     // QUICK_SCOPE_CYCLE_COUNTER(STAT_UCastingStateProcessor_Execute);
 
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();

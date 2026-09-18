@@ -12,6 +12,7 @@
 #include "Characters/Unit/UnitBase.h"
 #include "Actors/WorkArea.h"
 #include "MassActorSubsystem.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // Make sure UnitSignals::GoToBase and UnitSignals::Idle (or your equivalents) are defined and accessible
 
@@ -84,6 +85,10 @@ void UResourceExtractionStateProcessor::InitializeInternal(UObject& Owner, const
 
 void UResourceExtractionStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UResourceExtractionStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UResourceExtractionStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

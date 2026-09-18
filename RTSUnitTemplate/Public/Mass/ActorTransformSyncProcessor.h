@@ -37,6 +37,40 @@ public:
 	
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float VisualISMActorSyncTime = 0.f;
+
+	/**
+	 * Adaptive Taktung der Aktor-Synchronisierung: ab welcher Einheitenzahl gedrosselt wird.
+	 *
+	 * WOFUER: DispatchPendingUpdates ruft Actor->SetActorTransform je Bild fuer jede bewegte
+	 * Einheit. Gemessen am 18.09.2026 auf LevelSix mit 510 Einheiten: 2,385 ms bei 509 Uebertraegen,
+	 * also 61 % der 3,773 ms des Prozessors. Mit 0,5 s Taktung fallen die Uebertraege auf 18 je
+	 * Bild und der Posten auf 0,088 ms - der Prozessor insgesamt auf 1,402 ms. Ersparnis 2,37 ms
+	 * von 21,1 ms Bildzeit, gut 11 %.
+	 *
+	 * WARUM NACH EINHEITENZAHL UND NICHT NACH BILDRATE: die Taktung beeinflusst die Bildrate, die
+	 * sie steuern soll - eine Regelung darauf schwingt (bei 45 fps drosseln, dadurch 60 fps,
+	 * dadurch entdrosseln, dadurch wieder 45). Genau dieser Fehler steckte schon einmal in der
+	 * Abstandsbremse der Client-Vorhersage. Die Einheitenzahl ist vorhersagend statt reagierend:
+	 * gedrosselt wird, BEVOR die Bildrate einbricht.
+	 *
+	 * Unterhalb dieser Zahl bleibt es bei VisualISMActorSyncTime (Vorgabe 0 = jedes Bild).
+	 */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
+	int32 ActorSyncScaleStartUnits = 150;
+
+	/** Ab dieser Einheitenzahl gilt die volle Taktung ActorSyncMaxInterval. */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
+	int32 ActorSyncScaleFullUnits = 500;
+
+	/** Groesste Taktung (s). Dazwischen wird linear interpoliert. 0 schaltet die Anpassung ab. */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
+	float ActorSyncMaxInterval = 0.5f;
+
+	/** Einheitenzahl des letzten Durchgangs - Grundlage der Anpassung. */
+	int32 LastFrameUnitCount = 0;
+
+	/** Liefert die aktuell gueltige Taktung. Siehe ActorSyncScaleStartUnits. */
+	float CalculateActorSyncInterval() const;
 	
 	/** Minimale Distanz, die sich die Einheit bewegen muss, damit eine neue Rotation berechnet wird (verhindert Jitter bei Stillstand). */
 	UPROPERTY(EditDefaultsOnly, Category = RTSUnitTemplate)

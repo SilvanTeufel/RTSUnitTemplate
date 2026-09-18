@@ -1174,7 +1174,7 @@ void AProjectile::Impact(AActor* ImpactTarget)
 				}
 				SurfaceLoc.Z = InstanceXform.GetLocation().Z;
 			}
-			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
+			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 			const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 			const float KillDelay = 2.0f;
 			PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
@@ -1286,7 +1286,7 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 				}
 				SurfaceLoc.Z = InstanceXform.GetLocation().Z;
 			}
-			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
+			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 			const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 			const float KillDelay = 2.0f;
 			PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
@@ -1387,7 +1387,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 					}
 					SurfaceLoc.Z = InstanceXform.GetLocation().Z;
 				}
-				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
+				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 				const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 				const float KillDelay = 2.0f;
 				PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
@@ -1421,7 +1421,7 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 					}
 					SurfaceLoc.Z = InstanceXform.GetLocation().Z;
 				}
-				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetActorLocation()) : SurfaceLoc;
+				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 				const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 				const float KillDelay = 2.0f;
 				PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
@@ -1514,12 +1514,12 @@ void AProjectile::SetBackBouncing(AUnitBase* ShootingUnit)
 	if(IsBouncingBack && IsBouncingNext && PiercedTargets == (MaxPiercedTargets-1))
 	{
 		Target = ShootingUnit;
-		TargetLocation = ShootingUnit->GetActorLocation();
+		TargetLocation = ShootingUnit->GetMassActorLocation();
 		BouncedBack = true;
 	}else if(IsBouncingBack && PiercedTargets < MaxPiercedTargets)
 	{
 		Target = ShootingUnit;
-		TargetLocation = ShootingUnit->GetActorLocation();
+		TargetLocation = ShootingUnit->GetMassActorLocation();
 		BouncedBack = true;
 	}
 }
@@ -1791,7 +1791,7 @@ int32 AProjectile::ApplyRadialGameplayEffects(
 		if (bDrawDebug)
 		{
 			const FColor MarkColor = bIsFriendly ? FColor::Green : FColor::Red;
-			DrawDebugSphere(World, Unit->GetActorLocation(), 40.f, 12, MarkColor, false, DebugDuration, 0, DebugThickness);
+			DrawDebugSphere(World, Unit->GetMassActorLocation(), 40.f, 12, MarkColor, false, DebugDuration, 0, DebugThickness);
 		}
 	}
 
