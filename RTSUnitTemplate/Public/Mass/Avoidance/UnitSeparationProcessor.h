@@ -60,6 +60,16 @@ protected:
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate")
 	float DistanceMultiplierEnemy = 1.0f;
 private:
+	/**
+	 * Wie weit in Schubrichtung geprueft wird, ob dort noch Navigationsnetz liegt (uu).
+	 *
+	 * Groesser = die Einheit wird frueher gestoppt, bleibt also weiter von Kanten entfernt.
+	 * Kleiner  = sie darf dichter an die Kante, wird aber spaeter gestoppt.
+	 * 0 schaltet die Pruefung ab und stellt das alte Verhalten her.
+	 */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Separation")
+	float SeparationNavLookahead = 120.f;
+
 	FMassEntityQuery EntityQuery;
 	
 	float TimeSinceLastRun = 0.f;
