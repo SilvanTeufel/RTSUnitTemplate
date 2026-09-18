@@ -5,6 +5,7 @@
 #include "MassSignalSubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UBuildingIdleStateProcessor::UBuildingIdleStateProcessor(): EntityQuery()
 {
@@ -37,5 +38,8 @@ void UBuildingIdleStateProcessor::InitializeInternal(UObject& Owner, const TShar
 
 void UBuildingIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UBuildingIdleStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UBuildingIdleStateProcessor);
+
 
 }

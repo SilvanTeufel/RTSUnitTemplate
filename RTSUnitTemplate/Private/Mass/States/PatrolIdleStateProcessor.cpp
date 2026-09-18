@@ -11,6 +11,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Async/Async.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UPatrolIdleStateProcessor::UPatrolIdleStateProcessor(): EntityQuery()
 {
@@ -52,6 +53,10 @@ void UPatrolIdleStateProcessor::InitializeInternal(UObject& Owner, const TShared
 
 void UPatrolIdleStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UPatrolIdleStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UPatrolIdleStateProcessor);
+
     // --- Throttling Check ---
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)

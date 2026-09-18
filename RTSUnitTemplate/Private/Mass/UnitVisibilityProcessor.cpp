@@ -14,6 +14,7 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "System/PlayerTeamSubsystem.h"
 #include "Kismet/GameplayStatics.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UUnitVisibilityProcessor::UUnitVisibilityProcessor()
 {
@@ -83,6 +84,10 @@ void UUnitVisibilityProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 
 void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitVisibilityProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitVisibilityProcessor);
+
 	if (!World) return;
 
 	if (!CachedCustomPC && World->GetNetMode() != NM_DedicatedServer)

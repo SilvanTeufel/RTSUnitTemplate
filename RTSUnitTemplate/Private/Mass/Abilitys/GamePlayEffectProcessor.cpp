@@ -9,6 +9,7 @@
 #include "MassNavigationFragments.h" // For EMassMovementAction
 #include "Characters/Unit/UnitBase.h"
 #include "Mass/UnitMassTag.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UGamePlayEffectProcessor::UGamePlayEffectProcessor()
 {
@@ -41,6 +42,10 @@ void UGamePlayEffectProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 
 void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UGamePlayEffectProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UGamePlayEffectProcessor);
+
     // Optional: Throttle the processor if it doesn't need to run every single frame.
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)

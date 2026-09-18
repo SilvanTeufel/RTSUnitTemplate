@@ -4,6 +4,7 @@
 #include "MassCommonFragments.h"
 #include "MassExecutionContext.h"
 #include "Mass/Signals/MySignals.h" // Your signal definitions
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UUnitPresenceSignalingProcessor::UUnitPresenceSignalingProcessor()
 {
@@ -29,6 +30,10 @@ void UUnitPresenceSignalingProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 
 void UUnitPresenceSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitPresenceSignalingProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitPresenceSignalingProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

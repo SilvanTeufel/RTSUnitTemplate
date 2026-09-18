@@ -4,6 +4,7 @@
 #include "Mass/UnitMassTag.h"
 #include "System/RTSBeaconSubsystem.h"
 #include "MassExecutionContext.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassBeaconProcessor::UMassBeaconProcessor()
 {
@@ -23,6 +24,10 @@ void UMassBeaconProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>
 
 void UMassBeaconProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassBeaconProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassBeaconProcessor);
+
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)
 	{

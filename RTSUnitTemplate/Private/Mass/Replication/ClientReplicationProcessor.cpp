@@ -2,6 +2,7 @@
 
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // CVARs for ClientReplicationProcessor (client)
 static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_EnableCache(
@@ -160,6 +161,10 @@ void UClientReplicationProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 
 void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UClientReplicationProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UClientReplicationProcessor);
+
 	if (bSkipReplication) return;
 
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();

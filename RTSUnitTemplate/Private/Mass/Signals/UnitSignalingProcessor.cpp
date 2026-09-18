@@ -15,6 +15,7 @@
 #include "EngineUtils.h"
 #include "HAL/IConsoleManager.h"
 #include "Mass/Replication/UnitClientBubbleInfo.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // CVARs for tuning client registration throughput
 static TAutoConsoleVariable<int32> CVarRTS_UnitSignaling_BudgetPerTick(
@@ -96,6 +97,9 @@ void UUnitSignalingProcessor::BeginDestroy()
 
 void UUnitSignalingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitSignalingProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitSignalingProcessor);
+
     //UE_LOG(LogTemp, Log, TEXT("!!!!!!!!!!!Execute!!!!!!!"));
     // Allow CVAR to override execution cadence for faster ramp-up
     const float DesiredInterval = FMath::Max(0.02f, CVarRTS_UnitSignaling_ExecInterval.GetValueOnGameThread());

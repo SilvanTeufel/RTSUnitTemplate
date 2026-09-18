@@ -6,6 +6,7 @@
 #include "MassSignalSubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UPostBindingInitProcessor::UPostBindingInitProcessor(): EntityQuery()
 {
@@ -24,5 +25,8 @@ void UPostBindingInitProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
 void UPostBindingInitProcessor::Execute(FMassEntityManager& EntityManager,
                                         FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UPostBindingInitProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UPostBindingInitProcessor);
+
 
 }

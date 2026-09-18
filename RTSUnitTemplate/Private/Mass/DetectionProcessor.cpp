@@ -12,6 +12,7 @@
 #include "MassNavigationFragments.h" // For FMassAgentCharacteristicsFragment
 #include "Async/Async.h"
 #include "Mass/Signals/UnitSignalingProcessor.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 
 
@@ -141,6 +142,10 @@ void UDetectionProcessor::Execute(
     FMassEntityManager&   EntityManager,
     FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UDetectionProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UDetectionProcessor);
+
+
     // 1) Timer
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)

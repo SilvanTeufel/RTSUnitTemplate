@@ -6,6 +6,7 @@
 #include "MassSignalSubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UPreventIdlingProcessor::UPreventIdlingProcessor()
 	: PatrolIdleQuery(), IdleQuery()
@@ -132,6 +133,10 @@ void UPreventIdlingProcessor::RunQuery(FMassEntityQuery& Query, FMassExecutionCo
 
 void UPreventIdlingProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UPreventIdlingProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UPreventIdlingProcessor);
+
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)
 	{

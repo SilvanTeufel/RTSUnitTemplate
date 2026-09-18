@@ -15,6 +15,7 @@
 #include "Mass/Projectile/MassProjectileMovementProcessor.h"
 #include "LandscapeProxy.h"
 #include "Actors/Projectile.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // BEHEBUNG (22.08.2026): Mindestgroesse der Trefferzone von Einheiten.
 //
@@ -68,6 +69,10 @@ void UMassProjectileImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 
 void UMassProjectileImpactProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassProjectileImpactProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassProjectileImpactProcessor);
+
 	TArray<FMassEntityHandle> Units;
 	TArray<FVector> UnitLocations;
 	TArray<FRotator> UnitRotations;
