@@ -248,7 +248,50 @@ private:
 	void DrawProjectedCircle(const FVector& Location, float Radius, FColor Color, float Thickness = -1.f, int32 InSegments = -1, bool bDisableSizeCulling = false);
 	void DrawMaterialDisc(const FClickIndicator& Indicator);
 	
-	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, const FSelectionSettings& Settings, bool bDisableOcclusionOverride = false, int32 InSegments = -1);
+	/**
+	 * @param OutBatch  Wenn gesetzt, werden die Dreiecke dort angehaengt statt sofort gezeichnet.
+	 *
+	 * WOFUER: die Funktion legte je Einheit ein eigenes TArray an und schickte ein eigenes
+	 * FCanvasTriangleItem los. Bei 510 ausgewaehlten Einheiten sind das 510 Heap-Allokationen und
+	 * 510 Zeichenauftraege - JE BILD. Gemessen am 17.09.2026 auf LevelSix: 5,8 ms im Posten "UI",
+	 * gegenueber 0,4 ms ohne Auswahl. Der Spiel-Thread lag bei 16,5 ms von 16,5 ms Bildzeit, die
+	 * Auswahlindikatoren waren davon der groesste Einzelposten.
+	 *
+	 * Mit dem Puffer sammelt der Aufrufer alle Einheiten ein und schickt EINEN Auftrag je Material
+	 * (es gibt drei Einstellungssaetze: Boden, fliegend, Gebaeude). Das Ergebnis ist pixelgleich -
+	 * es aendert sich nur, wann die Dreiecke abgeschickt werden, nicht welche.
+	 */
+	void DrawSelectionIndicator(class AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, const FSelectionSettings& Settings, bool bDisableOcclusionOverride = false, int32 InSegments = -1, TArray<FCanvasUVTri>* OutBatch = nullptr);
+
+	/** Sammelpuffer je Material. Bleibt zwischen den Bildern bestehen, damit nichts neu belegt wird. */
+	TMap<TObjectPtr<UMaterialInterface>, TArray<FCanvasUVTri>> SelectionBatches;
+
+	/**
+	 * Ab wievielen ausgewaehlten Einheiten die Kreise groeber gezeichnet werden.
+	 *
+	 * Bei so vielen Einheiten ist der einzelne Kreis nur noch wenige Pixel gross; die Segmente
+	 * sieht ohnehin niemand. Hochdrehen, wenn es doch auffaellt.
+	 */
+	/**
+	 * Groesste Entfernung, bis zu der ein Auswahlindikator gezeichnet wird (uu). 0 = unbegrenzt.
+	 *
+	 * WOFUER: die Sichtbarkeitspruefung lief bisher ueber ProjectWorldLocationToScreen - also
+	 * ERST projizieren, DANN verwerfen. Je Einheit sind das vier Projektionen (eine im Aufrufer,
+	 * drei in DrawSelectionIndicator), bei 510 ausgewaehlten Einheiten ueber 2000 pro Bild.
+	 * Gemessen am 17.09.2026: 4,19 ms, der zweitgroesste Posten des Spiel-Threads.
+	 *
+	 * Eine Entfernungs- und Blickrichtungspruefung in Weltkoordinaten kostet dagegen ein
+	 * Skalarprodukt. Sie laeuft jetzt VOR der Projektion.
+	 */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Selection")
+	float SelectionMaxDrawDistance = 25000.f;
+
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Selection")
+	int32 SelectionCoarseThreshold = 150;
+
+	/** Zweite Stufe: noch groeber. Siehe SelectionCoarseThreshold. */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Selection")
+	int32 SelectionVeryCoarseThreshold = 350;
 	void DrawAllSelectedUnitsIndicators();
 	void DrawAllHealthBars();
 	void DrawStackedHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, const FHealthBarSettings& Settings, const FVector& RightV);
