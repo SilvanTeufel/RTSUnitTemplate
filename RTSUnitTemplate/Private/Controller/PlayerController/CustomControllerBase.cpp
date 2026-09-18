@@ -2,6 +2,7 @@
 
 
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "System/AbilityTemplateSubsystem.h"
 // LUX-ANPASSUNG (16.08.2026): fuer die eng gefasste Direktsteuerungs-Ausnahme in
 // CorrectSetUnitMoveTarget_Implementation (Schiessen waehrend des Laufens).
@@ -12,7 +13,8 @@
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "MassEntitySubsystem.h"     // Needed for FMassEntityManager, UMassEntitySubsystem
-#include "MassNavigationFragments.h" // Needed for the engine's FMassMoveTargetFragment
+#include "MassNavigationFragments.h"
+#include "ProfilingDebugging/CsvProfiler.h" // Needed for the engine's FMassMoveTargetFragment
 #include "MassMovementFragments.h"  // Needed for EMassMovementAction, FMassVelocityFragment
 #include "MassEntityManager.h"  // For FMassEntityManager::FlushCommands
 #include "MassExecutor.h"          // Provides Defer() method context typically
@@ -817,6 +819,324 @@ void ACustomControllerBase::Server_Batch_CorrectSetUnitMoveTargets_Implementatio
 		AttackT, bResetHoldPosition, bResetFollowTarget, bOriginatorPredictsLocally);
 }
 
+void ACustomControllerBase::RTSPerfTestFixCamera()
+{
+	// Kamera auf einen festen Standpunkt ueber der Gruppe zwingen.
+	//
+	// WOFUER: die Kamera entscheidet, wie viele Einheiten projiziert, gezeichnet und in den
+	// Auswahlindikatoren verarbeitet werden - also genau die Posten, die hier gemessen werden.
+	// Eine von Hand bewegte oder gezoomte Kamera macht zwei Laeufe unvergleichbar; genau daran
+	// sind die Messungen vom 17.09.2026 gescheitert (Bildzeit unveraendert, obwohl die
+	// Abschnitte zusammen 3,7 ms verloren hatten - die Streuung lag bei p5 8,8 bis p95 23,6 ms).
+	ACameraBase* Kamera = Cast<ACameraBase>(GetPawn());
+	if (!Kamera)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PerfTest] Keine CameraBase - Kamera bleibt wie sie ist."));
+		return;
+	}
+
+	FVector Center = FVector::ZeroVector;
+	int32 Counter = 0;
+	for (AUnitBase* U : SelectedUnits)
+	{
+		if (IsValid(U)) { Center += U->GetActorLocation(); ++Counter; }
+	}
+	if (Counter == 0)
+	{
+		return;
+	}
+	Center /= Counter;
+
+	Kamera->SetActorLocation(Center + FVector(0.f, 0.f, RTSPerfTestCameraHeight));
+	Kamera->CameraDistanceToCharacter = RTSPerfTestCameraDistance;
+	if (Kamera->SpringArm)
+	{
+		Kamera->SpringArm->TargetArmLength = RTSPerfTestCameraDistance;
+		Kamera->SpringArm->SetRelativeRotation(Kamera->SpringArmRotator);
+	}
+}
+
+void ACustomControllerBase::RTSPerfSpawn(int32 Count, int32 Id, float Spread)
+{
+	ARTSGameModeBase* GameMode = Cast<ARTSGameModeBase>(UGameplayStatics::GetGameMode(this));
+	if (!GameMode)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PerfTest] Kein ARTSGameModeBase - kann nicht spawnen."));
+		return;
+	}
+
+	// Schwerpunkt der vorhandenen eigenen Einheiten. GetMassActorLocation, nicht GetActorLocation:
+	// unter der Drosselung hinkt die Aktorlage bis zu 0,5 s nach.
+	FVector Center = FVector::ZeroVector;
+	int32 ExistingUnits = 0;
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		AUnitBase* U = *It;
+		if (IsValid(U) && U->TeamId == SelectableTeamId && U->GetUnitState() != UnitData::Dead)
+		{
+			Center += U->GetMassActorLocation();
+			++ExistingUnits;
+		}
+	}
+	if (ExistingUnits == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PerfTest] Keine eigenen Einheiten als Bezugspunkt."));
+		return;
+	}
+	Center /= ExistingUnits;
+
+	// WELCHE ZEILE? NICHT RATEN - NACHSEHEN.
+	//
+	// Der erste Versuch lief mit Id 1 und meldete "0 von 90 erzeugt": diese Id gibt es in den
+	// Spawntabellen dieser Karte nicht. Ohne die Erfolgsmeldung waere der Lauf als "600 Einheiten"
+	// ausgewertet worden, obwohl es 510 blieben. Deshalb sucht die Funktion sich die Row jetzt
+	// selbst, wenn Id negativ ist - und schreibt in jedem Fall auf, welche Ids es ueberhaupt gibt.
+	FUnitSpawnParameter SelectedRow;
+	bool bRowFound = false;
+	FString AvailableIds;
+
+	for (UDataTable* Table : GameMode->UnitSpawnParameters)
+	{
+		if (!Table) continue;
+		for (const FName& RowName : Table->GetRowNames())
+		{
+			const FUnitSpawnParameter* Row = Table->FindRow<FUnitSpawnParameter>(RowName, TEXT(""));
+			if (!Row || !Row->UnitBaseClass) continue;
+
+			AvailableIds += FString::Printf(TEXT("%d "), Row->Id);
+			const bool bMatches = (Id < 0) ? true : (Row->Id == Id);
+			if (bMatches && !bRowFound)
+			{
+				SelectedRow = *Row;
+				bRowFound = true;
+			}
+		}
+	}
+
+	if (!bRowFound)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[PerfTest] RTSPerfSpawn: keine brauchbare Row fuer Id %d. ExistingUnits Ids: %s"),
+			Id, *AvailableIds);
+		return;
+	}
+
+	int32 SpawnedCount = 0;
+	for (int32 i = 0; i < Count; ++i)
+	{
+		// Goldener Angle: verteilt gleichmaessig, ohne Ringe oder Speichen zu bilden. Ein
+		// Zufallsversatz waere hier schlechter - die Messung soll wiederholbar sein.
+		const float Angle = 2.39996323f * i;
+		const float Radius = Spread * FMath::Sqrt(float(i + 1) / float(FMath::Max(Count, 1)));
+		const FVector Location = Center + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.f);
+
+		// SpawnSingleUnit statt SpawnSingleUnitFromDataTable: letztere sucht die Row jedes Mal
+		// neu und haengt das Ergebnis zusaetzlich an den Sammelpunkt des naechsten Gebaeudes -
+		// beides ist hier unerwuenscht.
+		if (GameMode->SpawnSingleUnit(SelectedRow, Location, nullptr, SelectableTeamId, nullptr))
+		{
+			++SpawnedCount;
+		}
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[PerfTest] RTSPerfSpawn: %d von %d erzeugt (Zeilen-Id %d), vorher %d eigene Einheiten. ExistingUnits Ids: %s"),
+		SpawnedCount, Count, SelectedRow.Id, ExistingUnits, *AvailableIds);
+}
+
+void ACustomControllerBase::RTSSelectAllOwn()
+{
+	if (!HUDBase)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PerfTest] Kein HUD - Auswahl nicht moeglich."));
+		return;
+	}
+
+	HUDBase->DeselectAllUnits();
+
+	int32 SelectedCount = 0;
+	for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+	{
+		AUnitBase* U = *It;
+		if (!IsValid(U) || U->GetUnitState() == UnitData::Dead)
+		{
+			continue;
+		}
+		if (U->TeamId != SelectableTeamId || IsForeignCameraUnit(U))
+		{
+			continue;
+		}
+		HUDBase->SelectedUnits.AddUnique(U);
+		HUDBase->SelectedUnitsSet.Add(U);
+		U->SetSelected();
+		++SelectedCount;
+	}
+	SelectedUnits = HUDBase->SelectedUnits;
+
+	UE_LOG(LogTemp, Warning, TEXT("[PerfTest] %d Einheiten von Team %d gewaehlt."),
+		SelectedCount, SelectableTeamId);
+}
+
+static TAutoConsoleVariable<int32> CVarRTS_PerfTestGroups(
+	TEXT("RTS.PerfTest.Gruppen"),
+	1,
+	TEXT("1 = alle Einheiten marschieren gemeinsam zum selben Ziel (Vorgabe). N > 1 = die Auswahl ")
+	TEXT("wird in N Gruppen geteilt, N-1 davon bekommen JE EIN EIGENES Ziel sternfoermig um die ")
+	TEXT("Mitte, die letzte bleibt stehen.")
+	TEXT("")
+	TEXT("WOFUER: die Pruefung der Chunk-Tag-Abfrage (RTS.ChunkTags.Verify) meldete 0 Deviations ")
+	TEXT("bei 200.000 Vergleichen - aber nur ZWEI Tag-Kombinationen. Das ist kein Wunder, wenn alle ")
+	TEXT("Einheiten dasselbe tun: sie haben dann zwangslaeufig dieselben Tags, und ein Fehler in der ")
+	TEXT("Annahme 'ein Chunk = ein Archetyp' koennte sich gar nicht zeigen. Mit mehreren Gruppen ")
+	TEXT("laufen Marschierende (MassStateRun) und Stehende (Idle/Patrol) GLEICHZEITIG, und die ")
+	TEXT("Erkennungs- und Verfolgungstags streuen zusaetzlich. Erst dann hat die Pruefung Aussagekraft."),
+	ECVF_Default);
+
+void ACustomControllerBase::RTSPerfTest(float StandSeconds, float MarchSeconds, float Distance)
+{
+	RTSPerfTestDistance = Distance;
+	RTSPerfTestStandSeconds = StandSeconds;
+	RTSPerfTestMoveSeconds = MarchSeconds;
+	RTSPerfTestStart = FPlatformTime::Seconds();
+	RTSPerfTestPhase = 0;
+	RTSPerfTestOrderCount = 0;
+
+	RTSSelectAllOwn();
+	RTSPerfTestFixCamera();
+
+	CSV_EVENT_GLOBAL(TEXT("Phase_Standing"));
+	UE_LOG(LogTemp, Warning,
+		TEXT("[PerfTest] Start | %.0f s stehen, dann %.0f s marschieren (%.0f uu, Nachbefehl alle %.0f s) | %d Einheiten"),
+		StandSeconds, MarchSeconds, Distance, RTSPerfTestOrderInterval, SelectedUnits.Num());
+
+	GetWorldTimerManager().SetTimer(RTSPerfTestTimer, this,
+		&ACustomControllerBase::RTSPerfTestTick, 1.0f, true);
+}
+
+void ACustomControllerBase::RTSPerfTestTick()
+{
+	const double Elapsed = FPlatformTime::Seconds() - RTSPerfTestStart;
+
+	// ---- Phase 0: stehen -------------------------------------------------------------------
+	if (Elapsed < RTSPerfTestStandSeconds)
+	{
+		return;
+	}
+
+	// ---- Phase 2: wieder stehen ------------------------------------------------------------
+	if (Elapsed > RTSPerfTestStandSeconds + RTSPerfTestMoveSeconds)
+	{
+		if (RTSPerfTestPhase != 2)
+		{
+			RTSPerfTestPhase = 2;
+			CSV_EVENT_GLOBAL(TEXT("Phase_StandingAgain"));
+			UE_LOG(LogTemp, Warning, TEXT("[PerfTest] Marschphase beendet nach %d Befehlen."),
+				RTSPerfTestOrderCount);
+		}
+		// Nach weiteren 15 s ist der Messfall fertig.
+		if (Elapsed > RTSPerfTestStandSeconds + RTSPerfTestMoveSeconds + 15.0)
+		{
+			CSV_EVENT_GLOBAL(TEXT("Phase_Done"));
+			UE_LOG(LogTemp, Warning, TEXT("[PerfTest] FERTIG."));
+			GetWorldTimerManager().ClearTimer(RTSPerfTestTimer);
+		}
+		return;
+	}
+
+	// ---- Phase 1: marschieren --------------------------------------------------------------
+	if (RTSPerfTestPhase != 1)
+	{
+		RTSPerfTestPhase = 1;
+		CSV_EVENT_GLOBAL(TEXT("Phase_Moving"));
+	}
+
+	const double SincePhaseStart = Elapsed - RTSPerfTestStandSeconds;
+	const int32 Due = FMath::FloorToInt(SincePhaseStart / RTSPerfTestOrderInterval) + 1;
+	if (RTSPerfTestOrderCount >= Due)
+	{
+		return;   // Der naechste Befehl ist noch nicht dran.
+	}
+
+	// Die Auswahl JEDES MAL neu setzen - siehe den Kommentar an RTSPerfTestTick.
+	RTSSelectAllOwn();
+	if (SelectedUnits.Num() == 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PerfTest] Keine eigenen Einheiten mehr."));
+		return;
+	}
+
+	FVector Center = FVector::ZeroVector;
+	int32 Counter = 0;
+	for (AUnitBase* U : SelectedUnits)
+	{
+		if (IsValid(U)) { Center += U->GetActorLocation(); ++Counter; }
+	}
+	if (Counter == 0) { return; }
+	Center /= Counter;
+
+	// Abwechselnd hin und zurueck, damit die Gruppe in Bewegung bleibt statt anzukommen.
+	const float Sign = (RTSPerfTestOrderCount % 2 == 0) ? 1.f : -1.f;
+	const FVector Target = Center + FVector(RTSPerfTestDistance * Sign,
+	                                     RTSPerfTestDistance * Sign * 0.6f, 0.f);
+
+	++RTSPerfTestOrderCount;
+	RTSPerfTestFixCamera();
+
+	const int32 GroupCount = FMath::Max(1, CVarRTS_PerfTestGroups.GetValueOnGameThread());
+	if (GroupCount <= 1)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[PerfTest] Befehl %d an %d Einheiten nach %s (t=%.0f s)"),
+			RTSPerfTestOrderCount, SelectedUnits.Num(), *Target.ToCompactString(), Elapsed);
+		RightClickPressedMassMinimap(Target);
+		return;
+	}
+
+	// Streumodus - siehe RTS.PerfTest.GroupCount. Die Auswahl wird nur voruebergehend beschnitten und
+	// am Ende vollstaendig wiederhergestellt; RTSPerfTestTick setzt sie ohnehin jedes Mal neu.
+	TArray<AUnitBase*> AllSelectedUnits = SelectedUnits;
+	const int32 PerGroup = FMath::DivideAndRoundUp(AllSelectedUnits.Num(), GroupCount);
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[PerfTest] Befehl %d STREUEND an %d Einheiten in %d GroupCount (%d marschieren, %d bleiben stehen) (t=%.0f s)"),
+		RTSPerfTestOrderCount, AllSelectedUnits.Num(), GroupCount,
+		FMath::Min(PerGroup * (GroupCount - 1), AllSelectedUnits.Num()),
+		FMath::Max(0, AllSelectedUnits.Num() - PerGroup * (GroupCount - 1)), Elapsed);
+
+	// Die LETZTE Gruppe bekommt bewusst keinen Befehl - sie liefert die stehenden Einheiten,
+	// ohne die neben Run- keine Idle-Tags im selben Bild vorkaemen.
+	for (int32 g = 0; g < GroupCount - 1; ++g)
+	{
+		const int32 From = g * PerGroup;
+		const int32 To = FMath::Min(From + PerGroup, AllSelectedUnits.Num());
+		if (From >= To)
+		{
+			break;
+		}
+
+		SelectedUnits.Reset();
+		for (int32 i = From; i < To; ++i)
+		{
+			if (IsValid(AllSelectedUnits[i]))
+			{
+				SelectedUnits.Add(AllSelectedUnits[i]);
+			}
+		}
+		if (SelectedUnits.Num() == 0)
+		{
+			continue;
+		}
+
+		const float Angle = (2.f * PI * g) / float(GroupCount - 1);
+		const FVector GroupTarget = Center + FVector(
+			FMath::Cos(Angle) * RTSPerfTestDistance * Sign,
+			FMath::Sin(Angle) * RTSPerfTestDistance * Sign, 0.f);
+
+		RightClickPressedMassMinimap(GroupTarget);
+	}
+
+	SelectedUnits = MoveTemp(AllSelectedUnits);
+}
+
 void ACustomControllerBase::NotifyClientsOfBatchMove(
 	const TArray<AUnitBase*>& Units,
 	const TArray<FVector>& UsedTargets,
@@ -995,20 +1315,16 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 	{
 		return;
 	}
-	// [BatchDiag] APPLY-entry log removed (noise).
 	if (!Unit->IsInitialized)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN !IsInitialized Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 	if (!Unit->CanMove)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN !CanMove Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 	if (Unit->UnitState == UnitData::Dead)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN Dead Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 
@@ -1046,7 +1362,6 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 
 	if (!EntityManager.IsEntityValid(MassEntityHandle))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[BatchDiag] APPLY-RETURN InvalidHandle Idx=%d"), Unit->UnitIndex); // BatchDiag TEMP
 		return;
 	}
 
@@ -1071,7 +1386,6 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 	bool bIsAttackingOrPausing = DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStateAttackTag::StaticStruct()) || DoesEntityHaveTag(EntityManager, MassEntityHandle, FMassStatePauseTag::StaticStruct());
 	bool bIsMovingWhileAttacking = CombatStatsPtr && CombatStatsPtr->bCanMoveWhileAttacking && bIsAttackingOrPausing;
 
-	// [BatchDiag] APPLY-decision log removed (noise).
 
 	if (!bIsMovingWhileAttacking)
 	{
@@ -1734,7 +2048,7 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 
 	if (FollowTarget)
 	{
-		FVector FollowLocation = FollowTarget->GetActorLocation();
+		FVector FollowLocation = FollowTarget->GetMassActorLocation();
 
 		if (World)
 		{
@@ -1848,7 +2162,7 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 		}
 
 		// Compute group center of followers to determine approach direction
-		FVector BldCenter = FollowTarget ? FollowTarget->GetActorLocation() : FollowLocation;
+		FVector BldCenter = FollowTarget ? FollowTarget->GetMassActorLocation() : FollowLocation;
 		FVector GroupCenter = FVector::ZeroVector;
 		int32 GroupCount = 0;
 		for (AUnitBase* U : Units)
@@ -2171,7 +2485,7 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 										if (EM.IsEntityActive(TgtH))
 										{
 											AIT->FriendlyTargetEntity = TgtH;
-											AIT->LastKnownFriendlyLocation = HitUnit->GetActorLocation();
+											AIT->LastKnownFriendlyLocation = HitUnit->GetMassActorLocation();
 										}
 									}
 									if (FMassClientPredictionFragment* Pred = EM.GetFragmentDataPtr<FMassClientPredictionFragment>(H))
@@ -3496,8 +3810,11 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         }
         else if (IsShiftPressed)
         {
-            DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
+            // Der Kreis wird ERST NACH der Zielanpassung gezeichnet - siehe unten bei
+            // AdjustBatchTargetsForNav. Im Shift-Zweig laeuft die Einheit ueber
+            // RightClickRunShift zum unveraenderten Loc, dieser Kreis ist also sofort richtig.
             if (!U->IsInitialized || !U->CanMove) continue;
+            DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
             if (U->bIsMassUnit)
             {
                 if (U->GetUnitState() != UnitData::Run)
@@ -3516,8 +3833,12 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
         }
         else
         {
-            DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
             if (!U->IsInitialized || !U->CanMove) continue;
+            if (!U->bIsMassUnit)
+            {
+                // Nicht-Mass-Einheiten laufen direkt zum Klickpunkt, ihr Kreis stimmt sofort.
+                DrawCircleAtLocation(GetWorld(), Loc, FColor::Green);
+            }
             if (U->bIsMassUnit)
             {
                 BatchUnits.Add(U);
@@ -3547,6 +3868,17 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
     	// -> client units appeared stuck while the server moved them. RecalculateFormation does not
     	// nav-validate its per-slot offsets, so this step is what guarantees reachable predicted targets.
     	BatchLocs = AdjustBatchTargetsForNav(BatchUnits, BatchLocs);
+
+    	// DIE KREISE GEHOEREN DORTHIN, WO DIE EINHEITEN WIRKLICH HINLAUFEN.
+    	//
+    	// Frueher wurden sie oben in der Schleife am Klickpunkt gezeichnet - also BEVOR
+    	// AdjustBatchTargetsForNav die Ziele auf das Navigationsnetz und in die Formation legt.
+    	// Bei vielen Einheiten verschiebt diese Anpassung die Ziele deutlich, und die Kreise
+    	// standen sichtbar woanders als die Einheiten hinliefen.
+    	for (const FVector& Ziel : BatchLocs)
+    	{
+    		DrawCircleAtLocation(GetWorld(), Ziel, FColor::Green);
+    	}
 
     	TArray<float> BatchRadii;
     	for (AUnitBase* Unit : BatchUnits)
@@ -5187,7 +5519,9 @@ void ACustomControllerBase::HandleAttackMovePressed()
             }
             else
             {
-                LeftClickAttack(U, RunLocation);
+                // TargetUnit stammt aus GetSelectableHitUnderCursor weiter oben und traegt damit
+                // den Hover-Rueckfall - die Umsetzung muss nicht mehr selbst spuren.
+                LeftClickAttack(U, RunLocation, TargetUnit);
             }
 
             PlayAttackSound = true;
