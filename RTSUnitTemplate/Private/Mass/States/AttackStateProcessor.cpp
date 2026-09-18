@@ -21,6 +21,7 @@
 #include "Mass/States/CombatPlaceholder.h"
 #include "Async/Async.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 
 UAttackStateProcessor::UAttackStateProcessor(): EntityQuery()
@@ -79,6 +80,10 @@ void UAttackStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager
 
 void UAttackStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UAttackStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UAttackStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
@@ -173,9 +178,6 @@ void UAttackStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMa
         if (PredictionList.Num() > 0)
         {
             FMassClientPredictionFragment& Pred = PredictionList[EntityIdx];
-            // === BatchDiag (TEMP): this freeze overwrites a fresh move prediction if Attack tag survived the command ===
-            RTS_BatchDiagLog(TEXT("ATK-FREEZE(stop)"), World, EntityManager, Entity,
-                Cast<AUnitBase>(Actor) ? Cast<AUnitBase>(Actor)->UnitIndex : -1, &Pred);
             Pred.Location = Transform.GetLocation();
             Pred.PredDesiredSpeed = 0.f;
             Pred.bHasData = true;
