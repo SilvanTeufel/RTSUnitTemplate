@@ -11,6 +11,7 @@
 #include "NavigationSystem.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h" // UWorld::IsNetMode / NM_Client
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // CLIENT-ONLY multiplier for the separation (lateral unit-unit push) force. Separation's lateral shove is the
 // main residual client jitter source when many units funnel a tight curve (large Overlap -> strong sideways
@@ -79,6 +80,11 @@ void UUnitSeparationProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
 
 void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitSeparationProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitSeparationProcessor);
+
+
+
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)
 	{
@@ -257,6 +263,55 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 	if (AccumPush.Num() == 0)
 	{
 		return;
+	}
+
+	// KEIN SCHUB AUF FLAECHEN OHNE NAVMESH.
+	//
+	// Der Trennschub ist eine reine Kraft in der Ebene - er fragt nicht, wohin er schiebt. In enger
+	// Formation an einer Klippe summieren sich die Schuebe mehrerer Nachbarn, die Einheit wird ueber
+	// die Kante gedrueckt, und HandleGroundAndHeight zieht sie anschliessend auf das gefundene
+	// Gelaende OBEN. Ergebnis: Einheiten stehen auf Klippen, auf denen kein Navigationsnetz liegt,
+	// und finden von dort keinen Weg zurueck.
+	//
+	// Die Eingangspruefung weiter oben schaut nur, ob die Einheit AKTUELL auf dem Netz steht - nicht,
+	// ob das Ziel des Schubs es auch tut. Genau diese Luecke wird hier geschlossen: eine Vorausschau
+	// in Schubrichtung, und faellt sie neben das Netz, entfaellt der Schub fuer diese Einheit.
+	//
+	// Kosten: eine zweite Projektion je geschobener Einheit und Durchlauf. Der Prozessor laeuft
+	// getaktet (ExecutionInterval), nicht je Bild, und schiebt ohnehin nur die Einheiten, die sich
+	// draengen - nicht die ganze Armee.
+	UNavigationSystemV1* NavCheck = UNavigationSystemV1::GetCurrent(Context.GetWorld());
+	if (NavCheck && SeparationNavLookahead > 0.f)
+	{
+		int32 Verworfen = 0;
+		for (const FClumpUnitInfo& Info : Units)
+		{
+			FVector* Push = AccumPush.Find(Info.Entity);
+			if (!Push)
+			{
+				continue;
+			}
+			const FVector Richtung = Horizontal(*Push).GetSafeNormal();
+			if (Richtung.IsNearlyZero())
+			{
+				continue;
+			}
+
+			// Vorausschau etwas ueber Agentenbreite, damit der Schub gestoppt wird, BEVOR die
+			// Einheit auf der Kante steht - nicht erst, wenn sie schon darueber hinaus ist.
+			const FVector Vorausschau = Info.Location + Richtung * SeparationNavLookahead;
+
+			FNavLocation NavLoc;
+			if (!NavCheck->ProjectPointToNavigation(Vorausschau, NavLoc, FVector(60.f, 60.f, 200.f)))
+			{
+				*Push = FVector::ZeroVector;
+				++Verworfen;
+			}
+		}
+		if (Verworfen > 0)
+		{
+			UE_LOG(LogTemp, VeryVerbose, TEXT("[Separation] %d Schuebe verworfen (Ziel ohne NavMesh)"), Verworfen);
+		}
 	}
 
 	// Weaken the separation push on the client only (server stays authoritative at full strength).
