@@ -24,6 +24,7 @@
 #include "Actors/Projectile.h"
 #include "Components/CapsuleComponent.h"
 #include "Mass/States/CombatPlaceholder.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UPauseStateProcessor::UPauseStateProcessor(): EntityQuery()
 {
@@ -88,6 +89,10 @@ void UPauseStateProcessor::InitializeInternal(UObject& Owner, const TSharedRef<F
 
 void UPauseStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UPauseStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UPauseStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
@@ -337,13 +342,9 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     }
 
 
-    // === BatchDiag (TEMP): Pause client entry. If a recently-commanded unit still shows here with
     // Pause tag, the move command did not strip Pause and ApplyAttackStopLogic will freeze it. ===
     if (!Stats.bCanMoveWhileAttacking)
     {
-        RTS_BatchDiagLog(TEXT("PAUSE-CLIENT(freeze)"), EntityManager.GetWorld(), EntityManager, Entity,
-            Cast<AUnitBase>(Actor) ? Cast<AUnitBase>(Actor)->UnitIndex : -1,
-            EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity));
     }
 
     ApplyAttackStopLogic(Context, Stats, TargetFrag, Entity, EntityIdx);
