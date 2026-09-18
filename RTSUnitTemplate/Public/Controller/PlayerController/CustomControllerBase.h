@@ -243,6 +243,78 @@ public:
 		bool bResetFollowTarget,
 		bool bTargetsAlreadyValidated = false);
 
+	/**
+	 * Messfall fuer die Bildrate: waehlt alle eigenen Einheiten und schickt sie nach einer
+	 * Ruhephase auf Wanderschaft.
+	 *
+	 * WOFUER: die Frage "warum fallen wir beim Bewegen von 60 auf 45 fps" laesst sich nur
+	 * beantworten, wenn man BEIDE Zustaende im selben Lauf misst und die Grenze dazwischen genau
+	 * kennt. Von Hand geklickt ist dieser Zeitpunkt weder exakt noch wiederholbar.
+	 *
+	 * Der Befehl setzt CSV-Marken ("Standing", "Moving"), sodass sich die Aufzeichnung
+	 * hinterher exakt an der Grenze teilen laesst, und laesst sich ueber -ExecCmds direkt beim
+	 * Start des Pakets ausloesen - also ohne Editor und ohne Eingabe.
+	 *
+	 * @param RuheSekunden   Wie lange vor dem Befehl stillgestanden wird.
+	 * @param Entfernung     Wie weit die Einheiten laufen sollen (uu).
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "RTSUnitTemplate|Performance")
+	void RTSPerfTest(float StandSeconds = 15.f, float MarchSeconds = 60.f, float Distance = 9000.f);
+
+	/** Setzt die Kamera auf einen festen Standpunkt ueber der Auswahl. Siehe die Quelle. */
+	UFUNCTION(Exec, BlueprintCallable, Category = "RTSUnitTemplate|Performance")
+	void RTSPerfTestFixCamera();
+
+	/** Hoehe der Messkamera ueber dem Gruppenmittelpunkt (uu). */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
+	float RTSPerfTestCameraHeight = 2500.f;
+
+	/** Federarmlaenge der Messkamera (uu). Bestimmt, wieviel im Bild ist. */
+	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
+	float RTSPerfTestCameraDistance = 3500.f;
+
+	/** Waehlt alle Einheiten des eigenen Teams. Nur fuer Messungen. */
+	UFUNCTION(Exec, BlueprintCallable, Category = "RTSUnitTemplate|Performance")
+	void RTSSelectAllOwn();
+
+	/**
+	 * Spawnt zusaetzliche Einheiten des eigenen Teams. NUR FUER MESSUNGEN.
+	 *
+	 * WOFUER: die Vorgabe lautet 600 Einheiten bei 60 fps, die Messkarte stellt aber 510.
+	 * Eine Hochrechnung von 510 auf 600 traegt nicht, weil die Posten verschieden steil wachsen:
+	 * die Ausweichrechnung ueberproportional (dichtere Pulks = mehr Nachbarn je Einheit), der
+	 * Hindernis-Schnappschuss linear, die Auswahlindikatoren nur mit den SICHTBAREN Einheiten.
+	 * Drei Steigungen lassen sich nicht zu einer Geraden zusammenfassen - also wird gemessen.
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "RTSUnitTemplate|Performance")
+	void RTSPerfSpawn(int32 Count = 90, int32 Id = -1, float Spread = 3000.f);
+
+protected:
+	/**
+	 * Ein Takt des Messfalls. Ruft sich selbst wieder auf, bis alle Phasen durch sind.
+	 *
+	 * WARUM NACHBEFOHLEN WIRD: ein einziger Marschbefehl reicht nicht. Die Einheiten kommen an
+	 * und stehen wieder - die Aufzeichnung enthielte dann eine Mischung aus beiden Zustaenden,
+	 * und genau die will diese Messung ja trennen. Deshalb geht alle RTSPerfTestOrderInterval
+	 * Sekunden ein neuer Befehl raus, abwechselnd in zwei Richtungen.
+	 *
+	 * WARUM JEDES MAL NEU GEWAEHLT WIRD: das HUD baut SelectedUnits laufend neu auf
+	 * (HandleSelectionRectangle leert die Liste, solange bSelectFriendly gesetzt ist). Im ersten
+	 * Anlauf war die Auswahl nach 20 s leer und der Marschbefehl lief ins Leere - der Lauf
+	 * mass dadurch nur Stillstand.
+	 */
+	void RTSPerfTestTick();
+
+	FTimerHandle RTSPerfTestTimer;
+	float RTSPerfTestDistance = 8000.f;
+	float RTSPerfTestOrderInterval = 6.f;
+	float RTSPerfTestStandSeconds = 15.f;
+	float RTSPerfTestMoveSeconds = 60.f;
+	double RTSPerfTestStart = 0.0;
+	int32 RTSPerfTestPhase = 0;
+	int32 RTSPerfTestOrderCount = 0;
+
+public:
 	/** Schickt die Vorhersage eines Befehls an alle Clients. Siehe ClientPredictMaxPerRPC. */
 	void NotifyClientsOfBatchMove(
 		const TArray<AUnitBase*>& Units,
