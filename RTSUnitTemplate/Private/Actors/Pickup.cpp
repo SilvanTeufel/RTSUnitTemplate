@@ -110,7 +110,7 @@ void APickup::Tick(float DeltaTime)
 			}
 
 			if(Sound && UnitBase->IsOnViewport)
-				UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetActorLocation(), 1.f);
+				UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetMassActorLocation(), 1.f);
 		 	
 			DestroySelectableWithDelay();
 			Executed = true;

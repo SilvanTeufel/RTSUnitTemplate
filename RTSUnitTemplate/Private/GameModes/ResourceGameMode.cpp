@@ -429,7 +429,7 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 	// Get the closest resource's distance as reference for threshold
 	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base)) 
 		? Worker->Base->GetActorLocation() 
-		: Worker->GetActorLocation();
+		: Worker->GetMassActorLocation();
 	
 	const float ClosestDistance = WorkPlaces.Num() > 0 
 		? FVector::Dist(ReferenceLocation, WorkPlaces[0]->GetActorLocation()) 
@@ -598,7 +598,7 @@ ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Work
 			}	
 			else
 			{
-				float DistanceSquared = (Base->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
+				float DistanceSquared = (Base->GetActorLocation() - Worker->GetMassActorLocation()).SizeSquared();
 				if (DistanceSquared < MinDistanceSquared)
 				{
 					MinDistanceSquared = DistanceSquared;
@@ -618,7 +618,7 @@ AWorkArea* AResourceGameMode::GetClosestWorkArea(AWorkingUnitBase* Worker, const
 
 	for (AWorkArea* Area : WorkAreas)
 	{
-		float DistanceSquared = (Area->GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
+		float DistanceSquared = (Area->GetActorLocation() - Worker->GetMassActorLocation()).SizeSquared();
 		if (DistanceSquared < MinDistanceSquared)
 		{
 			MinDistanceSquared = DistanceSquared;
@@ -661,7 +661,7 @@ TArray<AWorkArea*> AResourceGameMode::GetFiveClosestResourcePlaces(AWorkingUnitB
 	// This ensures resources are selected based on proximity to the base, not the worker's current position
 	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base))
 		? Worker->Base->GetActorLocation()
-		: Worker->GetActorLocation();
+		: Worker->GetMassActorLocation();
 	
 	AllAreas.Sort([ReferenceLocation](const AWorkArea& AreaA, const AWorkArea& AreaB) {
 		return (AreaA.GetActorLocation() - ReferenceLocation).SizeSquared() < 
@@ -705,8 +705,8 @@ TArray<AWorkArea*> AResourceGameMode::GetClosestBuildPlaces(AWorkingUnitBase* Wo
 
 	// Sort all areas by distance to the worker
 	AllAreas.Sort([Worker](const AWorkArea& AreaA, const AWorkArea& AreaB) {
-		return (AreaA.GetActorLocation() - Worker->GetActorLocation()).SizeSquared() < 
-			   (AreaB.GetActorLocation() - Worker->GetActorLocation()).SizeSquared();
+		return (AreaA.GetActorLocation() - Worker->GetMassActorLocation()).SizeSquared() < 
+			   (AreaB.GetActorLocation() - Worker->GetMassActorLocation()).SizeSquared();
 	});
 
 	// Take up to the first X areas
@@ -851,7 +851,7 @@ TArray<AWorkArea*> AResourceGameMode::GetAllResourcePlaces(AWorkingUnitBase* Wor
 	// Sort all areas by distance to the worker's base (if available), otherwise use worker location
 	const FVector ReferenceLocation = (Worker->Base && IsValid(Worker->Base))
 		? Worker->Base->GetActorLocation()
-		: Worker->GetActorLocation();
+		: Worker->GetMassActorLocation();
 
 	AllAreas.Sort([ReferenceLocation](const AWorkArea& AreaA, const AWorkArea& AreaB) {
 		return (AreaA.GetActorLocation() - ReferenceLocation).SizeSquared() <
@@ -926,7 +926,7 @@ AWorkArea* AResourceGameMode::GetNearestAvailableResourceOfTypeWithin(AWorkingUn
 {
 	if (!Worker) return nullptr;
 
-	const FVector WorkerLoc = Worker->GetActorLocation();
+	const FVector WorkerLoc = Worker->GetMassActorLocation();
 	AWorkArea* Best = nullptr;
 	float BestDistSq = Radius * Radius; // only consider nodes within Radius
 

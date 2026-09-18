@@ -1168,7 +1168,7 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
                     GameState.MyUnitCount++;
                     GameState.MyTotalHealth += Attributes->GetHealth();
                     GameState.MyTotalAttackDamage += Attributes->GetAttackDamage();
-                    SumFriendlyPositions += MyUnit->GetActorLocation();
+                    SumFriendlyPositions += MyUnit->GetMassActorLocation();
                     NumFriendlyUnits++;
                 }
                 else
@@ -1176,7 +1176,7 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
                     GameState.EnemyUnitCount++;
                     GameState.EnemyTotalHealth += Attributes->GetHealth();
                     GameState.EnemyTotalAttackDamage += Attributes->GetAttackDamage();
-                    SumEnemyPositions += MyUnit->GetActorLocation();
+                    SumEnemyPositions += MyUnit->GetMassActorLocation();
                     NumEnemyUnits++;
                 }
 

@@ -373,7 +373,7 @@ void AEffectArea::HandleProjectileImpact_Implementation(AActor* Shooter, const F
 	if (ProjectileClass && Shooter) {
 		if (const AProjectile* CDO = ProjectileClass->GetDefaultObject<AProjectile>()) {
 			if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(Shooter)) {
-				const FVector FromLoc = PerfShooter->GetActorLocation();
+				const FVector FromLoc = PerfShooter->GetMassActorLocation();
 				const FRotator FaceRot = (ImpactLocation - FromLoc).Rotation();
 				PerfShooter->FireEffectsAtLocation(CDO->ImpactVFX, CDO->ImpactSound, CDO->ScaleImpactVFX, CDO->ScaleImpactSound, ImpactLocation, 2.0f, FaceRot);
 			}

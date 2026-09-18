@@ -125,7 +125,7 @@ void AUnitSpawnPlatform::UpdateUnitPositions()
 			FVector Offset = FVector(0.0f, UnitSpacing * i, 0.0f);
 			FVector RotatedOffset = QuatRotation.RotateVector(Offset);
 			FVector NewSpawnLocation = GetActorLocation() + BaseOffset + RotatedOffset;
-			if (FVector::Dist(Unit->GetActorLocation(), NewSpawnLocation) > 100.0f)
+			if (FVector::Dist(Unit->GetMassActorLocation(), NewSpawnLocation) > 100.0f)
 			{
 				Unit->SetActorLocation(NewSpawnLocation);
 			}

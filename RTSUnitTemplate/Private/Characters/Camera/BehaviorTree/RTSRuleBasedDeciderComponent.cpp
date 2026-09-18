@@ -2120,7 +2120,7 @@ void URTSRuleBasedDeciderComponent::EvaluateDefence()
 		if (!IsValid(Unit) || Unit->TeamId == MyTeamId || Unit->TeamId <= 0) continue;
 		if (Unit->GetUnitState() == UnitData::Dead || Unit->bIsBuilding) continue;
 
-		const FVector Loc = Unit->GetActorLocation();
+		const FVector Loc = Unit->GetMassActorLocation();
 		for (const FVector& Building : OwnBuildings)
 		{
 			const double DistSq = FVector::DistSquared2D(Loc, Building);
