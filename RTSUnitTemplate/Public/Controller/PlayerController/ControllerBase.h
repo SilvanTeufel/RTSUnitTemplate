@@ -225,8 +225,24 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void LeftClickAMove(AUnitBase* Unit, FVector Location);
 	
+	/**
+	 * @param TargetUnit  Das bereits auf dem Client aufgeloeste Ziel, oder nullptr.
+	 *
+	 * WOFUER: die Umsetzung spurte bisher selbst nach einem Ziel (ECC_Pawn unter dem Cursor).
+	 * Das hat zwei Nachteile. Erstens laeuft sie als Server-RPC, liest also den Cursor des
+	 * SERVERS - bei einem Client trifft sie damit irgendetwas anderes als das Angeklickte.
+	 * Zweitens braucht jede Einheit eine Kollisionsform, nur damit diese Spur sie findet.
+	 *
+	 * Der Client loest das Ziel ohnehin schon auf (GetSelectableHitUnderCursor, inklusive der
+	 * Einheit, die UMassUnitHoverProcessor GEOMETRISCH markiert hat - ohne Kollision). Genau so
+	 * macht es LeftClickAttackMass mit seinem CursorHitActor bereits. Damit koennen die
+	 * Einheiten-Parents auf NoCollision stehen.
+	 *
+	 * nullptr behaelt das alte Verhalten bei, damit Blueprint-Aufrufer und der RL-Agent, die
+	 * kein Ziel mitgeben, nicht stillschweigend ihre Zielauswahl verlieren.
+	 */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void LeftClickAttack(AUnitBase* Unit, FVector Location);
+	void LeftClickAttack(AUnitBase* Unit, FVector Location, AUnitBase* TargetUnit = nullptr);
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void FireAbilityMouseHit(AUnitBase* Unit, const FHitResult& InHitResult);
