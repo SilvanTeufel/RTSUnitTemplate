@@ -7,6 +7,7 @@
 #include "MassExecutionContext.h"
 #include "MassNavigationFragments.h" // For EMassMovementAction
 #include "Mass/UnitMassTag.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UChargeMonitorProcessor::UChargeMonitorProcessor(): EntityQuery()
 {
@@ -34,6 +35,10 @@ void UChargeMonitorProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
 
 void UChargeMonitorProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UChargeMonitorProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UChargeMonitorProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

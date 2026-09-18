@@ -5,6 +5,7 @@
 #include "MassEntityManager.h"
 #include "Mass/UnitMassTag.h"
 #include "MassCommonFragments.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 URunAnimationProcessor::URunAnimationProcessor()
 {
@@ -30,6 +31,10 @@ void URunAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManage
 
 void URunAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/URunAnimationProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(URunAnimationProcessor);
+
 	EntityQuery.ForEachEntityChunk(Context, ([&](FMassExecutionContext& ChunkContext)
 	{
 		const float DeltaTime = ChunkContext.GetDeltaTimeSeconds();

@@ -20,6 +20,7 @@
 #include "GameFramework/Character.h"
 #include "Async/Async.h"
 #include "MassEntitySubsystem.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassUnitHoverProcessor::UMassUnitHoverProcessor()
 {
@@ -84,6 +85,10 @@ void UMassUnitHoverProcessor::BeginDestroy()
 
 void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassUnitHoverProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassUnitHoverProcessor);
+
 	UWorld* World = EntityManager.GetWorld();
 	if (!World || !SignalSubsystem) return;
 

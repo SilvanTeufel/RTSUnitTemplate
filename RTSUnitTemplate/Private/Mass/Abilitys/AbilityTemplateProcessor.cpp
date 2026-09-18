@@ -8,6 +8,7 @@
 #include "Characters/Unit/AbilityUnit.h"
 #include "System/AbilityTemplateSubsystem.h"
 #include "Engine/World.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UAbilityTemplateProcessor::UAbilityTemplateProcessor()
 {
@@ -28,6 +29,10 @@ void UAbilityTemplateProcessor::ConfigureQueries(const TSharedRef<FMassEntityMan
 void UAbilityTemplateProcessor::Execute(FMassEntityManager& EntityManager,
                                         FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UAbilityTemplateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UAbilityTemplateProcessor);
+
 	UWorld* World = GetWorld();
 	if (!World)
 	{

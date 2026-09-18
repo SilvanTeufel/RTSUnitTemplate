@@ -13,6 +13,7 @@
 #include "Engine/World.h"
 #include "Characters/Unit/UnitBase.h"
 #include "MassActorSubsystem.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UMassProjectileMovementProcessor::UMassProjectileMovementProcessor()
 {
@@ -35,6 +36,10 @@ void UMassProjectileMovementProcessor::ConfigureQueries(const TSharedRef<FMassEn
 
 void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassProjectileMovementProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassProjectileMovementProcessor);
+
 	static uint32 LogThrottle = 0;
 	bool bSyncFromCDO = (LogThrottle % 120 == 0); // Sync from CDO every 120 frames
 	LogThrottle++;

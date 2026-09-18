@@ -12,6 +12,7 @@
 #include "NavAreas/NavArea_Obstacle.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h" // UWorld::IsNetMode / NM_Client
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // CLIENT-ONLY multiplier for the soft-avoidance (push-back-onto-navmesh) force. Default 1.0 = FULL: unlike
 // separation, this force keeps units ON the navmesh at corners/edges and largely AGREES with the reconciler
@@ -47,6 +48,11 @@ void UUnitSoftAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
 
 void UUnitSoftAvoidanceProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitSoftAvoidanceProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitSoftAvoidanceProcessor);
+
+
+
 	TimeSinceLastRun += Context.GetDeltaTimeSeconds();
 	if (TimeSinceLastRun < ExecutionInterval)
 	{

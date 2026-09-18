@@ -26,6 +26,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 UDeathStateProcessor::UDeathStateProcessor(): EntityQuery()
 {
@@ -382,6 +383,10 @@ void UDeathStateProcessor::HandleUpdateDissolve(FName SignalName, TArray<FMassEn
 
 void UDeathStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UDeathStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UDeathStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {

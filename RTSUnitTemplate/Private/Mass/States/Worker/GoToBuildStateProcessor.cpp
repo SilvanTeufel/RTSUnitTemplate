@@ -19,6 +19,7 @@
 #include "Mass/UnitMassTag.h"
 #include "Mass/Signals/MySignals.h"
 #include "Characters/Unit/UnitBase.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 
 UGoToBuildStateProcessor::UGoToBuildStateProcessor(): EntityQuery()
@@ -72,6 +73,10 @@ void UGoToBuildStateProcessor::InitializeInternal(UObject& Owner, const TSharedR
 
 void UGoToBuildStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UGoToBuildStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UGoToBuildStateProcessor);
+
     TimeSinceLastRun += Context.GetDeltaTimeSeconds();
     if (TimeSinceLastRun < ExecutionInterval)
     {
