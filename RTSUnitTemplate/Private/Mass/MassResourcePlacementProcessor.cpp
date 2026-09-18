@@ -7,6 +7,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "MassCommonTypes.h"
 #include "MassCommonFragments.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 
 // Collected ISM instance update for batched dispatch
 struct FResourceISMInstanceUpdate
@@ -33,6 +34,10 @@ void UMassResourcePlacementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 }
 
 void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context) {
+
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UMassResourcePlacementProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UMassResourcePlacementProcessor);
+
     // Batch-Update: collect updates per ISM component instead of calling UpdateInstanceTransform individually
     TMap<UInstancedStaticMeshComponent*, TArray<FResourceISMInstanceUpdate>> BatchedUpdates;
 
@@ -61,8 +66,12 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
                         static const FName SocketName(TEXT("ResourceSocket"));
                         ResourceTransform = Worker->GetMesh()->GetSocketTransform(SocketName);
                     } else {
-                        // Fallback for ISMs: Use Actor Transform
-                        ResourceTransform = Worker->GetActorTransform();
+                        // Fallback for ISMs: Mass-Lage, NICHT die Aktorlage. Die getragene Ressource
+                        // wird hier jedes Bild an diese Transformation gesetzt; mit der Aktorlage
+                        // wuerde sie unter der Drosselung (siehe ActorSyncScaleStartUnits) bis zu
+                        // 0,5 s hinter dem Traeger herruckeln. Der skelettale Zweig darueber ist
+                        // nicht betroffen - solche Einheiten werden gar nicht erst gedrosselt.
+                        ResourceTransform = Worker->GetMassActorTransform();
                     }
 
                     if (!ResourceFrag.SocketOffset.IsNearlyZero()) {

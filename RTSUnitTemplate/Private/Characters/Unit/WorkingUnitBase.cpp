@@ -421,7 +421,7 @@ AWorkArea* AWorkingUnitBase::SpawnWorkAreaReplicated(TSubclassOf<AWorkArea> Work
 
 			if (Unit)
 			{
-				const FVector UnitLoc = Unit->GetActorLocation();
+				const FVector UnitLoc = Unit->GetMassActorLocation();
 				FVector UnitExtentBounds(100.f, 100.f, 100.f);
 
 				if (UCapsuleComponent* Capsule = Unit->FindComponentByClass<UCapsuleComponent>())

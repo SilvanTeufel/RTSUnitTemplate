@@ -64,6 +64,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Core/CollisionUtils.h"
 #include "Core/RTSUnitUtils.h"
+#include "ProfilingDebugging/CsvProfiler.h"
 using namespace RTSUnitUtils;
 
 // Diagnostic: set `RTS.WorkerMineLog 1` in the console to trace why an idle worker does/doesn't
@@ -431,6 +432,10 @@ void UUnitStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>&
 
 void UUnitStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
+	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UUnitStateProcessor im CSV sichtbar.
+	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UUnitStateProcessor);
+
+
   
 }
 
@@ -1142,7 +1147,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			
             		if (StrongUnitActor->Base)
             		{
-            			FVector WorkerLoc = StrongUnitActor->GetActorLocation();
+            			FVector WorkerLoc = StrongUnitActor->GetMassActorLocation();
             			FVector BaseLoc = StrongUnitActor->Base->GetActorLocation();
 
             			// 2D Richtung von Basis zum Worker
@@ -1151,7 +1156,7 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             			DirToWorker = DirToWorker.GetSafeNormal();
 
             			float BaseRadius = StrongUnitActor->Base->GetCollisionRadiusInDirection(DirToWorker);
-            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetActorRotation()) : 0.f;
+            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetMassActorRotation()) : 0.f;
 
             			// Position am Rand der Basis extrapolieren
             			FVector TargetXY = BaseLoc + DirToWorker * (BaseRadius + AgentRadius);
@@ -1165,14 +1170,14 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		WorkerStats->BuildingAreaAvailable = (StrongUnitActor->BuildArea && IsValid(StrongUnitActor->BuildArea)) ? true : false;
             		if (StrongUnitActor->BuildArea)
             		{
-            			FVector WorkerLoc = StrongUnitActor->GetActorLocation();
+            			FVector WorkerLoc = StrongUnitActor->GetMassActorLocation();
             			FVector AreaLoc = StrongUnitActor->BuildArea->GetActorLocation();
             			FVector DirToWorker = (WorkerLoc - AreaLoc);
             			DirToWorker.Z = 0.f;
             			DirToWorker = DirToWorker.GetSafeNormal();
 
             			float AreaRadius = StrongUnitActor->BuildArea->GetCollisionRadiusInDirection(DirToWorker);
-            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetActorRotation()) : 0.f;
+            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetMassActorRotation()) : 0.f;
             			
             			FVector TargetXY = AreaLoc + DirToWorker * (AreaRadius + AgentRadius);
             			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
@@ -1192,14 +1197,14 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		
             		if (StrongUnitActor->ResourcePlace)
             		{
-            			FVector WorkerLoc = StrongUnitActor->GetActorLocation();
+            			FVector WorkerLoc = StrongUnitActor->GetMassActorLocation();
             			FVector AreaLoc = StrongUnitActor->ResourcePlace->GetActorLocation();
             			FVector DirToWorker = (WorkerLoc - AreaLoc);
             			DirToWorker.Z = 0.f;
             			DirToWorker = DirToWorker.GetSafeNormal();
 
             			float AreaRadius = StrongUnitActor->ResourcePlace->GetCollisionRadiusInDirection(DirToWorker);
-            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetActorRotation()) : 0.f;
+            			float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, StrongUnitActor->GetMassActorRotation()) : 0.f;
 
             			FVector TargetXY = AreaLoc + DirToWorker * (AreaRadius + AgentRadius);
             			TargetXY = ProjectLocationToNavMeshOnEdge(StrongUnitActor->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
@@ -3434,7 +3439,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				// UMassActorBindingComponent, which fills it from SpawnStoredLocation.
 				if (StateFrag.StoredLocation.IsNearlyZero())
 				{
-					StateFrag.StoredLocation = Unit->GetActorLocation();
+					StateFrag.StoredLocation = Unit->GetMassActorLocation();
 				}
 
 				if (PatrolFragPtr && Unit->UnitState == UnitData::PatrolRandom)
@@ -3513,7 +3518,7 @@ void UUnitStateProcessor::HandleUnitSpawnedSignal(
 				{
 					if (Unit) 
 					{
-						const FVector ActorInitialLocation = Unit->GetActorLocation();
+						const FVector ActorInitialLocation = Unit->GetMassActorLocation();
 						FTransform MyTransform = TransformFragPtr->GetMutableTransform();
 						MyTransform.SetLocation(ActorInitialLocation);
 					}

@@ -128,7 +128,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 				// Y = rechts. Atan2(Y, X) ergibt damit direkt den Winkel gegen die
 				// Blickrichtung, 0 = vorwaerts, +/-180 = rueckwaerts.
 				const FVector LokaleGeschwindigkeit =
-					UnitBase->GetActorRotation().UnrotateVector(MassVelocity);
+					UnitBase->GetMassActorRotation().UnrotateVector(MassVelocity);
 				LocomotionDirection = FMath::RadiansToDegrees(
 					FMath::Atan2(LokaleGeschwindigkeit.Y, LokaleGeschwindigkeit.X));
 
@@ -286,7 +286,7 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			if(Sound && UnitBase)
 			{
 				if(SoundTimer == 0.f)
-					UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetActorLocation(), 1.f);
+					UGameplayStatics::PlaySoundAtLocation(UnitBase, Sound, UnitBase->GetMassActorLocation(), 1.f);
 
 				SoundTimer += Deltaseconds;
 				

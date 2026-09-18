@@ -332,7 +332,7 @@ void ABuildingBase::AutoLoadNearbyWorkers()
 		if (!Worker->IsWorker || !Worker->CanBeTransported) continue;
 		if (Worker->TeamId != TeamId) continue;
 		if (Worker->GetUnitState() == UnitData::Dead) continue;
-		if (FVector::DistSquared(Here, Worker->GetActorLocation()) > RadiusSq) continue;
+		if (FVector::DistSquared(Here, Worker->GetMassActorLocation()) > RadiusSq) continue;
 		Candidates.Add(Worker);
 	}
 
@@ -621,7 +621,7 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 	}
 	
 	// Use Base location for distance calculation (worker is at base when this is called)
-	const FVector BaseLocation = IsValid(UnitBase->Base) ? UnitBase->Base->GetActorLocation() : UnitBase->GetActorLocation();
+	const FVector BaseLocation = IsValid(UnitBase->Base) ? UnitBase->Base->GetActorLocation() : UnitBase->GetMassActorLocation();
 
 	// Calculate distance threshold based on the closest resource (multiplier of closest distance)
 	const float ClosestDistance = FVector::Dist(BaseLocation, AllWorkPlaces[0]->GetActorLocation());

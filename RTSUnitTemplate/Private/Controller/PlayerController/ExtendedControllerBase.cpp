@@ -790,7 +790,7 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
 			// Check if the unit is valid and has the same TeamId as the camera and is eligible for selection
 			if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected) // && !Unit->BuildArea
 			{
-				float DistanceSquared = FVector::DistSquared(Position, Unit->GetActorLocation());
+				float DistanceSquared = FVector::DistSquared(Position, Unit->GetMassActorLocation());
 				// Check if this unit is closer than the currently tracked closest unit
 				if (DistanceSquared < ClosestDistanceSquared)
 				{
@@ -825,7 +825,7 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 		// Check if the unit is valid, belongs to the player, is a worker, not building, and is selectable
 		if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected) // && !Unit->BuildArea
 		{
-			float DistanceSquared = FVector::DistSquared(Position, Unit->GetActorLocation());
+			float DistanceSquared = FVector::DistSquared(Position, Unit->GetMassActorLocation());
 			// Check if this unit is closer than the currently tracked closest unit
 			if (DistanceSquared < ClosestDistanceSquared)
 			{
@@ -1626,7 +1626,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
             }
             OtherExtent.X = R;
             OtherExtent.Y = R;
-            OtherCenter = TargetBuilding->GetActorLocation();
+            OtherCenter = TargetBuilding->GetMassActorLocation();
         }
     }
 
@@ -2721,7 +2721,7 @@ void AExtendedControllerBase::PerformWorkAreaDistanceResolution(AWorkArea* Dragg
 void AExtendedControllerBase::GetSnappedExtensionTransform(ABuildingBase* Unit, const FVector& MouseLocation, FVector& OutLocation, FRotator& OutRotation)
 {
     if (!Unit) return;
-    const FVector UnitLoc = Unit->GetActorLocation();
+    const FVector UnitLoc = Unit->GetMassActorLocation();
     FVector UnitCenterBounds, UnitExtentBounds;
     GetActorBoundsForSnap(Unit, UnitCenterBounds, UnitExtentBounds);
 
@@ -2821,7 +2821,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	// Calculate a stable ground-plane projection at the initiator building's base level.
 	// This prevents "jumps" in world position when the trace hits building tops vs. ground.
 	FVector UnitCenter, UnitExtent(100.f, 100.f, 100.f);
-	float PlaneZ = Unit->GetActorLocation().Z;
+	float PlaneZ = Unit->GetMassActorLocation().Z;
 	if (GetActorBoundsForSnap(Unit, UnitCenter, UnitExtent))
 	{
 		PlaneZ = UnitCenter.Z - UnitExtent.Z;
@@ -2858,8 +2858,8 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	auto IsWithinSnapReach = [&](ABuildingBase* Target) -> bool
 	{
 		if (!Target || !Unit) return false;
-		const FVector UnitLoc = Unit->GetActorLocation();
-		const FVector TargetLocPos = Target->GetActorLocation();
+		const FVector UnitLoc = Unit->GetMassActorLocation();
+		const FVector TargetLocPos = Target->GetMassActorLocation();
 		const FVector2D Dir = FVector2D(TargetLocPos.X - UnitLoc.X, TargetLocPos.Y - UnitLoc.Y);
 		const float ActualDist = Dir.Size();
 		float MaxDist = 0.f;
@@ -2960,7 +2960,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			ABuildingBase* DirectTarget = GetBuildingBaseFromActor(Hit.GetActor());
 			if (DirectTarget && IsCompatibleForEnergyWall(Unit, DirectTarget) && IsWithinSnapReach(DirectTarget))
 			{
-				const float D = FVector::Dist2D(StableMouseLocation, DirectTarget->GetActorLocation());
+				const float D = FVector::Dist2D(StableMouseLocation, DirectTarget->GetMassActorLocation());
 				Best = DirectTarget; BestD = D;
 			}
 
@@ -3095,7 +3095,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	// 5. Finalisierung: Bei Snapping exakt die Gebäudeposition übernehmen
 	if (bFoundCompatible && TargetBuilding)
 	{
-		FVector BuildingLoc = TargetBuilding->GetActorLocation();
+		FVector BuildingLoc = TargetBuilding->GetMassActorLocation();
 		TargetLoc.X = BuildingLoc.X;
 		TargetLoc.Y = BuildingLoc.Y;
 
@@ -4108,7 +4108,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
 
         if (AbilityRange > 0.f)
         {
-            const float Distance = FVector::Dist(MouseGround, Unit->GetActorLocation());
+            const float Distance = FVector::Dist(MouseGround, Unit->GetMassActorLocation());
             if (Distance > AbilityRange)
             {
                 bAnyOutOfRange = true;
@@ -4153,7 +4153,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
         if (SelectedUnits.Num() > 0 && SelectedUnits[0])
         {
             AUnitBase* Unit = SelectedUnits[0];
-            const FVector ALocation = Unit->GetActorLocation();
+            const FVector ALocation = Unit->GetMassActorLocation();
             const float Distance = FVector::Dist(MouseGround, ALocation);
             if (Unit->CurrentSnapshot.AbilityClass)
             {
@@ -4331,7 +4331,7 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
                         R += TargetBuilding->MassActorBindingComponent->AdditionalCapsuleRadius;
                     }
                     OtherExt.X = R; OtherExt.Y = R;
-                    OtherCenter = TargetBuilding->GetActorLocation();
+                    OtherCenter = TargetBuilding->GetMassActorLocation();
                 }
             }
             const FVector2D ToTarget(MouseGround.X - OtherCenter.X, MouseGround.Y - OtherCenter.Y);
@@ -4503,7 +4503,7 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 	FRotator DesiredRot = WA->ServerMeshRotationBuilding;
 	if (Unit)
 	{
-		const FVector UnitLoc = Unit->GetActorLocation();
+		const FVector UnitLoc = Unit->GetMassActorLocation();
 		const FVector WLoc = WA->GetActorLocation();
 		const FVector2D Delta2D(WLoc.X - UnitLoc.X, WLoc.Y - UnitLoc.Y);
 		if (FMath::Abs(Delta2D.X) >= FMath::Abs(Delta2D.Y))
@@ -4827,7 +4827,7 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 		{
 			if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(DiagWorld))
 			{
-				const FVector Von = Worker->GetActorLocation();
+				const FVector Von = Worker->GetMassActorLocation();
 				const FVector Nach = Worker->BuildArea->GetActorLocation();
 				if (const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance())
 				{
@@ -4899,14 +4899,14 @@ void AExtendedControllerBase::SendWorkerToWork_Implementation(AUnitBase* Worker)
 			{
 				WorkerStats->BuildingAreaAvailable = true;
 
-				FVector WorkerLoc = Worker->GetActorLocation();
+				FVector WorkerLoc = Worker->GetMassActorLocation();
 				FVector AreaLoc = Worker->BuildArea->GetActorLocation();
 				FVector DirToWorker = (WorkerLoc - AreaLoc);
 				DirToWorker.Z = 0.f;
 				DirToWorker = DirToWorker.GetSafeNormal();
 
 				float AreaRadius = Worker->BuildArea->GetCollisionRadiusInDirection(DirToWorker);
-				float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, Worker->GetActorRotation()) : 0.f;
+				float AgentRadius = CharFragment ? CharFragment->GetRadiusInDirection(-DirToWorker, Worker->GetMassActorRotation()) : 0.f;
 
 				FVector TargetXY = AreaLoc + DirToWorker * (AreaRadius + AgentRadius);
 				TargetXY = ProjectLocationToNavMeshOnEdge(Worker->GetWorld(), AreaLoc, TargetXY, AreaRadius + AgentRadius);
@@ -5935,7 +5935,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					{
 						if (const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance())
 						{
-							const FVector Von = UnitBase->GetActorLocation();
+							const FVector Von = UnitBase->GetMassActorLocation();
 							const FVector Nach = DraggedWorkArea->GetActorLocation();
 							FPathFindingQuery Query(nullptr, *NavData, Von, Nach);
 							Query.SetAllowPartialPaths(true);
@@ -6086,10 +6086,10 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			TraceParams.AddIgnoredActor(UnitBase);
 			TraceParams.AddIgnoredActor(DraggedWorkArea);
 
-			float UnitGroundZ = UnitBase->GetActorLocation().Z;
+			float UnitGroundZ = UnitBase->GetMassActorLocation().Z;
 			float WAGroundZ = DraggedWorkArea->GetActorLocation().Z;
 
-			if (GetWorld()->LineTraceSingleByChannel(UnitHit, UnitBase->GetActorLocation() + TraceStartOffset, UnitBase->GetActorLocation() + TraceEndOffset, ECC_WorldStatic, TraceParams))
+			if (GetWorld()->LineTraceSingleByChannel(UnitHit, UnitBase->GetMassActorLocation() + TraceStartOffset, UnitBase->GetMassActorLocation() + TraceEndOffset, ECC_WorldStatic, TraceParams))
 			{
 				UnitGroundZ = UnitHit.Location.Z;
 			}
@@ -6325,7 +6325,7 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 	else
 	{
 		// Fallback if bounds fail
-		ZDiff = FMath::Abs(Target->GetActorLocation().Z - Initiator->GetActorLocation().Z);
+		ZDiff = FMath::Abs(Target->GetMassActorLocation().Z - Initiator->GetActorLocation().Z);
 	}
 
 	bool bZValid = ZDiff < EnergyWallSnapZTolerance;
@@ -6348,7 +6348,7 @@ bool AExtendedControllerBase::WallTrace(ABuildingBase* Unit, AActor* TargetActor
 		OutTraceZOffset = Capsule->GetScaledCapsuleHalfHeight() / 2.f;
 	}
 
-	OutStart = Unit->GetActorLocation() - FVector(0, 0, OutTraceZOffset);
+	OutStart = Unit->GetMassActorLocation() - FVector(0, 0, OutTraceZOffset);
 	OutEnd = TargetActor->GetActorLocation() - FVector(0, 0, OutTraceZOffset);
 
 	TArray<FHitResult> Hits;
