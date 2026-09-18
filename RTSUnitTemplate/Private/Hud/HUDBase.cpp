@@ -504,8 +504,9 @@ FVector AHUDBase::ResolveBuildingWaypointOrigin(const AUnitBase* Unit, const ABu
 		return FVector::ZeroVector;
 	}
 
-	const FVector ActorLoc = Unit->GetActorLocation();
-	const FRotator ActorRot = Unit->GetActorRotation();
+	// Mass-Lage statt Aktorlage: der Aktor hinkt unter der Drosselung bis zu 0,5 s nach.
+	const FVector ActorLoc = Unit->GetMassActorLocation();
+	const FRotator ActorRot = Unit->GetMassActorRotation();
 
 	// No config source -> HUD global default in the unit's actor frame.
 	if (!Config)
@@ -537,6 +538,7 @@ FVector AHUDBase::ResolveBuildingWaypointOrigin(const AUnitBase* Unit, const ABu
 
 void AHUDBase::DrawSelectedBuildingWaypointLinks()
 {
+
 	if (SelectedUnits.Num() == 0)
 	{
 		return;
@@ -555,7 +557,7 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 
 		// Frustum Culling: Gebäude im Bild?
 		FVector2D Dummy;
-		if (!PC->ProjectWorldLocationToScreen(Unit->GetActorLocation(), Dummy)) continue;
+		if (!PC->ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), Dummy)) continue;
 
 		// Draw the rally line for finished buildings (HasWaypoint) and for construction sites
 		// whose finished building has HasWaypoint (the rally the site carries until handoff).
@@ -657,6 +659,7 @@ void AHUDBase::DrawSelectedBuildingWaypointLinks()
 
 void AHUDBase::DrawSelectedUnitsMovementLines()
 {
+
 	if (SelectedUnits.Num() == 0)
 	{
 		return;
@@ -676,7 +679,7 @@ void AHUDBase::DrawSelectedUnitsMovementLines()
 	{
 		if (IsValid(Unit))
 		{
-			Sum += Unit->GetActorLocation();
+			Sum += Unit->GetMassActorLocation();
 			++Count;
 		}
 	}
@@ -834,7 +837,7 @@ static void AppendBandQuad(TArray<FCanvasUVTri>& Out, const FVector2D& P0, const
 	Out.Add(T1);
 }
 
-void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, const FSelectionSettings& Settings, bool bDisableOcclusionOverride, int32 InSegments)
+void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, float RadiusX, float RadiusY, const FRotator& Rotation, const FSelectionSettings& Settings, bool bDisableOcclusionOverride, int32 InSegments, TArray<FCanvasUVTri>* OutBatch)
 {
 	APlayerController* PC = GetOwningPlayerController();
 	if (!PC || !PC->PlayerCameraManager || !Canvas) return;
@@ -845,11 +848,36 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 	if (!PC->ProjectWorldLocationToScreen(Location + ZOff, ScreenCenter)) return;
     
 	FRotator YawRot(0, Rotation.Yaw, 0);
-	PC->ProjectWorldLocationToScreen(Location + ZOff + YawRot.RotateVector(FVector(RadiusX, 0, 0)), ScreenAxisX);
-	PC->ProjectWorldLocationToScreen(Location + ZOff + YawRot.RotateVector(FVector(0, RadiusY, 0)), ScreenAxisY);
+
+	// Rueckgabewerte PRUEFEN - genau hier entstanden die langen Linien quer ueber den Bildschirm.
+	//
+	// WOFUER: der Mittelpunkt kann noch vor der Kameraebene liegen, waehrend ein Achsenpunkt schon
+	// dahinter liegt. ProjectWorldLocationToScreen liefert dann false und laesst ScreenAxisX/Y
+	// UNVERAENDERT - der Aufrufer rechnete bisher trotzdem damit weiter. Aus VecX/VecY wurden
+	// dadurch riesige Werte und aus dem Auswahlring zwei Striche von der Bildecke zur Einheit.
+	// Gemeldet als "gruene Debuglinien, die von oben links zu den Einheiten laufen, sobald die
+	// Einheiten unten links aus dem Bild gewandert sind" - es war kein Debug-Code, sondern dieser
+	// Ring. Der Fehler trat nur am Bildrand auf, deshalb fiel er bei ruhiger Kamera nie auf.
+	const bool bAchseXOk = PC->ProjectWorldLocationToScreen(Location + ZOff + YawRot.RotateVector(FVector(RadiusX, 0, 0)), ScreenAxisX);
+	const bool bAchseYOk = PC->ProjectWorldLocationToScreen(Location + ZOff + YawRot.RotateVector(FVector(0, RadiusY, 0)), ScreenAxisY);
+	if (!bAchseXOk || !bAchseYOk)
+	{
+		return;
+	}
 
 	FVector2D VecX = ScreenAxisX - ScreenCenter;
 	FVector2D VecY = ScreenAxisY - ScreenCenter;
+
+	// Zweiter Riegel: auch eine GELUNGENE Projektion kann bei streifendem Winkel einen absurd
+	// langen Achsenvektor liefern. Ein Auswahlring, der breiter als der Bildschirm waere, ist
+	// keiner - er ist ein Artefakt.
+	int32 SchirmX = 0, SchirmY = 0;
+	PC->GetViewportSize(SchirmX, SchirmY);
+	const float MaxAchse = FMath::Max(SchirmX, SchirmY) * 1.0f;
+	if (MaxAchse > 0.f && (VecX.Size() > MaxAchse || VecY.Size() > MaxAchse))
+	{
+		return;
+	}
 
 	// --- OPTIMIERUNG: Size Culling ---
 	// Wenn der Kreis kleiner als ein paar Pixel ist, abbrechen
@@ -859,7 +887,9 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 	// material-textured band (accumulated into SelTris, drawn once) instead of flat lines. All
 	// Style / Thickness / occlusion-fade settings are preserved; the material only skins it.
 	const bool bUseSelMaterial = (Settings.SelectionMaterial != nullptr);
-	TArray<FCanvasUVTri> SelTris;
+	// In den Sammelpuffer schreiben, wenn einer da ist - sonst in ein eigenes Array wie bisher.
+	TArray<FCanvasUVTri> LocalTris;
+	TArray<FCanvasUVTri>& SelTris = OutBatch ? *OutBatch : LocalTris;
 	const float SelHalfThick = Settings.Thickness * 0.5f;
 
 	// 2. Occlusion-Vorbereitung
@@ -973,7 +1003,8 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 	}
 
 	// One batched material draw for the whole ring/octagon/arc (shared proxy -> batches across units).
-	if (bUseSelMaterial && SelTris.Num() > 0)
+	// Mit Sammelpuffer zeichnet der Aufrufer nach der Schleife - siehe OutBatch im Header.
+	if (bUseSelMaterial && !OutBatch && SelTris.Num() > 0)
 	{
 		FCanvasTriangleItem SelItem(SelTris, (const FTexture*)nullptr);
 		SelItem.MaterialRenderProxy = Settings.SelectionMaterial->GetRenderProxy();
@@ -984,6 +1015,7 @@ void AHUDBase::DrawSelectionIndicator(AUnitBase* Unit, const FVector& Location, 
 
 void AHUDBase::DrawAllSelectedUnitsIndicators()
 {
+
 	if (!bEnableStandardSelection) return;
 
 	UWorld* World = GetWorld();
@@ -996,13 +1028,35 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 
 	// Bestimmung der Genauigkeit basierend auf der Anzahl der Einheiten
 	int32 GlobalSegments = 64; // Höchste Genauigkeit (bis 25 Einheiten)
-	if (SelectedUnits.Num() > 50)
+	const int32 SelectedCount = SelectedUnits.Num();
+	if (SelectionVeryCoarseThreshold > 0 && SelectedCount > SelectionVeryCoarseThreshold)
 	{
-		GlobalSegments = 12;   // Niedrigste Genauigkeit (über 50 Einheiten)
+		GlobalSegments = 6;
 	}
-	else if (SelectedUnits.Num() > 25)
+	else if (SelectionCoarseThreshold > 0 && SelectedCount > SelectionCoarseThreshold)
+	{
+		GlobalSegments = 8;
+	}
+	else if (SelectedCount > 50)
+	{
+		GlobalSegments = 12;
+	}
+	else if (SelectedCount > 25)
 	{
 		GlobalSegments = 32;   // Mittlere Genauigkeit (26 bis 50 Einheiten)
+	}
+
+	// Kameradaten EINMAL holen - siehe SelectionMaxDrawDistance im Header.
+	const FVector CameraLocation = PC->PlayerCameraManager->GetCameraLocation();
+	const FVector KameraBlick = PC->PlayerCameraManager->GetCameraRotation().Vector();
+	const float MaxDistSquared = (SelectionMaxDrawDistance > 0.f)
+		? SelectionMaxDrawDistance * SelectionMaxDrawDistance
+		: TNumericLimits<float>::Max();
+
+	// Puffer leeren, aber die Belegung behalten - siehe SelectionBatches im Header.
+	for (auto& Paar : SelectionBatches)
+	{
+		Paar.Value.Reset();
 	}
 
 	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
@@ -1014,13 +1068,34 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 			continue; 
 		}
 
-		FVector DrawLocation = Unit->GetActorLocation();
+		// 0a. Die Sichtbarkeit steht schon fest - UMassUnitVisibilityProcessor berechnet sie
+		//     zentral fuer alle Einheiten (Unit->IsOnViewport). Sie hier noch einmal zu ermitteln
+		//     waere doppelte Arbeit, und fuer eine Einheit ausserhalb des Bildes ist JEDE weitere
+		//     Zeile verschwendet: Projektion, Fragmentzugriff, Segmentrechnung.
+		//
+		//     Nebenwirkung, die zugleich einen Fehler behebt: eine Einheit am Bildrand konnte einen
+		//     ENTARTETEN Ring erzeugen. Ihr Mittelpunkt lag noch vor der Kameraebene, ein
+		//     Achsenpunkt schon dahinter - die Projektion des Achsenpunktes schlug fehl, ihr
+		//     Rueckgabewert wurde ignoriert, und aus dem Ring wurden lange Striche von der Bildecke
+		//     zur Einheit. Gemeldet als "gruene Debuglinien", war aber dieser Ring.
+		if (!Unit->IsOnViewport)
+		{
+			continue;
+		}
+
+		FVector DrawLocation = Unit->GetMassActorLocation();
+
+		// 0b. Billige Vorabpruefung in WELTKOORDINATEN, bevor irgendetwas projiziert wird.
+		//    Ein Skalarprodukt statt vier Projektionen - siehe SelectionMaxDrawDistance.
+		const FVector ToUnit = DrawLocation - CameraLocation;
+		if (ToUnit.SizeSquared() > MaxDistSquared) continue;          // zu weit weg
+		if (FVector::DotProduct(ToUnit, KameraBlick) <= 0.f) continue;  // hinter der Kamera
 
 		// 1. Frustum Culling (Grobe Prüfung ob Einheit im Bild)
 		FVector2D ScreenPos;
 		if (!PC->ProjectWorldLocationToScreen(DrawLocation, ScreenPos)) continue;
 
-		FRotator UnitRotation = Unit->GetActorRotation();
+		FRotator UnitRotation = Unit->GetMassActorRotation();
 		float FinalRadiusX = 60.f;
 		float FinalRadiusY = 60.f;
 		bool bIsFlying = false;
@@ -1068,16 +1143,36 @@ void AHUDBase::DrawAllSelectedUnitsIndicators()
 		else if (bIsFlying) EffectiveSettings = FlyingSelectionSettings;
 		else EffectiveSettings = GroundSelectionSettings;
 
+		TArray<FCanvasUVTri>* Puffer = nullptr;
+		if (EffectiveSettings.SelectionMaterial)
+		{
+			Puffer = &SelectionBatches.FindOrAdd(EffectiveSettings.SelectionMaterial);
+		}
+
 		DrawSelectionIndicator(
 			Unit,
-			DrawLocation, 
-			FinalRadiusX * EffectiveSettings.SizeMultiplier, 
-			FinalRadiusY * EffectiveSettings.SizeMultiplier, 
-			UnitRotation, 
+			DrawLocation,
+			FinalRadiusX * EffectiveSettings.SizeMultiplier,
+			FinalRadiusY * EffectiveSettings.SizeMultiplier,
+			UnitRotation,
 			EffectiveSettings,
 			bIsFlying,
-			GlobalSegments
+			GlobalSegments,
+			Puffer
 		);
+	}
+
+	// EIN Zeichenauftrag je Material statt einem je Einheit.
+	for (auto& Paar : SelectionBatches)
+	{
+		if (Paar.Value.Num() == 0 || !Paar.Key)
+		{
+			continue;
+		}
+		FCanvasTriangleItem SammelItem(Paar.Value, (const FTexture*)nullptr);
+		SammelItem.MaterialRenderProxy = Paar.Key->GetRenderProxy();
+		SammelItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(SammelItem);
 	}
 }
 
@@ -1170,7 +1265,7 @@ void AHUDBase::HandleSelectionRectangle()
 			if (Controller && Unit->CanBeSelected && !IsForeignCameraUnit(Unit) && Unit->bUseSkeletalMovement && (Unit->TeamId == Controller->SelectableTeamId || Controller->SelectableTeamId == 0)) //  && !SUnit
 			{
 				FVector2D ScreenLocation;
-				if (Controller->ProjectWorldLocationToScreen(Unit->GetActorLocation(), ScreenLocation))
+				if (Controller->ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), ScreenLocation))
 				{
 					if (ScreenLocation.X >= SelectionRectMin.X && ScreenLocation.X <= SelectionRectMax.X &&
 						ScreenLocation.Y >= SelectionRectMin.Y && ScreenLocation.Y <= SelectionRectMax.Y)
@@ -1397,7 +1492,7 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
         AMassUnitBase* Unit = *It;
         if (!Unit) continue;
 
-        if (Unit->bUseSkeletalMovement || (Controller->SelectableTeamId != 0 && Unit->TeamId != Controller->SelectableTeamId))
+        if (Controller->SelectableTeamId != 0 && Unit->TeamId != Controller->SelectableTeamId)
             continue;
 
         if (AUnitBase* UB = Cast<AUnitBase>(Unit))
@@ -1407,6 +1502,47 @@ void AHUDBase::SelectISMUnitsInRectangle(const FVector2D& RectMin, const FVector
         }
 
         // Test each instance from VisualInstances in fragment
+        // SKELETT-EINHEITEN HABEN KEINE ISM-INSTANZ - sie werden ueber ihre Lage erfasst.
+        //
+        // Frueher stand hier ein "if (bUseSkeletalMovement) continue;" und SKM-Einheiten wurden
+        // stattdessen von GetActorsInSelectionRectangle erfasst. Das laeuft aber ueber
+        // GetComponentsBoundingBox, und der Aufruf weiter oben uebergibt bIncludeNonColliding
+        // = false - seit RTS.Units.NoCollision die Kapsel abschaltet, hat eine SKM-Einheit damit
+        // keine Huelle mehr und fiel aus der Rahmenauswahl heraus. Per Linksklick ging sie
+        // weiterhin, weil dort UMassUnitHoverProcessor greift, der rein geometrisch arbeitet.
+        //
+        // Statt die Engine-Huelle zu reparieren, macht dieser Zweig es wie der ISM-Zweig darunter:
+        // Lage projizieren, gegen das Rechteck pruefen. Das braucht KEINE Kollision und ist damit
+        // von jeder Kollisionseinstellung unabhaengig.
+        if (Unit->bUseSkeletalMovement)
+        {
+            FVector2D SkmScreenLoc;
+            if (!PC->ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), SkmScreenLoc))
+                continue;
+
+            if (SkmScreenLoc.X >= FMath::Min(RectMin.X, RectMax.X) &&
+                SkmScreenLoc.X <= FMath::Max(RectMin.X, RectMax.X) &&
+                SkmScreenLoc.Y >= FMath::Min(RectMin.Y, RectMax.Y) &&
+                SkmScreenLoc.Y <= FMath::Max(RectMin.Y, RectMax.Y))
+            {
+                if (AUnitBase* SkmUnit = Cast<AUnitBase>(Unit))
+                {
+                    if (!SelectedUnits.Contains(SkmUnit))
+                    {
+                        if (SkmUnit->GetOwner() == nullptr)
+                        {
+                            SkmUnit->SetOwner(Controller);
+                        }
+                        SkmUnit->SetSelected();
+                        SelectedUnits.AddUnique(SkmUnit);
+                        SelectedUnitsSet.Add(SkmUnit);
+                        SelectUnitsFromSameSquad(SkmUnit);
+                    }
+                }
+            }
+            continue;
+        }
+
         const FMassUnitVisualFragment* VisualFrag = Unit->GetVisualFragment();
         if (!VisualFrag) continue;
 
@@ -1556,7 +1692,7 @@ void AHUDBase::MoveUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 		if(Units[i])
 		if (Units[i]->RunLocationArray.Num()) {
 
-			FVector ActorLocation = Units[i]->GetActorLocation();
+			FVector ActorLocation = Units[i]->GetMassActorLocation();
 			const float DistSq = FVector::DistSquared2D(ActorLocation, Units[i]->RunLocation);
 
 			if (DistSq <= FMath::Square(Units[i]->MovementAcceptanceRadius)) { 
@@ -1591,8 +1727,8 @@ void AHUDBase::IsSpeakingUnitClose(TArray <AUnitBase*> Units, TArray <ASpeakingU
 				
 				if(Units[u] && Units[u]->TeamId && !SUnit)
 				{
-					const FVector UnitLocation = Units[u]->GetActorLocation();
-					const FVector SpeakingUnitLocation = SpeakUnits[i]->GetActorLocation();
+					const FVector UnitLocation = Units[u]->GetMassActorLocation();
+					const FVector SpeakingUnitLocation = SpeakUnits[i]->GetMassActorLocation();
 					const float MinSpeakDistSq = FMath::Square(SpeakUnits[i]->MinSpeakDistance);
 					const float DistSq = FVector::DistSquared2D(UnitLocation, SpeakingUnitLocation);
 					
@@ -1619,7 +1755,7 @@ void AHUDBase::PatrolUnitsThroughWayPoints(TArray <AUnitBase*> Units)
 		if(Units[i])
 		if (Units[i]->RunLocationArray.Num()) {
 
-			FVector ActorLocation = Units[i]->GetActorLocation();
+			FVector ActorLocation = Units[i]->GetMassActorLocation();
 			const float DistSq = FVector::DistSquared2D(ActorLocation, Units[i]->RunLocation);
 
 			if (DistSq <= FMath::Square(Units[i]->MovementAcceptanceRadius)) { // || DistanceY <= Units[i]->StopRunToleranceY 
@@ -1754,6 +1890,7 @@ bool AHUDBase::IsActorInsideRec(FVector InPoint, FVector CuPoint, FVector ALocat
 
 void AHUDBase::DrawAllHealthBars()
 {
+
 	if (!bEnableHealthBars || !Canvas) return;
 
 	APlayerController* PC = GetOwningPlayerController();
@@ -1803,7 +1940,7 @@ void AHUDBase::DrawAllHealthBars()
 			float FinalRadiusX = 60.f;
 			float FinalRadiusY = 60.f;
 			float FinalRadiusZ = 60.f;
-			float LastGroundLocationZ = Unit->GetActorLocation().Z;
+			float LastGroundLocationZ = Unit->GetMassActorLocation().Z;
 
 			// Direkter Komponenten-Zugriff für Größe
 			if (UBoxComponent* BoxComp = Unit->BoxCollisionComponent)
@@ -1865,7 +2002,7 @@ void AHUDBase::DrawAllHealthBars()
 
 			// 3. Einzige Projektion für diesen Frame
 			FVector2D ScreenPos;
-			FVector BaseLoc = Unit->GetActorLocation();
+			FVector BaseLoc = Unit->GetMassActorLocation();
 			if (EffectiveSettings.Style == EHealthBarStyle::SemiCircle)
 			{
 				BaseLoc.Z = LastGroundLocationZ;
@@ -2358,6 +2495,7 @@ void AHUDBase::DrawLevelText(AUnitBase* Unit, const FVector2D& ScreenPos, const 
 
 void AHUDBase::DrawAllResourceCounts()
 {
+
 	if (!bShowResourceWorkerCounts || !Canvas || !LevelFont) return;
 
 	APlayerController* PC = GetOwningPlayerController();
