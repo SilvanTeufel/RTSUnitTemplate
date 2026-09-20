@@ -2615,6 +2615,26 @@ void ACustomControllerBase::RightClickPressedMass()
 			}
 		}
 		bZieltAufBauplatz = (Getroffen != nullptr) && !Getroffen->IsNoBuildZone;
+
+		// Steht auf dem Bauplatz ein FERTIGES Gebaeude, meint der Klick das Gebaeude - nicht den
+		// Bauplatz darunter. Die AWorkArea bleibt nach dem Bau bestehen und blockt weiterhin
+		// ECC_Visibility (sie wird nur unsichtbar geschaltet), liegt also dauerhaft VOR dem
+		// Gebaeude. Ohne diese Ausnahme verschluckte der Bauplatz-Zweig jeden Reparaturklick,
+		// bevor TryHandleFollowOnRightClick den Hover-Rueckfall ueberhaupt auswerten konnte.
+		//
+		// Bewusst NUR fuer Gebaeude: waere jede vom UMassUnitHoverProcessor markierte Einheit eine
+		// Ausnahme, koennte ein zufaellig ueberfahrener Arbeiter den Bauplatz-Klick wieder
+		// unerreichbar machen - genau der Fall, fuer den diese Sperre eingebaut wurde.
+		if (bZieltAufBauplatz)
+		{
+			if (const AUnitBase* HoveredActor = HoveredUnit.Get())
+			{
+				if (HoveredActor->IsA(ABuildingBase::StaticClass()))
+				{
+					bZieltAufBauplatz = false;
+				}
+			}
+		}
 	}
 
 	if (!bZieltAufBauplatz && TryHandleFollowOnRightClick(HitPawn))
