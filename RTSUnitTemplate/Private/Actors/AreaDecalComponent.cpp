@@ -602,3 +602,27 @@ void UAreaDecalComponent::UpdateMassEffectRadius(float NewRadius)
 
 
 
+
+void UAreaDecalComponent::SetVirtualTextureWritingEnabled(bool bEnabled)
+{
+	if (!RVTWriterComponent)
+	{
+		return;
+	}
+
+	if (!bEnabled)
+	{
+		// Zustand merken, BEVOR er ueberschrieben wird - sonst weckt das Wiedereinschalten einen
+		// Writer auf, der vorher gar nicht aktiv war.
+		bVirtualTextureWritingWasEnabled = RVTWriterComponent->IsVisible();
+		RVTWriterComponent->SetHiddenInGame(true);
+		RVTWriterComponent->SetVisibility(false);
+		return;
+	}
+
+	if (bVirtualTextureWritingWasEnabled)
+	{
+		RVTWriterComponent->SetHiddenInGame(false);
+		RVTWriterComponent->SetVisibility(true);
+	}
+}

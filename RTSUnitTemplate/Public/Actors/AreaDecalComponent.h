@@ -175,7 +175,25 @@ public:
 	bool AdvanceMassScaling(float DeltaSeconds, float& OutNewRadius, bool& bOutCompleted);
 	bool IsBeaconScaling() const { return bScaleOwnerIsBeacon; }
 
+	/**
+	 * Schaltet das Schreiben in die Runtime Virtual Texture ab und wieder an, ohne den Zustand des
+	 * Decals selbst anzufassen.
+	 *
+	 * Gebraucht vom ReplayModule: waehrend einer Wiedergabe muss der Creep des LAUFENDEN Spiels aus
+	 * dem Bild. SetActorHiddenInGame reicht dafuer NICHT - RVTWriterComponent traegt ohnehin
+	 * dauerhaft bHiddenInGame und rendert ueber VirtualTextureRenderPassType::Exclusive am
+	 * Hauptdurchgang vorbei. Erst die Sichtbarkeit nimmt es aus allen Durchgaengen.
+	 *
+	 * Der Zustand vor dem Abschalten wird gemerkt, damit das Wiedereinschalten keinen Writer
+	 * aufweckt, der ohnehin aus war (inaktives Decal oder kein RVT-Betrieb).
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Area Decal")
+	void SetVirtualTextureWritingEnabled(bool bEnabled);
+
 protected:
+	/** Merkt, ob der Writer vor einem SetVirtualTextureWritingEnabled(false) ueberhaupt aktiv war. */
+	bool bVirtualTextureWritingWasEnabled = false;
+
 	float ScaleStartRadius = 0.f;
 	float ScaleTargetRadius = 0.f;
 	float ScaleDuration = 0.f;
