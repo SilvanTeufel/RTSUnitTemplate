@@ -1497,6 +1497,18 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 
 void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase)
 {
+	// [WellenDiag] Der Wellen-Pfad hat bisher NICHTS protokolliert. Als am 19.09.2026 gemeldet
+	// wurde, dass auf Level_6_Survive ueberhaupt keine Gegner mehr kommen, liessen sich Tabellen,
+	// Zeilen und Reihenfolge zwar von aussen als korrekt nachweisen - aber nicht, ob diese
+	// Funktion ueberhaupt aufgerufen wird und wie viele Timer sie am Ende scharf stellt.
+	// Genau diese Luecke schliessen die drei Zeilen hier.
+	int32 DiagRowsTotal = 0;
+	int32 DiagTimersArmed = 0;
+	int32 DiagNoLoop = 0;
+	int32 DiagBadInterval = 0;
+
+	UE_LOG(LogTemp, Warning, TEXT("[WellenDiag] SetupTimerFromDataTable startet. Tabellen=%d Authority=%d Location=%s"),
+		UnitSpawnParameters.Num(), HasAuthority() ? 1 : 0, *Location.ToCompactString());
 
 	for (UDataTable* UnitSpawnParameter : UnitSpawnParameters)
 	{
@@ -1539,12 +1551,34 @@ void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, 
 						TimerMap.SkipTimer = false;
 						SpawnTimerHandleMap.Add(TimerMap);
 						TimerIndex++;
+
+						// [WellenDiag] SetTimer mit einer Rate <= 0 stellt KEINEN Timer scharf und
+						// meldet das nicht. Deshalb wird der Takt hier mitgezaehlt statt angenommen.
+						if (SpawnParameter.LoopTime > 0.f)
+						{
+							DiagTimersArmed++;
+						}
+						else
+						{
+							DiagBadInterval++;
+							UE_LOG(LogTemp, Warning, TEXT("[WellenDiag] Zeile '%s' (Id=%d) hat LoopTime=%.2f - es entsteht kein Timer."),
+								*RowName.ToString(), SpawnParameter.Id, SpawnParameter.LoopTime);
+						}
 					}
+					else
+					{
+						DiagNoLoop++;
+					}
+
+					DiagRowsTotal++;
 				}
 
 			}
 		}
 	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[WellenDiag] SetupTimerFromDataTable fertig. Zeilen=%d TimerScharf=%d OhneSchleife=%d UngueltigerTakt=%d"),
+		DiagRowsTotal, DiagTimersArmed, DiagNoLoop, DiagBadInterval);
 }
 
 void ARTSGameModeBase::SetupUnitsFromDataTable_Implementation(FVector Location, AUnitBase* UnitToChase, const TArray<class UDataTable*>& UnitTable) // , int TeamId , const FString& WaypointTag, int32 UnitIndex, AUnitBase* SummoningUnit, int SummonIndex
@@ -1928,8 +1962,13 @@ AUnitBase* ARTSGameModeBase::SpawnSingleUnit(FUnitSpawnParameter SpawnParameter,
 void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParameter, FVector Location, AUnitBase* UnitToChase) // , int TeamId, AWaypoint* Waypoint, int32 UnitIndex, AUnitBase* SummoningUnit, int SummonIndex
 {
 
-	if (!SpawnParameter.UnitBaseClass) return;
-	
+	if (!SpawnParameter.UnitBaseClass)
+	{
+		// [WellenDiag] Stiller Ausstieg Nr. 1: eine Zeile ohne Klasse spawnt nichts und sagt nichts.
+		UE_LOG(LogTemp, Warning, TEXT("[WellenDiag] SpawnUnits Id=%d ABGELEHNT: UnitBaseClass ist leer."), SpawnParameter.Id);
+		return;
+	}
+
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
 
 	// Adaptive reinforcement. Returns exactly 1.0 when the row has bAdaptiveSpawn off, so
@@ -1943,6 +1982,14 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		: SpawnParameter.UnitCount;
 
 	FTimerHandleMapping TimerMap = GetTimerHandleMappingById(SpawnParameter.Id);
+
+	// [WellenDiag] Der Takt schlaegt an - aber ob daraus Einheiten werden, entscheiden die zwei
+	// Vergleiche darunter, und beide waren bisher stumm. Diese Zeile zeigt je Ausloesung, ob die
+	// Zeile ihr eigenes Kontingent schon voll hat oder ob sie uebersprungen wird.
+	UE_LOG(LogTemp, Warning, TEXT("[WellenDiag] SpawnUnits Id=%d lebt=%d Deckel=%d SkipTimer=%d SkipNachTod=%d"),
+		SpawnParameter.Id, UnitCount, EffectiveMaxUnitSpawnCount,
+		TimerMap.SkipTimer ? 1 : 0, SpawnParameter.SkipTimerAfterDeath ? 1 : 0);
+
 	if(UnitCount < EffectiveMaxUnitSpawnCount && TimerMap.SkipTimer && SpawnParameter.SkipTimerAfterDeath){
 		SetSkipTimerMappingById(SpawnParameter.Id, false);
 		return;
