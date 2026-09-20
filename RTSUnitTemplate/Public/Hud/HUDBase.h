@@ -300,6 +300,29 @@ private:
 	void DrawSideBracketsHealthBar(AUnitBase* Unit, const FVector& BaseLoc, const FVector2D& ScreenPos, float WorldRadius, float WorldWidthRadius, const FHealthBarSettings& Settings, const FVector& RightV, const FVector& UpV);
 	float GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHealthBarSettings& Settings);
 
+public:
+	/**
+	 * Zeichnet ALLE schwebenden Schadenszahlen in einem Durchgang.
+	 *
+	 * Ersetzt seit dem 20.09.2026 den alten AIndicatorActor je Treffer. Die Zahlen liegen im
+	 * UDamageNumberSubsystem; hier werden sie nur projiziert und geschrieben.
+	 */
+	void DrawDamageNumbers();
+
+	/**
+	 * Schrift der Schadenszahlen.
+	 *
+	 * ACHTUNG: Vorher kam die Schrift aus dem UMG-Widget (UDamageIndicator::IndicatorFont).
+	 * Bleibt dieses Feld leer, faellt der Zeichner auf die Engine-Schrift zurueck - dann sieht
+	 * die Zahl ANDERS aus als vorher. Hier dieselbe Schrift eintragen, die im Widget stand.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage Numbers")
+	TObjectPtr<UFont> DamageNumberFont;
+
+	/** Ab dieser Einheitenzahl werden keine Schadenszahlen mehr gezeichnet. Wie vorher im Widget. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage Numbers")
+	int32 DamageNumberMaxUnitCount = 200;
+
 protected:
 	void HandleSelectionRectangle();
 	void DrawDashedLine2D(const FVector2D& Start, const FVector2D& End, float DashLen, float GapLen, FLinearColor Color, float Thickness);
