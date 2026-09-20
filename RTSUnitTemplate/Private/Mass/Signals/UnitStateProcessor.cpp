@@ -1215,6 +1215,10 @@ void UUnitStateProcessor::SynchronizeStatsFromActorToFragment(FMassEntityHandle 
             		}
             		
             		WorkerStats->ResourceExtractionTime = StrongUnitActor->ResourceExtractionTime;
+            		if (const AWorkingUnitBase* WorkerActor = Cast<AWorkingUnitBase>(StrongUnitActor))
+            		{
+            			WorkerStats->RepairDistance = WorkerActor->RepairDistance;
+            		}
             		
             		if (WorkerStats->BaseAvailable && WorkerStats->ResourceAvailable)
             		{
