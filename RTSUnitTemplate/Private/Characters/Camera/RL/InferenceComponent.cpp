@@ -22,6 +22,9 @@
 // beschraenkt und dort auf 0 % kommt. Das Netz hat die Randhaeufigkeit der Tasten gelernt,
 // nicht die Bedingung "welche Gruppe ist gerade gewaehlt".
 // 1 = solche Aktionen bei der Auswahl ausblenden. Betrifft nur den KI-Pfad.
+// 2 = zusaetzlich unbezahlbare Bauaktionen ausblenden.
+// 3 = leere Gruppenwahlen ausblenden (Anlauf 4, 02.09.2026).
+// 4 = den Zweitakt "waehlen, feuern" erzwingen (Anlauf 5, 19.09.2026) - siehe IstAktionMoeglich.
 static int32 GRLActionMask = 0;
 static FAutoConsoleVariableRef CVarRLActionMask(
     TEXT("rts.rl.action.mask"),
@@ -122,6 +125,55 @@ namespace
         GRLBrainOverrides,
         TEXT("Hirnmodus je Team, z.B. \"1:1,2:0\" (1 = trainiertes Netz, 0 = Regel-KI)."),
         ECVF_Default);
+
+    /**
+     * Sampling-Temperatur je Team - gemessen am 19./20.09.2026.
+     *
+     * Die Temperatur gehoert zum LEHRER, nicht zum Spiel. Der Xeno-Lehrer spielt eine echte
+     * Mischung; greedy liess den Agenten dort auf eine einzige Taste zusammenfallen, deshalb
+     * steht die globale Vorgabe auf 0,4. Der Singularianer-Lehrer spielt dagegen fast
+     * deterministisch: ueber 290 454 Entscheidungen folgt nach einer Gruppenwahl zu 91,3 % eine
+     * Faehigkeit, sonst zu 0,0 %. Wuerfeln zerstoert diese Politik, statt sie aufzulockern.
+     *
+     * Gemessen gegen PPO 33, je n = 36: Temperatur 0,4 ergab alive -68,92 (SE 8,79),
+     * Temperatur 0 ergab -22,36 (SE 2,34) - eine Differenz von +46,56 bei t = 5,12, ohne dass
+     * am Netz irgendetwas geaendert wurde.
+     *
+     * Solange eine einzige Zahl fuer beide Fraktionen gilt, misst jede gemeinsame Reihe eine der
+     * beiden falsch. Format wie beim Hirnmodus: "1:0.4|2:0".
+     */
+    static FString GRLTemperatureOverrides;
+    static FAutoConsoleVariableRef CVarRLTemperatureOverrides(
+        TEXT("rts.ai.rl.temperature.teams"),
+        GRLTemperatureOverrides,
+        TEXT("Sampling-Temperatur je Team, z.B. \"1:0.4|2:0\". Leer = globaler Wert."),
+        ECVF_Default);
+
+    /** Liefert true und die Temperatur, wenn fuer dieses Team eine gesetzt ist. */
+    bool FindTemperatureOverride(int32 TeamId, float& OutTemperature)
+    {
+        if (GRLTemperatureOverrides.IsEmpty() || TeamId < 0)
+        {
+            return false;
+        }
+        FString Normalisiert = GRLTemperatureOverrides.Replace(TEXT("|"), TEXT(","));
+        TArray<FString> Pairs;
+        Normalisiert.ParseIntoArray(Pairs, TEXT(","), true);
+        for (const FString& Pair : Pairs)
+        {
+            FString Left, Right;
+            if (!Pair.Split(TEXT(":"), &Left, &Right))
+            {
+                continue;
+            }
+            if (FCString::Atoi(*Left.TrimStartAndEnd()) == TeamId)
+            {
+                OutTemperature = FCString::Atof(*Right.TrimStartAndEnd());
+                return true;
+            }
+        }
+        return false;
+    }
 
     /** Liefert true und den Modus, wenn fuer dieses Team ein Override gesetzt ist. */
     bool FindBrainOverride(int32 TeamId, EBrainMode& OutMode)
@@ -669,6 +721,41 @@ bool UInferenceComponent::IstAktionMoeglich(int32 ActionIndex) const
     AExtendedControllerBase* PCFuerGruppe = AgentFuerGruppe
         ? Cast<AExtendedControllerBase>(AgentFuerGruppe->GetController()) : nullptr;
 
+    // Anlauf 5 (19.09.2026): den Zweitakt des Lehrers erzwingen.
+    //
+    // Gemessen ueber 290 454 Regelentscheidungen der Singularianer: war die vorige Aktion eine
+    // Gruppenwahl, folgt zu 91,3 % eine Faehigkeit und zu 0,0 % eine weitere Gruppenwahl. War sie
+    // es nicht, folgt zu 0,0 % eine Faehigkeit. Der Lehrer wechselt also streng ab - waehlen,
+    // feuern, waehlen, feuern.
+    //
+    // Das nachgeahmte Netz faellt aus diesem Takt heraus: es waehlt nur noch in 0,8 % der Faelle
+    // eine Gruppe (Lehrer 15,1 %) und erreicht den Zustand "Gruppe gewaehlt" damit praktisch nie.
+    // Seine 13,4 % Faehigkeitsdruecke landen folglich alle im Zweig, in dem der Lehrer
+    // Faehigkeiten NIE benutzt. Aus diesem Zweig fuehrt kein Weg zurueck, und genau deshalb waren
+    // mehr Epochen, breitere Netze und Entropiebonus wirkungslos: es ist kein Kapazitaets-,
+    // sondern ein Rueckkopplungsproblem.
+    //
+    // Gesperrt werden ausschliesslich die beiden Faelle, die der Lehrer zu EXAKT 0,0 % spielt.
+    // Die 91,3 % bleiben ungezwungen - die Maske nimmt das Unmoegliche weg, sie schreibt nichts
+    // vor. Zu Partiebeginn ist LastChosenActionIndex -1, also gilt "keine Gruppe gewaehlt": das
+    // Netz muss erst waehlen, bevor es feuern darf. Das ist der gewollte Einstieg in den Takt.
+    if (GRLActionMask == 4)
+    {
+        const bool bVorigeWarGruppenwahl = (LastChosenActionIndex >= 0 && LastChosenActionIndex <= 9);
+        const bool bIstGruppenwahl = (ActionIndex >= 0 && ActionIndex <= 9);
+        const bool bIstFaehigkeit = (ActionIndex >= 10 && ActionIndex <= 15);
+
+        if (bVorigeWarGruppenwahl && bIstGruppenwahl)
+        {
+            return false;
+        }
+        if (!bVorigeWarGruppenwahl && bIstFaehigkeit)
+        {
+            return false;
+        }
+        return true;
+    }
+
     // Anlauf 4 (02.09.2026): leere Gruppenwahlen ausblenden.
     //
     // Gemessen ueber je 12 Partien: BC waehlt in 8,9 % der Faelle eine leere Gruppe, PPO mit
@@ -823,7 +910,13 @@ int32 UInferenceComponent::SelectActionFromScores(const TArray<float>& Scores)
         return 0;
     }
 
-    const float Temperature = GetSamplingTemperature();
+    // Team-Override vor dem globalen Wert - siehe FindTemperatureOverride.
+    float Temperature = GetSamplingTemperature();
+    float ProTeam = 0.f;
+    if (FindTemperatureOverride(ResolveOwningTeamId(), ProTeam))
+    {
+        Temperature = ProTeam;
+    }
 
     if (Temperature <= 0.f)
     {
