@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/LevelUnit.h"
+#include "GameStates/UpgradeGameState.h"
 
 #include "Core/TalentSaveGame.h"
 #include "Kismet/GameplayStatics.h"
@@ -34,6 +35,36 @@ void ALevelUnit::BeginPlay()
 {
 	Super::BeginPlay();
 	UpdateCachedLevelString();
+
+	// Nachvergabe: was das Team laengst gekauft hat, gilt auch fuer eine Einheit, die erst
+	// mitten in der Partie dazukommt. Ueber den Timer, weil die Teamnummer hier oft noch
+	// nicht steht.
+	if (HasAuthority())
+	{
+		GetWorldTimerManager().SetTimer(AttributeTreeSyncTimer, this,
+			&ALevelUnit::RetrySyncAttributeTreeFromTeam, 0.5f, /*bLoop=*/true, /*FirstDelay=*/0.25f);
+	}
+}
+
+void ALevelUnit::RetrySyncAttributeTreeFromTeam()
+{
+	--AttributeTreeSyncAttemptsLeft;
+
+	const bool bGiveUp = (AttributeTreeSyncAttemptsLeft <= 0);
+	if (TeamId >= 1 || bGiveUp)
+	{
+		GetWorldTimerManager().ClearTimer(AttributeTreeSyncTimer);
+		if (TeamId >= 1)
+		{
+			SyncAttributeTreeFromTeam();
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[Attributbaum] '%s' hat nach 20 Versuchen keine Teamnummer - keine Nachvergabe."),
+				*GetName());
+		}
+	}
 }
 
 void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLifetimeProps) const
@@ -51,8 +82,6 @@ void ALevelUnit::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLif
 	DOREPLIFETIME(ALevelUnit, CustomEffects);
 	DOREPLIFETIME(ALevelUnit, UnitIndex);
 	DOREPLIFETIME(ALevelUnit, AttributeTreeNodes);
-	DOREPLIFETIME(ALevelUnit, AttributeTreePoints);
-	DOREPLIFETIME(ALevelUnit, UsedAttributeTreePoints);
 }
 
 
@@ -224,14 +253,6 @@ void ALevelUnit::ResetTalents()
 //  Radial Attribute Tree
 // ---------------------------------------------------------------------------
 
-void ALevelUnit::GrantAttributeTreePoints(int32 Anzahl)
-{
-	if (Anzahl <= 0)
-	{
-		return;
-	}
-	AttributeTreePoints += Anzahl;
-}
 
 int32 ALevelUnit::GetAttributeTreeNodePoints(FName NodeId) const
 {
@@ -310,8 +331,29 @@ bool ALevelUnit::CanInvestInAttributeTreeNode(FName NodeId) const
 	{
 		return false;
 	}
-	// Eigener Vorrat, NICHT LevelData.TalentPoints - siehe Kopfkommentar im Header.
-	return AttributeTreePoints > 0;
+	// KEINE Vorratspruefung mehr: ob bezahlt werden kann, entscheidet der Teamtopf im
+	// AUpgradeGameState. Diese Funktion beantwortet nur noch "passt der Knoten zu DIESER
+	// Einheit und ist er noch nicht voll".
+	return true;
+}
+
+bool ALevelUnit::HasInvestableAttributeTreeNode() const
+{
+	if (!AttributeTreeDataTable)
+	{
+		return false;
+	}
+
+	// CanInvestInAttributeTreeNode prueft Tag-Zugehoerigkeit, Knotenobergrenze, Freischaltung
+	// und Vorrat in einem - hier genuegt deshalb der erste Treffer.
+	for (const FName& NodeId : AttributeTreeDataTable->GetRowNames())
+	{
+		if (CanInvestInAttributeTreeNode(NodeId))
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool ALevelUnit::ApplyAttributeTreeStat(EAttributeTreeStat Stat)
@@ -389,69 +431,95 @@ bool ALevelUnit::ApplyAttributeTreeEffectOnly(EAttributeTreeStat Stat)
 	return false;
 }
 
-bool ALevelUnit::InvestInAttributeTreeNode(FName NodeId)
+// ENTFERNT am 20.09.2026: ALevelUnit::InvestInAttributeTreeNode.
+//
+// Investiert wird nur noch ueber das Team - AExtendedCameraBase::Server_InvestTeamAttributeTreeNode
+// bucht im AUpgradeGameState und ruft danach ApplyAttributeTreeNodeFromTeam auf jeder passenden
+// Einheit auf. Ein zweiter Investitionsweg mit eigenem Vorrat wuerde wieder auseinanderlaufen.
+bool ALevelUnit::ApplyAttributeTreeNodeFromTeam(FName NodeId)
 {
-	const FAttributeTreeNodeRow* Row = FindAttributeTreeRow(NodeId);
+	if (!AttributeTreeDataTable || NodeId.IsNone())
+	{
+		return false;
+	}
+
+	const FAttributeTreeNodeRow* Row = AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(
+		NodeId, TEXT("ApplyAttributeTreeNodeFromTeam"), /*bWarnIfMissing=*/false);
 	if (!Row)
 	{
 		return false;
 	}
+
+	// Der Tag entscheidet, WER die Aufwertung bekommt - ein Knoten ohne Tag gilt fuer alle.
 	if (!DoesAttributeTreeNodeMatchUnit(*Row))
 	{
-		return false; // node belongs to a different unit type
+		return false;
 	}
 
-	const int32 MaxPts = FMath::Max(1, Row->MaxPoints);
-	if (GetAttributeTreeNodePoints(NodeId) >= MaxPts)
-	{
-		return false; // node already full
-	}
-	if (!IsAttributeTreeNodeUnlocked(NodeId))
-	{
-		return false; // prerequisite not satisfied
-	}
-	if (AttributeTreePoints <= 0)
-	{
-		return false; // kein Punkt im Vorrat DES BAUMS
-	}
-
-	// Attribut anheben, ohne die Talentpunkte anzufassen. Steht das Attribut schon an
-	// MaxTalentsPerStat, passiert nichts - der Knoten waechst trotzdem und kostet trotzdem einen
-	// Punkt, sonst koennten tiefe Zweige, die sich ein gedeckeltes Attribut teilen, nie weiter.
-	// Wer das nicht will, hebt MaxTalentsPerStat an.
+	// Freischaltung wird hier NICHT geprueft: das Team hat den Knoten bereits bezahlt, und die
+	// Vorbedingung gilt fuer den Baum des Teams, nicht fuer diese Einheit. Wer hier noch einmal
+	// pruefte, wuerde neu gespawnte Einheiten aussperren, deren eigener Baum noch leer ist.
 	ApplyAttributeTreeEffectOnly(Row->Attribute);
 
-	AttributeTreePoints = FMath::Max(0, AttributeTreePoints - 1);
-	UsedAttributeTreePoints += 1;
-
-	// Book-keeping: bump the node's invested count.
-	bool bFound = false;
 	for (FAttributeTreeNodeState& State : AttributeTreeNodes)
 	{
 		if (State.NodeId == NodeId)
 		{
 			State.Points++;
-			bFound = true;
-			break;
+			return true;
 		}
 	}
-	if (!bFound)
-	{
-		FAttributeTreeNodeState NewState;
-		NewState.NodeId = NodeId;
-		NewState.Points = 1;
-		AttributeTreeNodes.Add(NewState);
-	}
+
+	FAttributeTreeNodeState NewState;
+	NewState.NodeId = NodeId;
+	NewState.Points = 1;
+	AttributeTreeNodes.Add(NewState);
 	return true;
+}
+
+void ALevelUnit::SyncAttributeTreeFromTeam()
+{
+	if (!HasAuthority() || !AttributeTreeDataTable)
+	{
+		return;
+	}
+
+	const UWorld* Welt = GetWorld();
+	AUpgradeGameState* GameStateRef = Welt ? Welt->GetGameState<AUpgradeGameState>() : nullptr;
+	if (!GameStateRef)
+	{
+		return;
+	}
+
+	int32 Nachgeholt = 0;
+	const TArray<FAttributeTreeNodeState> TeamNodes = GameStateRef->GetTeamAttributeTreeNodes(TeamId);
+	for (const FAttributeTreeNodeState& TeamNode : TeamNodes)
+	{
+		const int32 Fehlend = TeamNode.Points - GetAttributeTreeNodePoints(TeamNode.NodeId);
+		for (int32 i = 0; i < Fehlend; ++i)
+		{
+			if (!ApplyAttributeTreeNodeFromTeam(TeamNode.NodeId))
+			{
+				break; // Tag passt nicht - die restlichen Stufen desselben Knotens auch nicht.
+			}
+			++Nachgeholt;
+		}
+	}
+
+	if (Nachgeholt > 0)
+	{
+		UE_LOG(LogTemp, Log,
+			TEXT("[Attributbaum] Nachvergabe an '%s' (Team %d): %d Stufen aus %d Teamknoten."),
+			*GetName(), TeamId, Nachgeholt, TeamNodes.Num());
+	}
 }
 
 void ALevelUnit::ResetAttributeTree()
 {
 	AttributeTreeNodes.Empty();
 
-	// Eigene Punkte zurueck in den eigenen Vorrat.
-	AttributeTreePoints += UsedAttributeTreePoints;
-	UsedAttributeTreePoints = 0;
+	// Die Erstattung liegt beim Team (AUpgradeGameState::ResetTeamAttributeTree) - hier wird
+	// nur noch die Wirkung auf DIESER Einheit geloescht.
 
 	// ResetTalents setzt die ATTRIBUTE auf null und erstattet die Talentpunkte. Beides gehoert
 	// zusammen: Baum und TalentChooser schreiben in dieselben Attribute, ohne dass irgendwo steht,

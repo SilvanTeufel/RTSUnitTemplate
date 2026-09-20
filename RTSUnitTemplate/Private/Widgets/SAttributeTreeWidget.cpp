@@ -67,6 +67,7 @@ void SAttributeTreeWidget::Construct(const FArguments& InArgs)
 	OnIsUnlockedDelegate        = InArgs._OnIsUnlocked;
 	OnInvestDelegate            = InArgs._OnInvest;
 	OnResetDelegate             = InArgs._OnReset;
+	OnCloseDelegate             = InArgs._OnClose;
 
 	NodeBackgroundBrush = FSlateRoundedBoxBrush(FLinearColor::White, NodeRadius, FVector2D(NodeRadius * 2.f, NodeRadius * 2.f));
 
@@ -229,6 +230,20 @@ FSlateRect SAttributeTreeWidget::ResetButtonRect(const FVector2D& LocalSize) con
 	// Fixed screen-space button in the top-left corner (not affected by pan).
 	const float W = 96.f, H = 26.f, M = 10.f;
 	return FSlateRect(M, M, M + W, M + H);
+}
+
+FSlateRect SAttributeTreeWidget::CloseButtonRect(const FVector2D& LocalSize) const
+{
+	// Gegenstueck zu ResetButtonRect, aber oben RECHTS - ebenfalls fest im Bildraum.
+	const float W = 96.f, H = 26.f, M = 10.f;
+	return FSlateRect(LocalSize.X - M - W, M, LocalSize.X - M, M + H);
+}
+
+FSlateRect SAttributeTreeWidget::BackToGameButtonRect(const FVector2D& LocalSize) const
+{
+	// Unten rechts, deutlich groesser als der kleine oben - siehe Kopfkommentar im Header.
+	const float W = 240.f, H = 56.f, M = 24.f;
+	return FSlateRect(LocalSize.X - M - W, LocalSize.Y - M - H, LocalSize.X - M, LocalSize.Y - M);
 }
 
 bool SAttributeTreeWidget::IsUnlocked(FName Id) const
@@ -494,6 +509,50 @@ int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 		Layer += 2;
 	}
 
+	// --- 3b2. Schliessen-Knopf (fest oben rechts, faehrt beim Schwenken nicht mit) ---
+	if (OnCloseDelegate.IsBound())
+	{
+		const FSlateRect R = CloseButtonRect(LocalSize);
+		const FVector2D BtnSize(R.GetSize().X, R.GetSize().Y);
+		const FVector2D BtnTL(R.Left, R.Top);
+		FSlateDrawElement::MakeBox(OutDrawElements, Layer,
+			AllottedGeometry.ToPaintGeometry(BtnSize, FSlateLayoutTransform(1.f, BtnTL)),
+			&NodeBackgroundBrush, ESlateDrawEffect::None, FLinearColor(0.05f, 0.26f, 0.30f, 0.95f));
+
+		const TSharedRef<FSlateFontMeasure> FM = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		const FString Msg = TEXT("Close");
+		const FVector2D TS = FM->Measure(Msg, NodeFont);
+		FSlateDrawElement::MakeText(OutDrawElements, Layer + 1,
+			AllottedGeometry.ToPaintGeometry(TS, FSlateLayoutTransform(1.f, FVector2D(R.Left + (BtnSize.X - TS.X) * 0.5f, R.Top + (BtnSize.Y - TS.Y) * 0.5f))),
+			Msg, NodeFont, ESlateDrawEffect::None, FLinearColor::White);
+		Layer += 2;
+	}
+
+	// --- 3b3. Grosser "Back to Game"-Knopf, fest unten rechts ---
+	if (OnCloseDelegate.IsBound())
+	{
+		const FSlateRect R = BackToGameButtonRect(LocalSize);
+		const FVector2D BtnSize(R.GetSize().X, R.GetSize().Y);
+		const FVector2D BtnTL(R.Left, R.Top);
+		FSlateDrawElement::MakeBox(OutDrawElements, Layer,
+			AllottedGeometry.ToPaintGeometry(BtnSize, FSlateLayoutTransform(1.f, BtnTL)),
+			&NodeBackgroundBrush, ESlateDrawEffect::None, FLinearColor(0.07f, 0.34f, 0.40f, 0.98f));
+
+		const TSharedRef<FSlateFontMeasure> FM = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		const FString Msg = TEXT("Back to Game");
+
+		// Groessere Schrift als beim kleinen Knopf - er soll aus der Entfernung lesbar sein.
+		FSlateFontInfo BigFont = NodeFont;
+		BigFont.Size = FMath::Max(NodeFont.Size + 6, 16);
+
+		const FVector2D TS = FM->Measure(Msg, BigFont);
+		FSlateDrawElement::MakeText(OutDrawElements, Layer + 1,
+			AllottedGeometry.ToPaintGeometry(TS, FSlateLayoutTransform(1.f,
+				FVector2D(R.Left + (BtnSize.X - TS.X) * 0.5f, R.Top + (BtnSize.Y - TS.Y) * 0.5f))),
+			Msg, BigFont, ESlateDrawEffect::None, FLinearColor::White);
+		Layer += 2;
+	}
+
 	// --- 3c. Optional border frame (over the tree, under the tooltip) ---
 	Layer = PaintPanelBorder(AllottedGeometry, OutDrawElements, Layer, InWidgetStyle);
 
@@ -665,6 +724,20 @@ FReply SAttributeTreeWidget::OnMouseButtonDown(const FGeometry& MyGeometry, cons
 	if (MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		const FVector2D Local = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+
+		// Der grosse Zurueck-Knopf unten rechts - dieselbe Wirkung wie der kleine oben.
+		if (OnCloseDelegate.IsBound() && BackToGameButtonRect(MyGeometry.GetLocalSize()).ContainsPoint(Local))
+		{
+			OnCloseDelegate.Execute();
+			return FReply::Handled();
+		}
+
+		// Schliessen-Knopf (fest oben rechts) hat wie Reset Vorrang vor Knoten und Schwenken.
+		if (OnCloseDelegate.IsBound() && CloseButtonRect(MyGeometry.GetLocalSize()).ContainsPoint(Local))
+		{
+			OnCloseDelegate.Execute();
+			return FReply::Handled();
+		}
 
 		// Reset button (fixed top-left) takes priority over nodes/pan.
 		if (OnResetDelegate.IsBound() && ResetButtonRect(MyGeometry.GetLocalSize()).ContainsPoint(Local))
