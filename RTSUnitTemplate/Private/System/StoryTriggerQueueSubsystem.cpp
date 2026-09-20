@@ -4,6 +4,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
+#include "Engine/Engine.h"
 #include "Engine/StreamableManager.h"
 #include "Engine/AssetManager.h"
 #include "Actors/StoryTriggerActor.h"
@@ -174,7 +175,12 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	// Beides wird deshalb erst unten gesetzt, direkt beim Bewaffnen des Timers, der es auch
 	// wieder abbaut. Zustand und sein Abbau gehoeren zusammen.
 
-	APlayerController* PC = UGameplayStatics::GetPlayerController(World, 0);
+	// Ein Story-Widget gehoert in einen LOKALEN Viewport. GetPlayerController(World, 0) liefert
+	// auf einem Dedicated Server aber den Controller des ENTFERNTEN Spielers - dort ist kein
+	// Controller lokal. CreateWidget lehnt den dann ab ("Only Local Player Controllers can be
+	// assigned to widgets") und die Story bleibt trotzdem als laufend vermerkt. Deshalb gezielt
+	// den ersten lokalen Controller holen und ohne einen solchen gar nicht erst anfangen.
+	APlayerController* PC = GEngine ? GEngine->GetFirstLocalPlayerController(World) : nullptr;
 	if (!PC)
 	{
 		return;
