@@ -1,6 +1,7 @@
 // Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Widgets/AttributeTreeWidget.h"
+#include "GameStates/UpgradeGameState.h"
 #include "EngineUtils.h"
 #include "Widgets/SAttributeTreeWidget.h"
 #include "Characters/Unit/LevelUnit.h"
@@ -88,7 +89,8 @@ TSharedRef<SWidget> UAttributeTreeWidget::RebuildWidget()
 		.OnGetHeaderText(FAttrTreeGetHeaderText::CreateUObject(this, &UAttributeTreeWidget::HandleGetHeaderText))
 		.OnIsUnlocked(FAttrTreeIsUnlocked::CreateUObject(this, &UAttributeTreeWidget::HandleIsUnlocked))
 		.OnInvest(FAttrTreeOnInvest::CreateUObject(this, &UAttributeTreeWidget::HandleInvest))
-		.OnReset(FAttrTreeOnReset::CreateUObject(this, &UAttributeTreeWidget::HandleReset));
+		.OnReset(FAttrTreeOnReset::CreateUObject(this, &UAttributeTreeWidget::HandleReset))
+		.OnClose(FAttrTreeOnClose::CreateUObject(this, &UAttributeTreeWidget::HandleClose));
 
 	RefreshNodes();
 	return MyTree.ToSharedRef();
@@ -249,16 +251,17 @@ void UAttributeTreeWidget::RefreshNodes()
 
 	TArray<FAttributeTreeSlateNode> SlateNodes;
 
-	// Ueber AktuellesZiel, damit der Baum auch dann gefuellt ist, wenn ihn niemand ueber
-	// SetTargetUnit versorgt hat.
-	const ALevelUnit* Ziel = AktuellesZiel();
-	if (Ziel && Ziel->AttributeTreeDataTable)
+	// Die Tabelle kommt vom TEAM, nicht von einer Anzeigeeinheit: das Widget kennt seit dem
+	// 20.09.2026 ueberhaupt keine Einheit mehr, nur noch Tags.
+	const AUpgradeGameState* GameStateRef = TeamGameState();
+	const UDataTable* Table = GameStateRef ? GameStateRef->FindTeamAttributeTreeTable(MyTeamId()) : nullptr;
+	if (Table)
 	{
-		const TArray<FName> RowNames = Ziel->AttributeTreeDataTable->GetRowNames();
+		const TArray<FName> RowNames = Table->GetRowNames();
 		SlateNodes.Reserve(RowNames.Num());
 		for (const FName& RowName : RowNames)
 		{
-			const FAttributeTreeNodeRow* Row = Ziel->AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(RowName, TEXT("AttributeTreeUI"), /*bWarnIfMissing=*/false);
+			const FAttributeTreeNodeRow* Row = Table->FindRow<FAttributeTreeNodeRow>(RowName, TEXT("AttributeTreeUI"), /*bWarnIfMissing=*/false);
 			if (!Row)
 			{
 				continue;
@@ -302,202 +305,75 @@ void UAttributeTreeWidget::RefreshNodes()
 	// ob der alte Tagfilter noch greift - genau das war der gemeldete Fehler.
 	UE_LOG(LogTemp, Log, TEXT("[Attributbaum] Widget zeichnet %d Knoten aus '%s'."),
 		SlateNodes.Num(),
-		(Ziel && Ziel->AttributeTreeDataTable) ? *Ziel->AttributeTreeDataTable->GetName() : TEXT("-"));
-
-	// Die Vertreter neu suchen lassen: die Zusammensetzung des Teams kann sich geaendert haben.
-	VertreterProTag.Reset();
+		Table ? *Table->GetName() : TEXT("-"));
 
 	MyTree->SetNodes(MoveTemp(SlateNodes));
 }
 
-ALevelUnit* UAttributeTreeWidget::AktuellesZiel() const
-{
-	if (IsValid(TargetUnit))
-	{
-		return TargetUnit;
-	}
-
-	if (ALevelUnit* Gemerkt = GefundenesZiel.Get())
-	{
-		return Gemerkt;
-	}
-
-	const UWorld* Welt = GetWorld();
-	if (!Welt)
-	{
-		return nullptr;
-	}
-
-	int32 MeinTeam = -1;
-	if (const APlayerController* PC = GetOwningPlayer())
-	{
-		if (const ACameraControllerBase* Kamera = Cast<const ACameraControllerBase>(PC))
-		{
-			MeinTeam = Kamera->SelectableTeamId;
-		}
-	}
-
-	ALevelUnit* Ersatz = nullptr;
-	for (TActorIterator<ALevelUnit> It(Welt); It; ++It)
-	{
-		ALevelUnit* Einheit = *It;
-		if (!IsValid(Einheit) || !Einheit->AttributeTreeDataTable)
-		{
-			continue;
-		}
-		if (MeinTeam >= 0 && Einheit->TeamId != MeinTeam)
-		{
-			continue;
-		}
-
-		// Bevorzugt eine mit freien Punkten - sonst zeigt der Baum die erstbeste mit 0 an,
-		// obwohl anderswo im Team welche liegen.
-		if (Einheit->AttributeTreePoints > 0)
-		{
-			GefundenesZiel = Einheit;
-			return Einheit;
-		}
-
-		if (!Ersatz)
-		{
-			Ersatz = Einheit;
-		}
-	}
-
-	GefundenesZiel = Ersatz;
-	return Ersatz;
-}
-
-ALevelUnit* UAttributeTreeWidget::VertreterFuer(const FAttributeTreeNodeRow& Row) const
-{
-	ALevelUnit* Anzeige = AktuellesZiel();
-
-	// Knoten ohne Tag (die Wurzel) gelten fuer jeden - da genuegt die Anzeigeeinheit.
-	if (!Row.UnitTag.IsValid())
-	{
-		return Anzeige;
-	}
-
-	// Passt die Anzeigeeinheit selbst, ist sie der beste Vertreter: dann stimmen Anzeige und
-	// Wirkung ueberein.
-	if (Anzeige && Anzeige->DoesAttributeTreeNodeMatchUnit(Row))
-	{
-		return Anzeige;
-	}
-
-	// Zwischenspeicher: die Suche laeuft sonst je Knoten und Bild ueber alle Aktoren.
-	if (const TWeakObjectPtr<ALevelUnit>* Gemerkt = VertreterProTag.Find(Row.UnitTag))
-	{
-		if (ALevelUnit* Lebt = Gemerkt->Get())
-		{
-			return Lebt;
-		}
-		VertreterProTag.Remove(Row.UnitTag);
-	}
-
-	const UWorld* Welt = GetWorld();
-	if (!Welt)
-	{
-		return nullptr;
-	}
-
-	int32 MeinTeam = -1;
-	if (const ACameraControllerBase* Kamera = Cast<const ACameraControllerBase>(GetOwningPlayer()))
-	{
-		MeinTeam = Kamera->SelectableTeamId;
-	}
-
-	// Bevorzugt eine Einheit mit freien Punkten - sonst zeigt der Ast 0 an, obwohl anderswo im
-	// Team noch investiert werden koennte.
-	ALevelUnit* Ersatz = nullptr;
-	for (TActorIterator<ALevelUnit> It(Welt); It; ++It)
-	{
-		ALevelUnit* Einheit = *It;
-		if (!IsValid(Einheit) || !Einheit->AttributeTreeDataTable)
-		{
-			continue;
-		}
-		if (MeinTeam >= 0 && Einheit->TeamId != MeinTeam)
-		{
-			continue;
-		}
-		if (!Einheit->DoesAttributeTreeNodeMatchUnit(Row))
-		{
-			continue;
-		}
-		if (Einheit->AttributeTreePoints > 0)
-		{
-			VertreterProTag.Add(Row.UnitTag, Einheit);
-			return Einheit;
-		}
-		if (!Ersatz)
-		{
-			Ersatz = Einheit;
-		}
-	}
-	if (Ersatz)
-	{
-		VertreterProTag.Add(Row.UnitTag, Ersatz);
-	}
-	return Ersatz;
-}
-
-ALevelUnit* UAttributeTreeWidget::VertreterFuerKnoten(FName NodeId) const
-{
-	const ALevelUnit* Anzeige = AktuellesZiel();
-	if (!Anzeige || !Anzeige->AttributeTreeDataTable)
-	{
-		return nullptr;
-	}
-	const FAttributeTreeNodeRow* Row = Anzeige->AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(
-		NodeId, TEXT("AttributeTreeUI"), /*bWarnIfMissing=*/false);
-	return Row ? VertreterFuer(*Row) : nullptr;
-}
+// ENTFERNT am 20.09.2026: AktuellesZiel, VertreterFuer und VertreterFuerKnoten.
+//
+// Das Widget kennt keine Einheit mehr, nur noch Tags und den Teamtopf. Die drei Funktionen
+// waren der Kern des gemeldeten Fehlers: AktuellesZiel gab den einmal gemerkten
+// GefundenesZiel bedingungslos zurueck (RefreshNodes leerte ihn nie), waehrend das
+// Investieren ueber VertreterFuerKnoten auf einer ANDEREN Einheit buchte. Anzeige und
+// Buchung lagen damit dauerhaft auf verschiedenen Einheiten.
 
 int32 UAttributeTreeWidget::HandleGetNodePoints(FName NodeId) const
 {
-	// Am Vertreter des Astes ablesen, nicht an der Anzeigeeinheit - siehe VertreterFuer.
-	const ALevelUnit* Vertreter = VertreterFuerKnoten(NodeId);
-	return Vertreter ? Vertreter->GetAttributeTreeNodePoints(NodeId) : 0;
+	// Die investierte Stufe gehoert dem TEAM, nicht einer Einheit. Einheiten fuehren weiter
+	// Buch darueber, was bei IHNEN angekommen ist - fuer die Anzeige ist das unerheblich.
+	const AUpgradeGameState* GameStateRef = TeamGameState();
+	return GameStateRef ? GameStateRef->GetTeamAttributeTreeNodePoints(MyTeamId(), NodeId) : 0;
+}
+
+int32 UAttributeTreeWidget::MyTeamId() const
+{
+	const ACameraControllerBase* Kamera = Cast<const ACameraControllerBase>(GetOwningPlayer());
+	return Kamera ? Kamera->SelectableTeamId : -1;
+}
+
+const AUpgradeGameState* UAttributeTreeWidget::TeamGameState() const
+{
+	const UWorld* Welt = GetWorld();
+	return Welt ? Welt->GetGameState<AUpgradeGameState>() : nullptr;
 }
 
 int32 UAttributeTreeWidget::HandleGetAvailablePoints() const
 {
-	const ALevelUnit* Ziel = AktuellesZiel();
-	// Der EIGENE Vorrat des Baums. Vorher stand hier LevelData.TalentPoints - derselbe Topf, den
-	// AutoLevelUp() selbsttaetig leerraeumt; deshalb zeigte der Baum staendig 0.
-	return Ziel ? Ziel->AttributeTreePoints : 0;
+	// Der Topf DES TEAMS, seit dem 20.09.2026.
+	//
+	// Vorher las diese Zeile den Vorrat EINER Einheit, waehrend HandleInvest auf einer anderen
+	// buchte - daher die gemeldete Anzeige, die sich nie ruehrte. Es gibt jetzt nur noch einen
+	// Topf, und dies ist er.
+	const AUpgradeGameState* GameStateRef = TeamGameState();
+	return GameStateRef ? GameStateRef->GetTeamAttributeTreePoints(MyTeamId()) : 0;
 }
 
 FString UAttributeTreeWidget::HandleGetHeaderText() const
 {
-	const ALevelUnit* Ziel = AktuellesZiel();
-	if (!Ziel)
+	const int32 TeamId = MyTeamId();
+	const AUpgradeGameState* GameStateRef = TeamGameState();
+	if (TeamId < 1 || !GameStateRef)
 	{
-		// Say WHY it is empty. "No unit selected" left open whether nothing was clicked or whether
-		// no unit carries the table at all.
-		return FString(TEXT("No unit with an attribute tree - assign the table on the unit"));
+		// Sagen, WARUM leer. "Keine Einheit gewaehlt" liess offen, ob nichts angeklickt war oder
+		// ob ueberhaupt kein Baum existiert.
+		return FString(TEXT("No team assigned yet - the attribute tree belongs to the team"));
 	}
 
-	// Der Baum wirkt auf die ganze Fraktion, also zeigt die Kopfzeile den Teamstand.
-	//
-	// Die Punkte liegen je Einheit (ALevelUnit::AttributeTreePoints), vergeben werden sie aber im
-	// selben Takt an alle. Angezeigt wird deshalb das MAXIMUM - das ist, was der naechste Klick
-	// mindestens bei einer Einheit auszugeben hat. Wer weniger hat, bleibt bei dieser Aufwertung
-	// einfach zurueck; so steht es auch in Server_InvestAttributeTreeNode.
-	int32 TeamEinheiten = 0;
-	int32 MaxVerfuegbar = Ziel->AttributeTreePoints;
-	int32 MaxVerbraucht = Ziel->UsedAttributeTreePoints;
+	const int32 Available = GameStateRef->GetTeamAttributeTreePoints(TeamId);
+	const int32 Spent = GameStateRef->GetTeamUsedAttributeTreePoints(TeamId);
+
+	// Die Teamgroesse bleibt in der Zeile, damit erkennbar ist, dass ein Klick alle passenden
+	// Einheiten betrifft und nicht eine einzelne.
+	int32 TeamUnits = 0;
 	if (const UWorld* Welt = GetWorld())
 	{
 		for (TActorIterator<ALevelUnit> It(Welt); It; ++It)
 		{
 			const ALevelUnit* Andere = *It;
-			if (IsValid(Andere) && Andere->TeamId == Ziel->TeamId && Andere->AttributeTreeDataTable)
+			if (IsValid(Andere) && Andere->TeamId == TeamId && Andere->AttributeTreeDataTable)
 			{
-				++TeamEinheiten;
-				MaxVerfuegbar = FMath::Max(MaxVerfuegbar, Andere->AttributeTreePoints);
-				MaxVerbraucht = FMath::Max(MaxVerbraucht, Andere->UsedAttributeTreePoints);
+				++TeamUnits;
 			}
 		}
 	}
@@ -516,84 +392,63 @@ FString UAttributeTreeWidget::HandleGetHeaderText() const
 		}
 		else
 		{
-			// Say it outright - otherwise you wait for points that never come.
+			// Klar heraussagen - sonst wartet man auf Punkte, die nie kommen.
 			Takt = FString(TEXT("   |   no periodic grant"));
 		}
 	}
 
-	// "Attribute points", not "talent points": these are two separate pools since 10.09.2026, and
-	// the identical wording was part of the confusion.
 	return FString::Printf(
 		TEXT("Attribute points: %d available, %d spent   |   Team %d: %d units%s"),
-		MaxVerfuegbar, MaxVerbraucht, Ziel->TeamId, TeamEinheiten, *Takt);
+		Available, Spent, TeamId, TeamUnits, *Takt);
 }
 
 bool UAttributeTreeWidget::HandleIsUnlocked(FName NodeId) const
 {
-	const ALevelUnit* Vertreter = VertreterFuerKnoten(NodeId);
-	return Vertreter ? Vertreter->IsAttributeTreeNodeUnlocked(NodeId) : false;
+	const AUpgradeGameState* GameStateRef = TeamGameState();
+	return GameStateRef ? GameStateRef->IsTeamAttributeTreeNodeUnlocked(MyTeamId(), NodeId) : false;
 }
 
 void UAttributeTreeWidget::HandleInvest(FName NodeId)
 {
-	// Der Vertreter des Astes, nicht die Anzeigeeinheit: sonst scheitert die Vorpruefung unten an
-	// jedem Knoten, der zu einer anderen Stufe gehoert als die gerade gewaehlte Einheit.
-	ALevelUnit* Ziel = VertreterFuerKnoten(NodeId);
-	if (!Ziel)
-	{
-		Ziel = AktuellesZiel();
-	}
-	if (!Ziel)
-	{
-		return;
-	}
-
-	// Client-side gate to avoid pointless RPCs; the server re-validates authoritatively.
-	if (!Ziel->CanInvestInAttributeTreeNode(NodeId))
-	{
-		return;
-	}
-
-	// Route through the player-owned camera pawn so the Server RPC has a valid owner.
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+	// Es gibt nichts mehr lokal zu pruefen: Vorrat, Freischaltung und Deckel gehoeren dem Team
+	// und werden auf dem Server entschieden. Eine Vorpruefung hier waere eine zweite Wahrheit.
+	if (const APlayerController* PC = GetOwningPlayer())
 	{
 		if (AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(PC->GetPawn()))
 		{
-			Camera->Server_InvestAttributeTreeNode(Ziel, NodeId);
+			Camera->Server_InvestTeamAttributeTreeNode(NodeId);
+		}
+	}
+}
+
+void UAttributeTreeWidget::HandleClose()
+{
+	// Schliessen heisst: zurueck auf die Startansicht, nicht nur "unsichtbar machen".
+	//
+	// Wuerde hier nur SetVisibility(Collapsed) stehen, bliebe TabMode auf 4 stehen - der
+	// naechste Tab-Druck spraenge dann auf 0 und der Spieler haette eine Ansicht mehr zu
+	// durchlaufen, als er erwartet. AExtendedCameraBase::ShowStartScreen setzt stattdessen den
+	// Modus zurueck und laesst UpdateTabModeUI alles Uebrige aufraeumen.
+	if (const APlayerController* PC = GetOwningPlayer())
+	{
+		if (AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(PC->GetPawn()))
+		{
+			Camera->ShowStartScreen();
 			return;
 		}
 	}
 
-	// Standalone / listen-server fallback: only run the authoritative invest directly when we ARE
-	// the authority (never mutate replicated state on a non-authoritative client).
-	UWorld* World = GetWorld();
-	if (Ziel->HasAuthority() || (World && World->GetNetMode() == NM_Standalone))
-	{
-		Ziel->InvestInAttributeTreeNode(NodeId);
-	}
+	// Ohne Kamera-Pawn wenigstens selbst aus dem Bild gehen.
+	SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UAttributeTreeWidget::HandleReset()
 {
-	ALevelUnit* Ziel = AktuellesZiel();
-	if (!Ziel)
-	{
-		return;
-	}
-
-	// Route through the player-owned camera pawn so the Server RPC has a valid owner.
-	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
+	if (const APlayerController* PC = GetOwningPlayer())
 	{
 		if (AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(PC->GetPawn()))
 		{
-			Camera->Server_ResetAttributeTree(Ziel);
-			return;
+			Camera->Server_ResetTeamAttributeTree();
 		}
-	}
-
-	UWorld* World = GetWorld();
-	if (Ziel->HasAuthority() || (World && World->GetNetMode() == NM_Standalone))
-	{
-		Ziel->ResetAttributeTree();
 	}
 }

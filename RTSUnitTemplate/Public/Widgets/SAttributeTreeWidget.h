@@ -40,6 +40,7 @@ DECLARE_DELEGATE_RetVal(FString, FAttrTreeGetHeaderText);
 DECLARE_DELEGATE_RetVal_OneParam(bool, FAttrTreeIsUnlocked, FName);
 DECLARE_DELEGATE_OneParam(FAttrTreeOnInvest, FName);
 DECLARE_DELEGATE(FAttrTreeOnReset);
+DECLARE_DELEGATE(FAttrTreeOnClose);
 
 /**
  * A radial (ring-shaped) attribute tree rendered entirely in Slate.
@@ -106,6 +107,7 @@ public:
 		SLATE_EVENT(FAttrTreeIsUnlocked, OnIsUnlocked)
 		SLATE_EVENT(FAttrTreeOnInvest, OnInvest)
 		SLATE_EVENT(FAttrTreeOnReset, OnReset)
+		SLATE_EVENT(FAttrTreeOnClose, OnClose)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -135,6 +137,17 @@ private:
 	bool IsUnlocked(FName Id) const;
 	void RefreshTooltip();
 	FSlateRect ResetButtonRect(const FVector2D& LocalSize) const;
+	/** Schliessen-Knopf, oben RECHTS - gegenueber von Reset. */
+	FSlateRect CloseButtonRect(const FVector2D& LocalSize) const;
+
+	/**
+	 * Der GROSSE Zurueck-Knopf unten rechts.
+	 *
+	 * Der kleine oben rechts bleibt, aber er ist als einzige Rueckkehr zu unscheinbar - wer den
+	 * Baum ueber den Umschaltknopf des TaggedUnitSelector oeffnet, sucht ihn. Unten rechts ist
+	 * die Stelle, an der man ihn erwartet, und gross genug, um ihn zu treffen.
+	 */
+	FSlateRect BackToGameButtonRect(const FVector2D& LocalSize) const;
 
 	/** Drives hover detection + timing every frame from the cursor position (reliable under Slate global invalidation). */
 	EActiveTimerReturnType HandleActiveTimer(double InCurrentTime, float InDeltaTime);
@@ -185,6 +198,7 @@ private:
 	FAttrTreeIsUnlocked OnIsUnlockedDelegate;
 	FAttrTreeOnInvest OnInvestDelegate;
 	FAttrTreeOnReset OnResetDelegate;
+	FAttrTreeOnClose OnCloseDelegate;
 
 	// Render resources
 	FSlateBrush NodeBackgroundBrush;

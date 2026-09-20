@@ -174,6 +174,12 @@ protected:
 	int32 HandleGetNodePoints(FName NodeId) const;
 	int32 HandleGetAvailablePoints() const;
 
+	/** Teamnummer des zuschauenden Spielers. -1, wenn sie noch nicht vergeben ist. */
+	int32 MyTeamId() const;
+
+	/** Der GameState, der die Teamtoepfe fuehrt. Auch auf dem Client vorhanden. */
+	const class AUpgradeGameState* TeamGameState() const;
+
 	/**
 	 * Kopfzeile des Baums: wieviele Punkte verfuegbar sind und in welchem Takt neue kommen.
 	 * Der Takt steht auf dem Spielercontroller (TalentPointInterval / TalentPointsPerInterval),
@@ -183,51 +189,18 @@ protected:
 	bool HandleIsUnlocked(FName NodeId) const;
 	void HandleInvest(FName NodeId);
 	void HandleReset();
+	/** Schliessen-Knopf: zurueck auf die Startansicht (siehe ShowStartScreen). */
+	void HandleClose();
 
 	UPROPERTY()
 	ALevelUnit* TargetUnit = nullptr;
 
-	/**
-	 * Die Einheit, mit der der Baum gerade arbeitet - notfalls selbst gesucht.
-	 *
-	 * SetTargetUnit wird nur beim Umschalten auf die Tab-Stufe des Baums gerufen. Wird das Widget
-	 * auf einem anderen Weg sichtbar (fest im HUD, ueber ein eigenes Menue), blieb TargetUnit
-	 * null und der Baum zeigte "Keine Einheit gewaehlt" - obwohl Einheiten mit Attributbaum und
-	 * Punkten dastanden. Gemeldet am 10.09.2026.
-	 *
-	 * Gesucht wird die erste eigene Einheit MIT Attributbaum, bevorzugt eine mit freien Punkten.
-	 */
-	ALevelUnit* AktuellesZiel() const;
-
-	/** Ergebnis der Suche, damit nicht bei jedem Zeichnen ueber alle Aktoren gelaufen wird. */
-	mutable TWeakObjectPtr<ALevelUnit> GefundenesZiel;
-
-	/**
-	 * Die Einheit, an der der Zustand EINES Knotens abzulesen ist.
-	 *
-	 * Der Baum ist EIN Baum mit fuenf Aesten - T0 bis T4 - und zeigt alle gleichzeitig. Ein Knoten
-	 * im T2-Ast gehoert aber nicht der gerade gewaehlten Einheit, sondern den Fahrzeugen des Teams.
-	 * Wieviele Punkte in ihm stecken und ob er freigeschaltet ist, muss deshalb an einer Einheit
-	 * abgelesen werden, die zu SEINEM Tag passt, nicht an der Anzeigeeinheit.
-	 *
-	 * Ohne Tag am Knoten (die Wurzel) zaehlt die Anzeigeeinheit. Findet sich keine passende
-	 * Einheit, gibt es nullptr - der Knoten wird dann als leer und gesperrt gezeichnet, was
-	 * richtig ist: ohne Einheit dieser Stufe gibt es nichts aufzuwerten.
-	 */
-	ALevelUnit* VertreterFuer(const struct FAttributeTreeNodeRow& Row) const;
-
-	/** Wie VertreterFuer, aber ueber die Zeilenkennung - fuer die Rueckrufe aus Slate. */
-	ALevelUnit* VertreterFuerKnoten(FName NodeId) const;
-
-	/**
-	 * Gefundene Vertreter je Stufen-Tag.
-	 *
-	 * OHNE diesen Zwischenspeicher liefe fuer JEDEN der 31 Knoten bei JEDEM Zeichnen ein
-	 * TActorIterator ueber alle Aktoren der Welt - bei 60 Bildern je Sekunde also rund 1900
-	 * Weltdurchlaeufe je Sekunde. Ein toter oder ungueltiger Eintrag wird bei der Abfrage
-	 * verworfen und neu gesucht.
-	 */
-	mutable TMap<FGameplayTag, TWeakObjectPtr<ALevelUnit>> VertreterProTag;
+	// ENTFERNT am 20.09.2026: AktuellesZiel, GefundenesZiel und VertreterProTag.
+	//
+	// Das Widget zeigt den Baum DES TEAMS und braucht dafuer keine Einheit. Die beiden
+	// Zwischenspeicher waren nur noetig, weil je Knoten eine Vertretereinheit gesucht wurde -
+	// und GefundenesZiel wurde nie verworfen, was die Anzeige dauerhaft auf einer Einheit
+	// festnagelte, auf der gar nicht gebucht wurde.
 
 	TSharedPtr<SAttributeTreeWidget> MyTree;
 };

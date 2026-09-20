@@ -260,22 +260,57 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attribute Tree")
 	TArray<FAttributeTreeNodeState> AttributeTreeNodes;
 
+	// ENTFERNT am 20.09.2026: AttributeTreePoints, UsedAttributeTreePoints und
+	// GrantAttributeTreePoints.
+	//
+	// Der Vorrat gehoert jetzt dem TEAM (AUpgradeGameState::FTeamAttributeTree). Zwei Toepfe -
+	// einer je Einheit, einer je Team - waeren zwei Wahrheiten ueber dieselbe Sache; genau daraus
+	// entstand der gemeldete Fehler, dass die Anzeige 3 Punkte zeigte, sich aber nur 2 vergeben
+	// liessen. Die Einheit fuehrt weiterhin AttributeTreeNodes: das ist ihre Buchhaltung darueber,
+	// was bei IHR angekommen ist, und die Grundlage der Nachvergabe.
+
 	/**
-	 * Freie Punkte NUR fuer den Attributbaum. Nichts anderes greift darauf zu.
+	 * Wendet EINE Stufe des Knotens auf diese Einheit an - ohne Punktkosten.
 	 *
-	 * Repliziert, weil das Widget auf dem Client zeichnet: ohne Replikation stuenden dort
-	 * dauerhaft 0 Punkte, obwohl der Server welche vergeben hat.
+	 * Gegenstueck zu InvestInAttributeTreeNode: dort zahlt die Einheit selbst, hier hat das TEAM
+	 * bereits bezahlt (AUpgradeGameState::InvestTeamAttributeTreeNode) und diese Einheit bekommt
+	 * nur noch die Wirkung. Der Tag des Knotens entscheidet weiterhin, ob sie gemeint ist.
+	 *
+	 * @return true, wenn die Stufe tatsaechlich angewendet wurde.
 	 */
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attribute Tree")
-	int32 AttributeTreePoints = 0;
-
-	/** Bereits im Baum ausgegebene Punkte - Grundlage der Rueckerstattung beim Zuruecksetzen. */
-	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attribute Tree")
-	int32 UsedAttributeTreePoints = 0;
-
-	/** Legt Punkte in den Vorrat des Baums. Nur der Server; die Replikation traegt sie zum Client. */
 	UFUNCTION(BlueprintCallable, Category = "Attribute Tree")
-	void GrantAttributeTreePoints(int32 Anzahl);
+	bool ApplyAttributeTreeNodeFromTeam(FName NodeId);
+
+	/**
+	 * Holt alle bereits investierten Stufen des eigenen Teams nach.
+	 *
+	 * Das ist die Nachvergabe fuer neu gespawnte Einheiten: sie kommen mitten in die Partie und
+	 * haetten sonst nichts von dem, was das Team laengst bezahlt hat. Bringt jeden Knoten auf den
+	 * Stand des Teams und ueberspringt, was diese Einheit schon hat - mehrfaches Aufrufen ist
+	 * deshalb unschaedlich.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Attribute Tree")
+	void SyncAttributeTreeFromTeam();
+
+private:
+	/**
+	 * Wartet auf die Teamnummer und holt dann nach.
+	 *
+	 * BeginPlay allein traegt nicht: TeamId wird an vielen Stellen erst NACH dem Spawn gesetzt
+	 * (UnitSpawnPlatform, BuildingBase, UnitBase::SetTeamId und weitere). Eine Nachvergabe direkt
+	 * in BeginPlay liefe deshalb regelmaessig gegen TeamId = 0 und taete nichts, ohne dass das
+	 * irgendwo auffiele. Diese Schleife versucht es erneut, bis die Nummer da ist.
+	 */
+	UFUNCTION()
+	void RetrySyncAttributeTreeFromTeam();
+
+	/** Laeuft, bis die Teamnummer steht - siehe RetrySyncAttributeTreeFromTeam. */
+	FTimerHandle AttributeTreeSyncTimer;
+
+	/** Verbleibende Versuche der Nachvergabe. */
+	int32 AttributeTreeSyncAttemptsLeft = 20;
+
+public:
 
 	/** Points invested into a specific node (0 if none). */
 	UFUNCTION(BlueprintPure, Category = "Attribute Tree")
@@ -289,6 +324,17 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Attribute Tree")
 	bool CanInvestInAttributeTreeNode(FName NodeId) const;
 
+	/**
+	 * Gibt es ueberhaupt noch einen Knoten, in den diese Einheit investieren KANN?
+	 *
+	 * Nicht dasselbe wie AttributeTreePoints > 0: ein Knoten gehoert ueber TalentTag/UnitTags zu
+	 * bestimmten Einheitentypen (DoesAttributeTreeNodeMatchUnit). Eine Einheit ohne passenden
+	 * Knoten behaelt ihre Punkte fuer immer - wer nur den Vorrat abfragt, bekommt dauerhaft
+	 * "ja". Genau daran hoerte am 19.09.2026 das Pulsieren des Knopfes nie auf.
+	 */
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
+	bool HasInvestableAttributeTreeNode() const;
+
 	/** Look up a node row by Id (row name). Returns nullptr if missing. */
 	const FAttributeTreeNodeRow* FindAttributeTreeRow(FName NodeId) const;
 
@@ -296,9 +342,8 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Attribute Tree")
 	bool DoesAttributeTreeNodeMatchUnit(const FAttributeTreeNodeRow& Row) const;
 
-	/** Server-authoritative: invest one ATTRIBUTE TREE point through a node. True if a point was spent. */
-	UFUNCTION(BlueprintCallable, Category = "Attribute Tree")
-	bool InvestInAttributeTreeNode(FName NodeId);
+	// ENTFERNT am 20.09.2026: InvestInAttributeTreeNode. Investiert wird ueber das Team -
+	// siehe ApplyAttributeTreeNodeFromTeam und Server_InvestTeamAttributeTreeNode.
 
 	/**
 	 * Server-authoritative: leert die Knoten und erstattet die Punkte des Baums zurueck.
