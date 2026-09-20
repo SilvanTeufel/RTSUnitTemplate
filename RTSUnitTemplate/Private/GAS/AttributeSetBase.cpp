@@ -129,22 +129,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 					}
 				}
 
-				// Compute threshold crossings before applying damage to Health
-				{
-					const float NewHealthProjected = FMath::Clamp(GetHealth() + DamageAmount, 0.0f, GetMaxHealth());
-					const float MaxH = GetMaxHealth();
-					if (MaxH > 0.f && OldHealth != NewHealthProjected)
-					{
-						const float OldPct = OldHealth / MaxH;
-						const float NewPct = NewHealthProjected / MaxH;
-						// Downward crossings (damage)
-						if (OldPct >= 0.50f && NewPct < 0.50f) { UnitBase->OnHealthThresholdCrossed(false, false, true, NewHealthProjected); }
-						if (OldPct >= 0.25f && NewPct < 0.25f) { UnitBase->OnHealthThresholdCrossed(false, true,  false, NewHealthProjected); }
-						// Upward crossings (edge case if shield overflow indirectly heals, included for completeness)
-						if (OldPct <= 0.25f && NewPct > 0.25f) { UnitBase->OnHealthThresholdCrossed(true,  true,  false, NewHealthProjected); }
-						if (OldPct <= 0.50f && NewPct > 0.50f) { UnitBase->OnHealthThresholdCrossed(true,  false, true, NewHealthProjected); }
-					}
-				}
+				// Schwellen meldet SetAttributeHealth weiter unten selbst - siehe FireHealthThresholdEvents.
 				SpawnIndicator(-1*DamageAmount, FLinearColor::Red, FLinearColor::White, 0.25f);
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 
@@ -158,22 +143,7 @@ void UAttributeSetBase::PostGameplayEffectExecute(const FGameplayEffectModCallba
 				if (OldHealth + DamageAmount <= GetMaxHealth())
 					SpawnIndicator(DamageAmount, FLinearColor::Green, FLinearColor::White, 0.7f);
 
-				// Compute threshold crossings before applying heal to Health
-				{
-					const float NewHealthProjected = FMath::Clamp(GetHealth() + DamageAmount, 0.0f, GetMaxHealth());
-					const float MaxH = GetMaxHealth();
-					if (MaxH > 0.f && OldHealth != NewHealthProjected)
-					{
-						const float OldPct = OldHealth / MaxH;
-						const float NewPct = NewHealthProjected / MaxH;
-						// Upward crossings (healing)
-						if (OldPct <= 0.25f && NewPct > 0.25f) { UnitBase->OnHealthThresholdCrossed(true,  true,  false, NewHealthProjected); }
-						if (OldPct <= 0.50f && NewPct > 0.50f) { UnitBase->OnHealthThresholdCrossed(true,  false, true, NewHealthProjected); }
-						// Downward crossings shouldn't happen on heal, but keep checks symmetrical for safety
-						if (OldPct >= 0.50f && NewPct < 0.50f) { UnitBase->OnHealthThresholdCrossed(false, false, true, NewHealthProjected); }
-						if (OldPct >= 0.25f && NewPct < 0.25f) { UnitBase->OnHealthThresholdCrossed(false, true,  false, NewHealthProjected); }
-					}
-				}
+				// Schwellen meldet SetAttributeHealth selbst - siehe FireHealthThresholdEvents.
 				SetAttributeHealth(FMath::Max(GetHealth() + DamageAmount, 0.0f));
 			}
 
@@ -245,6 +215,10 @@ void UAttributeSetBase::OnRep_HealthRegeneration(const FGameplayAttributeData& O
 
 void UAttributeSetBase::SetAttributeHealth(float NewHealth)
 {
+	// Vorwert merken: die Schwellenmeldung braucht beide Werte, und ALLE Gesundheitsaenderungen
+	// laufen hier durch - Schaden, Heilung, Reparatur und Regeneration.
+	const float OldHealth = GetHealth();
+
 	if (NewHealth > GetMaxHealth())  // Assuming you have a getter for MaxHealth
 	{
 			Health.SetCurrentValue(GetMaxHealth());
@@ -253,6 +227,75 @@ void UAttributeSetBase::SetAttributeHealth(float NewHealth)
 	{
 		Health.SetCurrentValue(FMath::Max(NewHealth, 0.0f));
 	}
+
+	// Mit dem GEKLEMMTEN Wert melden, nicht mit dem gewuenschten: wer auf 120 % heilt, hat die
+	// 50-%-Schwelle einmal ueberschritten, nicht anderthalbmal.
+	FireHealthThresholdEvents(OldHealth, GetHealth());
+}
+
+void UAttributeSetBase::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
+{
+	Super::PostAttributeChange(Attribute, OldValue, NewValue);
+
+	if (Attribute == GetHealthAttribute())
+	{
+		FireHealthThresholdEvents(OldValue, NewValue);
+	}
+}
+
+void UAttributeSetBase::FireHealthThresholdEvents(float OldHealth, float NewHealth)
+{
+	AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor());
+	if (!UnitBase)
+	{
+		return;
+	}
+
+	const float MaxH = GetMaxHealth();
+	if (MaxH <= 0.f)
+	{
+		return;
+	}
+
+	// Vom GEMERKTEN Vorwert rechnen, nicht vom uebergebenen.
+	//
+	// Es melden zwei Pfade: SetAttributeHealth (Schaden, Heilung, Reparatur, Regeneration) und
+	// PostAttributeChange (GAS-Aggregation). Beide koennen dieselbe Aenderung sehen. Mit einem
+	// gemeinsamen Bezugspunkt zaehlt eine Ueberschreitung genau einmal, und keiner der beiden
+	// Pfade kann eine verschlucken.
+	if (LastThresholdHealth < 0.f)
+	{
+		LastThresholdHealth = OldHealth;
+	}
+
+	const float FromHealth = LastThresholdHealth;
+	LastThresholdHealth = NewHealth;
+
+	if (FromHealth == NewHealth)
+	{
+		return;
+	}
+
+	const float OldPct = FromHealth / MaxH;
+	const float NewPct = NewHealth / MaxH;
+
+	auto Fire = [UnitBase, NewHealth, OldPct, NewPct](bool bIncrease, bool bLow, bool bHigh)
+	{
+		// DIAGNOSE (20.09.2026, Rauch bleibt nach der Reparatur stehen): zeigt Richtung,
+		// Schwelle und Prozentwerte. Belegt, dass der Weg nach oben jetzt ueberhaupt meldet.
+		UE_LOG(LogTemp, Log,
+			TEXT("[Schwelle] %s: %s ueber %s (%.0f%% -> %.0f%%)."),
+			*UnitBase->GetName(), bIncrease ? TEXT("AUFWAERTS") : TEXT("abwaerts"),
+			bLow ? TEXT("25%") : TEXT("50%"), OldPct * 100.f, NewPct * 100.f);
+		UnitBase->OnHealthThresholdCrossed(bIncrease, bLow, bHigh, NewHealth);
+	};
+
+	// Abwaerts
+	if (OldPct >= 0.50f && NewPct < 0.50f) { Fire(false, false, true); }
+	if (OldPct >= 0.25f && NewPct < 0.25f) { Fire(false, true,  false); }
+	// Aufwaerts
+	if (OldPct <= 0.25f && NewPct > 0.25f) { Fire(true,  true,  false); }
+	if (OldPct <= 0.50f && NewPct > 0.50f) { Fire(true,  false, true); }
 }
 
 void UAttributeSetBase::OnRep_Shield(const FGameplayAttributeData& OldShield)
