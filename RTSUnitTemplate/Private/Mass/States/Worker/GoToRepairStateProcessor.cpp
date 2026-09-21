@@ -188,8 +188,14 @@ void UGoToRepairStateProcessor::ExecuteServer(FMassEntityManager& EntityManager,
                 FriendlyRadius = FriendlyChar->CapsuleRadius;
             }
 
-            // Compute effective repair reach based on FollowRadius (keep hysteresis)
-            const float FollowRadius = FMath::Max(0.f, TargetFrag.FollowRadius);
+            // Reichweite aus RepairDistance, NICHT mehr aus FollowRadius.
+            //
+            // Anmarsch und Reparatur rechneten vorher mit verschiedenen Groessen: hier
+            // FollowRadius, in SyncRepairTime dagegen RepairDistance. War FollowRadius klein,
+            // musste der Arbeiter viel naeher heran, als das Reparieren spaeter verlangte - und
+            // kam wegen Ausweichen und Kollision oft nie an. Das war "faengt manchmal nicht an
+            // zu reparieren". Beide Seiten benutzen jetzt denselben Wert.
+            const float FollowRadius = FMath::Max(0.f, WorkerStats.RepairDistance);
             
             float AttackerRadius = CharFrag.CapsuleRadius;
             float TargetRadius = FriendlyRadius;

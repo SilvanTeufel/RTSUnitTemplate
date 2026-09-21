@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/PerformanceUnit.h"
+#include "System/DamageNumberSubsystem.h"
 #include "Actors/AreaDecalComponent.h"   // ground painting is exempt from the fog visibility push
 #include "Characters/Unit/BuildingBase.h"
 
@@ -448,24 +449,34 @@ void APerformanceUnit::CheckHealthBarVisibility()
 
 void APerformanceUnit::SpawnDamageIndicator_Implementation(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset)
 {
+	// DIAGNOSE (20.09.2026, Umbau der Schadenszahlen): zaehlt, wieviele Zahlen ueberhaupt
+	// entstehen. Ohne diese Zahl ist ein Vorher/Nachher-Vergleich wertlos - eine Messung, in der
+	// der Pfad gar nicht laeuft, sieht aus wie eine schnelle Messung. Der Zaehler sitzt VOR dem
+	// Nebelfilter-Zweig, damit beide Varianten dieselbe Last ausweisen.
+	static int32 DamageNumberCount = 0;
+	++DamageNumberCount;
+	if ((DamageNumberCount % 100) == 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Schadenszahlen] %d Zahlen angefordert."), DamageNumberCount);
+	}
+
+	// NEBEL DES KRIEGES: unveraendert an dieser Stelle. Die Funktion ist ein NetMulticast, der
+	// Filter wird also je Client ausgewertet - genau so soll es sein.
 	if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
 	{
-		if(Damage > 0 && Attributes->IndicatorBaseClass)
+		if (Damage > 0)
 		{
-			
-			FTransform Transform;
-			Transform.SetLocation(GetActorLocation());
-			Transform.SetRotation(FQuat(FRotator::ZeroRotator)); // FRotator::ZeroRotator
-
-			const auto MyIndicator = Cast<AIndicatorActor>
-								(UGameplayStatics::BeginDeferredActorSpawnFromClass
-								(this, Attributes->IndicatorBaseClass, Transform,  ESpawnActorCollisionHandlingMethod::AlwaysSpawn));
-			
-			
-			if (MyIndicator != nullptr)
+			// KEIN Aktor mehr je Treffer.
+			//
+			// Bis zum 20.09.2026 entstand hier je Schadenszahl ein AIndicatorActor mit einer
+			// UWidgetComponent und eigenem Tick. Jetzt wandert die Zahl in einen Ringpuffer im
+			// UDamageNumberSubsystem, und AHUDBase zeichnet einmal je Bild alle zusammen.
+			if (const UWorld* World = GetWorld())
 			{
-				UGameplayStatics::FinishSpawningActor(MyIndicator, Transform);
-				MyIndicator->SpawnDamageIndicator(Damage, HighColor, LowColor, ColorOffset);
+				if (UDamageNumberSubsystem* Numbers = World->GetSubsystem<UDamageNumberSubsystem>())
+				{
+					Numbers->AddNumber(GetActorLocation(), Damage, HighColor, LowColor, ColorOffset);
+				}
 			}
 		}
 	}
@@ -870,6 +881,24 @@ bool APerformanceUnit::ComputeInherentVisibility() const
 	const bool bResult = (!EnableFog || IsVisibleEnemy || IsMyTeam);
 	
 	return bResult;
+}
+
+bool APerformanceUnit::IsHiddenForReplay() const
+{
+	// Bewusst OHNE Nebel und OHNE Viewport-Keulung - siehe Kopfkommentar im Header.
+	if (!IsInitialized)
+	{
+		return true;
+	}
+	if (IsHidden())
+	{
+		return true;
+	}
+	if (bIsInvisible && !IsMyTeam)
+	{
+		return true;
+	}
+	return false;
 }
 
 bool APerformanceUnit::ComputeLocalVisibility() const

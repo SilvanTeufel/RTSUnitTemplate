@@ -1,5 +1,6 @@
 ﻿// Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "GameStates/UpgradeGameState.h"
 #include "System/RTSTravelHelpers.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "DrawDebugHelpers.h"
@@ -257,7 +258,8 @@ static TAutoConsoleVariable<int32> CVarLuxDirectPredict(
 
 // Der Selbsttest steht weiter unten bei den uebrigen Diagnosebefehlen; BeginPlay braucht ihn aber
 // schon hier.
-static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TArray<FString>& Args);
+static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TArray<FString>& Args,
+                                      ACameraControllerBase* InPC = nullptr);
 static void TempoTest(const TArray<FString>& Args, UWorld* World, FOutputDevice& Ar);
 
 void ACameraControllerBase::ApplyDirectMovePredictionLocally(const FVector& Target, bool bStopping, bool bStartingMove)
@@ -641,6 +643,28 @@ static TAutoConsoleVariable<float> CVarAttributbaumSelbsttest(
 	TEXT("Sekunden nach Spielstart, nach denen der Attributbaum-Selbsttest einmal laeuft. 0 = aus."),
 	ECVF_Default);
 
+// Sekunden nach Spielstart, nach denen der Attributbaum EINMAL zurueckgesetzt wird.
+// 0 = aus. Gegenstueck zum Selbsttest oben, damit sich auch der Rueckweg ohne Bedienung
+// belegen laesst: -dpcvars=rts.attributetree.autoreset=100
+static TAutoConsoleVariable<float> CVarAttributbaumSelbstruecksetzen(
+	TEXT("rts.attributetree.autoreset"),
+	0.f,
+	TEXT("Sekunden nach Spielstart, nach denen der Attributbaum des Teams einmal zurueckgesetzt wird. 0 = aus."),
+	ECVF_Default);
+
+// Punkte je Vergabe, zur Laufzeit umstellbar.
+//
+// Das Feld TalentPointsPerInterval am Controller bleibt die Vorgabe und ist je Projekt im
+// Blueprint setzbar (AstraHelix 1, andere Projekte duerfen abweichen). Diese CVar ueberschreibt
+// es, ohne dass ein Blueprint angefasst werden muss - gedacht fuers Ausbalancieren im laufenden
+// Spiel und fuer Messlaeufe: -dpcvars=rts.talents.pointsperinterval=5
+// Negativ = aus, dann gilt das Feld.
+static TAutoConsoleVariable<int32> CVarTalentPointsPerInterval(
+	TEXT("rts.talents.pointsperinterval"),
+	-1,
+	TEXT("Punkte je Vergabe fuer den Attributbaum. Negativ = Vorgabe des Controllers benutzen."),
+	ECVF_Default);
+
 // Dasselbe fuer den Tempotest: -dpcvars=rts.speedtest.auto=30
 static TAutoConsoleVariable<float> CVarTempoSelbsttest(
 	TEXT("rts.speedtest.auto"),
@@ -840,8 +864,43 @@ void ACameraControllerBase::BeginPlay()
 			FTimerHandle Selbsttest;
 			GetWorldTimerManager().SetTimer(Selbsttest, FTimerDelegate::CreateWeakLambda(this, [this]()
 			{
-				FuehreAttributbaumTestAus(GetWorld(), *GLog, TArray<FString>());
+				FuehreAttributbaumTestAus(GetWorld(), *GLog, TArray<FString>(), this);
 			}), Verzoegerung, /*bLoop=*/true);
+		}
+
+		// Einmalig: das Zuruecksetzen ist nicht wiederholbar sinnvoll - nach dem ersten Mal
+		// ist nichts mehr da, was erstattet werden koennte.
+		const float RuecksetzVerzoegerung = CVarAttributbaumSelbstruecksetzen.GetValueOnGameThread();
+		if (RuecksetzVerzoegerung > 0.f)
+		{
+			FTimerHandle Selbstruecksetzen;
+			GetWorldTimerManager().SetTimer(Selbstruecksetzen, FTimerDelegate::CreateWeakLambda(this, [this]()
+			{
+				const UWorld* Welt = GetWorld();
+				const AUpgradeGameState* GameStateRef = Welt ? Welt->GetGameState<AUpgradeGameState>() : nullptr;
+				if (!GameStateRef)
+				{
+					return;
+				}
+
+				// Vorher/Nachher in EINER Ausgabe - sonst ist nicht zu unterscheiden, ob der
+				// Rueckweg gewirkt hat oder ob ohnehin nichts investiert war.
+				const int32 VorratVorher = GameStateRef->GetTeamAttributeTreePoints(SelectableTeamId);
+				const int32 AusgegebenVorher = GameStateRef->GetTeamUsedAttributeTreePoints(SelectableTeamId);
+				const int32 KnotenVorher = GameStateRef->GetTeamAttributeTreeNodes(SelectableTeamId).Num();
+
+				if (AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn()))
+				{
+					Camera->Server_ResetTeamAttributeTree();
+				}
+
+				UE_LOG(LogTemp, Log,
+					TEXT("[Attributbaum] Zuruecksetzen Team %d: Vorrat %d -> %d, ausgegeben %d -> %d, Knoten %d -> %d."),
+					SelectableTeamId,
+					VorratVorher, GameStateRef->GetTeamAttributeTreePoints(SelectableTeamId),
+					AusgegebenVorher, GameStateRef->GetTeamUsedAttributeTreePoints(SelectableTeamId),
+					KnotenVorher, GameStateRef->GetTeamAttributeTreeNodes(SelectableTeamId).Num());
+			}), RuecksetzVerzoegerung, /*bLoop=*/false);
 		}
 
 		// Einmalig, nicht wiederholend: der Tempotest nimmt seinen Eingriff selbst wieder
@@ -912,7 +971,7 @@ static void TalenteStatus(const TArray<FString>& /*Args*/, UWorld* World, FOutpu
 	int32 Eigene = 0;
 	int32 Fremde = 0;
 	int32 SummePunkte = 0;
-	int32 SummeBaumPunkte = 0;
+	int32 SummeBaumPunkte = 0;  // wird aus dem Teamtopf gefuellt, nicht mehr aufsummiert
 	for (TActorIterator<ALevelUnit> It(World); It; ++It)
 	{
 		ALevelUnit* Unit = *It;
@@ -925,7 +984,6 @@ static void TalenteStatus(const TArray<FString>& /*Args*/, UWorld* World, FOutpu
 		{
 			++Eigene;
 			SummePunkte += Unit->LevelData.TalentPoints;
-			SummeBaumPunkte += Unit->AttributeTreePoints;
 		}
 		else
 		{
@@ -934,8 +992,13 @@ static void TalenteStatus(const TArray<FString>& /*Args*/, UWorld* World, FOutpu
 	}
 
 	// Die beiden Vorraete GETRENNT ausweisen - sie laufen seit dem 10.09.2026 auseinander, und
-	// eine einzige Zahl liesse offen, welcher der beiden gemeint ist.
-	Ar.Logf(TEXT("[Talente] Einheiten: %d eigene (zusammen %d freie Talentpunkte, %d freie Attributpunkte), %d fremde."),
+	// eine einzige Zahl liesse offen, welcher der beiden gemeint ist. Der Attributbaum ist seit
+	// dem 20.09.2026 EIN Wert je Team und keine Summe ueber Einheiten mehr.
+	if (const AUpgradeGameState* GameStateRef = World->GetGameState<AUpgradeGameState>())
+	{
+		SummeBaumPunkte = GameStateRef->GetTeamAttributeTreePoints(PC->SelectableTeamId);
+	}
+	Ar.Logf(TEXT("[Talente] Einheiten: %d eigene (zusammen %d freie Talentpunkte), Teamtopf des Attributbaums: %d frei. %d fremde Einheiten."),
 		Eigene, SummePunkte, SummeBaumPunkte, Fremde);
 
 	if (Eigene == 0)
@@ -961,10 +1024,11 @@ static void TalenteStatus(const TArray<FString>& /*Args*/, UWorld* World, FOutpu
 			return;
 		}
 
-		Ar.Logf(TEXT("[Talente] %s: Ziel '%s' (Team %d) - Talent: %d frei / %d verbraucht, Attributbaum: %d frei / %d verbraucht."),
+		// Der Attributbaum steht hier nicht mehr: sein Vorrat gehoert dem Team, nicht der
+		// Zieleinheit. Er wird weiter unten einmal je Team ausgegeben.
+		Ar.Logf(TEXT("[Talente] %s: Ziel '%s' (Team %d) - Talent: %d frei / %d verbraucht."),
 			Name, *Ziel->GetName(), Ziel->TeamId,
-			Ziel->LevelData.TalentPoints, Ziel->LevelData.UsedTalentPoints,
-			Ziel->AttributeTreePoints, Ziel->UsedAttributeTreePoints);
+			Ziel->LevelData.TalentPoints, Ziel->LevelData.UsedTalentPoints);
 	};
 
 	ZeigeZiel(TEXT("TalentChooser"),
@@ -1007,13 +1071,18 @@ static void TalenteGeben(const TArray<FString>& Args, UWorld* World, FOutputDevi
 		if (IsValid(Unit) && Unit->TeamId == PC->SelectableTeamId)
 		{
 			Unit->LevelData.TalentPoints += Anzahl;
-			Unit->GrantAttributeTreePoints(Anzahl);
 			++Beschenkte;
 		}
 	}
 
-	Ar.Logf(TEXT("[Talente] %d Punkte an %d eigene Einheiten vergeben - in BEIDE Vorraete (Talent und Attributbaum)."),
-		Anzahl, Beschenkte);
+	// Der Attributbaum bekommt seine Punkte am Team, nicht je Einheit.
+	if (AUpgradeGameState* GameStateRef = World->GetGameState<AUpgradeGameState>())
+	{
+		GameStateRef->GrantTeamAttributeTreePoints(PC->SelectableTeamId, Anzahl);
+	}
+
+	Ar.Logf(TEXT("[Talente] %d Talentpunkte an %d eigene Einheiten und %d Punkte an den Attributbaum von Team %d."),
+		Anzahl, Beschenkte, Anzahl, PC->SelectableTeamId);
 }
 
 static FAutoConsoleCommandWithWorldArgsAndOutputDevice GTalenteGebenCmd(
@@ -1091,9 +1160,16 @@ static void AttributbaumTest(const TArray<FString>& Args, UWorld* World, FOutput
 	FuehreAttributbaumTestAus(World, Ar, Args);
 }
 
-static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TArray<FString>& Args)
+static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TArray<FString>& Args,
+                                      ACameraControllerBase* InPC)
 {
-	ACameraControllerBase* PC = HoleKameraController(World);
+	// Den EIGENEN Controller nehmen, wenn einer uebergeben wird.
+	//
+	// HoleKameraController liefert immer denselben - auf einer Karte mit mehreren Controllern
+	// (KI gegen KI plus Zuschauer) ist das der mit Teamnummer 0, und der besitzt keine Einheit.
+	// Der Selbsttest meldete deshalb 20-mal hintereinander "keine eigene Einheit gefunden",
+	// obwohl Team 1 und Team 2 je 13 Einheiten mit Baum hatten.
+	ACameraControllerBase* PC = InPC ? InPC : HoleKameraController(World);
 	if (!PC)
 	{
 		Ar.Log(TEXT("[Attributbaum] Kein ACameraControllerBase."));
@@ -1164,7 +1240,17 @@ static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TA
 	}
 
 	// Punkte sicherstellen und einen investierbaren Knoten suchen.
-	Ziel->GrantAttributeTreePoints(10);
+	//
+	// Seit dem 20.09.2026 gehoert der Vorrat dem TEAM - der Test legt sie deshalb dort ab und
+	// nicht mehr auf der Einheit. 'Ziel' dient nur noch als Messobjekt fuer die Attributwerte.
+	AUpgradeGameState* GameStateRef = World->GetGameState<AUpgradeGameState>();
+	if (!GameStateRef)
+	{
+		Ar.Log(TEXT("[Attributbaum] Kein AUpgradeGameState - ohne ihn gibt es keinen Teamtopf."));
+		return;
+	}
+	const int32 TestTeamId = PC->SelectableTeamId;
+	GameStateRef->GrantTeamAttributeTreePoints(TestTeamId, 10);
 
 	FName Knoten = NAME_None;
 	if (Args.Num() > 1)
@@ -1175,11 +1261,20 @@ static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TA
 	{
 		for (const FName& N : Sichtbar)
 		{
-			if (Ziel->CanInvestInAttributeTreeNode(N))
+			// Freischaltung und Deckel am TEAM pruefen, nicht an der Einheit - die Einheit hat
+			// keinen eigenen Vorrat mehr.
+			const FAttributeTreeNodeRow* Kandidat =
+				Ziel->AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(N, TEXT("Test"), false);
+			if (!Kandidat || !GameStateRef->IsTeamAttributeTreeNodeUnlocked(TestTeamId, N))
 			{
-				Knoten = N;
-				break;
+				continue;
 			}
+			if (GameStateRef->GetTeamAttributeTreeNodePoints(TestTeamId, N) >= FMath::Max(1, Kandidat->MaxPoints))
+			{
+				continue;
+			}
+			Knoten = N;
+			break;
 		}
 	}
 
@@ -1192,14 +1287,28 @@ static void FuehreAttributbaumTestAus(UWorld* World, FOutputDevice& Ar, const TA
 	const FAttributeTreeNodeRow* Row =
 		Ziel->AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(Knoten, TEXT("Test"), false);
 	const FBaumMesswerte Vorher = LiesMesswerte(Ziel);
-	const bool bInvestiert = Ziel->InvestInAttributeTreeNode(Knoten);
-	const FBaumMesswerte Nachher = LiesMesswerte(Ziel);
 
-	Ar.Logf(TEXT("[Attributbaum] Knoten '%s' (Attribut %s): investiert %s, Vorrat %d frei / %d vergeben."),
+	// Ueber denselben Weg wie der Knopf im Widget: buchen am Team, anwenden auf ALLE passenden
+	// Einheiten. Ein eigener Testpfad wuerde etwas anderes pruefen als das, was der Spieler tut.
+	const int32 VorratVorher = GameStateRef->GetTeamAttributeTreePoints(TestTeamId);
+	if (AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(PC->GetPawn()))
+	{
+		Camera->Server_InvestTeamAttributeTreeNode(Knoten);
+	}
+	else
+	{
+		Ar.Log(TEXT("[Attributbaum] Kein AExtendedCameraBase als Pawn - der Investitionsweg des Widgets ist nicht erreichbar."));
+		return;
+	}
+	const FBaumMesswerte Nachher = LiesMesswerte(Ziel);
+	const int32 VorratNachher = GameStateRef->GetTeamAttributeTreePoints(TestTeamId);
+
+	Ar.Logf(TEXT("[Attributbaum] Knoten '%s' (Attribut %s): investiert %s, Teamtopf %d -> %d frei / %d vergeben."),
 		*Knoten.ToString(),
 		Row ? *StaticEnum<EAttributeTreeStat>()->GetNameStringByValue((int64)Row->Attribute) : TEXT("?"),
-		bInvestiert ? TEXT("JA") : TEXT("NEIN"),
-		Ziel->AttributeTreePoints, Ziel->UsedAttributeTreePoints);
+		(VorratNachher < VorratVorher) ? TEXT("JA") : TEXT("NEIN"),
+		VorratVorher, VorratNachher,
+		GameStateRef->GetTeamUsedAttributeTreePoints(TestTeamId));
 
 	auto Zeile = [&Ar](const TCHAR* Name, float A, float B)
 	{
@@ -1390,7 +1499,23 @@ void ACameraControllerBase::GrantPeriodicTalentPoints()
 	// Baums darf das nicht mehr sein. Als Zeitreihe ueber die Partie ist das ohne weiteres Zutun
 	// ablesbar.
 	int32 BestandTalent = 0;
+
+	// Der Zufluss des Attributbaums: EINMAL je Takt fuer das ganze Team, nicht je Einheit.
+	const int32 CVarPoints = CVarTalentPointsPerInterval.GetValueOnGameThread();
+	const int32 PointsThisInterval = (CVarPoints >= 0) ? CVarPoints : TalentPointsPerInterval;
+
 	int32 BestandBaum = 0;
+	if (AUpgradeGameState* GameStateRef = GetWorld() ? GetWorld()->GetGameState<AUpgradeGameState>() : nullptr)
+	{
+		GameStateRef->GrantTeamAttributeTreePoints(SelectableTeamId, PointsThisInterval);
+		BestandBaum = GameStateRef->GetTeamAttributeTreePoints(SelectableTeamId);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Talente] Kein AUpgradeGameState - der Attributbaum von Team %d bekommt keine Punkte."),
+			SelectableTeamId);
+	}
 
 	for (TActorIterator<ALevelUnit> It(GetWorld()); It; ++It)
 	{
@@ -1425,11 +1550,15 @@ void ACameraControllerBase::GrantPeriodicTalentPoints()
 		// unveraendert wie bisher, und der Baum bekommt seine eigenen, an die AutoLevelUp() nicht
 		// herankommt. Vorher gab es nur den einen Topf - das Selbstaufwerten leerte ihn, und im
 		// Baum standen dauerhaft 0 Punkte.
-		Unit->GrantAttributeTreePoints(TalentPointsPerInterval);
+		// KEIN Unit->GrantAttributeTreePoints mehr.
+		//
+		// Der Zufluss liegt seit dem 20.09.2026 beim TEAM (siehe unten, vor der Schleife). Hier
+		// bekam bis dahin JEDE eigene Einheit denselben Betrag - als gemeinsamer Topf waere das
+		// Einkommen damit linear mit der Armeegroesse gewachsen, und wer mehr Einheiten hat,
+		// haette den Baum nebenbei schneller gefuellt.
 		++Beschenkte;
 
 		BestandTalent += Unit->LevelData.TalentPoints;
-		BestandBaum += Unit->AttributeTreePoints;
 
 		// Mitzaehlen, wieviele Einheiten ueberhaupt einen Attributbaum tragen. Ohne diese Tabelle
 		// bekommt UAttributeTreeWidget nie eine Zieleinheit und bleibt leer - von aussen sieht das
@@ -1443,8 +1572,8 @@ void ACameraControllerBase::GrantPeriodicTalentPoints()
 	if (Beschenkte > 0)
 	{
 		UE_LOG(LogTemp, Log,
-			TEXT("[Talente] %d Punkte an %d Einheiten von Team %d vergeben; davon %d mit Attributbaum. Bestand: Talent %d, Attributbaum %d."),
-			TalentPointsPerInterval, Beschenkte, SelectableTeamId, MitBaum,
+			TEXT("[Talente] %d Punkte an den Attributbaum von Team %d; %d eigene Einheiten, davon %d mit Baum. Bestand: Talent %d, Teamtopf %d."),
+			PointsThisInterval, SelectableTeamId, Beschenkte, MitBaum,
 			BestandTalent, BestandBaum);
 
 		if (MitBaum == 0)
@@ -1452,7 +1581,7 @@ void ACameraControllerBase::GrantPeriodicTalentPoints()
 			UE_LOG(LogTemp, Warning,
 				TEXT("[Talente] KEINE eigene Einheit hat ein AttributeTreeDataTable - das Attributbaum-Widget bleibt deshalb leer."));
 		}
-		Client_ShowTalentPointToast(TalentPointsPerInterval, Beschenkte);
+		Client_ShowTalentPointToast(PointsThisInterval, Beschenkte);
 	}
 	else
 	{

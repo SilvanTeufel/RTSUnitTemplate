@@ -376,6 +376,19 @@ struct FMassWorkerStatsFragment : public FMassFragment
 	UPROPERTY(EditAnywhere, Category = "Worker")
 	float ResourceExtractionTime = 2.0f;
 
+	/**
+	 * Abstand zum Reparaturziel, ZUSAETZLICH zu den beiden Kapselradien.
+	 *
+	 * Wird aus AWorkingUnitBase::RepairDistance gefuellt. Entscheidend ist, dass Anmarsch UND
+	 * Reparatur denselben Wert benutzen: vorher rechnete der Anmarsch mit FollowRadius und die
+	 * Reparatur mit RepairDistance. War FollowRadius klein, musste der Arbeiter unrealistisch
+	 * nah heran, um ueberhaupt in den Reparaturzustand zu wechseln - und kam dort wegen
+	 * Ausweichen und Kollision oft nie an. Genau das war "faengt manchmal nicht an zu
+	 * reparieren".
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "Worker|State", Transient)
+	float RepairDistance = 100.f;
+
 	// Target info for GoToBuild state, populated externally (e.g., by signal handler)
 	UPROPERTY(VisibleAnywhere, Category="Worker|State", Transient)
 	FVector BuildAreaPosition = FVector::ZeroVector;

@@ -101,6 +101,9 @@ public:
 	// Override the BeginPlay function
 	virtual void BeginPlay() override;
 
+	/** Raeumt den Tab-Hinweis vom Viewport - er haengt an Slate, nicht am Aktor. */
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
 	UFUNCTION(Client, Reliable)
 	void Client_UpdateWidgets(UUnitWidgetSelector* NewWidgetSelector, UTaggedUnitSelector* NewTaggedSelector, UResourceWidget* NewResourceWidget);
 	
@@ -217,12 +220,22 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UAttributeTreeWidget* AttributeTreeWidget;
 
-	/** Server-authoritative: invest one talent point through an attribute-tree node. */
+	// ENTFERNT am 20.09.2026: Server_InvestAttributeTreeNode und Server_ResetAttributeTree.
+	// Ersetzt durch die beiden Team-Fassungen unten - kein Blueprint rief sie auf (geprueft).
+
+	/**
+	 * Investiert EINEN Punkt des Teams in den Knoten und wendet ihn sofort auf alle passenden
+	 * Einheiten an.
+	 *
+	 * Die Teamnummer wird NICHT uebergeben, sondern auf dem Server aus dem eigenen Controller
+	 * gelesen - ein Client koennte sonst in den Baum einer fremden Fraktion investieren.
+	 */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void Server_InvestAttributeTreeNode(ALevelUnit* Unit, FName NodeId);
-	/** Server-authoritative: reset the unit's attribute tree (refunds talent points). */
+	void Server_InvestTeamAttributeTreeNode(FName NodeId);
+
+	/** Setzt den Baum des EIGENEN Teams zurueck: erstattet in den Teamtopf, leert alle Einheiten. */
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
-	void Server_ResetAttributeTree(ALevelUnit* Unit);
+	void Server_ResetTeamAttributeTree();
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 		void SetUserWidget(AUnitBase* SelectedActor);
@@ -284,6 +297,64 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void UpdateTabModeUI();
+
+	/**
+	 * Talent- und AbilityChooser fuer die Tab-Ansichten zeigen.
+	 *
+	 * Absichtlich getrennt von SetUserWidget: dieses haengt ueber SetWidgets am Auswahlknopf
+	 * und darf den AbilityChooser NICHT aufklappen, der Tab-Weg hier dagegen schon.
+	 */
+	void ShowChoosersForTabMode(class AUnitBase* TargetUnit);
+
+	/**
+	 * Zurueck auf die Startansicht (TabMode 1) und die Oberflaeche entsprechend aufraeumen.
+	 *
+	 * 1 und nicht 0: das ist der Wert, mit dem das Spiel startet und auf den auch
+	 * ACustomControllerBase zuruecksetzt. Der naechste Tab-Druck geht von dort aus weiter.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ShowStartScreen();
+
+	// --- Hinweis "Tab fuer die naechste Ansicht" (19.09.2026) ---------------------------------
+	//
+	// Die Tab-Taste blaettert durch fuenf Ansichten (0 = Standard, 1 Resource, 2 Control,
+	// 3 WinCondition, 4 Attributbaum). Dass es ueberhaupt weitergeht, stand nirgends - deshalb
+	// blendet UpdateTabHint() den Hinweis unten rechts ein, sobald TabMode != 0 ist. In der
+	// Standardansicht bleibt er bewusst aus.
+	//
+	// Bewusst als Slate-Inhalt am Viewport statt als Widget im HUD-Blueprint: so gilt er ohne
+	// Verdrahtung fuer BEIDE Fraktions-HUDs und fuer jede Karte. Schrift und Farbe sind
+	// einstellbar, damit das Plugin nicht hart auf Projektinhalte zeigt - der Standardpfad
+	// trifft die ChakraPetch des Projekts, laeuft aber ins Leere statt in einen Fehler, wenn
+	// ein anderes Projekt die Schrift nicht hat.
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tab")
+	FText TabHintText = FText::FromString(TEXT("PRESS TAB FOR NEXT SCREEN"));
+
+	/** Beschriftung des Knopfes, der zurueck auf die Startansicht fuehrt. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tab")
+	FText TabBackText = FText::FromString(TEXT("BACK TO GAME"));
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tab")
+	FSoftObjectPath TabHintFontPath = FSoftObjectPath(TEXT("/Game/AIGenerated/Fonts/ChakraPetch-SemiBold_Font.ChakraPetch-SemiBold_Font"));
+
+	/** TEXT_LIGHT aus dem Designsystem. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tab")
+	FLinearColor TabHintColor = FLinearColor(0.82f, 0.89f, 0.96f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tab")
+	int32 TabHintFontSize = 16;
+
+	/** Abstand zur unteren rechten Ecke. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tab")
+	FMargin TabHintPadding = FMargin(0.f, 0.f, 48.f, 28.f);
+
+	void UpdateTabHint();
+
+private:
+	TSharedPtr<class SWidget> TabHintSlateWidget;
+
+public:
 
 	/** Designer-tunable blur applied by UpdateViewportBlur() while a Tab / map / Esc menu is open. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Camera|Blur")

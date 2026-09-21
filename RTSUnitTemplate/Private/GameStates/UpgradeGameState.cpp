@@ -1,6 +1,7 @@
 // Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "GameStates/UpgradeGameState.h"
 #include "Net/UnrealNetwork.h"
+#include "EngineUtils.h"
 
 AUpgradeGameState::AUpgradeGameState()
 {
@@ -11,6 +12,7 @@ void AUpgradeGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AUpgradeGameState, TeamUpgradesArray);
+    DOREPLIFETIME(AUpgradeGameState, TeamAttributeTrees);
 }
 
 void AUpgradeGameState::OnRep_TeamUpgrades()
@@ -126,4 +128,182 @@ void AUpgradeGameState::ResearchUpgradeByName(int32 TeamId, FString UpgradeName)
             }
         }
     }
+}
+
+// --------------------------------------------------------------------------
+//  Attributbaum je Team
+// --------------------------------------------------------------------------
+
+void AUpgradeGameState::OnRep_TeamAttributeTrees()
+{
+    // Das Widget liest den Topf bei jedem Zeichnen neu; hier ist nichts zu tun.
+    // Der Haken bleibt stehen, weil eine spaetere Anzeige-Aktualisierung genau hier hingehoert.
+}
+
+const FTeamAttributeTree* AUpgradeGameState::FindTeamAttributeTree(int32 TeamId) const
+{
+    const int32 TeamIndex = TeamId - 1;
+    return TeamAttributeTrees.IsValidIndex(TeamIndex) ? &TeamAttributeTrees[TeamIndex] : nullptr;
+}
+
+FTeamAttributeTree* AUpgradeGameState::FindOrAddTeamAttributeTree(int32 TeamId)
+{
+    if (!HasAuthority() || TeamId < 1)
+    {
+        return nullptr;
+    }
+
+    const int32 TeamIndex = TeamId - 1;
+    if (TeamIndex >= TeamAttributeTrees.Num())
+    {
+        TeamAttributeTrees.SetNum(TeamIndex + 1);
+    }
+    return &TeamAttributeTrees[TeamIndex];
+}
+
+void AUpgradeGameState::GrantTeamAttributeTreePoints(int32 TeamId, int32 Count)
+{
+    if (Count <= 0)
+    {
+        return;
+    }
+    if (FTeamAttributeTree* Tree = FindOrAddTeamAttributeTree(TeamId))
+    {
+        Tree->AvailablePoints += Count;
+    }
+}
+
+int32 AUpgradeGameState::GetTeamAttributeTreePoints(int32 TeamId) const
+{
+    const FTeamAttributeTree* Tree = FindTeamAttributeTree(TeamId);
+    return Tree ? Tree->AvailablePoints : 0;
+}
+
+int32 AUpgradeGameState::GetTeamUsedAttributeTreePoints(int32 TeamId) const
+{
+    const FTeamAttributeTree* Tree = FindTeamAttributeTree(TeamId);
+    return Tree ? Tree->UsedPoints : 0;
+}
+
+int32 AUpgradeGameState::GetTeamAttributeTreeNodePoints(int32 TeamId, FName NodeId) const
+{
+    const FTeamAttributeTree* Tree = FindTeamAttributeTree(TeamId);
+    if (!Tree)
+    {
+        return 0;
+    }
+    for (const FAttributeTreeNodeState& Node : Tree->Nodes)
+    {
+        if (Node.NodeId == NodeId)
+        {
+            return Node.Points;
+        }
+    }
+    return 0;
+}
+
+TArray<FAttributeTreeNodeState> AUpgradeGameState::GetTeamAttributeTreeNodes(int32 TeamId) const
+{
+    const FTeamAttributeTree* Tree = FindTeamAttributeTree(TeamId);
+    return Tree ? Tree->Nodes : TArray<FAttributeTreeNodeState>();
+}
+
+bool AUpgradeGameState::InvestTeamAttributeTreeNode(int32 TeamId, FName NodeId, int32 MaxPoints)
+{
+    FTeamAttributeTree* Tree = FindOrAddTeamAttributeTree(TeamId);
+    if (!Tree || Tree->AvailablePoints <= 0 || NodeId.IsNone())
+    {
+        return false;
+    }
+
+    FAttributeTreeNodeState* Existing = nullptr;
+    for (FAttributeTreeNodeState& Node : Tree->Nodes)
+    {
+        if (Node.NodeId == NodeId)
+        {
+            Existing = &Node;
+            break;
+        }
+    }
+
+    const int32 Current = Existing ? Existing->Points : 0;
+    if (MaxPoints > 0 && Current >= MaxPoints)
+    {
+        return false;
+    }
+
+    if (Existing)
+    {
+        Existing->Points = Current + 1;
+    }
+    else
+    {
+        FAttributeTreeNodeState NewNode;
+        NewNode.NodeId = NodeId;
+        NewNode.Points = 1;
+        Tree->Nodes.Add(NewNode);
+    }
+
+    Tree->AvailablePoints -= 1;
+    Tree->UsedPoints += 1;
+    return true;
+}
+
+void AUpgradeGameState::ResetTeamAttributeTree(int32 TeamId)
+{
+    FTeamAttributeTree* Tree = FindOrAddTeamAttributeTree(TeamId);
+    if (!Tree)
+    {
+        return;
+    }
+
+    Tree->AvailablePoints += Tree->UsedPoints;
+    Tree->UsedPoints = 0;
+    Tree->Nodes.Reset();
+}
+
+const UDataTable* AUpgradeGameState::FindTeamAttributeTreeTable(int32 TeamId) const
+{
+    const UWorld* Welt = GetWorld();
+    if (!Welt)
+    {
+        return nullptr;
+    }
+    for (TActorIterator<ALevelUnit> It(const_cast<UWorld*>(Welt)); It; ++It)
+    {
+        const ALevelUnit* Unit = *It;
+        if (IsValid(Unit) && Unit->TeamId == TeamId && Unit->AttributeTreeDataTable)
+        {
+            return Unit->AttributeTreeDataTable;
+        }
+    }
+    return nullptr;
+}
+
+bool AUpgradeGameState::IsTeamAttributeTreeNodeUnlocked(int32 TeamId, FName NodeId) const
+{
+    const UDataTable* Table = FindTeamAttributeTreeTable(TeamId);
+    if (!Table)
+    {
+        return false;
+    }
+
+    const FAttributeTreeNodeRow* Row = Table->FindRow<FAttributeTreeNodeRow>(
+        NodeId, TEXT("IsTeamAttributeTreeNodeUnlocked"), /*bWarnIfMissing=*/false);
+    if (!Row)
+    {
+        return false;
+    }
+    if (Row->PrevId.IsNone())
+    {
+        return true; // Wurzelknoten
+    }
+
+    const FAttributeTreeNodeRow* Parent = Table->FindRow<FAttributeTreeNodeRow>(
+        Row->PrevId, TEXT("IsTeamAttributeTreeNodeUnlocked"), /*bWarnIfMissing=*/false);
+    if (!Parent)
+    {
+        return false;
+    }
+    return GetTeamAttributeTreeNodePoints(TeamId, Row->PrevId) >= FMath::Max(1, Parent->MaxPoints);
 }

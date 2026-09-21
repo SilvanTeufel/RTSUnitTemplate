@@ -93,6 +93,41 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetAttributeHealth(float NewHealth);
 
+	/**
+	 * Meldet das Ueberschreiten der 25-%- und 50-%-Schwelle an die Einheit.
+	 *
+	 * Sitzt bewusst HIER und nicht an den einzelnen Aufrufern: gemessen am 20.09.2026 lief die
+	 * Erkennung nur in AUnitBase::SetHealth und in PostGameplayEffectExecute, waehrend die
+	 * Regeneration (ALevelUnit::Tick) den Wert direkt ueber SetAttributeHealth anhebt. Dadurch
+	 * feuerte der Weg nach OBEN praktisch nie - im Log ueberschritt derselbe WallTower die
+	 * 50 % neunzehnmal nach unten und kein einziges Mal nach oben. Sichtbare Folge: der
+	 * Schadensrauch ging an und nie wieder aus.
+	 */
+	void FireHealthThresholdEvents(float OldHealth, float NewHealth);
+
+	/**
+	 * Faengt ALLE Aenderungen des Attributwerts ab, auch die aus der GAS-Aggregation.
+	 *
+	 * Noetig, weil `SetAttributeHealth` nur EIN Weg ist. Gameplay-Effekte mit Modifikatoren
+	 * rechnen `CurrentValue` neu, ohne den Setter zu rufen - das Schwellenereignis blieb dann
+	 * aus, und genau das ist die Erklaerung fuer "der Rauch geht MANCHMAL nicht aus".
+	 *
+	 * Doppelte Meldungen sind unschaedlich: FireHealthThresholdEvents rechnet vom gemerkten
+	 * Vorwert aus, ein zweiter Aufruf sieht deshalb keine Aenderung mehr.
+	 */
+	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
+
+private:
+	/**
+	 * Zuletzt gemeldeter Gesundheitswert. Negativ = noch nie gemeldet.
+	 *
+	 * Der Bezugspunkt der Schwellenpruefung. Wuerde stattdessen der jeweils uebergebene
+	 * Vorwert benutzt, meldeten zwei Pfade dieselbe Ueberschreitung doppelt.
+	 */
+	float LastThresholdHealth = -1.f;
+
+public:
+
 	// Shield //
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Attributes", SaveGame, ReplicatedUsing= OnRep_Shield)
 	FGameplayAttributeData Shield;
