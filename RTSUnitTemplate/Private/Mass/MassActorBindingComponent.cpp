@@ -1264,7 +1264,25 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
                 }
                 else
                 {
-                    CharFrag->LastGroundLocation = ActorLoc.Z; // Fallback to current Z
+                    // Der Boden wird aus der EIGENEN Pose zurueckgerechnet, nicht auf die
+                    // Aktormitte gesetzt.
+                    //
+                    // Vorher stand hier ActorLoc.Z. Direkt darunter wird aber
+                    // FinalLoc.Z = LastGroundLocation + CapsuleHeight (bzw. + FlyHeight)
+                    // gerechnet - das Gebaeude sprang beim Fehlschlag also um eine volle
+                    // Kapselhoehe nach oben, und UMassUnitHoverProcessor baut sein
+                    // Trefferkapsel-Segment aus demselben Wert. Genau das ist der gemeldete
+                    // Hover-Aussetzer. So gerechnet ist der Rueckfall ein Nichtstun: die
+                    // Einheit bleibt, wo sie steht.
+                    const float HeightOffset = CharFrag->bIsFlying ? CharFrag->FlyHeight
+                                                                   : CharFrag->CapsuleHeight;
+                    CharFrag->LastGroundLocation = ActorLoc.Z - HeightOffset;
+
+                    // DIAGNOSE (20.09.2026): offen ist, WANN der Trace fehlschlaegt.
+                    // PCG-Volumen und Boeden auf WorldDynamic sind die Verdaechtigen.
+                    UE_LOG(LogTemp, Warning,
+                        TEXT("[Bodentrace] '%s' findet keinen Boden bei (%.0f, %.0f, %.0f) - Rueckfall auf die eigene Pose."),
+                        *UnitOwner->GetName(), ActorLoc.X, ActorLoc.Y, ActorLoc.Z);
                 }
 
                 // FIX: Set visual position for buildings (static)

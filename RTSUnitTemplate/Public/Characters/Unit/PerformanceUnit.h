@@ -197,7 +197,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void VisibilityTickFog();
 
-	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	/**
+	 * Unreliable, seit dem 20.09.2026.
+	 *
+	 * Eine verlorene Schadenszahl ist folgenlos - ein verstopfter zuverlaessiger Kanal nicht.
+	 * Bei einem Gefecht mit hunderten Treffern je Sekunde lief hier je Treffer ein garantiert
+	 * zuzustellendes Paket ueber die Leitung.
+	 */
+	UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnDamageIndicator(const float Damage, FLinearColor HighColor, FLinearColor LowColor, float ColorOffset);
 	
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
@@ -269,6 +276,23 @@ public:
 	virtual void SetEnemyVisibility(AActor* DetectingActor, bool bVisible) override;
 	virtual bool ComputeLocalVisibility() const override;
 	virtual bool ComputeInherentVisibility() const override;
+
+	/**
+	 * Ist die Einheit aus SPIELGRUENDEN versteckt - unabhaengig vom Nebel des Krieges?
+	 *
+	 * Fuer die Replay-Aufzeichnung. ComputeInherentVisibility taugt dafuer NICHT: dort steckt
+	 * der Nebel mit drin (`!EnableFog || IsVisibleEnemy || IsMyTeam`), und ein Replay, das den
+	 * Nebel mitschneidet, liesse die halbe gegnerische Armee verschwinden.
+	 *
+	 * Erfasst genau die Gruende, die auch im Spiel die KOMPLETTE Einheit samt Niagara
+	 * ausblenden:
+	 * - `!IsInitialized`: das Einladen in einen Transporter setzt es zurueck
+	 *   (ATransportUnit::SetCollisionAndVisibility)
+	 * - `IsHidden()`: jemand hat den Aktor ausdruecklich versteckt
+	 * - Tarnung gegenueber dem fremden Team
+	 */
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	bool IsHiddenForReplay() const;
 	// End IMassVisibilityInterface
 	
 };

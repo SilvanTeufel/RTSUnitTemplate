@@ -986,29 +986,13 @@ void AUnitBase::SetHealth_Implementation(float NewHealth)
 	// UAttributeSetBase::PostGameplayEffectExecute und schreibt den Attributwert direkt, ohne
 	// SetHealth je aufzurufen. Der Waechter sitzt jetzt dort - siehe AUnitBase::bIsInvulnerable.
 
-	// Fire Blueprint event when crossing 25% or 50% thresholds (up or down)
-	{
-		const float LocalMaxHealth = Attributes->GetMaxHealth();
-		if (LocalMaxHealth > 0.f && OldHealth != NewHealth)
-		{
-			const float OldPct = OldHealth / LocalMaxHealth;
-			const float NewPct = NewHealth / LocalMaxHealth;
+	// Die Schwellenerkennung liegt seit dem 20.09.2026 in UAttributeSetBase::SetAttributeHealth.
+	//
+	// Hier stand sie an einem Nebenweg: SetHealth wird nur von der Reparatur gerufen, waehrend
+	// Regeneration und Kampfschaden den Attributwert direkt schreiben. Gemessen: derselbe
+	// WallTower ueberschritt die 50 % neunzehnmal nach unten und kein einziges Mal nach oben.
+	// Der Aufruf unten laeuft durch SetAttributeHealth und meldet damit von selbst.
 
-			auto Fire = [this, NewHealth](bool bIncrease, bool bLow, bool bHigh)
-			{
-				OnHealthThresholdCrossed(bIncrease, bLow, bHigh, NewHealth);
-			};
-
-			// Downward crossings
-			if (OldPct >= 0.50f && NewPct < 0.50f) { Fire(false, false, true); }
-			if (OldPct >= 0.25f && NewPct < 0.25f) { Fire(false, true,  false); }
-
-			// Upward crossings
-			if (OldPct <= 0.25f && NewPct > 0.25f) { Fire(true,  true,  false); }
-			if (OldPct <= 0.50f && NewPct > 0.50f) { Fire(true,  false, true); }
-		}
-	}
-	
 	Attributes->SetAttributeHealth(NewHealth);
 	UpdateEntityHealth(NewHealth, Attributes->GetShield());
 	if(NewHealth <= 0.f)

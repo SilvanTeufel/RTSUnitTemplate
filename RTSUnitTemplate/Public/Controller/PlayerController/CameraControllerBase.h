@@ -552,9 +552,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
 	float TalentPointInterval = 60.f;
 
-	/** Wieviele Punkte jede eigene Einheit je Vergabe bekommt. */
+	/**
+	 * Wieviele Punkte jede eigene Einheit je Vergabe bekommt.
+	 *
+	 * Stand 19.09.2026 auf 1 heruntergesetzt (vorher 5). Bei einem Takt von 60 s haeuften sich
+	 * sonst so viele Punkte an, dass der Attributbaum seinen Sinn verliert - es gab nie einen
+	 * Grund, sich zu entscheiden.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
-	int32 TalentPointsPerInterval = 5;
+	int32 TalentPointsPerInterval = 1;
 
 	/**
 	 * Wartezeit bis zur ERSTEN Vergabe. Danach laeuft der Takt aus TalentPointInterval.

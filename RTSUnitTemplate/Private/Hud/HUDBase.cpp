@@ -16,6 +16,9 @@
 #include "GeometryCollection/GeometryCollectionSimulationTypes.h"
 #include "Net/UnrealNetwork.h"
 #include "CanvasItem.h"
+#include "System/DamageNumberSubsystem.h"
+#include "Engine/Font.h"
+#include "GameModes/RTSGameModeBase.h"
 #include "Engine/Canvas.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -1331,6 +1334,7 @@ void AHUDBase::DrawHUD()
 	DrawAllSelectedUnitsIndicators();
 	DrawAllHealthBars();
 	DrawAllResourceCounts();
+	DrawDamageNumbers();
 
 	if (ExtensionPreviewLine.bIsActive)
 	{
@@ -2599,4 +2603,120 @@ float AHUDBase::GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHe
 	return DisplayedPct;
 }
 
+void AHUDBase::DrawDamageNumbers()
+{
+	UWorld* World = GetWorld();
+	if (!World || !Canvas)
+	{
+		return;
+	}
 
+	UDamageNumberSubsystem* Numbers = World->GetSubsystem<UDamageNumberSubsystem>();
+	if (!Numbers)
+	{
+		return;
+	}
+
+	// Dieselbe Notbremse wie vorher im Widget: ab MaxUnitCount Einheiten werden die Zahlen
+	// weggelassen, statt die Bildrate zu opfern.
+	if (const ARTSGameModeBase* RTSGameMode = Cast<ARTSGameModeBase>(World->GetAuthGameMode()))
+	{
+		if (RTSGameMode->AllUnits.Num() > DamageNumberMaxUnitCount)
+		{
+			return;
+		}
+	}
+
+	APlayerController* PC = GetOwningPlayerController();
+	if (!PC)
+	{
+		return;
+	}
+
+	// Die Kurven sind ABSICHTLICH Zeile fuer Zeile aus UDamageIndicator uebernommen - Groesse,
+	// Farbe und Deckkraft muessen sich nicht aendern, nur der Weg dorthin.
+	const float MinDamage = 1.f;
+	const float MaxDamage = 100.f;
+	const float MinTextSize = 24.f;
+	const float MaxTextSize = 50.f;
+
+	UFont* Font = DamageNumberFont ? DamageNumberFont.Get() : GEngine->GetLargeFont();
+	if (!Font)
+	{
+		return;
+	}
+
+	const float Now = World->GetTimeSeconds();
+
+	for (const FDamageNumberEntry& Entry : Numbers->GetEntries())
+	{
+		if (!Entry.bActive)
+		{
+			continue;
+		}
+
+		const float Age = Now - Entry.SpawnTime;
+		if (Age < 0.f || Age > UDamageNumberSubsystem::MaxLifeSeconds)
+		{
+			continue;
+		}
+
+		// Steigen und seitliche Abdrift - der alte Aktor tat dasselbe je Tick.
+		FVector WorldPos = Entry.StartLocation;
+		WorldPos.Z += UDamageNumberSubsystem::RisePerSecond * Age;
+		WorldPos.X += Entry.DriftPerSecond.X * Age;
+		WorldPos.Y += Entry.DriftPerSecond.Y * Age;
+
+		// Hinter der Kamera liegende Zahlen wuerden gespiegelt auf dem Schirm landen.
+		const FVector ScreenPos = Canvas->Project(WorldPos);
+		if (ScreenPos.Z <= 0.f)
+		{
+			continue;
+		}
+
+		const float ClampedDamage = FMath::Clamp(Entry.Damage, MinDamage, MaxDamage);
+		const float Alpha = (ClampedDamage - MinDamage) / (MaxDamage - MinDamage);
+
+		const float TextSize = MinTextSize + (MaxTextSize - MinTextSize) * Alpha;
+
+		// Farbe: HSV-Interpolation mit dem Versatz, exakt wie UDamageIndicator::CalculateTextColor.
+		const float ColorAlpha = FMath::Clamp(Alpha + Entry.ColorOffset, 0.f, 1.f);
+		FLinearColor Color = FLinearColor::LerpUsingHSV(Entry.LowColor, Entry.HighColor, ColorAlpha);
+
+		// Ausblenden im letzten Drittel der Lebenszeit.
+		//
+		// Das alte Widget nahm 0,01 je halber Sekunde ab - bei 2 s Lebensdauer also ganze 4 %.
+		// Die Zahl verschwand damit schlagartig statt zu verklingen. Standard in ARPGs
+		// (Diablo 4 und Verwandte) ist ein sichtbares Ausblenden zum Schluss.
+		const float FadeStart = UDamageNumberSubsystem::MaxLifeSeconds * 0.6f;
+		const float Fade = (Age <= FadeStart)
+			? 1.f
+			: 1.f - ((Age - FadeStart) / (UDamageNumberSubsystem::MaxLifeSeconds - FadeStart));
+		Color.A = FMath::Clamp(Fade, 0.f, 1.f);
+
+		FNumberFormattingOptions Opts;
+		Opts.SetMaximumFractionalDigits(0);
+		const FText Label = FText::AsNumber(Entry.Damage, &Opts);
+
+		// Kurzer Groessen-Impuls beim Erscheinen - der "Anschlag", den Trefferzahlen in ARPGs
+		// haben. Ohne ihn wirkt die Zahl, als sei sie schon da gewesen.
+		const float PopDuration = 0.12f;
+		const float Pop = (Age < PopDuration)
+			? FMath::Lerp(1.25f, 1.f, Age / PopDuration)
+			: 1.f;
+		const float FinalScale = (TextSize * Pop) / Font->LegacyFontSize;
+
+		FCanvasTextItem TextItem(FVector2D(ScreenPos.X, ScreenPos.Y), Label, Font, Color);
+		TextItem.bCentreX = true;
+		TextItem.bCentreY = true;
+		TextItem.Scale = FVector2D(FinalScale, FinalScale);
+		TextItem.BlendMode = SE_BLEND_Translucent;
+
+		// Dunkle Kontur. Ohne sie verschwindet eine helle Zahl ueber hellem Boden und eine
+		// dunkle ueber dunklem - genau deshalb hat sie in ARPGs jede Trefferzahl.
+		TextItem.bOutlined = true;
+		TextItem.OutlineColor = FLinearColor(0.f, 0.f, 0.f, Color.A * 0.85f);
+
+		Canvas->DrawItem(TextItem);
+	}
+}

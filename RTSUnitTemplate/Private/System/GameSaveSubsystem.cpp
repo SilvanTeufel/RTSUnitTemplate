@@ -1,5 +1,6 @@
 ﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "System/GameSaveSubsystem.h"
+#include "GameStates/UpgradeGameState.h"
 #include "HAL/FileManager.h"
 #include "Save/RTSSaveGame.h"
 #include "Kismet/GameplayStatics.h"
@@ -176,8 +177,7 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
                 Data.AttributeTreeNodes.Add(NodeSave);
             }
 
-            Data.AttributeTreePoints = LevelUnit->AttributeTreePoints;
-            Data.UsedAttributeTreePoints = LevelUnit->UsedAttributeTreePoints;
+            // Der Vorrat steht nicht mehr hier, sondern einmal je Team weiter unten.
         }
 
         // Ability states (owner-level toggles) for this unit
@@ -276,6 +276,28 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
         S.CurrentWinConditionIndex = Config->CurrentWinConditionIndex;
         S.TagProgress = Config->TagProgress;
         Save->WinLoseStates.Add(MoveTemp(S));
+    }
+
+    // Attributbaum je Team mitschreiben. Seit dem 20.09.2026 liegt der Vorrat dort und nicht
+    // mehr bei den Einheiten; ohne diesen Block waere der gesamte Baumfortschritt nach dem
+    // Laden verloren.
+    if (const AUpgradeGameState* UpgradeState = World->GetGameState<AUpgradeGameState>())
+    {
+        for (int32 TeamIndex = 0; TeamIndex < UpgradeState->TeamAttributeTrees.Num(); ++TeamIndex)
+        {
+            const FTeamAttributeTree& Tree = UpgradeState->TeamAttributeTrees[TeamIndex];
+
+            FTeamAttributeTreeSaveData TreeSave;
+            TreeSave.TeamId = TeamIndex + 1;  // Indizierung wie im GameState: TeamIndex = TeamId - 1
+            TreeSave.AvailablePoints = Tree.AvailablePoints;
+            TreeSave.UsedPoints = Tree.UsedPoints;
+            for (const FAttributeTreeNodeState& Node : Tree.Nodes)
+            {
+                TreeSave.NodeIds.Add(Node.NodeId);
+                TreeSave.NodePoints.Add(Node.Points);
+            }
+            Save->TeamAttributeTrees.Add(MoveTemp(TreeSave));
+        }
     }
 
     // Verstrichene Spielzeit mitschreiben, damit Zeitziele und der Talentpunkt-Takt nach dem
@@ -402,6 +424,41 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
             if (AResourceGameState* ResourceGS = LoadedWorld->GetGameState<AResourceGameState>())
             {
                 ResourceGS->SetTeamResources(ResourceGM->TeamResources);
+            }
+        }
+    }
+
+    // Attributbaum je Team zurueckspielen. Leer bei Spielstaenden von vor dem 20.09.2026 -
+    // dann bleibt der Baum leer, statt mit halben Daten zu starten.
+    if (SaveData->TeamAttributeTrees.Num() > 0)
+    {
+        if (AUpgradeGameState* UpgradeState = LoadedWorld->GetGameState<AUpgradeGameState>())
+        {
+            for (const FTeamAttributeTreeSaveData& TreeSave : SaveData->TeamAttributeTrees)
+            {
+                UpgradeState->ResetTeamAttributeTree(TreeSave.TeamId);
+                UpgradeState->GrantTeamAttributeTreePoints(TreeSave.TeamId, TreeSave.AvailablePoints + TreeSave.UsedPoints);
+
+                // Ueber denselben Weg wie im Spiel buchen, damit Vorrat und Ausgegebenes
+                // zueinander passen; die Wirkung auf den Einheiten holt danach die Nachvergabe.
+                const int32 Count = FMath::Min(TreeSave.NodeIds.Num(), TreeSave.NodePoints.Num());
+                for (int32 i = 0; i < Count; ++i)
+                {
+                    for (int32 Step = 0; Step < TreeSave.NodePoints[i]; ++Step)
+                    {
+                        UpgradeState->InvestTeamAttributeTreeNode(TreeSave.TeamId, TreeSave.NodeIds[i], MAX_int32);
+                    }
+                }
+            }
+
+            // Die Einheiten holen sich den wiederhergestellten Stand selbst - dieselbe
+            // Nachvergabe, die auch neu gespawnte Einheiten bedient.
+            for (TActorIterator<ALevelUnit> It(LoadedWorld); It; ++It)
+            {
+                if (ALevelUnit* Unit = *It)
+                {
+                    Unit->SyncAttributeTreeFromTeam();
+                }
             }
         }
     }
@@ -598,10 +655,7 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
                 LevelUnit->AttributeTreeNodes.Add(NodeState);
             }
 
-            // Der eigene Vorrat des Baums. Er kommt NICHT mehr aus LevelData - beides sind seit
-            // dem 10.09.2026 getrennte Zaehler.
-            LevelUnit->AttributeTreePoints = SavedUnit.AttributeTreePoints;
-            LevelUnit->UsedAttributeTreePoints = SavedUnit.UsedAttributeTreePoints;
+            // Der Vorrat wird einmal je Team wiederhergestellt, nicht je Einheit.
         }
 
         // Mass-Entität auf die neue Actor-Position synchronisieren, Targets anpassen und Tags setzen

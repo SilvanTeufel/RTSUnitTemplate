@@ -111,15 +111,8 @@ struct FUnitSaveData
     UPROPERTY()
     TArray<FAttributeTreeNodeSaveData> AttributeTreeNodes;
 
-    // Der EIGENE Punktevorrat des Attributbaums. Seit dem 10.09.2026 nicht mehr identisch mit
-    // LevelData.TalentPoints - ohne diese beiden Felder waeren die Punkte des Baums nach dem
-    // Laden weg, waehrend die investierten Knoten oben stehen blieben.
-    // Aeltere Spielstaende bringen die Felder nicht mit und laden sie als 0.
-    UPROPERTY()
-    int32 AttributeTreePoints = 0;
-
-    UPROPERTY()
-    int32 UsedAttributeTreePoints = 0;
+    // ENTFERNT am 20.09.2026: AttributeTreePoints und UsedAttributeTreePoints je Einheit.
+    // Der Vorrat gehoert jetzt dem Team und steht in URTSSaveGame::TeamAttributeTrees.
 
     // Saved abilities states for this unit
     UPROPERTY()
@@ -248,6 +241,34 @@ struct FWorkAreaSaveData
     FSoftClassPath AreaEffectClass;
 };
 
+/**
+ * Der Attributbaum EINES Teams im Spielstand.
+ *
+ * Bewusst zwei parallele Listen statt einer Liste von Paaren: so braucht dieser Header die
+ * Knotenstruktur aus LevelUnit.h nicht, die sonst ueber jeden Nutzer des Spielstands mitwandern
+ * wuerde.
+ */
+USTRUCT()
+struct FTeamAttributeTreeSaveData
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    int32 TeamId = 0;
+
+    UPROPERTY()
+    int32 AvailablePoints = 0;
+
+    UPROPERTY()
+    int32 UsedPoints = 0;
+
+    UPROPERTY()
+    TArray<FName> NodeIds;
+
+    UPROPERTY()
+    TArray<int32> NodePoints;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API URTSSaveGame : public USaveGame
 {
@@ -295,4 +316,15 @@ public:
      */
     UPROPERTY()
     float SavedGameTimeSeconds = 0.f;
+
+    /**
+     * Attributbaum je Team - Vorrat, Ausgegebenes und die investierten Knoten.
+     *
+     * Leer bei Spielstaenden von vor dem 20.09.2026; der Lader ueberspringt die
+     * Wiederherstellung dann. Umgekehrt gilt: die Punkte, die bis dahin JE EINHEIT gespeichert
+     * waren, sind in solchen Staenden verloren - das ist die bewusst in Kauf genommene Folge
+     * der Umstellung auf einen gemeinsamen Topf.
+     */
+    UPROPERTY()
+    TArray<FTeamAttributeTreeSaveData> TeamAttributeTrees;
 };

@@ -11,6 +11,7 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameModes/ResourceGameMode.h"
 #include "GameStates/ResourceGameState.h"
+#include "GameStates/UpgradeGameState.h"
 #include "GAS/GAS.h"
 #include "Widgets/AbilityChooser.h"
 #include "Widgets/ResourceWidget.h"
@@ -22,6 +23,13 @@
 #include "Widgets/SoundControlWidget.h"
 #include "Widgets/WinConditionWidget.h"
 #include "Blueprint/UserWidget.h"
+#include "Widgets/Layout/SBox.h"
+#include "Widgets/SBoxPanel.h"
+#include "Widgets/Input/SButton.h"
+#include "Widgets/Text/STextBlock.h"
+#include "Styling/CoreStyle.h"
+#include "Engine/GameViewportClient.h"
+#include "Engine/Engine.h"
 
 AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
 {
@@ -216,6 +224,146 @@ void AExtendedCameraBase::OnTagProgressUpdated(AWinLoseConfigActor* Config)
 	}
 }
 
+void AExtendedCameraBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Slate-Inhalt am Viewport ueberlebt den Aktor - ohne das bliebe der Hinweis nach dem
+	// Verlassen der Karte stehen.
+	if (TabHintSlateWidget.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(TabHintSlateWidget.ToSharedRef());
+	}
+	TabHintSlateWidget.Reset();
+
+	Super::EndPlay(EndPlayReason);
+}
+
+void AExtendedCameraBase::ShowStartScreen()
+{
+	TabMode = 1;
+	UpdateTabModeUI();
+}
+
+void AExtendedCameraBase::UpdateTabHint()
+{
+	if (!GEngine || !GEngine->GameViewport)
+	{
+		return;
+	}
+
+	// Nur die Ansichten mit eigenem Fenster bekommen den Hinweis.
+	//
+	// ACHTUNG, hier lag der Fehler vom 19.09.2026: TabMode startet bei 1 (siehe Header und
+	// ACustomControllerBase, das ebenfalls auf 1 zuruecksetzt), NICHT bei 0. Die Pruefung
+	// "!= 0" blendete den Hinweis deshalb ausgerechnet auf der Startansicht ein.
+	//
+	// Modus 0 ist NICHT leer: der default-Zweig in UpdateTabModeUI zeigt dort Ability- und
+	// TalentChooser. Nur Modus 1 ist die Startansicht mit der blossen Ressourcenleiste.
+	const bool bShowHint = (TabMode != 1);
+
+	if (!bShowHint)
+	{
+		if (TabHintSlateWidget.IsValid())
+		{
+			GEngine->GameViewport->RemoveViewportWidgetContent(TabHintSlateWidget.ToSharedRef());
+			TabHintSlateWidget.Reset();
+		}
+		return;
+	}
+
+	if (TabHintSlateWidget.IsValid())
+	{
+		return; // steht bereits
+	}
+
+	FSlateFontInfo HintFont;
+	if (UObject* FontObject = TabHintFontPath.TryLoad())
+	{
+		HintFont = FSlateFontInfo(FontObject, TabHintFontSize);
+	}
+	else
+	{
+		HintFont = FCoreStyle::GetDefaultFontStyle("Regular", TabHintFontSize);
+	}
+	HintFont.LetterSpacing = 80;
+
+	// Der Knopf braucht eine eigene Referenz auf den Aktor, die ihn nicht am Leben haelt.
+	TWeakObjectPtr<AExtendedCameraBase> WeakSelf(this);
+
+	TSharedRef<STextBlock> HintText =
+		SNew(STextBlock)
+		.Text(TabHintText)
+		.Font(HintFont)
+		.ColorAndOpacity(FSlateColor(TabHintColor));
+
+	// Der Text schluckt keine Klicks, der Knopf darunter schon.
+	HintText->SetVisibility(EVisibility::HitTestInvisible);
+
+	TSharedRef<SWidget> HintBlock =
+		SNew(SBox)
+		.HAlign(HAlign_Right)
+		.VAlign(VAlign_Bottom)
+		.Padding(TabHintPadding)
+		[
+			SNew(SVerticalBox)
+
+			// Zurueck zur Startansicht - auf JEDEM Tab-Screen erreichbar, ohne dass dafuer in
+			// jedes HUD-Widget ein eigener Knopf muss.
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Right)
+			[
+				SNew(SButton)
+				.ContentPadding(FMargin(14.f, 5.f))
+				.ButtonColorAndOpacity(FLinearColor(0.010f, 0.015f, 0.027f, 0.85f))
+				.OnClicked_Lambda([WeakSelf]() -> FReply
+				{
+					if (AExtendedCameraBase* Camera = WeakSelf.Get())
+					{
+						Camera->ShowStartScreen();
+					}
+					return FReply::Handled();
+				})
+				[
+					SNew(STextBlock)
+					.Text(TabBackText)
+					.Font(HintFont)
+					.ColorAndOpacity(FSlateColor(TabHintColor))
+				]
+			]
+
+			+ SVerticalBox::Slot()
+			.AutoHeight()
+			.HAlign(HAlign_Right)
+			.Padding(FMargin(0.f, 6.f, 0.f, 0.f))
+			[
+				HintText
+			]
+		];
+
+	TabHintSlateWidget = HintBlock;
+
+	// ZOrder hoch genug, um ueber den HUD-Panels zu liegen. Das MainHUD kommt mit AddToViewport()
+	// ohne Angabe (= 0) herein, einzelne Fenster mit 1000. Mit den urspruenglichen 100 verschwand
+	// der Hinweis hinter dem AbilityChooser der Control-Ansicht - genau so gemeldet.
+	// Die Ladebilder liegen bei 9999 und bleiben damit weiterhin oben.
+	GEngine->GameViewport->AddViewportWidgetContent(HintBlock, 5000);
+}
+
+void AExtendedCameraBase::ShowChoosersForTabMode(AUnitBase* TargetUnit)
+{
+	SetUserWidget(TargetUnit);
+
+	// SetUserWidget blendet den AbilityChooser seit dem 19.09.2026 NICHT mehr ein: es haengt
+	// ueber AControllerBase::SetWidgets am Auswahlknopf, und dadurch sprang der Chooser bei
+	// jedem Klick auf eine Einheit auf. Ueber Tab ist das Aufklappen aber genau gewollt -
+	// deshalb hier, und nur hier, ausdruecklich. Ohne diese Zeilen blieb die Ability-Ansicht
+	// (Tab-Modus 0) leer, obwohl sie geblurrt war.
+	if (TargetUnit && AbilityChooserWidget)
+	{
+		AbilityChooserWidget->SetVisibility(ESlateVisibility::Visible);
+	}
+}
+
 void AExtendedCameraBase::UpdateTabModeUI()
 {
 	// Die Ressourcenleiste bleibt in JEDEM Tab-Modus sichtbar (02.09.2026). Vorher wurde sie
@@ -261,7 +409,7 @@ void AExtendedCameraBase::UpdateTabModeUI()
 			if (CameraControllerBase && CameraControllerBase->HUDBase && CameraControllerBase->HUDBase->SelectedUnits.Num())
 			{
 				AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
-				SetUserWidget(SelectedUnit);
+				ShowChoosersForTabMode(SelectedUnit);
 			}
 		}
 		break;
@@ -277,7 +425,7 @@ void AExtendedCameraBase::UpdateTabModeUI()
 			if (CameraControllerBase && CameraControllerBase->HUDBase && CameraControllerBase->HUDBase->SelectedUnits.Num())
 			{
 				AUnitBase* SelectedUnit = CameraControllerBase->HUDBase->SelectedUnits[0];
-				SetUserWidget(SelectedUnit);
+				ShowChoosersForTabMode(SelectedUnit);
 			}
 			TabToggled = true;
 		}
@@ -341,13 +489,14 @@ void AExtendedCameraBase::UpdateTabModeUI()
 				}
 			}
 
-			SetUserWidget(TargetUnit);
+			ShowChoosersForTabMode(TargetUnit);
 			TabToggled = TargetUnit != nullptr;
 		}
 		break;
 	}
-	
+
 	UpdateViewportBlur(TabToggled);
+	UpdateTabHint();
 }
 
 void AExtendedCameraBase::CloseMapMenu()
@@ -625,21 +774,47 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 	
 	if(!TalentChooserWidget) return;
 
+	// Liegt der Attributbaum (Tab 4) vorn, darf eine Auswahl die Chooser NICHT hochholen.
+	//
+	// SetUserWidget lief bei jeder Auswahlaenderung und setzte beide Chooser hart auf Visible -
+	// die Sichtbarkeit, die das HUD-Blueprint ueber die Tabs steuert, wurde damit ueberschrieben.
+	// Beim schnellen Klicken im Attributbaum wechselt die Anzeigeeinheit staendig, und der
+	// AbilityChooser sprang jedes Mal in den Vordergrund. Am 19.09.2026 genau so gemeldet.
+	//
+	// Owner und Aktualisierungstakt werden weiter gesetzt - nur die Sichtbarkeit bleibt dann in
+	// der Hand der Tab-Umschaltung. Auf den Tabs 1 bis 3 aendert sich nichts.
+	const bool bAttributeTreeInFront = AttributeTreeWidget
+		&& AttributeTreeWidget->GetVisibility() != ESlateVisibility::Collapsed
+		&& AttributeTreeWidget->GetVisibility() != ESlateVisibility::Hidden;
+
 	if(SelectedActor)
 	{
 		if (TalentChooserWidget) {
-			TalentChooserWidget->SetVisibility(ESlateVisibility::Visible);
+			if (!bAttributeTreeInFront)
+			{
+				TalentChooserWidget->SetVisibility(ESlateVisibility::Visible);
+			}
 			TalentChooserWidget->SetOwnerActor(SelectedActor);
 			TalentChooserWidget->CreateClassUIElements();
 			TalentChooserWidget->StartUpdateTimer();
 		}
 
 		if (AbilityChooserWidget) {
-			AbilityChooserWidget->SetVisibility(ESlateVisibility::Visible);
+			// Der AbilityChooser wird hier BEWUSST nicht mehr eingeblendet (19.09.2026).
+			//
+			// SetUserWidget haengt ueber AControllerBase::SetWidgets am Auswahlknopf
+			// (USelectorButton::SetUnitSelectorId). Jeder Klick auf eine Einheit schaltete den
+			// Chooser damit mit um - gemeldet als "der SelectButton soll den AbilityChooser
+			// nicht toggeln". Seine Sichtbarkeit steuern jetzt ausschliesslich der eigene Knopf
+			// im TaggedUnitSelector (UTaggedUnitSelector::ToggleAbilityChooser) und die
+			// Tab-Umschaltung im HUD-Blueprint.
+			//
+			// Owner und Aktualisierungstakt werden weiter gesetzt, damit der Chooser beim
+			// Aufklappen sofort die richtige Einheit zeigt.
 			AbilityChooserWidget->SetOwnerActor(SelectedActor);
 			AbilityChooserWidget->StartUpdateTimer();
 		}
-		
+
 	}else
 	{
 		if (TalentChooserWidget) TalentChooserWidget->StopTimer();
@@ -651,56 +826,98 @@ void AExtendedCameraBase::SetUserWidget(AUnitBase* SelectedActor)
 
 }
 
-void AExtendedCameraBase::Server_InvestAttributeTreeNode_Implementation(ALevelUnit* Unit, FName NodeId)
+void AExtendedCameraBase::Server_InvestTeamAttributeTreeNode_Implementation(FName NodeId)
 {
-	if (!Unit)
+	UWorld* Welt = GetWorld();
+	const ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	const int32 TeamId = MyPC ? MyPC->SelectableTeamId : -1;
+	if (!Welt || TeamId < 1)
 	{
 		return;
 	}
 
-	// Der Attributbaum gilt fuer die GANZE Fraktion, nicht fuer eine einzelne Einheit.
-	//
-	// Bis zum 10.09.2026 wurde nur in `Unit` investiert - der Baum sah damit aus wie ein
-	// Fraktionsbaum, wirkte aber nur auf die gerade gewaehlte Einheit. Jetzt bekommt jede Einheit
-	// mit derselben Teamnummer den Knoten, und der Tagfilter der Datentabelle entscheidet, welche
-	// davon gemeint ist: DoesAttributeTreeNodeMatchUnit prueft TalentTag und UnitTags, ein Knoten
-	// ohne Tag gilt fuer alle. Diese Pruefung steckt in InvestInAttributeTreeNode selbst, hier
-	// muss also nichts doppelt gefiltert werden.
-	//
-	// Die Punkte bleiben je Einheit: jede zahlt aus ihrem eigenen Vorrat, und wer gerade keinen
-	// hat, bleibt einfach zurueck. Ein gemeinsamer Topf waere die groessere Umstellung und
-	// wuerde die Vergabe im Zeittakt mit umbauen.
-	const int32 Team = Unit->TeamId;
-
-	int32 Erfolgreich = 0;
-	int32 Betrachtet = 0;
-	for (TActorIterator<ALevelUnit> It(GetWorld()); It; ++It)
+	AUpgradeGameState* GameStateRef = Welt->GetGameState<AUpgradeGameState>();
+	const UDataTable* Table = GameStateRef ? GameStateRef->FindTeamAttributeTreeTable(TeamId) : nullptr;
+	if (!GameStateRef || !Table)
 	{
-		ALevelUnit* Andere = *It;
-		if (!IsValid(Andere) || Andere->TeamId != Team)
+		UE_LOG(LogTemp, Warning,
+			TEXT("[Attributbaum] Investieren abgelehnt: %s fehlt (Team %d, Knoten '%s')."),
+			!GameStateRef ? TEXT("GameState") : TEXT("Baumtabelle"), TeamId, *NodeId.ToString());
+		return;
+	}
+
+	const FAttributeTreeNodeRow* Row = Table->FindRow<FAttributeTreeNodeRow>(
+		NodeId, TEXT("Server_InvestTeamAttributeTreeNode"), /*bWarnIfMissing=*/false);
+	if (!Row || !GameStateRef->IsTeamAttributeTreeNodeUnlocked(TeamId, NodeId))
+	{
+		return;
+	}
+
+	// Erst buchen, dann anwenden. Schlaegt das Buchen fehl (kein Punkt im Topf oder Knoten voll),
+	// darf keine einzige Einheit die Aufwertung bekommen.
+	if (!GameStateRef->InvestTeamAttributeTreeNode(TeamId, NodeId, Row->MaxPoints))
+	{
+		return;
+	}
+
+	int32 Applied = 0;
+	int32 Considered = 0;
+	for (TActorIterator<ALevelUnit> It(Welt); It; ++It)
+	{
+		ALevelUnit* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId != TeamId)
 		{
 			continue;
 		}
-
-		++Betrachtet;
-		if (Andere->InvestInAttributeTreeNode(NodeId))
+		++Considered;
+		if (Unit->ApplyAttributeTreeNodeFromTeam(NodeId))
 		{
-			++Erfolgreich;
+			++Applied;
 		}
 	}
 
 	UE_LOG(LogTemp, Log,
-		TEXT("[Attributbaum] Knoten '%s' fuer Team %d: %d von %d Einheiten aufgewertet (Rest passte nicht zum Tag oder hatte keinen Punkt)."),
-		*NodeId.ToString(), Team, Erfolgreich, Betrachtet);
+		TEXT("[Attributbaum] Team %d investiert in '%s': %d von %d Einheiten aufgewertet, Topf jetzt %d (ausgegeben %d)."),
+		TeamId, *NodeId.ToString(), Applied, Considered,
+		GameStateRef->GetTeamAttributeTreePoints(TeamId),
+		GameStateRef->GetTeamUsedAttributeTreePoints(TeamId));
 }
 
-void AExtendedCameraBase::Server_ResetAttributeTree_Implementation(ALevelUnit* Unit)
+void AExtendedCameraBase::Server_ResetTeamAttributeTree_Implementation()
 {
-	if (Unit)
+	UWorld* Welt = GetWorld();
+	const ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	const int32 TeamId = MyPC ? MyPC->SelectableTeamId : -1;
+	if (!Welt || TeamId < 1)
 	{
-		Unit->ResetAttributeTree();
+		return;
 	}
+
+	AUpgradeGameState* GameStateRef = Welt->GetGameState<AUpgradeGameState>();
+	if (!GameStateRef)
+	{
+		return;
+	}
+
+	GameStateRef->ResetTeamAttributeTree(TeamId);
+
+	int32 Cleared = 0;
+	for (TActorIterator<ALevelUnit> It(Welt); It; ++It)
+	{
+		ALevelUnit* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId != TeamId)
+		{
+			continue;
+		}
+		Unit->ResetAttributeTree();
+		++Cleared;
+	}
+
+	UE_LOG(LogTemp, Log,
+		TEXT("[Attributbaum] Team %d zurueckgesetzt: %d Einheiten geleert, Topf jetzt %d."),
+		TeamId, Cleared, GameStateRef->GetTeamAttributeTreePoints(TeamId));
 }
+
 
 void AExtendedCameraBase::SetSelectorWidget(int Id, AUnitBase* SelectedActor)
 {

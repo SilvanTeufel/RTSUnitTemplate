@@ -161,7 +161,7 @@ public:
 	// Additional repair parameters
 	// Distance buffer a worker needs to be from the FollowUnit (on top of both capsule radii) to start repairing
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
-	float RepairDistance = 250.f;
+	float RepairDistance = 100.f;  // Kapselradien plus diesen Abstand - Nutzerwunsch 50 bis 100
 	
 	// Amount of health restored per second while repairing
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
