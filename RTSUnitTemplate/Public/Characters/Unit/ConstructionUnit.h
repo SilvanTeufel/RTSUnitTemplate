@@ -62,6 +62,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Construction|Indicator")
 	void SeedIndicatorFootprint(const AWorkArea* InWorkArea);
 
+	/**
+	 * Skaliert die GANZE Baustelle auf den Grundriss des kuenftigen Gebaeudes.
+	 *
+	 * SeedIndicatorFootprint legt den Grundriss nur fuer den gezeichneten Indikator ab - die
+	 * Einheit selbst blieb so gross wie die Bauhelfer-Drohne. Diese Skalierung geht ueber den
+	 * AKTOR, deshalb zieht alles mit, was aus der Kapsel kommt: Trefferbereich, Hover,
+	 * Gesundheitsleiste, Angriffs- und Reparaturreichweite.
+	 *
+	 * MUSS VOR FinishSpawning laufen, damit der Wert im ersten Spawn-Paket zu den Clients
+	 * kommt und die Mass-Bindung die bereits skalierte Kapsel erfasst.
+	 */
+	void ApplyBuildingFootprintScale(const AWorkArea* InWorkArea);
+
+	/** Aus, wenn eine Baustelle ihre gestaltete Groesse behalten soll. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bMatchBuildingFootprintScale = true;
+
+	/** Grenzen gegen entartete Werte, falls ein Grundriss oder eine Kapsel unsinnig klein ist. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float MinBuildingFootprintScale = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float MaxBuildingFootprintScale = 6.f;
+
 	// Visual-only world bounds of a construction unit: mesh components (static / ISM with
 	// instances / skeletal when the unit runs in skeletal mode). Excludes widgets, Niagara and
 	// other non-mesh primitives whose asymmetric bounds used to skew the

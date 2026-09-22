@@ -5203,6 +5203,10 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			// FinishSpawning, so the values ride in the initial spawn bunch to clients.
 			CU->SeedIndicatorFootprint(WA);
 
+			// Direkt danach und ebenfalls VOR FinishSpawning: die Baustelle auf den Grundriss
+			// des kuenftigen Gebaeudes skalieren. Liest die Werte, die die Zeile darueber setzt.
+			CU->ApplyBuildingFootprintScale(WA);
+
 			if (CU->SetOffsetsDueToWorkAreaBounds && WA->Mesh)
 			{
 				const FBoxSphereBounds MeshBounds = WA->Mesh->CalcBounds(WA->Mesh->GetRelativeTransform());
