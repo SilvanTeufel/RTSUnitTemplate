@@ -244,6 +244,32 @@ public:
 	EExtensionSnapMethod ExtensionSnapMethod = EExtensionSnapMethod::Snap4Way;
 
 	/**
+	 * Eigener Grenzwert fuer den Bodenhoehenunterschied beim Ablegen eines Anbaus. Negativ = der
+	 * Wert des PlayerControllers (ExtensionGroundZThreshold) gilt.
+	 *
+	 * WARUM je Gebaeude und nicht global: fuer die meisten Anbauten sind 10 uu richtig - sie sollen
+	 * buendig am Gebaeude sitzen. WallTower sind der Gegenfall: eine Mauer laeuft ueber Gelaende und
+	 * muss Hoehenunterschiede ueberbruecken duerfen. Ein einziger globaler Wert kann nur eines von
+	 * beidem richtig machen.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float ExtensionGroundZThresholdOverride = -1.f;
+
+	/**
+	 * Die Vorschau dieses Anbaus uebernimmt die HOEHE DES WIRTSGEBAEUDES statt sich auf den Boden
+	 * unter sich selbst zu setzen.
+	 *
+	 * Fuer WallTower gedacht. Gemessen am 22.09.2026: die Vorschau sass korrekt auf IHREM Boden,
+	 * der aber an Gelaendestufen konstant 51 bis 503 uu unter dem Turmsockel lag - am Schirm sah
+	 * es aus, als starte die Wand im Boden. Fuer eine Wand zaehlt der Anschluss am Turm, nicht das
+	 * Gelaende darunter; sie darf ruhig durchs Gelaende laufen.
+	 *
+	 * Fuer alle anderen Anbauten bleibt es beim Bodenbezug - die sollen buendig aufsitzen.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bExtensionFollowsHostHeight = false;
+
+	/**
 	 * Extra yaw for extensions of THIS building, on top of the snap direction.
 	 *
 	 * The snap turns an extension so its local +X faces away from the host. Some buildings want it

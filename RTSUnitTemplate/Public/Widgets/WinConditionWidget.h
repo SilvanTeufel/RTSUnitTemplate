@@ -67,6 +67,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
 	FText SurvivalConditionText = FText::FromString(TEXT("Survive for {0} seconds."));
 
+	/** Vorgabetext fuer TeamReachedLocation. Ein CustomDescription am Ziel schlaegt ihn. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
+	FText ReachLocationConditionText = FText::FromString(TEXT("Reach the marked location."));
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI")
 	FText UnknownConditionText = FText::FromString(TEXT("Unknown"));
 

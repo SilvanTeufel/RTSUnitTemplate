@@ -26,6 +26,15 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional))
 	class UButton* SpectateButton;
 
+	/**
+	 * Optional: laedt dieselbe Karte neu.
+	 *
+	 * BindWidgetOptional, damit ein WinLose-Blueprint ohne diesen Knopf weiter kompiliert.
+	 * Sichtbar nur nach einer Niederlage - nach einem Sieg waere ein Neustart sinnlos.
+	 */
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UButton* RestartButton;
+
 	void SetupWidget(bool bInWon, const FString& MapName, FName InDestinationSwitchTagToEnable);
 
 protected:
@@ -36,6 +45,9 @@ protected:
 
 	UFUNCTION()
 	void OnSpectateClicked();
+
+	UFUNCTION()
+	void OnRestartClicked();
 
 	bool bWon;
 	FString TargetMapName;

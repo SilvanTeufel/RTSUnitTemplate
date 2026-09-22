@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -53,6 +53,30 @@ public:
 	/** Wie viele Bosse pro Welle. Waechst nicht - die Staerke kommt ueber die Stufe. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
 	int32 BossesPerWave = 1;
+
+	/**
+	 * Begleiteinheiten, die mit jeder Bosswelle kommen.
+	 *
+	 * Leer gelassen aendert sich nichts - der Spawner setzt dann nur Bosse wie bisher. Gedacht
+	 * gegen das gemeldete Abflauen: nach dem ersten Boss kamen kaum noch Gegner, weil die
+	 * Wellentabellen des GameMode durchgelaufen waren und nur noch der Boss nachkam.
+	 *
+	 * Die Begleiter bekommen dieselbe Stufe wie der Boss der Welle, werden also mit ihr staerker.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
+	TArray<TSubclassOf<AUnitBase>> EscortClasses;
+
+	/** Begleiter in der ERSTEN Bosswelle. 0 = keine. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
+	int32 EscortsPerWave = 0;
+
+	/** Wieviele Begleiter je weiterer Welle dazukommen. 0 = die Zahl bleibt gleich. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
+	int32 EscortsAddedPerWave = 0;
+
+	/** Obergrenze, damit eine lange Partie nicht in der Einheitenzahl erstickt. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
+	int32 MaxEscortsPerWave = 40;
 
 	/** Streuung um den Spawner herum (uu). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")

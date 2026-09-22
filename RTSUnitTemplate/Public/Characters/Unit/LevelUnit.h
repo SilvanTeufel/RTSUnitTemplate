@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -195,6 +195,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void AutoLevelUp();
+
+	/**
+	 * Darf ein Stufenaufstieg die Gesundheit wieder auffuellen?
+	 *
+	 * Vorgabe AUS. Bis zum 21.09.2026 stand eine Einheit nach jedem Aufstieg wieder bei voller
+	 * Gesundheit - im Dauergefecht ein unbeabsichtigter Vollheiler. Die Auffuellung entsteht
+	 * nicht an einer einzelnen Stelle, sondern als Nebenwirkung der Attributsaufwertung
+	 * (MaxHealth steigt, der Gesundheitswert wandert mit). Deshalb wird der Stand hier gemerkt
+	 * und nach dem Aufstieg wiederhergestellt, statt an der Ursache herumzuraten.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Level")
+	bool bFullHealOnLevelUp = false;
+
+	/** Stellt den vor dem Aufstieg gemerkten Gesundheitsstand wieder her. Siehe bFullHealOnLevelUp. */
+	void RestoreHealthAfterLevelUp(float HealthBeforeLevelUp);
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Leveling")
 	TArray<int32> AutolevelConfig = {1, 1, 1, 1, 1, 0};
