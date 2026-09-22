@@ -1213,6 +1213,17 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->CapsuleHeight = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         	CharFrag->CapsuleRadius = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius()+AdditionalCapsuleRadius;
 
+			// Sichtbare Oberkante einmalig erfassen - siehe FMassAgentCharacteristicsFragment::VisualTopOffset.
+			// ComputeVisualBounds filtert Widgets und leere ISMs bereits heraus und laeuft hier nach
+			// FinishSpawning, die ISM-Instanz steht also.
+			{
+				const FBox VisualBox = AConstructionUnit::ComputeVisualBounds(UnitOwner);
+				if (VisualBox.IsValid)
+				{
+					CharFrag->VisualTopOffset = VisualBox.Max.Z - UnitOwner->GetActorLocation().Z;
+				}
+			}
+
 			UBoxComponent* TargetedBox = UnitOwner->BoxCollisionComponent;
 
 			if (TargetedBox) {
