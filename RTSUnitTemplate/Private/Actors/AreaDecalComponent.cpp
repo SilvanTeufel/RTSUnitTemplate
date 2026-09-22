@@ -555,6 +555,18 @@ bool UAreaDecalComponent::AdvanceMassScaling(float DeltaSeconds, float& OutNewRa
 	return true;
 }
 
+void UAreaDecalComponent::ApplyReplayState(float NewRadius)
+{
+	if (HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
+	{
+		return;
+	}
+
+	bDecalIsVisible = true;
+	CurrentDecalRadius = NewRadius;
+	UpdateDecalVisuals();
+}
+
 void UAreaDecalComponent::SetCurrentDecalRadiusFromMass(float NewRadius)
 {
 	CurrentDecalRadius = NewRadius;
