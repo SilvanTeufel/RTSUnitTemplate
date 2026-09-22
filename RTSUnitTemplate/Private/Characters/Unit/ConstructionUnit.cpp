@@ -176,6 +176,52 @@ void AConstructionUnit::SeedIndicatorFootprint(const AWorkArea* InWorkArea)
 	}
 }
 
+void AConstructionUnit::ApplyBuildingFootprintScale(const AWorkArea* InWorkArea)
+{
+	if (!bMatchBuildingFootprintScale || !InWorkArea)
+	{
+		return;
+	}
+
+	// Der Zielradius steht schon fest - SeedIndicatorFootprint hat ihn aus dem fertigen Gebaeude
+	// geholt (getaggte Box, sonst Gebaeudekapsel, sonst die Flaeche selbst). Er wird hier nur
+	// gelesen, deshalb MUSS SeedIndicatorFootprint vorher gelaufen sein.
+	float TargetRadius = 0.f;
+	if (bIndicatorFootprintUseBox)
+	{
+		TargetRadius = FMath::Max(IndicatorFootprintBoxExtent.X, IndicatorFootprintBoxExtent.Y);
+	}
+	else
+	{
+		TargetRadius = IndicatorFootprintCapsuleRadius;
+	}
+
+	if (TargetRadius <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// Die EIGENE Groesse unskaliert nehmen: die Skalierung wird gleich gesetzt, ein skalierter
+	// Radius wuerde sich bei einem zweiten Aufruf selbst verstaerken.
+	const UCapsuleComponent* OwnCapsule = GetCapsuleComponent();
+	if (!OwnCapsule)
+	{
+		return;
+	}
+	const float OwnRadius = OwnCapsule->GetUnscaledCapsuleRadius();
+	if (OwnRadius <= KINDA_SMALL_NUMBER)
+	{
+		return;
+	}
+
+	// Gleichmaessig skalieren. Nur X/Y zu strecken wuerde die Drohne verzerren, und die Hoehe
+	// der Baustelle soll zum Gebaeude passen, nicht zur Drohne.
+	const float Faktor = FMath::Clamp(TargetRadius / OwnRadius,
+		MinBuildingFootprintScale, MaxBuildingFootprintScale);
+
+	SetActorScale3D(FVector(Faktor));
+}
+
 FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit)
 {
 	FBox VisualBox(ForceInit);

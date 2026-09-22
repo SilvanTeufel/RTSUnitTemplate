@@ -4337,6 +4337,7 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					// Seed the HUD-indicator footprint from the finished building BEFORE
 					// FinishSpawning, so the values ride in the initial spawn bunch to clients.
 					CU->SeedIndicatorFootprint(UnitBase->BuildArea);
+					CU->ApplyBuildingFootprintScale(UnitBase->BuildArea);
 
 					if (UnitBase->BuildArea->IsExtensionArea)
 					{
