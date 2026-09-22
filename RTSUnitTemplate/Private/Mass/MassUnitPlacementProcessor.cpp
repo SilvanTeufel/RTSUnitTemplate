@@ -1,6 +1,7 @@
 ﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/MassUnitPlacementProcessor.h"
 #include "MassCommonFragments.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "MassExecutionContext.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Mass/MassUnitVisualFragments.h"
@@ -26,6 +27,11 @@ void UMassUnitPlacementProcessor::ConfigureQueries(const TSharedRef<FMassEntityM
     EntityQuery.AddRequirement<FMassVisibilityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadWrite);
     EntityQuery.AddRequirement<FMassRepresentationLODFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    // Optional, damit kein Entity aus der Abfrage faellt, dem das Fragment fehlt.
+    EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
+    // Fuer den Abgleich unten: nur damit ein stehendes GEBAEUDE erkannt wird, das den Stop-Tag
+    // nie bekommen hat. Gemessen am 22.09.2026: WallTower-Extensions tragen ihn nicht.
+    EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassStateStopMovementTag>(EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassStateDeadTag>(EMassFragmentPresence::Optional);
     EntityQuery.AddTagRequirement<FMassUseSkeletalMovementTag>(EMassFragmentPresence::None);
@@ -54,6 +60,8 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
         TConstArrayView<FMassVisibilityFragment> VisibilityList = Context.GetFragmentView<FMassVisibilityFragment>();
         TArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetMutableFragmentView<FMassAgentCharacteristicsFragment>();
         TConstArrayView<FMassRepresentationLODFragment> LODFragments = Context.GetFragmentView<FMassRepresentationLODFragment>();
+        TArrayView<FTransformFragment> TransformList = Context.GetMutableFragmentView<FTransformFragment>();
+        TConstArrayView<FMassActorFragment> ActorList = Context.GetFragmentView<FMassActorFragment>();
 
         const bool bHasEffect = !EffectList.IsEmpty();
         const bool bHasVisibility = !VisibilityList.IsEmpty();
@@ -66,6 +74,53 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
         for (int i = 0; i < Context.GetNumEntities(); ++i) {
             FMassUnitVisualFragment& VisualFrag = VisualList[i];
             FMassAgentCharacteristicsFragment& CharFrag = CharList[i];
+
+            // DAS FTransformFragment EINER STEHENDEN EINHEIT NACHFUEHREN.
+            //
+            // GEMESSEN am 22.09.2026 auf Level_6_Survive: bei Gebaeuden laeuft PositionedTransform
+            // korrekt mit (daraus wird die ISM gezeichnet, und die liegt sichtbar richtig auf dem
+            // Gelaende), waehrend das FTransformFragment auf einem alten Wert STEHENBLEIBT -
+            // Xeno-Gebaeude auf konstant 11.0 bei Boden 7.0, WallTower auf dem blanken Boden
+            // (Abweichung -199.0 = genau die Kapselhalbhoehe) oder auf eingefrorenen
+            // Zwischenwerten aus dem Landeanflug (-42.2, -231.1, -320.9, -470.4).
+            //
+            // Es schreibt nicht etwa jemand einen falschen Wert: es schreibt NIEMAND. Belegt durch
+            // zwei Messungen mit null Treffern - [BodenZweig] (HandleGroundAndHeight laeuft fuer
+            // stehende Gebaeude gar nicht) und [TFragSchreiber] (weder LookAt noch der
+            // Bewegungsprozessor fassen sie an), waehrend im selben Lauf 4 Gebaeude abwichen.
+            //
+            // GetMassActorLocation liest das FTransformFragment ZUERST. Dadurch schlug der alte
+            // Wert auf alles durch, was die Mass-Position liest: Vorschauflaeche der Extension,
+            // Hoverpunkt, EnergyWall-Sockel, BuildArea auf Highground.
+            //
+            // NUR fuer angehaltene Einheiten. Bei einer bewegten ist das FTransformFragment der
+            // fuehrende Speicher und PositionedTransform folgt ihm - dort waere dieser Abgleich
+            // genau verkehrt herum und wuerde die Bewegung zurueckwerfen.
+            // Ein GEBAEUDE, das nicht mehr fliegt und nicht mehr fahren darf, steht - auch ohne
+            // Stop-Tag. Die WallTower-Extensions bekommen ihn nie; in der Messung vom 22.09.2026
+            // blieben deshalb 23 von 47 Gebaeuden auf dem alten Wert stehen, die Tuerme auf genau
+            // -199.0 (eine Kapselhalbhoehe). Waehrend des Landeanflugs ist CanMove noch wahr, dort
+            // fuehrt das TransformFragment - genau deshalb wird hier auf CanMove geprueft und
+            // nicht bloss auf "ist ein Gebaeude".
+            bool bIsSettledBuilding = false;
+            if (!ActorList.IsEmpty())
+            {
+                if (const AUnitBase* OwnerUnit = Cast<AUnitBase>(ActorList[i].Get()))
+                {
+                    bIsSettledBuilding = OwnerUnit->IsA(ABuildingBase::StaticClass())
+                                      && !OwnerUnit->CanMove
+                                      && !CharFrag.bIsFlying;
+                }
+            }
+
+            if ((bChunkIsStopped || bIsSettledBuilding) && !TransformList.IsEmpty())
+            {
+                FTransform& LiveTransform = TransformList[i].GetMutableTransform();
+                if (!LiveTransform.GetLocation().Equals(CharFrag.PositionedTransform.GetLocation(), 1.f))
+                {
+                    LiveTransform.SetLocation(CharFrag.PositionedTransform.GetLocation());
+                }
+            }
 
             bool bForceHidden = false;
             if (bHasEffect)
@@ -94,6 +149,7 @@ void UMassUnitPlacementProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
             // Wunsch Punkt 2: Keine Casts mehr, direkt PositionedTransform (BaseTransform)
             FTransform BaseTransform = CharFrag.PositionedTransform;
+
 
             if (bChunkIsStopped && bChunkIsDead)
             {
