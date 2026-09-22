@@ -40,11 +40,43 @@ void UWinLoseWidget::NativeConstruct()
 		SpectateButton->SetIsEnabled(CamPC != nullptr && CamPC->bSpectateAvailable);
 	}
 
+	// Neustart nur nach einer Niederlage anbieten.
+	if (RestartButton)
+	{
+		RestartButton->OnClicked.AddUniqueDynamic(this, &UWinLoseWidget::OnRestartClicked);
+		RestartButton->SetVisibility(bWon ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	}
+
 	if (PC && IsValid(PC))
 	{
 		PC->SetShowMouseCursor(true);
 		PC->SetInputMode(FInputModeUIOnly());
 	}
+}
+
+void UWinLoseWidget::OnRestartClicked()
+{
+	if (bAlreadyClicked) return;
+	bAlreadyClicked = true;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// Dieselbe Karte noch einmal laden. GetCurrentLevelName ohne Praefix liefert den Namen, den
+	// OpenLevel erwartet; ein Reisen ueber den Server ist hier falsch, weil der Neustart den
+	// gesamten Spielstand verwerfen soll.
+	const FString CurrentMap = UGameplayStatics::GetCurrentLevelName(World, /*bRemovePrefixString*/ true);
+	UE_LOG(LogTemp, Warning, TEXT("[WinLose] Neustart der Karte '%s'."), *CurrentMap);
+
+	RemoveFromParent();
+
+	if (APlayerController* OwningPC = GetOwningPlayer())
+	{
+		OwningPC->SetShowMouseCursor(false);
+		OwningPC->SetInputMode(FInputModeGameOnly());
+	}
+
+	UGameplayStatics::OpenLevel(World, FName(*CurrentMap));
 }
 
 void UWinLoseWidget::OnSpectateClicked()
