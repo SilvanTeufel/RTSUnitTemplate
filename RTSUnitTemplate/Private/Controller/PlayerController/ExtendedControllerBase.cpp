@@ -2991,8 +2991,17 @@ void AExtendedControllerBase::GetSnappedExtensionTransform(ABuildingBase* Unit, 
             break;
     }
 
+    // ExtensionRotationOffset gilt in BEIDEN Pfaden.
+    //
+    // Er wurde bisher nur im Arbeiterpfad angewandt (WorkingUnitBase.cpp, "DesiredYaw +=
+    // Unit->ExtensionRotationOffset"), nicht hier im Spielerpfad. Die vom Spieler gezogene
+    // Bauflaeche stand dadurch um genau diesen Offset verdreht, waehrend das daraus entstehende
+    // Gebaeude richtig stand - dessen Drehung laeuft ueber den Arbeiterpfad.
+    DesiredYaw += Unit->ExtensionRotationOffset;
+
     OutLocation = UnitLoc + Offset;
     OutRotation = FRotator(0.f, DesiredYaw, 0.f);
+
 }
 
 void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* DraggedWorkArea, ABuildingBase* Unit, float DeltaSeconds)
@@ -3106,24 +3115,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	FVector TargetLoc;
 	FRotator TargetRot;
 	GetSnappedExtensionTransform(Unit, StableMouseLocation, TargetLoc, TargetRot);
-
-	// VORSCHAUMESH IN DIE AUSGANGSLAGE, BEVOR GERECHNET WIRD.
-	//
-	// Die Neigung der Vorschauflaeche ist zurueckgenommen (siehe "DREIMAL GESCHEITERT" weiter
-	// unten). Dieser Abgleich bleibt als Wache stehen: die Z-Korrektur weiter unten rechnet aus
-	// MeshComp->CalcBounds, und eine Drehung oder ein Versatz am Mesh - woher auch immer, etwa
-	// aus einem Blueprint oder einem alten Stand - ginge dort als echte Meshausdehnung ein und
-	// verschoebe die Flaeche gegen den Boden. Er kostet im Normalfall einen Vergleich.
-	if (UStaticMeshComponent* VorschauMesh = DraggedWorkArea->Mesh)
-	{
-		if (!VorschauMesh->GetRelativeRotation().IsNearlyZero() || !FMath::IsNearlyZero(VorschauMesh->GetRelativeLocation().Z))
-		{
-			FVector Rel = VorschauMesh->GetRelativeLocation();
-			Rel.Z = 0.f;
-			VorschauMesh->SetRelativeLocation(Rel);
-			VorschauMesh->SetRelativeRotation(FRotator::ZeroRotator);
-		}
-	}
 
 	// Woher stammt die Hoehe in DIESEM Bild?
 	//
@@ -3677,6 +3668,14 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	//
 	// LEHRE: bevor eine Flaeche geneigt wird, gehoert gemessen, WIE LANG sie ist. Die Zahl stand
 	// die ganze Zeit im Log.
+	//
+	// NACHTRAG: Versuch 3 hatte eine zweite, laenger unentdeckte Nebenwirkung. Zur Absicherung
+	// setzte er die RELATIVE Drehung des Vorschau-Meshes je Bild auf null - in der Annahme, die
+	// Ausgangslage sei identisch null. Der Blueprint hat dort aber eine gestaltete Drehung stehen,
+	// die dadurch fortlaufend geloescht wurde: die Bauflaeche stand um 90 Grad verdreht, waehrend
+	// das daraus entstehende Gebaeude richtig stand (es nimmt ServerMeshRotationBuilding).
+	// Eine "Wache", die einen Wert auf einen ANGENOMMENEN Ausgangszustand zurueckstellt, ist keine
+	// Wache, sondern eine stille Ueberschreibung.
 	//
 	// Versuch 1: Mesh anheben. Die Unterkanten-Korrektur las die Anhebung im naechsten Bild als
 	// echte Meshausdehnung und senkte den Aktor um denselben Betrag - die Flaeche sank, statt zu
@@ -5630,23 +5629,6 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 	}
 
 	AWorkArea* DraggedWorkArea = UnitBase->CurrentDraggedWorkArea;
-
-	// DIE OPTISCHE NEIGUNG DER VORSCHAU ZURUECKNEHMEN, BEVOR ABGELEGT WIRD.
-	//
-	// UpdateExtensionWorkAreaPosition neigt das Mesh, damit die Flaeche am Turm auf dessen
-	// Sockelhoehe beginnt. Bliebe die Neigung beim Ablegen stehen, wuerde sie zur echten Lage der
-	// gesetzten WorkArea - und jede Bounds-Pruefung hier laese sie als Meshausdehnung mit.
-	// GENAU DARAN sind die beiden frueheren Anhebeversuche gescheitert (schwebende Tuerme).
-	if (DraggedWorkArea)
-	{
-		if (UStaticMeshComponent* VorschauMesh = DraggedWorkArea->Mesh)
-		{
-			FVector Rel = VorschauMesh->GetRelativeLocation();
-			Rel.Z = 0.f;
-			VorschauMesh->SetRelativeLocation(Rel);
-			VorschauMesh->SetRelativeRotation(FRotator::ZeroRotator);
-		}
-	}
 
 	if (!DraggedWorkArea)
 	{
