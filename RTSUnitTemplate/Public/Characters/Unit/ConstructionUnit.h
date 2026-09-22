@@ -84,7 +84,7 @@ public:
 	float MinBuildingFootprintScale = 0.5f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
-	float MaxBuildingFootprintScale = 6.f;
+	float MaxBuildingFootprintScale = 3.f;
 
 	// Visual-only world bounds of a construction unit: mesh components (static / ISM with
 	// instances / skeletal when the unit runs in skeletal mode). Excludes widgets, Niagara and
