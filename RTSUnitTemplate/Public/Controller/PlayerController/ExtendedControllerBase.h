@@ -380,6 +380,16 @@ public:
 	float ExtensionGroundZThreshold = 10.f;
 
 	/**
+	 * Spielraum der Streckenpruefung einer Energiewand, in Einheiten.
+	 *
+	 * NEGATIV macht die Sperre nachsichtiger: der Kandidat darf dann um diesen Betrag naeher an
+	 * die Wandstrecke heranreichen, ohne sie zu blockieren. Gerechnet wird gegen die SICHTBARE
+	 * Ausdehnung, nicht gegen die Aktorbounds - die schliessen Anbauten und Effekte mit ein.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
+	float WallSpanClearance = -50.f;
+
+	/**
 	 * Der tatsaechlich geltende Grenzwert: die Ueberschreibung des Gebaeudes, sonst der Wert oben.
 	 *
 	 * Ueber diese eine Stelle lesen BEIDE Verwender - die Rotfaerbung der Vorschau und die

@@ -123,7 +123,7 @@ static void GatherBlockersByBounds(UWorld* World, const FVector& TestCenter, con
  */
 static const AActor* FindBlockerAlongWallSpan(UWorld* World, const FVector& VonOrt, const FVector& BisOrt,
                                               float SpannBreite, const TArray<AActor*>& ActorsToIgnore,
-                                              UClass* BauartDerEndpunkte)
+                                              UClass* BauartDerEndpunkte, float Spielraum)
 {
 	if (!World)
 	{
@@ -157,6 +157,56 @@ static const AActor* FindBlockerAlongWallSpan(UWorld* World, const FVector& VonO
 		// Spieler als Hindernis meint. Wer dieselbe Klasse hat wie die beiden Endpunkte, gehoert
 		// zur Wandkette und wird uebergangen.
 		if (BauartDerEndpunkte && Kandidat->GetClass() == BauartDerEndpunkte)
+		{
+			continue;
+		}
+
+		// ZWEITE, GENAUE STUFE.
+		//
+		// Der Kasten oben ist achsparallel. Bei einer DIAGONALEN Wand ist das umschliessende
+		// Rechteck riesig: ein Gebaeude in einer seiner Ecken liegt weit neben der Verbindungslinie
+		// und wurde trotzdem als Hindernis gemeldet - der Spieler sah eine Wand, die das Gebaeude
+		// gar nicht beruehrt, und konnte den Turm nicht setzen.
+		//
+		// Der Kasten bleibt als grobe Vorauswahl (er ist billig und nimmt nur wenige Aktoren in die
+		// Hand). Hier wird der tatsaechliche ABSTAND ZUR STRECKE gerechnet, und zwar gegen die
+		// SICHTBARE Ausdehnung des Kandidaten - die Aktorbounds schliessen Anbauten und Effekte mit
+		// ein und sitzen dadurch zu weit aussen.
+		float KandidatRadius = 0.f;
+		if (const AUnitBase* KandidatEinheit = Cast<AUnitBase>(Kandidat))
+		{
+			const FBox Sichtbar = AConstructionUnit::ComputeVisualBounds(KandidatEinheit);
+			if (Sichtbar.IsValid)
+			{
+				const FVector Aus = Sichtbar.GetExtent();
+				KandidatRadius = FMath::Max(Aus.X, Aus.Y);
+			}
+		}
+		else if (const AWorkArea* KandidatFlaeche = Cast<AWorkArea>(Kandidat))
+		{
+			if (KandidatFlaeche->Mesh)
+			{
+				const FVector Aus = KandidatFlaeche->Mesh->Bounds.BoxExtent;
+				KandidatRadius = FMath::Max(Aus.X, Aus.Y);
+			}
+		}
+		if (KandidatRadius <= KINDA_SMALL_NUMBER)
+		{
+			// Ohne sichtbares Mesh bleibt nur der grobe Kasten - dann lieber sperren als eine Wand
+			// durch etwas ziehen zu lassen, dessen Groesse unbekannt ist.
+			return Kandidat;
+		}
+
+		const FVector KandidatOrt = Kandidat->GetActorLocation();
+		const FVector VonFlach(VonOrt.X, VonOrt.Y, 0.f);
+		const FVector BisFlach(BisOrt.X, BisOrt.Y, 0.f);
+		const FVector KandidatFlach(KandidatOrt.X, KandidatOrt.Y, 0.f);
+		const float AbstandZurStrecke =
+			FMath::PointDistToSegment(KandidatFlach, VonFlach, BisFlach);
+
+		// Spielraum ist ueblicherweise NEGATIV und macht die Sperre damit nachsichtiger.
+		const float Grenze = SpannBreite * 0.5f + KandidatRadius + Spielraum;
+		if (AbstandZurStrecke > Grenze)
 		{
 			continue;
 		}
@@ -3309,7 +3359,8 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 		if (const AActor* Sperre = FindBlockerAlongWallSpan(GetWorld(), Unit->GetMassActorLocation(),
 		                                                    StreckenEnde,
-		                                                    SpannBreite, Ignorieren, Unit->GetClass()))
+		                                                    SpannBreite, Ignorieren, Unit->GetClass(),
+		                                                    WallSpanClearance))
 		{
 			bStreckeGeometrischBlockiert = true;
 			DraggedWorkArea->TemporarilyChangeMaterial();
@@ -6787,7 +6838,8 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				Ignorieren.Add(WirtsTurm);
 
 				if (const AActor* Sperre = FindBlockerAlongWallSpan(GetWorld(),
-					WirtsTurm->GetMassActorLocation(), AblageOrt, SpannBreite, Ignorieren, WirtsTurm->GetClass()))
+					WirtsTurm->GetMassActorLocation(), AblageOrt, SpannBreite, Ignorieren,
+					WirtsTurm->GetClass(), WallSpanClearance))
 				{
 					UE_LOG(LogTemp, Warning,
 						TEXT("[WandVorschau] ABLAGE ABGELEHNT: %s liegt auf der Wandstrecke"),
