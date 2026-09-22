@@ -234,6 +234,16 @@ void UWinConditionWidget::UpdateConditionText()
 	FText DescriptionBody;
 	FWinConditionData WinData = ConfigActor->GetCurrentWinConditionData();
 	EWinLoseCondition CurrentCondition = WinData.Condition;
+
+	// Ein am Ziel hinterlegter Text schlaegt den automatisch gebauten Satz. Damit lassen sich
+	// Ziele beschreiben, die sich nicht aus Zahlen ergeben - TeamReachedLocation etwa fiel vorher
+	// in den default-Zweig und zeigte "Unknown".
+	if (!WinData.CustomDescription.IsEmpty())
+	{
+		DescriptionBody = WinData.CustomDescription;
+	}
+	else
+	{
 	switch (CurrentCondition)
 	{
 	case EWinLoseCondition::None:
@@ -300,9 +310,13 @@ void UWinConditionWidget::UpdateConditionText()
 	case EWinLoseCondition::TeamReachedGameTime:
 		DescriptionBody = FText::Format(SurvivalConditionText, FText::AsNumber(FMath::RoundToInt(WinData.TargetGameTime)));
 		break;
+	case EWinLoseCondition::TeamReachedLocation:
+		DescriptionBody = ReachLocationConditionText;
+		break;
 	default:
 		DescriptionBody = UnknownConditionText;
 		break;
+	}
 	}
 
 	FText FinalText = FText::Format(FText::FromString(TEXT("{0}{1}")), GoalPrefix, DescriptionBody);

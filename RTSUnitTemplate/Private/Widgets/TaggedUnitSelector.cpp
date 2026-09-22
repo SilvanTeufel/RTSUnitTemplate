@@ -26,6 +26,23 @@ void UTaggedUnitSelector::NativeConstruct()
     {
         AbilityChooserToggleButton->OnClicked.AddUniqueDynamic(this, &UTaggedUnitSelector::HandleAbilityChooserToggleClicked);
     }
+    if (WinConditionButton)
+    {
+        WinConditionButton->OnClicked.AddUniqueDynamic(this, &UTaggedUnitSelector::HandleWinConditionClicked);
+    }
+}
+
+void UTaggedUnitSelector::ShowWinCondition()
+{
+    if (AExtendedCameraBase* Camera = GetOwningCamera())
+    {
+        Camera->ShowWinConditionWidget(WinConditionDisplaySeconds);
+    }
+}
+
+void UTaggedUnitSelector::HandleWinConditionClicked()
+{
+    ShowWinCondition();
 }
 
 bool UTaggedUnitSelector::HasSpendableAttributePoints() const

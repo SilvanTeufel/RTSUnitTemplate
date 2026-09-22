@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "GameFramework/PlayerController.h"
@@ -22,6 +22,7 @@
 #include "Characters/Unit/LevelUnit.h"
 #include "Widgets/SoundControlWidget.h"
 #include "Widgets/WinConditionWidget.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/UserWidget.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/SBoxPanel.h"
@@ -174,8 +175,138 @@ bool AExtendedCameraBase::InitializeWinConditionDisplay()
 	return false;
 }
 
+// DIAGNOSE (bleibt stehen bis abbestellt): loest dieselbe Anzeige aus wie der GOAL-Knopf.
+//
+// Ohne diesen Befehl laesst sich der Knopfpfad nur mit der Hand pruefen - kopflos klickt
+// niemand. Mit ihm ist belegbar, ob das Widget erscheint, und die Diagnosezeile unten sagt,
+// woran es sonst liegt.
+static FAutoConsoleCommandWithWorld GZeigeSiegziel(
+	TEXT("rts.wincondition.show"),
+	TEXT("Blendet das Siegziel fuer 12 s ein - derselbe Weg wie der GOAL-Knopf."),
+	FConsoleCommandWithWorldDelegate::CreateStatic([](UWorld* World)
+	{
+		if (!World)
+		{
+			return;
+		}
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			APlayerController* PC = It->Get();
+			if (AExtendedCameraBase* Camera = PC ? Cast<AExtendedCameraBase>(PC->GetPawn()) : nullptr)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[WinCondition] Konsolenbefehl auf '%s'."), *Camera->GetName());
+				Camera->ShowWinConditionWidget(12.f);
+				return;
+			}
+		}
+		UE_LOG(LogTemp, Warning,
+			TEXT("[WinCondition] Kein Spieler-Pawn vom Typ AExtendedCameraBase gefunden - der ")
+			TEXT("GOAL-Knopf haette hier ebenfalls nichts bewirkt."));
+	}),
+	ECVF_Default);
+
 void AExtendedCameraBase::ShowWinConditionWidget(float Duration)
 {
+	// Siehe WinConditionWidgetClass: laeuft auf dieser Karte ein HUD ohne WinConditionWidget,
+	// wird es hier einmalig angelegt.
+	// Hat inzwischen ein HUD sein eigenes Widget gesetzt, raeumt der Rueckfall seines weg.
+	if (FallbackWinConditionWidget && WinConditionWidget && WinConditionWidget != FallbackWinConditionWidget)
+	{
+		FallbackWinConditionWidget->RemoveFromParent();
+		FallbackWinConditionWidget = nullptr;
+	}
+
+	const bool bHatteWidget = (WinConditionWidget != nullptr);
+	const TCHAR* Herkunft = TEXT("vom HUD erzeugt");
+
+	// ZUERST das bereits vorhandene Widget suchen, statt ein neues anzulegen.
+	//
+	// Ein im HUD platziertes Widget sitzt an seinem Platz und hat seine Groesse. Ein selbst
+	// erzeugtes landet ueber AddToViewport bildschirmfuellend darueber - genau das war am
+	// 21.09.2026 zu sehen. Das HUD setzt den Zeiger am Pawn aber nur in bestimmten Faellen;
+	// deshalb wird hier im Widgetbestand nachgesehen, bevor etwas Neues entsteht.
+	if (!WinConditionWidget)
+	{
+		TArray<UUserWidget*> Gefundene;
+		UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, Gefundene, UWinConditionWidget::StaticClass(), false);
+
+		// DIAGNOSE (bleibt stehen bis abbestellt): WELCHE Widgets gefunden werden und ob sie in
+		// einem HUD haengen oder frei im Viewport. Ein frei haengendes fuellt den Bildschirm -
+		// genau daran war am 21.09.2026 nicht zu erkennen, dass die Suche das eigene
+		// Rueckfall-Widget wiederfand.
+		for (UUserWidget* Kandidat : Gefundene)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[WinCondition] gefunden: '%s' (Klasse %s), Elternwidget: %s"),
+				*GetNameSafe(Kandidat), *GetNameSafe(Kandidat ? Kandidat->GetClass() : nullptr),
+				(Kandidat && Kandidat->GetParent()) ? *GetNameSafe(Kandidat->GetParent()) : TEXT("KEINES (frei im Viewport)"));
+		}
+
+		// Findet die Suche NICHTS, ist die naechste Frage, ob ueberhaupt ein HUD laeuft. Ohne
+		// diese Liste raet man, welches Widget fehlt.
+		if (Gefundene.Num() == 0)
+		{
+			TArray<UUserWidget*> AlleWidgets;
+			UWidgetBlueprintLibrary::GetAllWidgetsOfClass(this, AlleWidgets, UUserWidget::StaticClass(), false);
+			FString Namen;
+			for (const UUserWidget* W : AlleWidgets)
+			{
+				Namen += FString::Printf(TEXT("%s, "), *GetNameSafe(W ? W->GetClass() : nullptr));
+			}
+			UE_LOG(LogTemp, Warning,
+				TEXT("[WinCondition] KEIN Siegziel-Widget vorhanden. Laufende Widgets (%d): %s"),
+				AlleWidgets.Num(), Namen.IsEmpty() ? TEXT("keine") : *Namen);
+		}
+
+		for (UUserWidget* Kandidat : Gefundene)
+		{
+			UWinConditionWidget* AlsSiegziel = Cast<UWinConditionWidget>(Kandidat);
+			if (!AlsSiegziel || AlsSiegziel == FallbackWinConditionWidget)
+			{
+				// Das eigene Rueckfall-Widget zaehlt nicht als Fund - sonst findet die Suche
+				// genau das bildschirmfuellende Widget wieder, das sie ersetzen soll.
+				continue;
+			}
+			WinConditionWidget = AlsSiegziel;
+			Herkunft = TEXT("im HUD gefunden");
+			break;
+		}
+	}
+
+	// Erst wenn wirklich keines existiert, legt der Pawn eines an.
+	if (!WinConditionWidget && WinConditionWidgetClass)
+	{
+		if (APlayerController* OwningPC = Cast<APlayerController>(GetController()))
+		{
+			WinConditionWidget = CreateWidget<UWinConditionWidget>(OwningPC, WinConditionWidgetClass);
+			if (WinConditionWidget)
+			{
+				WinConditionWidget->AddToViewport();
+				FallbackWinConditionWidget = WinConditionWidget;
+				Herkunft = TEXT("ueber den Rueckfall selbst angelegt");
+			}
+		}
+	}
+
+	// Auch der Erfolgsfall wird gemeldet: eine ausbleibende Fehlermeldung ist kein Beleg dafuer,
+	// dass etwas passiert ist.
+	if (WinConditionWidget)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[WinCondition] Siegziel wird gezeigt (%s), Dauer %.1f s."),
+			bHatteWidget ? TEXT("vom HUD erzeugt") : Herkunft, Duration);
+	}
+
+	// DIAGNOSE (bleibt stehen bis abbestellt): ohne sie sieht ein fehlendes Widget genauso aus
+	// wie ein gedrueckter Knopf ohne Wirkung - und genau dieser Fall ist am 21.09.2026
+	// aufgetreten.
+	if (!WinConditionWidget)
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[WinCondition] '%s' soll das Siegziel zeigen, hat aber kein Widget. Weder ein HUD ")
+			TEXT("hat eines erzeugt noch ist WinConditionWidgetClass gesetzt."), *GetName());
+		return;
+	}
+
 	if (WinConditionWidget)
 	{
 		WinConditionWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
