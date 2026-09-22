@@ -332,13 +332,57 @@ void AControllerBase::SelectUnit(int Index)
 	}
 }
 
+void AControllerBase::ReplaceSelectedUnit(AUnitBase* OldUnit, AUnitBase* NewUnit)
+{
+	if (!IsValid(NewUnit) || !HUDBase) return;
+
+	// OldUnit darf null sein. Beim Bauabschluss ist die Baustelle bereits abgeraeumt, wenn das
+	// Gebaeude entsteht - der Aufrufer hat dort vorher gemerkt, dass sie ausgewaehlt war, und
+	// buergt damit fuer die Ersetzung. Mit einer gueltigen OldUnit wird hier selbst geprueft,
+	// damit nicht jedes fertige Gebaeude irgendwo auf der Karte die Auswahl an sich reisst.
+	if (OldUnit)
+	{
+		if (!HUDBase->SelectedUnits.Contains(OldUnit)) return;
+		RemoveUnitFromSelection(OldUnit);
+	}
+
+	if (!HUDBase->SelectedUnits.Contains(NewUnit))
+	{
+		HUDBase->SetUnitSelected(NewUnit);
+	}
+	SelectedUnits = HUDBase->SelectedUnits;
+
+	if (AExtendedCameraBase* ExtendedCameraBase = Cast<AExtendedCameraBase>(CameraBase))
+	{
+		ExtendedCameraBase->UpdateSelectorWidget();
+	}
+}
+
 void AControllerBase::RemoveUnitFromSelection(AUnitBase* Unit)
 {
 	if (!Unit || !HUDBase) return;
 
+	// Stirbt eine BAUSTELLE, waehrend sie ausgewaehlt ist, und steht ihr Gebaeude bereits, dann
+	// gehoert die Auswahl auf das Gebaeude. Der Zeiger liegt an der WorkArea (AWorkArea::Building).
+	// Hier VOR dem Entfernen lesen - danach kann der Aktor schon abgeraeumt sein.
+	AUnitBase* Nachfolger = nullptr;
+	if (const AConstructionUnit* Baustelle = Cast<AConstructionUnit>(Unit))
+	{
+		if (IsValid(Baustelle->WorkArea) && IsValid(Baustelle->WorkArea->Building))
+		{
+			Nachfolger = Baustelle->WorkArea->Building;
+		}
+	}
+
 	const int32 UnitIndex = HUDBase->SelectedUnits.Find(Unit);
 	HUDBase->SelectedUnits.Remove(Unit);
 	SelectedUnits = HUDBase->SelectedUnits;
+
+	if (Nachfolger && UnitIndex != INDEX_NONE && !HUDBase->SelectedUnits.Contains(Nachfolger))
+	{
+		HUDBase->SetUnitSelected(Nachfolger);
+		SelectedUnits = HUDBase->SelectedUnits;
+	}
 
 	if (UnitIndex != INDEX_NONE)
 	{

@@ -2653,6 +2653,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
    								float SavedHealth = 0.f;
    								float SavedShield = 0.f;
    								bool bHasSavedStats = false;
+								bool bBaustelleWarAusgewaehlt = false;
 								if (AConstructionUnit* CU = Cast<AConstructionUnit>(UnitBase->BuildArea->ConstructionUnit))
 								{
 									if (CU->Attributes)
@@ -2660,6 +2661,15 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 										SavedHealth = CU->Attributes->GetHealth();
 										SavedShield = CU->Attributes->GetShield();
 										bHasSavedStats = true;
+									}
+
+									// War die Baustelle ausgewaehlt, soll danach das GEBAEUDE ausgewaehlt sein.
+									// Das muss HIER gemerkt werden: die Baustelle verschwindet gleich, und
+									// AWorkArea::Building wird erst weiter unten gesetzt - zum Zeitpunkt des
+									// Abraeumens gibt es also noch nichts, worauf man umhaengen koennte.
+									if (ControllerBase && ControllerBase->HUDBase)
+									{
+										bBaustelleWarAusgewaehlt = ControllerBase->HUDBase->SelectedUnits.Contains(CU);
 									}
 
 									if (CU->DroneBehavior)
@@ -2707,6 +2717,13 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 								}
 
 								AUnitBase* NewUnit = SpawnSingleUnit(SpawnParameter, ActorLocation, nullptr, UnitBase->TeamId, nullptr, bDoGroundTrace, UnitBase->BuildArea);
+
+								if (NewUnit && bBaustelleWarAusgewaehlt && ControllerBase)
+								{
+									// Die Baustelle ist zu diesem Zeitpunkt schon weg; der Merker oben
+									// traegt die Information herueber.
+									ControllerBase->ReplaceSelectedUnit(nullptr, NewUnit);
+								}
 
 								// If spawn failed, allow future attempts (keep single-spawn guarantee only on success)
 								if (!NewUnit)
