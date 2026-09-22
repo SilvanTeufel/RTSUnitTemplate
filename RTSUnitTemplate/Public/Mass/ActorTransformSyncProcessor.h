@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -54,9 +54,13 @@ public:
 	 * gedrosselt wird, BEVOR die Bildrate einbricht.
 	 *
 	 * Unterhalb dieser Zahl bleibt es bei VisualISMActorSyncTime (Vorgabe 0 = jedes Bild).
+	 *
+	 * 21.09.2026: von 150 auf 300 angehoben - die Drosselung setzte zu frueh ein und war schon
+	 * bei mittleren Gefechten sichtbar. Zur Laufzeit ueber RTS.ActorSync.StartUnits und
+	 * RTS.ActorSync.FullUnits ueberschreibbar, ohne neu zu bauen.
 	 */
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
-	int32 ActorSyncScaleStartUnits = 150;
+	int32 ActorSyncScaleStartUnits = 300;
 
 	/** Ab dieser Einheitenzahl gilt die volle Taktung ActorSyncMaxInterval. */
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
