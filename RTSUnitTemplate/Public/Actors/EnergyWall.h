@@ -52,6 +52,33 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "EnergyWall")
 	int32 TeamId;
 
+	/**
+	 * Laesst die Wand dem Hoehenunterschied ihrer beiden Tuerme folgen, statt waagerecht zu stehen.
+	 *
+	 * Vorher wurde die Hoehendifferenz mit `Direction.Z = 0` ausdruecklich weggeworfen - die Wand
+	 * stand auch am Hang immer flach. Auf ebenem Grund aendert sich durch diesen Schalter NICHTS:
+	 * dort ist die Differenz null und damit auch die Neigung.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bFollowTerrainSlope = true;
+
+	/**
+	 * Steigung der Wand je Laengeneinheit (dZ pro uu entlang der lokalen Y-Achse).
+	 *
+	 * Wird als Instanzdatum 0 an das Schildmaterial gereicht, das daraus die Scherung baut:
+	 * WorldPositionOffset.Z = WallSlopePerUnit * lokales Y. Damit bleiben die Seitenkanten
+	 * senkrecht und nur Ober- und Unterkante laufen schraeg - das gewuenschte Trapez.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float WallSlopePerUnit = 0.f;
+
+	/** Waagerechte Richtung der Wand (normiert), fuer die Scherung im Material. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	FVector2D WallDirectionXY = FVector2D(1.f, 0.f);
+
+	/** Reicht Steigung und Richtung an alle drei Batch-Instanzen weiter (Custom Data 2..4). */
+	void SendeSteigungAnBatch();
+
 	UPROPERTY(EditAnywhere, Category = "EnergyWall|Effects")
 	TSubclassOf<class UGameplayEffect> FriendlyEffectClass;
 

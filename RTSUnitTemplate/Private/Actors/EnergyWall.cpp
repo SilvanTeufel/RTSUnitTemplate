@@ -12,6 +12,7 @@
 #include "NavigationSystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Components/CapsuleComponent.h"
 #include "Characters/Unit/UnitBase.h"
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemBlueprintLibrary.h"
@@ -40,6 +41,9 @@ AEnergyWall::AEnergyWall()
 	TopRodISM->SetCanEverAffectNavigation(false);
 	BottomRodISM->SetCanEverAffectNavigation(false);
 	ShieldISM->SetCanEverAffectNavigation(false);
+
+	// Ein Instanzdatum fuer die Scherung - siehe AEnergyWall::WallSlopePerUnit.
+	ShieldISM->NumCustomDataFloats = 1;
 
 	NavObstacleBox = CreateDefaultSubobject<UBoxComponent>(TEXT("NavObstacleBox"));
 	NavObstacleBox->SetupAttachment(WallRoot);
@@ -233,8 +237,48 @@ void AEnergyWall::UpdateWallTransformAndDimensions()
 {
 	if (!CachedBuildingA || !CachedBuildingB) return;
 
-	FVector LocA = CachedBuildingA->GetActorLocation();
-	FVector LocB = CachedBuildingB->GetActorLocation();
+	// SOCKEL, NICHT AKTORMITTE.
+	//
+	// GetActorLocation() liefert bei diesen Tuermen die KAPSELMITTE. Nimmt man sie als Anschluss,
+	// sitzt die ganze Wand um eine halbe Kapselhoehe zu hoch - genau so gemeldet am 22.09.2026,
+	// nachdem die Wandhoehe vom Bodentastwert auf die Turmhoehe umgestellt wurde.
+	//
+	// Die Unterkante ist der richtige Bezug: dort beginnt der Turm sichtbar, und dort soll die
+	// Wand ansetzen.
+	auto SockelVon = [](ABuildingBase* Gebaeude) -> FVector
+	{
+		// XY aus Mass, Z aus der KAPSEL DES AKTORS.
+		//
+		// Gemessen am 22.09.2026 an den 21 WallTowern auf Level_6_Survive: die Aktorhoehen sind
+		// exakt zwei Werte (711.1 und 389.2, Halbhoehe je 199, Sockel also 512.1 und 190.2).
+		// Tuerme derselben Ebene sind auf 0.1 uu identisch - eine Wand zwischen ihnen MUSS Steigung
+		// null haben. Sie wurde trotzdem schraeg gebaut, und der Hoverpunkt sitzt bei denselben
+		// Tuermen manchmal unter dem Turm: beide lesen die MASS-Position.
+		//
+		// ACHTUNG, OFFENE FRAGE: dass die Mass-Position nachhinkt, war daraus nur ERSCHLOSSEN.
+		// Die Direktmessung am 22.09.2026 (rts.massz.dump, siehe ActorTransformSyncProcessor)
+		// zeigt fuer alle sechs Startgebaeude von Level_6_Survive Abweichung 0.0 - die Drossel-
+		// Erklaerung ist damit fuer diese Faelle WIDERLEGT. WallTower waren nicht dabei, weil sie
+		// erst im Spiel entstehen; fuer sie fehlt die Messung noch.
+		//
+		// Die schiefen Waende koennen ebenso gut von der frueheren Bodenspur unter dem Mittelpunkt
+		// gekommen sein, die zur selben Zeit entfernt wurde. Der Weg ueber die Kapsel bleibt
+		// trotzdem richtig: er ist unabhaengig davon, wann das Fragment zuletzt geschrieben wurde.
+		// Deshalb: XY weiter aus Mass, Z aus der Kapsel des Aktors.
+		FVector Ort = Gebaeude->GetMassActorLocation();
+
+		// Von der Mitte auf die Unterkante: die Kapsel ist hier das verlaessliche Mass, denn die
+		// Aktorbounds schliessen Anbauten und Effekte mit ein und sitzen dadurch zu tief.
+		if (const UCapsuleComponent* Kapsel = Gebaeude->FindComponentByClass<UCapsuleComponent>())
+		{
+			Ort.Z = Kapsel->GetComponentLocation().Z - Kapsel->GetScaledCapsuleHalfHeight();
+		}
+
+		return Ort;
+	};
+
+	FVector LocA = SockelVon(CachedBuildingA);
+	FVector LocB = SockelVon(CachedBuildingB);
 
 	FVector Midpoint = (LocA + LocB) * 0.5f;
 	float Distance2D = FVector::Dist2D(LocA, LocB);
@@ -254,13 +298,70 @@ void AEnergyWall::UpdateWallTransformAndDimensions()
 		GroundZ = Hit.Location.Z;
 	}
 
-	SetActorLocation(FVector(Midpoint.X, Midpoint.Y, GroundZ));
+	// DIE TUERME BESTIMMEN DIE HOEHE, NICHT DER BODEN.
+	//
+	// Frueher wurde die Wand auf die getastete Bodenhoehe unter ihrem Mittelpunkt gesetzt. Bei
+	// geneigter Wand ist das falsch: auf einer Kuppe liegt der Boden in der Mitte HOEHER als die
+	// Mittelhoehe der beiden Turmanschluesse, und die Wand rutschte nach oben - gemeldet als
+	// "die EnergyWall wurde zu weit oben gebaut".
+	//
+	// Die Wand darf durch das Gelaende laufen; entscheidend ist, dass Anfang und Ende an den
+	// Tuermen sitzen. Deshalb zaehlt bei geneigter Wand der echte Mittelpunkt der Verbindung.
+	// Ohne Neigung bleibt es beim Bodentastwert, damit sich an bestehenden Karten nichts aendert.
+	// Die Tuerme bestimmen die Hoehe, nicht der Boden unter der Wandmitte - siehe die Meldung
+	// "EnergyWall wurde zu weit oben gebaut" vom 22.09.2026 (auf einer Kuppe liegt der Boden in der
+	// Mitte hoeher als die Mittelhoehe der beiden Anschluesse).
+	SetActorLocation(bFollowTerrainSlope
+		? Midpoint
+		: FVector(Midpoint.X, Midpoint.Y, GroundZ));
 	
 	// Rotate wall to align its Y-axis (Length) with the vector between buildings
+	//
+	// Die Hoehendifferenz wurde hier frueher mit `Direction.Z = 0` weggeworfen - deshalb stand die
+	// Wand auch zwischen unterschiedlich hohen Tuermen immer waagerecht. Bleibt sie stehen, neigt
+	// sich die Wand und verbindet die Tuerme tatsaechlich. Auf ebenem Grund ist die Differenz null,
+	// dort bleibt alles wie bisher.
 	FVector Direction = (LocB - LocA);
-	Direction.Z = 0; 
-	FRotator Rotation = Direction.Rotation() + FRotator(0, -90.f, 0.f);
-	SetActorRotation(Rotation);
+	if (!bFollowTerrainSlope)
+	{
+		Direction.Z = 0;
+	}
+	// ROTATOREN NICHT ADDIEREN, sobald ein Nickwinkel im Spiel ist.
+	//
+	// `Direction.Rotation() + FRotator(0, -90, 0)` ging gut, solange Direction.Z auf null gezwungen
+	// war: dann trug die Richtung nur einen Gierwinkel, und die Addition entsprach der Drehung.
+	// Mit Nickwinkel ist die Addition KEINE Verkettung mehr - die -90 Grad wirken dann um die
+	// falsche Achse und rollen die Wand, statt sie zu neigen. Von aussen sah sie deshalb weiter
+	// waagerecht aus, obwohl die Hoehendifferenz laengst berechnet wurde.
+	//
+	// Richtig ist die Verkettung ueber Quaternionen: erst in die Richtung drehen, DANN lokal um
+	// -90 Grad gieren, damit die Laengsachse (Y) auf der Verbindungslinie liegt.
+	// NUR GIERWINKEL - die Neigung macht das MATERIAL, nicht der Aktor.
+	//
+	// Eine gekippte Instanz bleibt ein gekipptes RECHTECK: ihre Seitenkanten stehen dann schief zu
+	// den senkrechten Tuermen. Gewuenscht ist ein Trapez - Seitenkanten senkrecht, Ober- und
+	// Unterkante schraeg. Das ist eine SCHERUNG, und die kann eine Instanztransformation nicht
+	// (sie kennt nur Verschiebung, Drehung, Skalierung).
+	//
+	// Deshalb: Aktor waagerecht ausrichten wie frueher, und die Hoehendifferenz als
+	// Instanzdatum ans Schildmaterial geben, das die Vertices entlang der Laenge in Z verschiebt.
+	FVector FlacheRichtung = Direction;
+	FlacheRichtung.Z = 0.f;
+	SetActorRotation(FlacheRichtung.Rotation() + FRotator(0, -90.f, 0.f));
+
+	// Steigung je Laengeneinheit, entlang der lokalen Y-Achse (die Laengsachse der Wand).
+	// Vorzeichen folgt der Reihenfolge A -> B, also derselben Richtung wie die Ausrichtung oben.
+	const float LaengeXY = FMath::Max(Distance2D, 1.f);
+	WallSlopePerUnit = (LocB.Z - LocA.Z) / LaengeXY;
+
+	// Waagerechte Richtung A -> B, normiert. Das Material braucht sie, um den Abstand eines Vertex
+	// vom Instanzmittelpunkt ENTLANG der Wand zu bestimmen - siehe CustomDataRichtungX/Y.
+	FVector2D Richtung(LocB.X - LocA.X, LocB.Y - LocA.Y);
+	WallDirectionXY = Richtung.IsNearlyZero() ? FVector2D(1.f, 0.f) : Richtung.GetSafeNormal();
+
+	// Der Batch muss den neuen Wert sehen - die Wand kann sich neu ausrichten, wenn ein Turm
+	// ersetzt wird oder die Karte nachtraeglich geformt wird.
+	SendeSteigungAnBatch();
 
 	float NativeTopZ = TopRodISM->GetRelativeLocation().Z;
 	float NativeBottomZ = BottomRodISM->GetRelativeLocation().Z;
@@ -274,7 +375,14 @@ void AEnergyWall::UpdateWallTransformAndDimensions()
 		}
 	}
 
-	TargetScaleY = Distance2D / NativeLength;
+	// Bei geneigter Wand ist der 2D-Abstand zu KURZ: sie muss die Strecke schraeg ueberbruecken,
+	// sonst endet sie vor dem hoeher stehenden Turm. Waagerecht sind beide Werte gleich.
+	// Die Laenge liegt jetzt WAAGERECHT (die Hoehe macht die Scherung im Material), deshalb zaehlt
+	// wieder der 2D-Abstand. Mit dem 3D-Abstand waere die Wand zu lang und stuende ueber den Turm
+	// hinaus - der 3D-Abstand war nur richtig, solange die Instanz selbst gekippt wurde.
+	const float Spannweite = Distance2D;
+
+	TargetScaleY = Spannweite / NativeLength;
 	TargetDistance2D = Distance2D;
 	TargetWallHeight = NativeHeight;
 }
@@ -306,6 +414,9 @@ void AEnergyWall::InitializeWallInternal()
 
 	// Add instance for shield plane at its Blueprint position, and hide it
 	ShieldISM->AddInstance(FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(1.f, TargetScaleY, 1.f)));
+
+	// HINWEIS: die eigenen ISMs sind unsichtbar geschaltet, gezeichnet wird aus dem Batch. Ein
+	// Instanzdatum HIER hat keine sichtbare Wirkung - die Steigung geht ueber SendeSteigungAnBatch().
 	SetzeSchildSichtbar(false);
 
 	// A wall that replicated in already-deactivated (e.g. to a late-joining client) must stay
@@ -781,6 +892,21 @@ void AEnergyWall::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	Super::EndPlay(EndPlayReason);
 }
 
+void AEnergyWall::SendeSteigungAnBatch()
+{
+	// Alle DREI Teile brauchen denselben Wert: Ober- und Unterstange und das Schild werden
+	// gemeinsam geschert, sonst laufen sie auseinander.
+	UEnergyWallBatchSubsystem* Batch = UEnergyWallBatchSubsystem::Get(this);
+	if (!Batch)
+	{
+		return;
+	}
+
+	Batch->SetzeSteigung(EEnergyWallPart::TopRod,    BatchIndexTop,    WallSlopePerUnit, WallDirectionXY);
+	Batch->SetzeSteigung(EEnergyWallPart::BottomRod, BatchIndexBottom, WallSlopePerUnit, WallDirectionXY);
+	Batch->SetzeSteigung(EEnergyWallPart::Shield,    BatchIndexShield, WallSlopePerUnit, WallDirectionXY);
+}
+
 void AEnergyWall::MeldeBeimBatchAn()
 {
 	UEnergyWallBatchSubsystem* Batch = UEnergyWallBatchSubsystem::Get(this);
@@ -797,6 +923,9 @@ void AEnergyWall::MeldeBeimBatchAn()
 	BatchIndexTop    = Batch->BelegePlatz(EEnergyWallPart::TopRod,    TopRodISM,    FTransform::Identity);
 	BatchIndexBottom = Batch->BelegePlatz(EEnergyWallPart::BottomRod, BottomRodISM, FTransform::Identity);
 	BatchIndexShield = Batch->BelegePlatz(EEnergyWallPart::Shield,    ShieldISM,    FTransform::Identity);
+
+	// Direkt nach dem Belegen die Steigung nachreichen - der Platz ist frisch und steht auf 0.
+	SendeSteigungAnBatch();
 
 	SchreibeBatchTransformationen();
 }
@@ -860,7 +989,36 @@ void AEnergyWall::SchreibeBatchTransformationen()
 		return T;
 	};
 
-	Batch->SetzeTransform(EEnergyWallPart::TopRod,    BatchIndexTop,    Weltlage(TopRodISM,    bIsVisibleByFoW));
-	Batch->SetzeTransform(EEnergyWallPart::BottomRod, BatchIndexBottom, Weltlage(BottomRodISM, bIsVisibleByFoW));
+	// DIE STANGEN WERDEN GENEIGT, NICHT GESCHERT.
+	//
+	// Eine Stange ist ein Zylinder, also ein eindimensionales Teil - sie braucht keine Scherung,
+	// sie muss nur schraeg stehen, dann bildet sie genau die Ober- bzw. Unterkante des Schildes.
+	// Das spart den Eingriff in MI_Emissive_03, das sich die Stangen mit anderen Objekten im
+	// Projekt TEILEN; dort eine Scherung einzubauen haette auf alles gewirkt, was es sonst noch
+	// benutzt. Nur das Schild (eine Flaeche) wird im Material geschert.
+	auto MitNeigung = [this](FTransform T) -> FTransform
+	{
+		if (FMath::IsNearlyZero(WallSlopePerUnit))
+		{
+			return T;
+		}
+
+		// Drehung um die LOKALE X-Achse (Roll): die Laengsachse der Stange ist Y, und eine Drehung
+		// um X hebt das eine Ende und senkt das andere.
+		// VORZEICHEN: negativ. Gemessen am Bild vom 22.09.2026 - mit positivem Roll liefen die
+		// Stangen gegenlaeufig zum Schild und kreuzten es. Die Drehrichtung um die lokale X-Achse
+		// ist der Steigung entgegengesetzt.
+		const float WinkelGrad = -FMath::RadiansToDegrees(FMath::Atan(WallSlopePerUnit));
+		T.SetRotation(T.GetRotation() * FQuat(FRotator(0.f, 0.f, WinkelGrad)));
+
+		// Schraeg ist laenger als waagerecht: ohne diese Streckung endet die Stange vor dem
+		// hoeheren Turm. Der Faktor ist die Hypotenuse zu 1 und Steigung.
+		const FVector S = T.GetScale3D();
+		T.SetScale3D(FVector(S.X, S.Y * FMath::Sqrt(1.f + WallSlopePerUnit * WallSlopePerUnit), S.Z));
+		return T;
+	};
+
+	Batch->SetzeTransform(EEnergyWallPart::TopRod,    BatchIndexTop,    MitNeigung(Weltlage(TopRodISM,    bIsVisibleByFoW)));
+	Batch->SetzeTransform(EEnergyWallPart::BottomRod, BatchIndexBottom, MitNeigung(Weltlage(BottomRodISM, bIsVisibleByFoW)));
 	Batch->SetzeTransform(EEnergyWallPart::Shield,    BatchIndexShield, Weltlage(ShieldISM,    bIsVisibleByFoW && bSchildZuletztSichtbar));
 }
