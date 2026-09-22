@@ -305,29 +305,6 @@ void AUnitBase::Destroyed()
 	Super::Destroyed();
 }
 
-static TAutoConsoleVariable<int32> CVarRTS_UnitsNoCollision(
-	TEXT("RTS.Units.NoCollision"),
-	1,
-	TEXT("1 = die Kapsel jeder EINHEIT wird beim Start auf NoCollision gesetzt (Vorgabe). 0 = wie frueher.")
-	TEXT("")
-	TEXT("WAS DAS NICHT BRICHT, und warum:")
-	TEXT("  Auswahl  - UMassUnitHoverProcessor prueft den Mausstrahl mit 10 Hz GEOMETRISCH gegen ")
-	TEXT("Kapsel bzw. Box jeder Mass-Einheit, ohne jede Kollision. CustomControllerBase bevorzugt ")
-	TEXT("sein Ergebnis vor dem Pawn-Trace.")
-	TEXT("  Projektile - UMassProjectileImpactProcessor prueft Treffer ueber Abstandsvergleiche ")
-	TEXT("gegen den Radius aus dem Mass-Fragment.")
-	TEXT("  Abstand  - UUnitSeparationProcessor und die Ausweichrechnung laufen ueber Mass.")
-	TEXT("  Boden    - HandleGroundAndHeight spurt auf ECC_WorldStatic, Einheiten sind das nicht.")
-	TEXT("")
-	TEXT("WAS ES SEHR WOHL BRICHT: AKTOR-Projektile. Projectile.cpp prueft an drei Stellen mit ")
-	TEXT("echter Physik (LineTrace auf ECC_WorldDynamic, zweimal SphereOverlapActors). Wo bUseMass ")
-	TEXT("aus ist, fliegen Geschosse nach dieser Aenderung durch die Einheiten hindurch. Das ist ")
-	TEXT("der Punkt, der nach dem Einschalten zu pruefen ist.")
-	TEXT("")
-	TEXT("GEBAEUDE UND BAUSTELLEN SIND AUSGENOMMEN - sie erben von AUnitBase, brauchen ihre Kapsel ")
-	TEXT("aber fuer die WorkArea-Platzierung: die Kandidatensuche laeuft ueber GetOverlappingActors ")
-	TEXT("und SphereOverlapActors, die Distanzmessung bewertet nur, was die Physik gefunden hat."),
-	ECVF_Default);
 
 void AUnitBase::BeginPlay()
 {
@@ -348,29 +325,14 @@ void AUnitBase::BeginPlay()
 
 	Super::BeginPlay();
 
-	// Siehe RTS.Units.NoCollision. Gebaeude und Baustellen bleiben unberuehrt - ABuildingBase und
-	// AConstructionUnit erben von AUnitBase, brauchen ihre Kapsel aber weiterhin.
-	// ABuildingBase::BeginPlay setzt danach ohnehin nur ECC_Pawn auf Ignore und behaelt den Rest.
-	// HELDENEINHEITEN BLEIBEN AUSGENOMMEN.
+	// Kollision steht seit dem 21.09.2026 AUSSCHLIESSLICH im Blueprint.
 	//
-	// Eine Heldeneinheit ist die direkt gesteuerte Einheit des Spielers; sie traegt den
-	// Gameplay-Tag Character.CameraUnit (der Elterntag matcht auch die nummerierten Kinder
-	// Character.CameraUnit.0, .1 ...). Sie wird ueber die Bewegungskomponente gesteuert statt
-	// ueber Mass, ist skelettal und soll sich wie eine gewoehnliche Spielfigur verhalten -
-	// also mit Kollision.
-	static const FGameplayTag HeldenWurzel = FGameplayTag::RequestGameplayTag(FName("Character.CameraUnit"), false);
-	const bool bIstHeld = HeldenWurzel.IsValid() && UnitTags.HasTag(HeldenWurzel);
-
-	if (CVarRTS_UnitsNoCollision.GetValueOnGameThread() != 0
-		&& !bIstHeld
-		&& !IsA(ABuildingBase::StaticClass())
-		&& !IsA(AConstructionUnit::StaticClass()))
-	{
-		if (UCapsuleComponent* Capsule = GetCapsuleComponent())
-		{
-			Capsule->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		}
-	}
+	// Hier schaltete bis dahin RTS.Units.NoCollision die Kapsel jeder Einheit ausser Helden,
+	// Gebaeuden und Baustellen beim Start ab. Nutzervorgabe: "Wir wollen kein Laufzeit Code, es
+	// soll im BP ausgeschaltet sein." Die Kapseln der Einheiten-Blueprints stehen deshalb jetzt
+	// selbst auf NoCollision; nur die vier direkt gesteuerten Einheiten behalten QueryOnly.
+	//
+	// Wer die Kollision einer Einheit aendern will, aendert sie am Blueprint - nicht hier.
 
 	// Messung: ENTSTEHEN einer Einheit. Gegenstueck ist [EinheitAb] im Todespfad
 	// (UnitStateProcessor::HandleStartDead). Der Klassenname traegt Fraktion UND Typ,
