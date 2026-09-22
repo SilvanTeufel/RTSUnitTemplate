@@ -75,7 +75,39 @@ public:
 	 */
 	static constexpr int32 CustomDataSichtbar = 1;
 
-	static constexpr int32 CustomDataAnzahl = 2;
+	/**
+	 * Custom-Data-Platz 2: Steigung der Wand je Laengeneinheit (dZ pro uu entlang der lokalen
+	 * Y-Achse).
+	 *
+	 * Das Material baut daraus die Scherung: WorldPositionOffset.Z = Steigung * lokales Y. Damit
+	 * bleiben die Seitenkanten der Wand senkrecht und nur Ober- und Unterkante laufen schraeg -
+	 * eine gekippte Instanz waere dagegen ein gekipptes Rechteck und stuende schief zu den Tuermen.
+	 *
+	 * MUSS ueber den Batch laufen: die eigenen ISMs der Wandaktoren sind unsichtbar geschaltet
+	 * (SetVisibility(false)), gezeichnet wird ausschliesslich aus dem gemeinsamen Batch-ISM. Werte,
+	 * die auf den Aktor-ISMs landen, haben KEINE sichtbare Wirkung - genau daran ist der erste
+	 * Anlauf gescheitert.
+	 */
+	static constexpr int32 CustomDataSteigung = 2;
+
+	/**
+	 * Custom-Data-Plaetze 3 und 4: waagerechte Richtung der Wand (X, Y), normiert.
+	 *
+	 * WOFUER: das Material muss wissen, WIE WEIT ein Vertex entlang der Wand vom Instanzmittelpunkt
+	 * entfernt ist. Der naheliegende Weg ueber TransformPosition World->Local funktioniert bei
+	 * einem ISM NICHT wie erwartet - "Local" ist dort der KOMPONENTENraum, und der Batch-ISM sitzt
+	 * im Weltursprung. Die Rechnung liefert damit faktisch Weltkoordinaten, und die Scherung warf
+	 * die Wand weit weg ("im Boden oder in der Luft").
+	 *
+	 * Mit der Richtung geht es instanzbezogen und damit verlaesslich:
+	 *     entlang = dot(WeltPosition - ObjectPositionWS, Richtung)
+	 *     WorldPositionOffset.Z = Steigung * entlang
+	 * ObjectPositionWS ist bei einem ISM der Mittelpunkt DER INSTANZ - genau der Bezug, der fehlte.
+	 */
+	static constexpr int32 CustomDataRichtungX = 3;
+	static constexpr int32 CustomDataRichtungY = 4;
+
+	static constexpr int32 CustomDataAnzahl = 5;
 
 	/**
 	 * Belegt einen Instanzplatz und gibt seinen Index zurueck, oder INDEX_NONE.
@@ -90,6 +122,9 @@ public:
 
 	/** Setzt Lage und Groesse eines Platzes. WeltTransform, nicht relativ. */
 	void SetzeTransform(EEnergyWallPart Teil, int32 Index, const FTransform& WeltTransform);
+
+	/** Setzt die Steigung fuer die Scherung im Material (Custom Data 2). */
+	void SetzeSteigung(EEnergyWallPart Teil, int32 Index, float SteigungJeEinheit, const FVector2D& RichtungXY);
 
 	/** Setzt Sichtbarkeit (Custom Data 1). */
 	void SetzeSichtbar(EEnergyWallPart Teil, int32 Index, bool bSichtbar);
