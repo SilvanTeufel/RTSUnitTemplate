@@ -183,39 +183,49 @@ void AConstructionUnit::ApplyBuildingFootprintScale(const AWorkArea* InWorkArea)
 		return;
 	}
 
-	// Der Zielradius steht schon fest - SeedIndicatorFootprint hat ihn aus dem fertigen Gebaeude
-	// geholt (getaggte Box, sonst Gebaeudekapsel, sonst die Flaeche selbst). Er wird hier nur
-	// gelesen, deshalb MUSS SeedIndicatorFootprint vorher gelaufen sein.
-	float TargetRadius = 0.f;
-	if (bIndicatorFootprintUseBox)
+	// GLEICHES MASS AUF BEIDEN SEITEN.
+	//
+	// Der erste Anlauf rechnete den Grundriss des Gebaeudes gegen den KAPSELRADIUS der Baustelle.
+	// Das sind zwei verschiedene Dinge: die Kapsel ist auf die Bewegung ausgelegt und bei einer
+	// Baudrohne viel kleiner als ihre Darstellung. Bei einem grossen Gebaeude lief das Verhaeltnis
+	// in die Deckelung und die Baustelle wurde um ein Vielfaches zu gross - beim DataCenter
+	// sichtbar groesser als die WorkArea und als das Gebaeude selbst.
+	//
+	// Jetzt stehen auf beiden Seiten SICHTBARE Ausdehnungen: die Flaeche der WorkArea ist per
+	// Definition der Bauplatz des Gebaeudes, und die eigene Groesse kommt aus den Meshbounds.
+	if (!InWorkArea->Mesh)
 	{
-		TargetRadius = FMath::Max(IndicatorFootprintBoxExtent.X, IndicatorFootprintBoxExtent.Y);
+		return;
 	}
-	else
-	{
-		TargetRadius = IndicatorFootprintCapsuleRadius;
-	}
-
+	const FVector AreaExtent = InWorkArea->Mesh->CalcBounds(InWorkArea->Mesh->GetRelativeTransform()).BoxExtent;
+	const float TargetRadius = FMath::Max(AreaExtent.X, AreaExtent.Y);
 	if (TargetRadius <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	// Die EIGENE Groesse unskaliert nehmen: die Skalierung wird gleich gesetzt, ein skalierter
-	// Radius wuerde sich bei einem zweiten Aufruf selbst verstaerken.
-	const UCapsuleComponent* OwnCapsule = GetCapsuleComponent();
-	if (!OwnCapsule)
+	// Die EIGENE Groesse VOR dieser Skalierung. SetActorScale3D wirkt auf die Meshbounds, ein
+	// zweiter Aufruf wuerde sich sonst selbst verstaerken - deshalb durch die aktuelle Skalierung
+	// teilen statt den rohen Wert zu nehmen.
+	const FBox EigeneBounds = ComputeVisualBounds(this);
+	float OwnRadius = 0.f;
+	if (EigeneBounds.IsValid)
 	{
-		return;
+		const FVector EigeneAusdehnung = EigeneBounds.GetExtent();
+		const FVector AktuelleSkala = GetActorScale3D();
+		const float SkalaXY = FMath::Max(FMath::Abs(AktuelleSkala.X), FMath::Abs(AktuelleSkala.Y));
+		OwnRadius = FMath::Max(EigeneAusdehnung.X, EigeneAusdehnung.Y)
+			/ FMath::Max(SkalaXY, KINDA_SMALL_NUMBER);
 	}
-	const float OwnRadius = OwnCapsule->GetUnscaledCapsuleRadius();
+
+	// Rueckfall auf die Kapsel, falls noch kein Mesh steht. Dann lieber gar nicht skalieren, als
+	// mit dem falschen Mass zu skalieren - genau daran ist der erste Anlauf gescheitert.
 	if (OwnRadius <= KINDA_SMALL_NUMBER)
 	{
 		return;
 	}
 
-	// Gleichmaessig skalieren. Nur X/Y zu strecken wuerde die Drohne verzerren, und die Hoehe
-	// der Baustelle soll zum Gebaeude passen, nicht zur Drohne.
+	// Gleichmaessig skalieren; nur X/Y zu strecken wuerde die Darstellung verzerren.
 	const float Faktor = FMath::Clamp(TargetRadius / OwnRadius,
 		MinBuildingFootprintScale, MaxBuildingFootprintScale);
 

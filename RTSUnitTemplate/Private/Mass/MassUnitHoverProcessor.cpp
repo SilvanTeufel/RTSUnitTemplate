@@ -209,15 +209,20 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			const FMassAgentCharacteristicsFragment& CharFrag = CharFrags[i];
 
 			FVector BaseLocation = EntityTransform.GetLocation();
-			// Fuer die HOEHE den GROESSEREN der beiden Werte nehmen, nicht den der gerade
-			// gewaehlten Form. Eine Einheit mit Box-Kollision hat trotzdem eine Kapsel, und ist die
-			// hoeher als die Box, blieb der obere Teil der Einheit bisher unklickbar. Umgekehrt
-			// genauso. Die Breite bleibt formabhaengig (GetRadiusInDirection), weil ein
-			// aufgeweiteter Radius benachbarte Einheiten gegenseitig verdecken wuerde.
-			const float HalfHeight = FMath::Max(
-				CharFrag.CapsuleHeight,
-				CharFrag.bUseBoxComponent ? CharFrag.BoxExtent.Z : 0.f);
-			const float Height = HalfHeight * 2.0f;
+			// Die Trefferstrecke reicht vom FUSS bis zur SICHTBAREN OBERKANTE.
+			//
+			// Vorher stand hier der Wert der gerade gewaehlten Kollisionsform, danach kurzzeitig das
+			// Maximum aus Kapsel und Box. Beides beschreibt nicht, was auf dem Schirm steht: die
+			// Kapsel ist auf die Bewegung ausgelegt, die Box auf den Grundriss. Das Maximum fiel
+			// deshalb je nach Einheit zu hoch oder zu niedrig aus - bei den meisten zu hoch.
+			//
+			// VisualTopOffset kommt aus den Meshbounds und wird einmalig bei der Bindung erfasst.
+			// Fehlt er (0), gilt das alte Verhalten.
+			const float HalfHeight = CharFrag.bUseBoxComponent ? CharFrag.BoxExtent.Z : CharFrag.CapsuleHeight;
+			const float FootToTop = (CharFrag.VisualTopOffset > KINDA_SMALL_NUMBER)
+				? (CharFrag.VisualTopOffset + CharFrag.CapsuleHeight)
+				: (HalfHeight * 2.0f);
+			const float Height = FootToTop;
 
 			// Die Trefferkapsel aus der EIGENEN Pose aufbauen, nicht aus LastGroundLocation.
 			//

@@ -1206,6 +1206,17 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
     // UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Characteristics")
     // bool bIsOnPlattform = false; // Dein Plattform-Flag
 
+	/**
+	 * Oberkante der SICHTBAREN Einheit, relativ zur Aktormitte. 0 = nicht erfasst.
+	 *
+	 * Weder die Kapsel noch die Box beschreiben, was auf dem Schirm steht: die Kapsel ist auf die
+	 * Bewegung ausgelegt, die Box auf den Grundriss. Der Hover brauchte aber genau das Sichtbare -
+	 * ein Maximum aus beiden trifft es nur zufaellig und faellt je nach Einheit zu hoch oder zu
+	 * niedrig aus. Einmalig bei der Bindung aus den Meshbounds erfasst.
+	 */
+	UPROPERTY()
+	float VisualTopOffset = 0.f;
+
 	float GetRadiusInDirection(const FVector& WorldDirection, const FRotator& WorldRotation) const
 	{
 		if (!bUseBoxComponent) return CapsuleRadius;
