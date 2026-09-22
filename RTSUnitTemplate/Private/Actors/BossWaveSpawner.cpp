@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/BossWaveSpawner.h"
 
@@ -108,9 +108,47 @@ void ABossWaveSpawner::SpawnWave()
 		}
 	}
 
+	// Begleiter derselben Welle - siehe EscortClasses. Sie bekommen die Stufe des Bosses, damit
+	// die Welle als Ganzes mitwaechst und nicht nur ihr Anfuehrer.
+	int32 Begleiter = 0;
+	if (EscortClasses.Num() > 0 && EscortsPerWave > 0)
+	{
+		const int32 Anzahl = FMath::Clamp(EscortsPerWave + WaveIndex * EscortsAddedPerWave,
+			0, FMath::Max(0, MaxEscortsPerWave));
+
+		for (int32 i = 0; i < Anzahl; ++i)
+		{
+			TSubclassOf<AUnitBase> Klasse = EscortClasses[(WaveIndex + i) % EscortClasses.Num()];
+			if (!Klasse)
+			{
+				continue;
+			}
+
+			FUnitSpawnParameter Parameter;
+			Parameter.UnitBaseClass = Klasse;
+			Parameter.UnitCount = 1;
+			Parameter.State = UnitData::PatrolRandom;
+			Parameter.StatePlaceholder = UnitData::PatrolRandom;
+			Parameter.WaypointTag = WaypointTag;
+			Parameter.TeamId = TeamId;
+			Parameter.CanBeSelected = false;
+
+			const FVector Streuung(FMath::FRandRange(-SpawnRadius, SpawnRadius),
+			                       FMath::FRandRange(-SpawnRadius, SpawnRadius), 0.f);
+			AUnitBase* Einheit = GameMode->SpawnSingleUnit(Parameter, GetActorLocation() + Streuung,
+				nullptr, TeamId, nullptr);
+
+			if (Einheit)
+			{
+				HebeAufStufe(Einheit, Stufe);
+				++Begleiter;
+			}
+		}
+	}
+
 	++WaveIndex;
-	UE_LOG(LogTemp, Log, TEXT("[BossWelle] Welle %d: %d Boss(e) auf Stufe %d gesetzt (naechste Stufe %d)"),
-		WaveIndex, Gesetzt, Stufe, GetNextWaveLevel());
+	UE_LOG(LogTemp, Warning, TEXT("[BossWelle] Welle %d: %d Boss(e) und %d Begleiter auf Stufe %d gesetzt (naechste Stufe %d)"),
+		WaveIndex, Gesetzt, Begleiter, Stufe, GetNextWaveLevel());
 }
 
 void ABossWaveSpawner::HebeAufStufe(AUnitBase* Einheit, int32 Zielstufe) const
