@@ -265,6 +265,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveUnitFromSelection(AUnitBase* Unit);
 
+	/**
+	 * Tauscht eine ausgewaehlte Einheit gegen eine andere, ohne die uebrige Auswahl anzutasten.
+	 *
+	 * Gebaut fuer die Baustelle: verschwindet sie, weil das Gebaeude fertig ist, soll der Spieler
+	 * das GEBAEUDE ausgewaehlt haben und nicht ins Leere greifen. War die alte Einheit gar nicht
+	 * ausgewaehlt, passiert nichts.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ReplaceSelectedUnit(AUnitBase* OldUnit, AUnitBase* NewUnit);
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetRunLocation(AUnitBase* Unit, const FVector& DestinationLocation);
 	
