@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/LevelUnit.h"
 #include "GameStates/UpgradeGameState.h"
@@ -115,9 +115,16 @@ void ALevelUnit::LevelUp_Implementation()
 		LevelData.TalentPoints += LevelUpData.TalentPointsPerLevel; // Define TalentPointsPerLevel as appropriate
 		LevelData.Experience -= LevelUpData.ExperiencePerLevel*LevelData.CharacterLevel;
 		UpdateCachedLevelString();
+
+		// Auch der einzelne Aufstieg haelt den Gesundheitsstand - OnLevelUp ist ein
+		// Blueprint-Ereignis und kann dort ebenfalls heilen.
+		const float HealthBeforeSingleLevelUp = (Attributes && !bFullHealOnLevelUp) ? Attributes->GetHealth() : -1.f;
+
 		OnLevelUp(LevelData.CharacterLevel);
 		// Trigger any additional level-up effects or logic here
 		LevelVisibilityCheck();
+
+		RestoreHealthAfterLevelUp(HealthBeforeSingleLevelUp);
 	}
 
 	//UE_LOG(LogTemp, Log, TEXT("After Level Up: Level %d, Experience %d"), LevelData.CharacterLevel, LevelData.Experience);
@@ -125,6 +132,11 @@ void ALevelUnit::LevelUp_Implementation()
 
 void ALevelUnit::AutoLevelUp()
 {
+	// Siehe bFullHealOnLevelUp: der Gesundheitsstand wird ueber den GESAMTEN Aufstieg gehalten,
+	// nicht nur ueber LevelUp() - die Attributsinvestitionen darunter heben MaxHealth an, und
+	// genau daran haengt die Auffuellung.
+	const float HealthBeforeLevelUp = (Attributes && !bFullHealOnLevelUp) ? Attributes->GetHealth() : -1.f;
+
 	LevelUp();
 
 	for(int i = 0; i < AutolevelConfig[0]; i++)
@@ -144,6 +156,23 @@ void ALevelUnit::AutoLevelUp()
 
 	for(int i = 0; i < AutolevelConfig[5]; i++)
 		InvestPointIntoMagicResistance();
+
+	RestoreHealthAfterLevelUp(HealthBeforeLevelUp);
+}
+
+void ALevelUnit::RestoreHealthAfterLevelUp(float HealthBeforeLevelUp)
+{
+	// Negativ heisst: nichts zu tun (Auffuellen ist erlaubt oder es gab keine Attribute).
+	if (HealthBeforeLevelUp < 0.f || !Attributes)
+	{
+		return;
+	}
+
+	const float Wiederhergestellt = FMath::Min(HealthBeforeLevelUp, Attributes->GetMaxHealth());
+	if (!FMath::IsNearlyEqual(Attributes->GetHealth(), Wiederhergestellt))
+	{
+		Attributes->SetAttributeHealth(Wiederhergestellt);
+	}
 }
 
 void ALevelUnit::SetLevel(int32 CharLevel)
