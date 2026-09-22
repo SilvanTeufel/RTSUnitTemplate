@@ -2,9 +2,26 @@
 
 
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "HAL/IConsoleManager.h"
 #include "LandscapeProxy.h"
 #include "System/RTSBeaconSubsystem.h"
 #include "Controller/PlayerController/CameraControllerBase.h" // LUX-ANPASSUNG (16.08.2026): fuer die Direktsteuerungs-Ausnahme bei FMassStopWhileAimingTag
+
+static TAutoConsoleVariable<float> CVarRTS_WallPreviewInterpSpeed(
+	TEXT("rts.wallpreview.interpspeed"),
+	// 0 ist die abgenommene Vorgabe (22.09.2026). Stand vorher auf 15 und wurde ueber
+	// DefaultEngine.ini auf 0 gezogen - beim Abbau der Diagnose-CVars waere die Verzoegerung
+	// dadurch stillschweigend zurueckgekommen.
+	0.f,
+	TEXT("Wie schnell die Bauvorschau der Maus folgt. 0 = ohne Verzoegerung, hart unter dem ")
+	TEXT("Zeiger. Kleiner = traeger und damit sichtbar versetzt."),
+	ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_WallPreviewDiag(
+	TEXT("rts.wallpreview.diag"),
+	0,
+	TEXT("1 = meldet, wie weit die gezeichnete Bauvorschau von ihrer Zielposition entfernt ist."),
+	ECVF_Default);
 
 #include "EngineUtils.h"
 #include "GameplayTagsManager.h"
@@ -60,6 +77,151 @@
 using namespace RTSUnitUtils;
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
+// Vorwaertsdeklaration: GatherBlockersByBounds braucht sie, steht aber davor.
+static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent);
+
+/**
+ * Findet WorkAreas und Gebaeude, deren Ausdehnung einen Testkasten schneidet - OHNE Kollision.
+ *
+ * Warum nicht BoxOverlapActors: der fragt die Kollisionsantwort ab. Sobald an Gebaeuden
+ * CollisionProfile = NoCollision steht (genau das ist gewollt), meldet er sie nicht mehr - das
+ * Einrasten waere tot und WorkAreas liessen sich in Gebaeude hineinsetzen. Diese Fassung liest
+ * stattdessen die GEOMETRIE ueber GetActorBoundsForSnap, und die haengt nicht an der Kollision:
+ * fuer WorkAreas kommt sie aus dem Mesh, fuer Gebaeude aus Kapselradius und -hoehe. Eine Kapsel
+ * auf NoCollision behaelt ihre Masse.
+ *
+ * Bewusst nur ueber AWorkArea und ABuildingBase iteriert statt ueber alle Aktoren: nur diese
+ * beiden sollen das Setzen blockieren, und die Schleife laeuft waehrend eines Ziehvorgangs je
+ * Bild. Landschaft und Kulisse wuerden ohnehin gleich wieder herausgefiltert.
+ */
+/**
+ * Testkasten der gezogenen Flaeche an einer Wunschposition.
+ *
+ * GetOverlappingActors taugt hier nicht: das liest die REGISTRIERTEN Overlap-Ereignisse, und die
+ * setzen Kollision auf BEIDEN Seiten plus aktivierte Overlap-Events voraus. Gebaeude erfuellen
+ * das, WorkAreas nicht - genau deshalb wurde eine WorkArea zwischen zwei Tuermen nie erkannt,
+ * waehrend ein Gebaeude erkannt wurde. Mit NoCollision an Gebaeuden fiele auch der Rest weg.
+ */
+// Vorwaertsdeklarationen: FindBlockerAlongWallSpan braucht beide, steht aber davor.
+static void GatherBlockersByBounds(UWorld* World, const FVector& TestCenter, const FVector& TestExtent,
+                                   const TArray<AActor*>& ActorsToIgnore, TArray<AActor*>& OutActors);
+
+/**
+ * Liegt etwas auf der STRECKE zwischen zwei Tuermen, das die Energiewand blockiert?
+ *
+ * Diese Pruefung fehlte vollstaendig. Alle bisherigen Tests schauen nur um den gezogenen Turm
+ * oder um den Ablagepunkt herum - die Wand selbst spannt aber ueber hunderte Einheiten dazwischen,
+ * und was dort steht, sah niemand. Deshalb liess sich eine Wand durch eine WorkArea ziehen.
+ *
+ * Dass es bei GEBAEUDEN zu funktionieren schien, war ein Nebeneffekt: die sind gross genug, um den
+ * Turmbereich selbst zu beruehren, und fielen damit in die vorhandene Punktpruefung. WorkAreas sind
+ * kleiner und rutschten hindurch.
+ *
+ * Geprueft wird ein Kasten ueber die Verbindungslinie, halb so breit wie SpannBreite. Bewusst
+ * achsparallel und damit etwas grosszuegig: ein exakter gedrehter Kasten waere genauer, aber eine
+ * zu grosszuegige Sperre ist hier der harmlosere Fehler als eine Wand, die durch ein Gebaeude geht.
+ */
+static const AActor* FindBlockerAlongWallSpan(UWorld* World, const FVector& VonOrt, const FVector& BisOrt,
+                                              float SpannBreite, const TArray<AActor*>& ActorsToIgnore,
+                                              UClass* BauartDerEndpunkte)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	const FVector Mitte = (VonOrt + BisOrt) * 0.5f;
+	const FVector Halb = (BisOrt - VonOrt) * 0.5f;
+	const FVector Ausdehnung(
+		FMath::Abs(Halb.X) + SpannBreite * 0.5f,
+		FMath::Abs(Halb.Y) + SpannBreite * 0.5f,
+		FMath::Max(FMath::Abs(Halb.Z), 100.f));
+
+	TArray<AActor*> Treffer;
+	GatherBlockersByBounds(World, Mitte, Ausdehnung, ActorsToIgnore, Treffer);
+
+	for (AActor* Kandidat : Treffer)
+	{
+		// Nur Bauplaetze blockieren; Ressourcenstellen sind keine Hindernisse - dieselbe Regel wie
+		// bei der Ablagepruefung, sonst koennte die KI neben Ressourcen gar nicht mehr bauen.
+		if (const AWorkArea* WA = Cast<AWorkArea>(Kandidat))
+		{
+			if (WA->Type != WorkAreaData::BuildArea) continue;
+		}
+
+		// ANDERE TUERME DERSELBEN ART SIND KEINE SPERRE.
+		//
+		// Messung vom 22.09.2026: die erste Fassung meldete 256 Mal "WallTower_C_2 liegt auf der
+		// Wandstrecke zwischen WallTower_C_9 und WallTower_C_1". WallTower stehen bauartbedingt in
+		// einer Reihe - ein dritter Turm zwischen zweien ist der Normalfall und nicht das, was der
+		// Spieler als Hindernis meint. Wer dieselbe Klasse hat wie die beiden Endpunkte, gehoert
+		// zur Wandkette und wird uebergangen.
+		if (BauartDerEndpunkte && Kandidat->GetClass() == BauartDerEndpunkte)
+		{
+			continue;
+		}
+
+		return Kandidat;
+	}
+
+	return nullptr;
+}
+
+static void GetDraggedTestBox(AWorkArea* Dragged, const FVector& AtLocation, FVector& OutCenter, FVector& OutExtent)
+{
+	OutCenter = AtLocation;
+	OutExtent = FVector(50.f, 50.f, 50.f);
+	if (!Dragged || !Dragged->Mesh)
+	{
+		return;
+	}
+
+	const FBoxSphereBounds B = Dragged->Mesh->CalcBounds(Dragged->Mesh->GetComponentTransform());
+	// Die Meshmitte kann neben dem Aktorpunkt liegen; der Versatz wandert mit.
+	OutCenter = AtLocation + (B.Origin - Dragged->GetActorLocation());
+	OutExtent = B.BoxExtent;
+}
+
+static void GatherBlockersByBounds(UWorld* World, const FVector& TestCenter, const FVector& TestExtent,
+                                   const TArray<AActor*>& ActorsToIgnore, TArray<AActor*>& OutActors)
+{
+	OutActors.Reset();
+	if (!World)
+	{
+		return;
+	}
+
+	const FBox TestBox = FBox::BuildAABB(TestCenter, TestExtent);
+
+	auto Pruefe = [&](AActor* Kandidat)
+	{
+		if (!IsValid(Kandidat) || ActorsToIgnore.Contains(Kandidat))
+		{
+			return;
+		}
+
+		FVector Mitte, Ausdehnung;
+		if (!GetActorBoundsForSnap(Kandidat, Mitte, Ausdehnung))
+		{
+			return;
+		}
+
+		if (TestBox.Intersect(FBox::BuildAABB(Mitte, Ausdehnung)))
+		{
+			OutActors.Add(Kandidat);
+		}
+	};
+
+	for (TActorIterator<AWorkArea> It(World); It; ++It)
+	{
+		Pruefe(*It);
+	}
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		Pruefe(*It);
+	}
+}
+
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent)
 {
 	if (!Actor)
@@ -82,6 +244,23 @@ static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& Ou
 	// For buildings: approximate footprint as a square using the capsule radius (radius*2 side length)
 	if (ABuildingBase* Bld = Cast<ABuildingBase>(Actor))
 	{
+		// EINE BOX SCHLAEGT DIE KAPSEL.
+		//
+		// Der Kapselradius ist ein grober Ersatz und bei laenglichen oder grossen Gebaeuden deutlich
+		// ZU KLEIN - die Wandstrecke lief dann sichtbar durch ein Gebaeude, ohne dass die Pruefung
+		// etwas fand. Wer eine Box mitbringt (Komponente vom Typ UBoxComponent oder mit dem Tag
+		// "BoxCollision"), liefert damit das ehrlichere Mass; die Kapsel bleibt der Rueckfall.
+		for (UActorComponent* Komponente : Bld->GetComponents())
+		{
+			UBoxComponent* Box = Cast<UBoxComponent>(Komponente);
+			if (!Box && Komponente && !Komponente->ComponentHasTag(TEXT("BoxCollision"))) continue;
+			if (!Box) continue;
+
+			OutCenter = Box->GetComponentLocation();
+			OutExtent = Box->GetScaledBoxExtent();
+			return true;
+		}
+
 		if (UCapsuleComponent* Capsule = Bld->FindComponentByClass<UCapsuleComponent>())
 		{
 			float R = Capsule->GetScaledCapsuleRadius();
@@ -1506,6 +1685,7 @@ FVector AExtendedControllerBase::ComputeGroundedLocation(AWorkArea* DraggedArea,
 		FCollisionQueryParams LocalParams = Params;
 		FVector LocalStart = TraceStart;
 		FVector LocalEnd = TraceEnd;
+		FString ZuletztGetroffen = TEXT("nichts");
 		while (Tries < MaxTries && World->LineTraceSingleByChannel(Hit, LocalStart, LocalEnd, ECC_Visibility, LocalParams))
 		{
 			if (Hit.GetActor() && Hit.GetActor()->IsA(ALandscape::StaticClass()))
@@ -1514,9 +1694,35 @@ FVector AExtendedControllerBase::ComputeGroundedLocation(AWorkArea* DraggedArea,
 				return Result;
 			}
 			// Not a landscape: ignore and continue tracing further down from just below this hit
+			ZuletztGetroffen = Hit.GetActor() ? Hit.GetActor()->GetClass()->GetName() : TEXT("<ohne Aktor>");
 			LocalParams.AddIgnoredActor(Hit.GetActor());
 			LocalStart = Hit.ImpactPoint - FVector(0.f, 0.f, 1.f);
 			++Tries;
+		}
+
+		// RUECKFALL: kein Landschaftstreffer in MaxTries Versuchen.
+		//
+		// Vorher wurde hier DesiredLocation unveraendert zurueckgegeben - damit landet der
+		// AKTORPUNKT auf der Wunschhoehe statt der Mesh-UNTERKANTE, und der Mesh steckt um
+		// OffsetActorToBottom im Boden. Genau das ist das gemeldete "zu tief gestartet": es
+		// trifft nur zu, wenn der Strahl versagt, deshalb sass die Vorschau meistens richtig.
+		// Ein Strahl versagt hier, wenn acht Nicht-Landschaft-Treffer uebereinanderliegen -
+		// PCG-Volumen fangen ECC_Visibility ab und sind der bekannte Fall dafuer.
+		//
+		// Jetzt wird wenigstens dieselbe Rechnung wie beim Treffer angewandt, nur mit der
+		// Wunschhoehe als Boden. Das ist nicht so gut wie ein echter Treffer, aber es setzt die
+		// Unterkante auf den Boden statt den Pivot.
+		Result.Z = DesiredLocation.Z - OffsetActorToBottom;
+
+		// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
+		// Meldet, dass und warum der Rueckfall gegriffen hat. Bleibt die Zeile im Log aus,
+		// waehrend die Vorschau trotzdem zu tief sitzt, ist diese Erklaerung WIDERLEGT.
+		if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("[WandVorschau] RUECKFALL: kein Landschaftstreffer nach %d Versuchen (zuletzt '%s'), ")
+				TEXT("Z %.0f -> %.0f, Unterkante liegt %.0f uu unter dem Aktorpunkt"),
+				Tries, *ZuletztGetroffen, DesiredLocation.Z, Result.Z, -OffsetActorToBottom);
 		}
 	}
 	return Result;
@@ -1536,15 +1742,9 @@ AActor* AExtendedControllerBase::CheckForSnapOverlap(AWorkArea* DraggedActor, co
 	// We'll test with a BoxOverlap at the new position
 	TArray<AActor*> OverlappedActors;
 
-	bool bAnyOverlap = UKismetSystemLibrary::BoxOverlapActors(
-		this,                              // WorldContext
-		TestLocation,                      // Location for the box center
-		Extent,                            // Half-size extents
-		TArray<TEnumAsByte<EObjectTypeQuery>>(),  // Object types to consider
-		AActor::StaticClass(),             // Class filter
-		TArray<AActor*>(),                 // Actors to ignore
-		OverlappedActors
-	);
+	// Ueber die Geometrie statt ueber die Kollision - siehe GatherBlockersByBounds.
+	GatherBlockersByBounds(GetWorld(), TestLocation, Extent, TArray<AActor*>(), OverlappedActors);
+	const bool bAnyOverlap = OverlappedActors.Num() > 0;
 
 	if (bAnyOverlap)
 	{
@@ -1841,15 +2041,9 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         // Test around the prospective mesh center (actor location + center offset)
         const FVector ProspectiveCenter = GroundedSnap + CenterToActorOffset;
 
-        bool bSuccess = UKismetSystemLibrary::BoxOverlapActors(
-            GetWorld(),
-            ProspectiveCenter,           // Test at the final grounded mesh center position
-            InflatedExtent,              // Half-extent (X, Y, Z) + gap to ensure clearance
-            ObjectTypes,
-            AActor::StaticClass(),
-            ActorsToIgnore,
-            OverlappingActors
-        );
+        // Ueber die Geometrie statt ueber die Kollision - siehe GatherBlockersByBounds.
+        GatherBlockersByBounds(GetWorld(), ProspectiveCenter, InflatedExtent, ActorsToIgnore, OverlappingActors);
+        const bool bSuccess = OverlappingActors.Num() > 0;
 
         if (bSuccess)
         {
@@ -2324,8 +2518,9 @@ void AExtendedControllerBase::MoveDraggedAreaFreely(AWorkArea* DraggedWorkArea, 
 
         const FVector TestCenter = FVector(GroundedPos.X + CenterToActorOffset.X, GroundedPos.Y + CenterToActorOffset.Y, GroundedPos.Z + CenterToActorOffset.Z);
 
-        const bool bOverlap = UKismetSystemLibrary::BoxOverlapActors(
-            GetWorld(), TestCenter, InflatedExtent, ObjectTypes, AActor::StaticClass(), Ignored, Hits);
+        // Ueber die Geometrie statt ueber die Kollision - siehe GatherBlockersByBounds.
+        GatherBlockersByBounds(GetWorld(), TestCenter, InflatedExtent, Ignored, Hits);
+        const bool bOverlap = Hits.Num() > 0;
 
         if (bOverlap)
         {
@@ -2827,11 +3022,82 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		PlaneZ = UnitCenter.Z - UnitExtent.Z;
 	}
 
+	// DIE BEZUGSEBENE AUF DAS GELAENDE UNTER DEM ZEIGER NACHZIEHEN.
+	//
+	// Die Ebene lag fest auf der Sockelhoehe des AUSGANGSTURMS. Das haelt die Vorschau ruhig,
+	// wenn der Mausstrahl mal ein Gebaeudedach und mal den Boden trifft - aber nur, solange das
+	// Gelaende unter dem Zeiger auf derselben Hoehe liegt wie der Turm.
+	//
+	// GEMESSEN am 22.09.2026 auf Level_6_Survive: Turmsockel 512.1, Zeiger auf der unteren
+	// Terrasse bei 190.2. Der Strahl trifft die zu hoch liegende Ebene 1396 bis 1792 uu ZU WEIT
+	// AUSSEN - die Flaeche wird also an einem ganz anderen Ort gesetzt und nimmt dort die
+	// Bodenhoehe. Der Fehler ist nicht gedeckelt, er waechst mit dem Hoehenunterschied und mit
+	// dem Abstand zum Turm; deshalb faellt er bei kleinen Stufen nicht auf. Mit Einrasten hat er
+	// nichts zu tun - er sitzt davor.
+	//
+	// Loesung ohne die Ruhe aufzugeben: dieselbe Ebenenprojektion, aber die Ebene wandert in zwei
+	// bis drei Runden auf die Gelaendehoehe am zuletzt getroffenen Punkt. Auf ebenem Grund ist
+	// nach der ersten Runde Schluss, an einer Stufe nach der zweiten.
+	auto GelaendehoeheBei = [&](const FVector& Punkt, float& OutZ) -> bool
+	{
+		FHitResult BodenTreffer;
+		FCollisionQueryParams BodenParams(SCENE_QUERY_STAT(ExtensionPlaneGround), true);
+		BodenParams.AddIgnoredActor(Unit);
+		BodenParams.AddIgnoredActor(DraggedWorkArea);
+		const FVector Von(Punkt.X, Punkt.Y, Punkt.Z + 5000.f);
+		const FVector Bis(Punkt.X, Punkt.Y, Punkt.Z - 5000.f);
+
+		// Gebaeude und Bauflaechen sind kein Gelaende - sonst kaeme das Dachspringen zurueck,
+		// gegen das die feste Ebene urspruenglich eingefuehrt wurde.
+		for (int32 Versuch = 0; Versuch < 8; ++Versuch)
+		{
+			if (!GetWorld()->LineTraceSingleByChannel(BodenTreffer, Von, Bis, ECC_Visibility, BodenParams))
+			{
+				return false;
+			}
+			AActor* Getroffen = BodenTreffer.GetActor();
+			if (Getroffen && (Getroffen->IsA(AWorkArea::StaticClass()) || GetBuildingBaseFromActor(Getroffen) != nullptr))
+			{
+				BodenParams.AddIgnoredActor(Getroffen);
+				continue;
+			}
+			OutZ = BodenTreffer.Location.Z;
+			return true;
+		}
+		return false;
+	};
+
 	FVector StableMouseLocation = bHitOccurred ? Hit.Location : PlacementTraceEnd;
 	if (!FMath::IsNearlyZero(TraceDir.Z))
 	{
-		float t = (PlaneZ - PlacementTraceStart.Z) / TraceDir.Z;
-		StableMouseLocation = PlacementTraceStart + TraceDir * t;
+		for (int32 Runde = 0; Runde < 3; ++Runde)
+		{
+			const float t = (PlaneZ - PlacementTraceStart.Z) / TraceDir.Z;
+			if (t <= 0.f)
+			{
+				break; // Ebene liegt hinter der Kamera - der alte Punkt bleibt stehen.
+			}
+			StableMouseLocation = PlacementTraceStart + TraceDir * t;
+
+			float NeueEbeneZ = PlaneZ;
+			if (!GelaendehoeheBei(StableMouseLocation, NeueEbeneZ))
+			{
+				break; // Kein Gelaende gefunden: bei der Sockelebene bleiben.
+			}
+			const bool bEingependelt = FMath::IsNearlyEqual(NeueEbeneZ, PlaneZ, 1.f);
+			PlaneZ = NeueEbeneZ;
+			if (bEingependelt)
+			{
+				// Noch einmal mit der endgueltigen Ebene schneiden, sonst bliebe der Punkt aus
+				// der vorletzten Runde stehen.
+				const float tEnd = (PlaneZ - PlacementTraceStart.Z) / TraceDir.Z;
+				if (tEnd > 0.f)
+				{
+					StableMouseLocation = PlacementTraceStart + TraceDir * tEnd;
+				}
+				break;
+			}
+		}
 	}
 	
 	// Fallback for distance checks if no hit occurred
@@ -2840,6 +3106,31 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	FVector TargetLoc;
 	FRotator TargetRot;
 	GetSnappedExtensionTransform(Unit, StableMouseLocation, TargetLoc, TargetRot);
+
+	// VORSCHAUMESH IN DIE AUSGANGSLAGE, BEVOR GERECHNET WIRD.
+	//
+	// Die Neigung der Vorschauflaeche ist zurueckgenommen (siehe "DREIMAL GESCHEITERT" weiter
+	// unten). Dieser Abgleich bleibt als Wache stehen: die Z-Korrektur weiter unten rechnet aus
+	// MeshComp->CalcBounds, und eine Drehung oder ein Versatz am Mesh - woher auch immer, etwa
+	// aus einem Blueprint oder einem alten Stand - ginge dort als echte Meshausdehnung ein und
+	// verschoebe die Flaeche gegen den Boden. Er kostet im Normalfall einen Vergleich.
+	if (UStaticMeshComponent* VorschauMesh = DraggedWorkArea->Mesh)
+	{
+		if (!VorschauMesh->GetRelativeRotation().IsNearlyZero() || !FMath::IsNearlyZero(VorschauMesh->GetRelativeLocation().Z))
+		{
+			FVector Rel = VorschauMesh->GetRelativeLocation();
+			Rel.Z = 0.f;
+			VorschauMesh->SetRelativeLocation(Rel);
+			VorschauMesh->SetRelativeRotation(FRotator::ZeroRotator);
+		}
+	}
+
+	// Woher stammt die Hoehe in DIESEM Bild?
+	//
+	// Der gemeldete Fehler rastet ein: war die Maus einmal auf einer tieferen Landschaftsebene,
+	// bleibt der Versatz. Ein je Bild neu gerechneter Wert kann das nicht - also schleppt eine
+	// der Quellen Zustand mit. Die Spur zeigt, welche zum Zeitpunkt des Einrastens gewonnen hat.
+	const TCHAR* HoehenQuelle = TEXT("Snap-Rechnung (UnitLoc.Z)");
 
 	// Rotation anwenden
 	DraggedWorkArea->SetActorRotation(TargetRot);
@@ -2964,9 +3255,14 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 				Best = DirectTarget; BestD = D;
 			}
 
-			// b) Overlaps as secondary source
+			// b) Overlaps as secondary source - ueber die Geometrie, siehe GetDraggedTestBox.
 			TArray<AActor*> CurrentOverlaps;
-			DraggedWorkArea->GetOverlappingActors(CurrentOverlaps);
+			{
+				FVector PruefMitte, PruefAusdehnung;
+				GetDraggedTestBox(DraggedWorkArea, DraggedWorkArea->GetActorLocation(), PruefMitte, PruefAusdehnung);
+				TArray<AActor*> Ignorieren; Ignorieren.Add(DraggedWorkArea);
+				GatherBlockersByBounds(GetWorld(), PruefMitte, PruefAusdehnung, Ignorieren, CurrentOverlaps);
+			}
 			for (AActor* OA : CurrentOverlaps)
 			{
 				ABuildingBase* BB = GetBuildingBaseFromActor(OA);
@@ -2987,6 +3283,102 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 				bFoundCompatible = true;
 				CurrentSnapActor = Best;
 				NextAllowedSnapTime = Now + SnapCooldownSeconds;
+			}
+		}
+	}
+
+	// Ergebnis der geometrischen Streckenpruefung, damit Abschnitt 7 es mitbenutzt.
+	bool bStreckeGeometrischBlockiert = false;
+
+	// 2a. Liegt etwas auf der STRECKE der kuenftigen Wand? Dann ist sie unmoeglich - Vorschau rot.
+	//
+	// ERWEITERT 22.09.2026: die Pruefung lief vorher NUR mit eingerastetem Zielturm. Zieht man die
+	// Vorschau ohne Snap durch ein Gebaeude, sah sie niemand - im Log standen deshalb 0 Treffer,
+	// waehrend sich die Wand sichtbar durch Gebaeude ziehen liess. Jetzt wird immer die Strecke
+	// vom Wirtsturm zur aktuellen Vorschauposition geprueft; ein eingerasteter Zielturm ersetzt
+	// nur den Endpunkt.
+	//
+	// Kollisionsfrei ueber GatherBlockersByBounds - die Gebaeudekollision ist abgeschaltet, ein
+	// Strahl oder Overlap wuerde also nichts mehr finden. Der Suchbereich ist der Kasten ueber die
+	// Verbindung, es werden also ohnehin nur Aktoren in Reichweite des naechsten Turms angefasst.
+	if (Unit->ExtensionMovementAllowed)
+	{
+		const FVector StreckenEnde = (bFoundCompatible && TargetBuilding)
+			? TargetBuilding->GetActorLocation()
+			: DraggedWorkArea->GetActorLocation();
+		ABuildingBase* EndpunktGebaeude = (bFoundCompatible && TargetBuilding) ? TargetBuilding : nullptr;
+		FVector EigeneMitte, EigeneAusdehnung;
+		GetDraggedTestBox(DraggedWorkArea, DraggedWorkArea->GetActorLocation(), EigeneMitte, EigeneAusdehnung);
+		const float SpannBreite = FMath::Max(EigeneAusdehnung.X, EigeneAusdehnung.Y) * 2.f;
+
+		TArray<AActor*> Ignorieren;
+		Ignorieren.Add(DraggedWorkArea);
+		Ignorieren.Add(Unit);
+		if (EndpunktGebaeude) { Ignorieren.Add(EndpunktGebaeude); }
+
+		if (const AActor* Sperre = FindBlockerAlongWallSpan(GetWorld(), Unit->GetMassActorLocation(),
+		                                                    StreckenEnde,
+		                                                    SpannBreite, Ignorieren, Unit->GetClass()))
+		{
+			bStreckeGeometrischBlockiert = true;
+			DraggedWorkArea->TemporarilyChangeMaterial();
+
+			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
+			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[WandVorschau] ROT: %s liegt auf der Wandstrecke ab %s (%s)"),
+					*Sperre->GetName(), *Unit->GetName(),
+					EndpunktGebaeude ? TEXT("bis Zielturm") : TEXT("bis Vorschauposition"));
+			}
+		}
+	}
+
+	// 2b. Rueckmeldung, wenn der Bodenhoehenunterschied das Ablegen verhindert.
+	//
+	// KORREKTUR 22.09.2026: hier stand vorher EnergyWallMaxHeightDifference - die falsche Groesse.
+	// Die entscheidet, ob zwei FERTIGE Gebaeude eine Wand bilden. Was das Ablegen verhindert, ist
+	// ExtensionGroundZThreshold in DropWorkAreaForUnit; wird er ueberschritten, wird die Flaeche
+	// zerstoert und die Faehigkeit abgebrochen. Weil die Rotfaerbung an der falschen Groesse hing,
+	// blieb sie aus, waehrend der Spieler trotzdem nicht setzen konnte.
+	//
+	// Dieselbe Rechnung wie dort: Bodenhoehe unter dem Ausgangsgebaeude gegen Bodenhoehe unter der
+	// gezogenen Flaeche, beim Einrasten mit doppeltem Spielraum.
+	{
+		FHitResult UnitHit, AreaHit;
+		const FVector Hoch(0, 0, 1000.f), Runter(0, 0, -2000.f);
+		FCollisionQueryParams Params;
+		Params.AddIgnoredActor(Unit);
+		Params.AddIgnoredActor(DraggedWorkArea);
+
+		float UnitGroundZ = Unit->GetMassActorLocation().Z;
+		float AreaGroundZ = DraggedWorkArea->GetActorLocation().Z;
+
+		if (GetWorld()->LineTraceSingleByChannel(UnitHit, Unit->GetMassActorLocation() + Hoch,
+		                                         Unit->GetMassActorLocation() + Runter, ECC_WorldStatic, Params))
+		{
+			UnitGroundZ = UnitHit.Location.Z;
+		}
+		if (GetWorld()->LineTraceSingleByChannel(AreaHit, DraggedWorkArea->GetActorLocation() + Hoch,
+		                                         DraggedWorkArea->GetActorLocation() + Runter, ECC_WorldStatic, Params))
+		{
+			AreaGroundZ = AreaHit.Location.Z;
+		}
+
+		const float Basis = GetEffectiveExtensionGroundZThreshold(Unit);
+		const float Grenze = bFoundCompatible ? (Basis * 2.f) : Basis;
+		const float Unterschied = FMath::Abs(UnitGroundZ - AreaGroundZ);
+
+		if (Unterschied > Grenze)
+		{
+			DraggedWorkArea->TemporarilyChangeMaterial();
+
+			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
+			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[WandVorschau] ROT: Bodenunterschied %.0f uu, erlaubt sind %.0f (ExtensionGroundZThreshold)"),
+					Unterschied, Grenze);
 			}
 		}
 	}
@@ -3023,11 +3415,24 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			if (bFoundValidGround)
 			{
 				TargetLoc.Z = GroundHit.Location.Z;
+				HoehenQuelle = TEXT("freier Bodenstrahl");
+			}
+
+			// Wirtshoehe schlaegt den Boden - siehe ABuildingBase::bExtensionFollowsHostHeight.
+			if (Unit->bExtensionFollowsHostHeight)
+			{
+				FVector WirtMitte, WirtAusdehnung;
+				if (GetActorBoundsForSnap(Unit, WirtMitte, WirtAusdehnung))
+				{
+					TargetLoc.Z = WirtMitte.Z - WirtAusdehnung.Z;
+					HoehenQuelle = TEXT("Sockelhoehe des Wirtsturms");
+				}
 			}
 		}
 		else
 		{
 			TargetLoc.Z += Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
+			HoehenQuelle = TEXT("ExtensionOffset ohne Bodenstrahl");
 		}
 
 		// Z-Korrektur für Mesh-Bodenabstand (Nur bei Bodenplatzierung)
@@ -3038,16 +3443,43 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			const float CurrentActorZ = DraggedWorkArea->GetActorLocation().Z;
 			const float Clearance = 2.f;
 			// Berechnet die neue Z-Position so, dass die Unterkante des Meshes auf Bodenhöhe + Clearance liegt
+			//
+			// SELBSTBEZUG: die neue Hoehe wird aus der AKTUELLEN Aktorhoehe gerechnet. Algebraisch
+			// kuerzt sich CurrentActorZ gegen BottomZ weg - ABER nur, solange die Bounds zur
+			// aktuellen Transformation passen. Tun sie das nicht, traegt dieser Schritt den Fehler
+			// des Vorbildes weiter, und genau so sieht ein Einrasten aus.
 			TargetLoc.Z = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
+			HoehenQuelle = TEXT("freier Pfad + Unterkanten-Korrektur");
 		}
 
 		// 4. Overlap Snap Check (An der nun korrigierten Bodenposition)
 		FVector PreOverlapCheckLoc = DraggedWorkArea->GetActorLocation();
 		DraggedWorkArea->SetActorLocation(TargetLoc);
 		DraggedWorkArea->UpdateOverlaps();
-		
+
+		// Ueber die Geometrie statt ueber registrierte Overlap-Ereignisse: so wird auch eine
+		// WorkArea zwischen den Tuermen erkannt (Punkt 3) und es funktioniert ohne Kollision.
 		TArray<AActor*> Overlaps;
-		DraggedWorkArea->GetOverlappingActors(Overlaps);
+		{
+			FVector PruefMitte, PruefAusdehnung;
+			GetDraggedTestBox(DraggedWorkArea, TargetLoc, PruefMitte, PruefAusdehnung);
+			TArray<AActor*> Ignorieren; Ignorieren.Add(DraggedWorkArea);
+			GatherBlockersByBounds(GetWorld(), PruefMitte, PruefAusdehnung, Ignorieren, Overlaps);
+
+			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
+			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0 && Overlaps.Num() > 0)
+			{
+				FString Namen;
+				for (const AActor* OA : Overlaps)
+				{
+					if (!OA) continue;
+					Namen += (Namen.IsEmpty() ? TEXT("") : TEXT(", "));
+					Namen += FString::Printf(TEXT("%s(%s)"), *OA->GetName(),
+						OA->IsA(AWorkArea::StaticClass()) ? TEXT("WorkArea") : TEXT("Gebaeude"));
+				}
+				UE_LOG(LogTemp, Warning, TEXT("[WandVorschau] blockiert durch %d: %s"), Overlaps.Num(), *Namen);
+			}
+		}
 		
 		// Priorität 1: Kompatible Gebäude suchen
 		if (Unit->ExtensionMovementAllowed)
@@ -3099,6 +3531,22 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		TargetLoc.X = BuildingLoc.X;
 		TargetLoc.Y = BuildingLoc.Y;
 
+		// KEINE NEIGUNG DER WORKAREA. Eine Bauflaeche liegt auf dem Boden - sie uebernimmt dessen
+		// HOEHE, nicht dessen Neigung.
+		//
+		// Hier stand ein Nickwinkel aus dem Hoehenunterschied zum Zielturm, damit die Vorschau
+		// dieselbe Neigung zeigt wie die spaetere Wand. Zwei Gruende, warum er weg ist:
+		//
+		// 1. Die Begruendung ist hinfaellig. AEnergyWall dreht sich seit dem 22.09.2026 nur noch im
+		//    Gierwinkel, das Gefaelle macht die Scherung im Material. Die Vorschau versprach also
+		//    eine Neigung, die die Wand gar nicht mehr hat.
+		// 2. Er blieb nicht in der Vorschau. Er ging nach ServerMeshRotationBuilding, und
+		//    HandleSpawnBuildingRequest reicht den als SpawnParameter.ServerMeshRotation mit
+		//    bOverrideServerMeshRotation=true an das fertige Gebaeude weiter - ein ueber eine
+		//    Steigung eingerasteter WallTower wurde dadurch SCHIEF gebaut.
+		//
+		// Der Gierwinkel aus GetSnappedExtensionTransform steht bereits in Zeile ~3134 und bleibt.
+
 		bool bGroundSet = false;
 
 		// Use a LineTrace to find the ground/floor at the snapped building's position
@@ -3130,6 +3578,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 				TargetLoc.Z = GroundHit.Location.Z;
 				bGroundSet = true;
+				HoehenQuelle = TEXT("Bodenstrahl am Snap-Gebaeude");
 				break;
 			}
 		}
@@ -3138,14 +3587,31 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		{
 			// Fallback: Adjust Z to the bottom of the target building's capsule (using helper)
 			FVector TB_Center, TB_Extent;
-			if (GetActorBoundsForSnap(TargetBuilding, TB_Center, TB_Extent))
+			const bool bBoundsOk = GetActorBoundsForSnap(TargetBuilding, TB_Center, TB_Extent);
+			if (bBoundsOk)
 			{
 				TargetLoc.Z = TB_Center.Z - TB_Extent.Z;
+				HoehenQuelle = TEXT("Gebaeudeunterkante (Rueckfall)");
 			}
 			else
 			{
 				// If bounds fail, fall back to building center (pivot)
 				TargetLoc.Z = BuildingLoc.Z;
+				HoehenQuelle = TEXT("Gebaeude-PIVOT (grober Rueckfall)");
+			}
+
+			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
+			//
+			// Dieser Anbau-Pfad hat eine EIGENE Bodensuche und laeuft nicht durch
+			// ComputeGroundedLocation - die dortige RUECKFALL-Zeile kann hier also nichts melden.
+			// Genau deshalb blieb "zu tief gestartet" bisher unsichtbar: gemessen wurde ein
+			// Rueckfall, den dieser Pfad gar nicht benutzt.
+			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
+			{
+				UE_LOG(LogTemp, Warning,
+					TEXT("[WandVorschau] Bodensuche im Anbaupfad FEHLGESCHLAGEN - Hoehe kommt jetzt aus %s, Z = %.0f"),
+					bBoundsOk ? TEXT("der Gebaeudeunterkante") : TEXT("dem Gebaeude-PIVOT (grob)"),
+					TargetLoc.Z);
 			}
 		}
 
@@ -3157,21 +3623,180 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			const float CurrentActorZ = DraggedWorkArea->GetActorLocation().Z;
 			const float Clearance = 2.f; // Match the clearance used in non-snapped logic
 			TargetLoc.Z = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
+			HoehenQuelle = TEXT("Snap-Pfad + Unterkanten-Korrektur");
 		}
 	}
 
 	// 6. Finale Bewegung
+	//
+	// Welcher Zweig gelaufen ist, wird gemerkt: die Diagnose stand frueher NUR im weichen Zweig
+	// und schwieg beim harten Snap komplett. Zwei Schweigepfade in einem Messwerkzeug sind einer
+	// zu viel - man kann dann nicht mehr unterscheiden, ob nichts passiert ist oder nichts
+	// gemessen wurde.
+	const TCHAR* GenutzterZweig = TEXT("weich");
+	float InterpSpeed = 0.f;
+
 	if (bFoundCompatible || Unit->ExtensionSnapMethod == EExtensionSnapMethod::None)
 	{
 		// Harter Snap ohne Verzögerung an das Gebäude oder wenn kein Snap-Lag gewünscht ist
+		GenutzterZweig = bFoundCompatible ? TEXT("harter Snap an Gebaeude") : TEXT("Snap aus");
 		DraggedWorkArea->SetActorLocation(TargetLoc);
 	}
 	else
 	{
-		// Weiche Interpolation ("Lag") zur Bodenposition
-		float InterpSpeed = 15.f;
+		// Weiche Interpolation ("Lag") zur Bodenposition.
+		//
+		// Genau hier entsteht der gemeldete Versatz: die Vorschauflaeche laeuft der Maus
+		// hinterher, statt unter ihr zu sitzen. Bei 15 als Geschwindigkeit und schneller
+		// Mausbewegung bleibt sie dauerhaft zurueck. Die Geschwindigkeit ist deshalb ueber
+		// rts.wallpreview.interpspeed einstellbar; 0 schaltet die Verzoegerung ganz ab und setzt
+		// die Flaeche hart unter den Zeiger.
+		InterpSpeed = CVarRTS_WallPreviewInterpSpeed.GetValueOnGameThread();
 		FVector CurrentLoc = DraggedWorkArea->GetActorLocation();
-		DraggedWorkArea->SetActorLocation(FMath::VInterpTo(CurrentLoc, TargetLoc, DeltaSeconds, InterpSpeed));
+
+		if (InterpSpeed <= 0.f)
+		{
+			DraggedWorkArea->SetActorLocation(TargetLoc);
+		}
+		else
+		{
+			DraggedWorkArea->SetActorLocation(FMath::VInterpTo(CurrentLoc, TargetLoc, DeltaSeconds, InterpSpeed));
+		}
+
+	}
+
+	// DREIMAL GESCHEITERT - NICHT WIEDER VERSUCHEN, OHNE DEN GRUND ZU KENNEN.
+	//
+	// Versuch 3 (22.09.2026): die Flaeche NEIGEN statt anheben, damit sie am Turm auf dessen
+	// Sockelhoehe ansetzt. Beruhte auf der Annahme, die Vorschauflaeche sei ein langes Band vom
+	// Turm bis zur Maus. FALSCH: die eigene Diagnose sagt "Meshmitte 28 uu neben dem Aktorpunkt",
+	// die Flaeche ist also kompakt und um ihren Aktorpunkt zentriert. Eine Drehung um die Mitte
+	// hebt sie deshalb um den halben Hoehenunterschied an, statt nur ihr Nahende zu heben -
+	// Turm oben ergibt eine schwebende Flaeche, Turm unten eine im Boden steckende, und der
+	// Fehler waechst mit dem Hoehenunterschied. Vollstaendig zurueckgenommen.
+	//
+	// LEHRE: bevor eine Flaeche geneigt wird, gehoert gemessen, WIE LANG sie ist. Die Zahl stand
+	// die ganze Zeit im Log.
+	//
+	// Versuch 1: Mesh anheben. Die Unterkanten-Korrektur las die Anhebung im naechsten Bild als
+	// echte Meshausdehnung und senkte den Aktor um denselben Betrag - die Flaeche sank, statt zu
+	// steigen.
+	//
+	// Versuch 2: Mesh anheben und zu Beginn jedes Bildes zuruecksetzen. Damit war die Rueckkopplung
+	// weg, ABER die Anhebung schlug in die Platzierung durch: gesetzte Tuerme schwebten in der
+	// Luft, und die EnergyWall uebernahm den falschen Anschluss.
+	//
+	// Die Vorschauflaeche und das, was gebaut wird, haengen enger zusammen als es von aussen
+	// aussieht. Wer das trennen will, muss zuerst herausfinden, WELCHE Stelle die Meshlage in die
+	// Platzierung uebernimmt - nicht erneut am Mesh drehen.
+	//
+	// Frueherer Hinweis: hier stand kurzzeitig eine Anhebung des Vorschau-Meshes auf
+	// Kapselmitte des Ausgangsturms. Sie ist ZURUECKGENOMMEN - sie hat die Flaeche am ZIELende
+	// nach unten versetzt und damit ein neues Problem erzeugt, statt das alte zu loesen.
+	//
+	// Der gemeldete Fehler sitzt am ANFANG der Strecke, nicht am Ziel: dort, wo die Flaeche
+	// beginnt, wird sie zum Gebaeude hin nach unten versetzt. Eine pauschale Anhebung des ganzen
+	// Meshes trifft diesen Fall nicht - sie verschiebt beide Enden gleich.
+
+	// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
+	// Meldet, wie weit die gezeichnete Flaeche vom Ziel entfernt ist - damit laesst sich
+	// belegen, ob der Versatz aus dieser Interpolation kommt oder woandersher.
+	if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
+	{
+		const float Abstand = FVector::Dist(DraggedWorkArea->GetActorLocation(), TargetLoc);
+
+		// ZWEITE moegliche Ursache mitmessen: sitzt der Mesh ueberhaupt auf dem Aktorpunkt?
+		//
+		// Die Interpolation erklaert nur einen Versatz WAEHREND der Mausbewegung - nach dem
+		// Anhalten holt sie in Sekundenbruchteilen auf. Ein Versatz, der stehen bleibt, kann
+		// daher nicht von ihr kommen, sondern nur von einem Mesh, dessen Mittelpunkt neben dem
+		// Aktorpunkt liegt (verschobener Pivot oder relativ versetzte Komponente). Genau diese
+		// Verschiebung berechnet MoveDraggedAreaFreely fuer den Ueberlapptest bereits - beim
+		// SETZEN der Position wird sie aber nirgends ausgeglichen.
+		float MittenVersatz = 0.f;
+		if (const UStaticMeshComponent* DiagMesh = DraggedWorkArea->Mesh)
+		{
+			const FBoxSphereBounds DiagBounds = DiagMesh->CalcBounds(DiagMesh->GetComponentTransform());
+			MittenVersatz = FVector::Dist2D(DiagBounds.Origin, DraggedWorkArea->GetActorLocation());
+		}
+
+		// Nach Achsen getrennt, denn "im Boden" ist ein Z-Problem und "zur Seite" ein XY-Problem.
+		// Der bisherige 3D-Abstand vermischte beides und konnte die Meldung nicht zuordnen.
+		const FVector Rest = DraggedWorkArea->GetActorLocation() - TargetLoc;
+		const float RestXY = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), TargetLoc);
+
+		// Die gruene Flaeche ist moeglicherweise GAR NICHT dieser Mesh, sondern ein eigener
+		// AAbilityIndicator mit eigener Positionierung (MoveAbilityIndicator_Local). Solange
+		// beide Orte nicht nebeneinander im Log stehen, misst man womoeglich das falsche
+		// Objekt - vier Erklaerungen am WorkArea waren sauber, waehrend der Nutzer weiter
+		// einen Versatz sah. Deshalb hier beide, mit ihrem Abstand zueinander.
+		FString MarkerText = TEXT("kein Marker");
+		if (CurrentDraggedAbilityIndicator)
+		{
+			const FVector MarkerOrt = CurrentDraggedAbilityIndicator->GetActorLocation();
+			const FVector MarkerRest = MarkerOrt - DraggedWorkArea->GetActorLocation();
+			MarkerText = FString::Printf(
+				TEXT("Marker %s steht XY %.0f / Z %+.0f neben der Flaeche"),
+				*CurrentDraggedAbilityIndicator->GetClass()->GetName(),
+				FVector::Dist2D(MarkerOrt, DraggedWorkArea->GetActorLocation()), MarkerRest.Z);
+		}
+
+		// BEWUSST OHNE SCHWELLE. Die alte Fassung protokollierte nur bei Rueckstand > 1 uu -
+		// mit rts.wallpreview.interpspeed 0 ist der Rueckstand null, also schwieg das Log
+		// zwangsweise. Diese Stille sah aus wie "kein Versatz", war aber eingebaut. Ein
+		// Messwerkzeug, das im Normalfall nichts sagt, kann seinen eigenen Ausfall nicht von
+		// einem Nullergebnis unterscheiden.
+		UE_LOG(LogTemp, Warning,
+			TEXT("[WandVorschau] Zweig '%s', Rueckstand %.0f uu (XY %.0f, Z %+.0f), Interp %.1f, dt %.4f, ")
+			TEXT("Meshmitte %.0f uu neben dem Aktorpunkt, %s"),
+			GenutzterZweig, Abstand, RestXY, Rest.Z, InterpSpeed, DeltaSeconds, MittenVersatz, *MarkerText);
+
+		// Sockel- und Mittelhoehe des Ausgangsturms fuer den Turmbezug unten.
+		float TurmMitteZ = Unit->GetMassActorLocation().Z;
+		float TurmSockelZ = TurmMitteZ;
+		{
+			FVector TurmMitte, TurmAusdehnung;
+			if (GetActorBoundsForSnap(Unit, TurmMitte, TurmAusdehnung))
+			{
+				TurmMitteZ = TurmMitte.Z;
+				TurmSockelZ = TurmMitte.Z - TurmAusdehnung.Z;
+			}
+		}
+
+		// DER EIGENTLICHE VERGLEICH.
+		//
+		// Die Zeile darueber misst Aktorposition gegen TargetLoc - beide stammen aus DERSELBEN
+		// Rechnung. "Rueckstand 0" heisst deshalb nur "dorthin gesetzt, wohin entschieden wurde",
+		// nicht "richtig entschieden". Die Maus kommt darin gar nicht vor, und genau deshalb waren
+		// vier Erklaerungen sauber, waehrend der Versatz sichtbar blieb.
+		//
+		// StableMouseLocation ist NICHT der Punkt unter dem Zeiger: es ist der Mausstrahl
+		// geschnitten mit einer waagerechten Ebene auf Sockelhoehe des Ausgangsgebaeudes
+		// (PlaneZ). Liegt das Gelaende unter dem Zeiger hoeher oder tiefer als dieser Sockel,
+		// weicht der projizierte Punkt seitlich UND in der Hoehe ab - der Fehler waechst mit
+		// Hangneigung und Abstand zum Gebaeude. Hier steht, wie gross er gerade ist.
+		const float EbenenFehlerXY = FVector::Dist2D(StableMouseLocation, Hit.Location);
+		const float EbenenFehlerZ  = StableMouseLocation.Z - Hit.Location.Z;
+		UE_LOG(LogTemp, Warning,
+			TEXT("[WandVorschau] Bezugsebene: Zeigerpunkt %s, projiziert %s -> Abweichung XY %.0f, Z %+.0f ")
+			TEXT("(Sockelhoehe %.0f, Treffer %s). Flaeche steht XY %.0f / Z %+.0f neben dem Zeigerpunkt, ")
+			TEXT("und Z %+.0f gegenueber dem TURM (Turmsockel %.0f, Turmmitte %.0f). Hoehe aus: %s"),
+			*Hit.Location.ToCompactString(), *StableMouseLocation.ToCompactString(),
+			EbenenFehlerXY, EbenenFehlerZ, PlaneZ, bHitOccurred ? TEXT("ja") : TEXT("nein"),
+			FVector::Dist2D(DraggedWorkArea->GetActorLocation(), Hit.Location),
+			DraggedWorkArea->GetActorLocation().Z - Hit.Location.Z,
+			// DER BEZUG, AUF DEN ES ANKOMMT.
+			//
+			// Bisher stand hier nur der Abstand zum Bodenpunkt unter dem Zeiger. Der Nutzer
+			// beschreibt aber den Abstand ZUM TURM ("die Flaeche startet am Tower versetzt nach
+			// unten"), und gegen diesen Bezug wurde nie gemessen - deshalb sah die Spalte immer
+			// unauffaellig aus (fast durchgehend +2), waehrend der Fehler sichtbar blieb.
+			//
+			// Turmsockel und Turmmitte beide mit ausgeben: die WorkArea steht auf dem Boden, der
+			// Turm auf Kapselmitte. Welcher der beiden der richtige Bezug ist, entscheidet erst
+			// der Vergleich mit dem, was am Schirm zu sehen ist.
+			DraggedWorkArea->GetActorLocation().Z - TurmSockelZ,
+			TurmSockelZ, TurmMitteZ, HoehenQuelle);
 	}
 
 	if (bFoundCompatible && TargetBuilding)
@@ -3208,6 +3833,14 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		FVector TraceStart, TraceEnd;
 		float TraceZOffset = 0.f;
 		bool bPathBlocked = WallTrace(Unit, DraggedWorkArea, TraceStart, TraceEnd, TraceZOffset, TargetBuilding);
+
+		// DIE GEOMETRISCHE PRUEFUNG MUSS HIER MIT EINFLIESSEN.
+		//
+		// WallTrace ist ein LineTrace auf ECC_Visibility. Seit die Gebaeudekollision abgeschaltet
+		// ist, findet er GAR NICHTS mehr - der Strich blieb deshalb gruen, obwohl die Wand sichtbar
+		// durch ein Gebaeude lief. Die Streckenpruefung aus Abschnitt 2a arbeitet ohne Kollision
+		// und hat die Treffer laengst; sie wurden nur nicht hierher weitergereicht.
+		bPathBlocked = bPathBlocked || bStreckeGeometrischBlockiert;
 
 		// Preview only: the WorkArea (new-tower) end sits at its GROUND pivot, so the wall/line ends at the
 		// floor there, while the tower end sits at the tower's mid (center pivot). Lift the WorkArea end up
@@ -3625,15 +4258,9 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
                 // Use the prospective mesh center as overlap center
                 const FVector TestCenter = FVector(GroundedPos.X + CenterToActorOffset.X, GroundedPos.Y + CenterToActorOffset.Y, GroundedPos.Z + CenterToActorOffset.Z);
 
-                const bool bOverlap = UKismetSystemLibrary::BoxOverlapActors(
-                    GetWorld(),
-                    TestCenter,               // test around mesh center
-                    InflatedExtent,
-                    ObjectTypes,
-                    AActor::StaticClass(),
-                    Ignored,
-                    Hits
-                );
+                // Ueber die Geometrie statt ueber die Kollision - siehe GatherBlockersByBounds.
+                GatherBlockersByBounds(GetWorld(), TestCenter, InflatedExtent, Ignored, Hits);
+                const bool bOverlap = Hits.Num() > 0;
 
                 if (bOverlap)
                 {
@@ -5000,6 +5627,23 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 
 	AWorkArea* DraggedWorkArea = UnitBase->CurrentDraggedWorkArea;
 
+	// DIE OPTISCHE NEIGUNG DER VORSCHAU ZURUECKNEHMEN, BEVOR ABGELEGT WIRD.
+	//
+	// UpdateExtensionWorkAreaPosition neigt das Mesh, damit die Flaeche am Turm auf dessen
+	// Sockelhoehe beginnt. Bliebe die Neigung beim Ablegen stehen, wuerde sie zur echten Lage der
+	// gesetzten WorkArea - und jede Bounds-Pruefung hier laese sie als Meshausdehnung mit.
+	// GENAU DARAN sind die beiden frueheren Anhebeversuche gescheitert (schwebende Tuerme).
+	if (DraggedWorkArea)
+	{
+		if (UStaticMeshComponent* VorschauMesh = DraggedWorkArea->Mesh)
+		{
+			FVector Rel = VorschauMesh->GetRelativeLocation();
+			Rel.Z = 0.f;
+			VorschauMesh->SetRelativeLocation(Rel);
+			VorschauMesh->SetRelativeRotation(FRotator::ZeroRotator);
+		}
+	}
+
 	if (!DraggedWorkArea)
 	{
 		UE_LOG(LogTemp, Verbose, TEXT("DropWorkAreaForUnit: Aborted because Unit has no CurrentDraggedWorkArea."));
@@ -5141,7 +5785,46 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					if (Other->Type != WorkAreaData::BuildArea) continue;
 					// Gleiche Regel fuer das Anlegen an eine andere BuildArea: nach einem Snap zaehlt nur
 					// der extreme Overlap, sonst waere das Snappen an Flaechen genauso unbrauchbar.
-					if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < WorkAreaBlockRadius * ReichweitenFaktor) { Blocker = Other; break; }
+					// GEOMETRIE statt Mittelpunktabstand.
+					//
+					// Frueher stand hier ein reiner Abstandstest gegen WorkAreaBlockRadius, beim Snap
+					// zusaetzlich auf 35 % geschrumpft. Waehrend des Ziehens prueft
+					// GatherBlockersByBounds dagegen die echten Ausdehnungen - zwei Verfahren, die
+					// auseinanderlaufen. Eine WorkArea, die den Bauplatz beruehrt, ihren Mittelpunkt
+					// aber weiter weg hat, fiel durch das Ablage-Raster und liess sich ueberbauen.
+					// Jetzt entscheidet an beiden Stellen dasselbe.
+					FVector AndereMitte, AndereAusdehnung;
+					if (!GetActorBoundsForSnap(Other, AndereMitte, AndereAusdehnung))
+					{
+						if (FVector::Dist2D(DropLoc, Other->GetActorLocation()) < WorkAreaBlockRadius * ReichweitenFaktor) { Blocker = Other; break; }
+						continue;
+					}
+
+					FVector EigeneMitte, EigeneAusdehnung;
+					const FVector AblageOrt = DraggedWorkArea->GetActorLocation();
+				GetDraggedTestBox(DraggedWorkArea, AblageOrt, EigeneMitte, EigeneAusdehnung);
+					EigeneAusdehnung *= ReichweitenFaktor;
+
+					// BERUEHRUNG IST ERLAUBT, nur echte Ueberlappung sperrt.
+					//
+					// Die erste Fassung liess schon eine Beruehrung der Meshkaesten sperren und war
+					// damit STRENGER als der alte Abstandstest, nicht nur anders - gemeldet als
+					// "kann bei kleinsten Hoehenunterschieden nicht mehr droppen". Bauplaetze
+					// duerfen dicht nebeneinander stehen; dafuer gibt es PlacementOverlapTolerance,
+					// und genau um diesen Betrag werden beide Kaesten vorher geschrumpft.
+					const FVector Nachlass(PlacementOverlapTolerance, PlacementOverlapTolerance, 0.f);
+					const FVector EigeneEng = EigeneAusdehnung - Nachlass;
+					const FVector AndereEng = AndereAusdehnung - Nachlass;
+					if (EigeneEng.X <= 0.f || EigeneEng.Y <= 0.f || AndereEng.X <= 0.f || AndereEng.Y <= 0.f)
+					{
+						continue; // zu klein fuer eine sinnvolle Ueberlappungspruefung
+					}
+
+					if (FBox::BuildAABB(EigeneMitte, EigeneEng).Intersect(FBox::BuildAABB(AndereMitte, AndereEng)))
+					{
+						Blocker = Other;
+						break;
+					}
 				}
 			}
 
@@ -6099,7 +6782,52 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				WAGroundZ = WAHit.Location.Z;
 			}
 
- 			float ZThreshold = bWorkAreaIsSnapped ? (ExtensionGroundZThreshold * 2.f) : ExtensionGroundZThreshold;
+			// DIE WANDSTRECKE AUCH BEIM ABLEGEN PRUEFEN.
+			//
+			// Die Vorschau faerbte sich rot, gesetzt werden konnte der Turm trotzdem - die
+			// Rotfaerbung ist reine Optik, sie verhindert nichts. Gemeldet am 22.09.2026.
+			//
+			// Kollisionsfrei, weil die Gebaeudekollision abgeschaltet ist: derselbe Helfer wie
+			// beim Ziehen, damit Anzeige und Ablehnung nicht wieder auseinanderlaufen.
+			if (ABuildingBase* WirtsTurm = Cast<ABuildingBase>(UnitBase))
+			{
+				const FVector AblageOrt = DraggedWorkArea->GetActorLocation();
+				FVector EigeneMitte, EigeneAusdehnung;
+				GetDraggedTestBox(DraggedWorkArea, AblageOrt, EigeneMitte, EigeneAusdehnung);
+				const float SpannBreite = FMath::Max(EigeneAusdehnung.X, EigeneAusdehnung.Y) * 2.f;
+
+				TArray<AActor*> Ignorieren;
+				Ignorieren.Add(DraggedWorkArea);
+				Ignorieren.Add(WirtsTurm);
+
+				if (const AActor* Sperre = FindBlockerAlongWallSpan(GetWorld(),
+					WirtsTurm->GetMassActorLocation(), AblageOrt, SpannBreite, Ignorieren, WirtsTurm->GetClass()))
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[WandVorschau] ABLAGE ABGELEHNT: %s liegt auf der Wandstrecke"),
+						*Sperre->GetName());
+
+					if (InDropWorkAreaFailedSound)
+					{
+						Client_PlaySound2D(InDropWorkAreaFailedSound);
+					}
+
+					DraggedWorkArea->Destroy();
+					UnitBase->BuildArea = nullptr;
+					UnitBase->CurrentDraggedWorkArea = nullptr;
+					CancelCurrentAbility(UnitBase);
+					SendWorkerToBase(UnitBase);
+					return true;
+				}
+			}
+
+			// Denselben effektiven Wert wie die Rotfaerbung benutzen - siehe
+			// GetEffectiveExtensionGroundZThreshold. Getrennte Rechnungen liefen hier schon einmal
+			// auseinander, mit dem Ergebnis, dass die Vorschau gruen blieb und der Drop trotzdem
+			// verworfen wurde.
+			const ABuildingBase* AusgangsGebaeude = Cast<ABuildingBase>(UnitBase);
+			float ZThreshold = GetEffectiveExtensionGroundZThreshold(AusgangsGebaeude);
+			if (bWorkAreaIsSnapped) { ZThreshold *= 2.f; }
  			if (FMath::Abs(UnitGroundZ - WAGroundZ) > ZThreshold)
  			{
  				if (InDropWorkAreaFailedSound)
@@ -6286,7 +7014,24 @@ bool AExtendedControllerBase::TryConnectEnergyWall(AUnitBase* UnitBase, AWorkAre
 	return false;
 }
 
+float AExtendedControllerBase::GetEffectiveExtensionGroundZThreshold(const ABuildingBase* Initiator) const
+{
+	if (Initiator && Initiator->ExtensionGroundZThresholdOverride >= 0.f)
+	{
+		return Initiator->ExtensionGroundZThresholdOverride;
+	}
+	return ExtensionGroundZThreshold;
+}
+
 bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator, ABuildingBase* Target) const
+{
+	bool bNurHoehe = false;
+	float HoehenDiff = 0.f;
+	return IsCompatibleForEnergyWallDetailed(Initiator, Target, bNurHoehe, HoehenDiff);
+}
+
+bool AExtendedControllerBase::IsCompatibleForEnergyWallDetailed(ABuildingBase* Initiator, ABuildingBase* Target,
+                                                                bool& bOutOnlyHeightFailed, float& OutHeightDiff) const
 {
 	if (!Initiator || !Target || Initiator == Target)
 	{
@@ -6328,7 +7073,13 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 		ZDiff = FMath::Abs(Target->GetMassActorLocation().Z - Initiator->GetActorLocation().Z);
 	}
 
-	bool bZValid = ZDiff < EnergyWallSnapZTolerance;
+	const bool bZValid = ZDiff < EnergyWallMaxHeightDifference;
+
+	OutHeightDiff = ZDiff;
+
+	// Allein die Hoehe gescheitert? Nur dieser Fall rechtfertigt eine rote Vorschau - er ist der
+	// einzige, bei dem der Spieler etwas falsch macht, das er auch aendern kann.
+	bOutOnlyHeightFailed = (!bZValid && bSameClass && bInitiatorHasSpace && bTargetHasSpace);
 
 	if (!bSameClass || !bInitiatorHasSpace || !bTargetHasSpace || !bZValid)
 	{

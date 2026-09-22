@@ -191,8 +191,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool TryConnectEnergyWall(class AUnitBase* UnitBase, class AWorkArea* DraggedWorkArea, bool bIsSnapped = false);
 
+	/** Duerfen diese beiden Gebaeude eine Energiewand bilden? Blueprint-Fassung, unveraendert. */
 	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
 	bool IsCompatibleForEnergyWall(class ABuildingBase* Initiator, class ABuildingBase* Target) const;
+
+	/**
+	 * Dieselbe Pruefung mit Begruendung.
+	 *
+	 * bOutOnlyHeightFailed sagt, ob ALLE anderen Bedingungen erfuellt waren und allein der
+	 * Hoehenunterschied die Verbindung verhindert. Nur dann darf die Vorschau rot werden - sonst
+	 * wuerde jedes beliebige unpassende Gebaeude in der Naehe einen Fehlalarm ausloesen.
+	 *
+	 * Bewusst KEIN UFUNCTION: Blueprint erlaubt keine rohen Zeiger auf bool/float, und die
+	 * Blueprint-Fassung oben soll ihre Signatur behalten.
+	 */
+	bool IsCompatibleForEnergyWallDetailed(class ABuildingBase* Initiator, class ABuildingBase* Target,
+	                                       bool& bOutOnlyHeightFailed, float& OutHeightDiff) const;
 
 	// Spezialisierter Trace für Energiewände (Extensions). Prüft auf Blockaden durch Einheiten, Gebäude oder Hindernisse.
 	bool WallTrace(class ABuildingBase* Unit, AActor* TargetActor, FVector& OutStart, FVector& OutEnd, float& OutTraceZOffset, AActor* IgnoreBuilding = nullptr);
@@ -336,13 +350,43 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap, meta = (ClampMin = "0.0", ClampMax = "500.0"))
 	float PlacementOverlapTolerance = 60.f;
 
-	/** Maximum Z difference (base-to-base) allowed for two buildings to connect with an energy wall. */
+	/**
+	 * Groesster Hoehenunterschied (Sockel zu Sockel), bei dem zwei Gebaeude noch eine Energiewand
+	 * bilden duerfen.
+	 *
+	 * Hiess bis 22.09.2026 EnergyWallSnapZTolerance. Das "Snap" im Namen war irrefuehrend: der Wert
+	 * hat mit dem Einrasten nichts zu tun, er entscheidet allein darueber, OB eine Wand entstehen
+	 * darf. Fuer bereits gesetzte Werte liegt eine Umleitung in DefaultEngine.ini unter
+	 * [CoreRedirects] - ohne die waere ein im Editor gesetzter Wert beim Umbenennen verloren.
+	 *
+	 * Wird er ueberschritten, faerbt sich die Vorschau ROT, statt nur nicht einzurasten. Vorher
+	 * passierte schlicht nichts und der Spieler erfuhr den Grund nie.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
-	float EnergyWallSnapZTolerance = 10.f;
+	float EnergyWallMaxHeightDifference = 10.f;
 
-	/** Maximum ground height difference allowed for extension placement. */
+	/**
+	 * Groesster Bodenhoehenunterschied, bei dem ein Anbau ueberhaupt noch ABGELEGT werden darf.
+	 *
+	 * NICHT verwechseln mit EnergyWallMaxHeightDifference: der entscheidet, ob zwei fertige
+	 * Gebaeude eine Wand bilden duerfen. DIESER Wert entscheidet, ob der Bauplatz ueberhaupt
+	 * gesetzt werden kann - wird er ueberschritten, wird die Flaeche zerstoert und die Faehigkeit
+	 * abgebrochen. Er ist damit der Wert, den der Spieler als "Turm laesst sich nicht setzen"
+	 * erlebt, und deshalb faerbt er auch die Vorschau rot.
+	 *
+	 * Beim eingerasteten Setzen gilt der doppelte Wert (siehe DropWorkAreaForUnit).
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap)
 	float ExtensionGroundZThreshold = 10.f;
+
+	/**
+	 * Der tatsaechlich geltende Grenzwert: die Ueberschreibung des Gebaeudes, sonst der Wert oben.
+	 *
+	 * Ueber diese eine Stelle lesen BEIDE Verwender - die Rotfaerbung der Vorschau und die
+	 * Ablagepruefung. Frueher stand die Rechnung zweimal getrennt da, und genau deshalb hing die
+	 * Rotfaerbung an einer anderen Groesse als die Ablehnung.
+	 */
+	float GetEffectiveExtensionGroundZThreshold(const class ABuildingBase* Initiator) const;
 	
 	// The actor we are currently snapped to (if any)
 	UPROPERTY(BlueprintReadOnly, Category = BuildingSnap)
