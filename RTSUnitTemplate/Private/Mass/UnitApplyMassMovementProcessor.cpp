@@ -77,6 +77,7 @@ static TAutoConsoleVariable<int32> CVarRTS_MoveDiag(
 	TEXT("Chunk-Lambda herauszuloesen ein eigener, zu messender Eingriff waere und kein Aufraeumen."),
 	ECVF_Default);
 
+
 void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
 	EntityQuery.Initialize(EntityManager);
