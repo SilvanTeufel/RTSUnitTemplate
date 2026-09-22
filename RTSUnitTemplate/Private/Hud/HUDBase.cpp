@@ -1992,6 +1992,36 @@ void AHUDBase::DrawAllHealthBars()
 				}
 			}
 
+			// BAUSTELLEN: die Leiste aus dem GEBAEUDE-Grundriss, nicht aus der Drohne.
+			//
+			// FinalRadius* kommt oben aus dem Mass-Fragment, also aus der eigenen Kollision der
+			// Bauhelfer-Einheit. Die ist klein, waehrend die Baustelle den Platz des kuenftigen
+			// Gebaeudes einnimmt - der Halbkreis sass deshalb sichtbar zu eng.
+			//
+			// AConstructionUnit::SeedIndicatorFootprint legt den Grundriss des fertigen Gebaeudes
+			// bereits ab (getaggte Box, sonst Gebaeudekapsel, sonst die WorkArea-Flaeche), bisher
+			// nur fuer den Auswahl-Indikator. BoxExtent/CapsuleRadius im Fragment bleiben bewusst
+			// unangetastet: daran haengen Angriffs- und Reparaturreichweite (GetCombinedRadii) und
+			// die Hover-Abfrage, die die Kollision der Baustelle selbst brauchen. Hier geht es nur
+			// um die gezeichnete Leiste.
+			if (Unit->bIsConstructionUnit)
+			{
+				if (const AConstructionUnit* Site = Cast<AConstructionUnit>(Unit))
+				{
+					if (Site->bIndicatorFootprintUseBox
+						&& Site->IndicatorFootprintBoxExtent.X > KINDA_SMALL_NUMBER
+						&& Site->IndicatorFootprintBoxExtent.Y > KINDA_SMALL_NUMBER)
+					{
+						FinalRadiusX = Site->IndicatorFootprintBoxExtent.X;
+						FinalRadiusY = Site->IndicatorFootprintBoxExtent.Y;
+					}
+					else if (Site->IndicatorFootprintCapsuleRadius > KINDA_SMALL_NUMBER)
+					{
+						FinalRadiusX = FinalRadiusY = Site->IndicatorFootprintCapsuleRadius;
+					}
+				}
+			}
+
 			FHealthBarSettings EffectiveSettings;
 			if (Unit->bIsConstructionUnit) EffectiveSettings = ConstructionHealthBarSettings;
 			else if (bIsBuilding) EffectiveSettings = BuildingHealthBarSettings;
