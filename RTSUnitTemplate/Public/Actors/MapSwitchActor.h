@@ -105,6 +105,29 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
     UCapsuleComponent* OverlapCapsule;
 
+    /**
+     * Abstand zwischen zwei Ueberlappungspruefungen in Sekunden.
+     *
+     * Der Knoten ist kein Reaktionstest - ein Viertel einer Sekunde ist fuer das Betreten eines
+     * Portals nicht wahrnehmbar und kostet ein Vielfaches weniger als eine Pruefung je Bild.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    float OverlapRecheckInterval = 0.25f;
+
+    float OverlapRecheckTime = 0.f;
+
+    /** Wer beim letzten Durchlauf im Knoten stand - daraus entstehen Ein- und Austritt. */
+    TSet<TWeakObjectPtr<class AUnitBase>> UnitsInRange;
+
+    /** Sucht die Einheiten im Knoten und meldet Ein- und Austritte. */
+    void CheckUnitsInRange();
+
+    /** Zeitgeber der Diagnose aus rts.mapswitch.diag. */
+    float MapSwitchDiagTime = 0.f;
+
+    /** Der Diagnose-Sprung aus rts.mapswitch.diag 2 passiert genau einmal. */
+    bool bDiagTeleportDone = false;
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
     UWidgetComponent* MarkerWidgetComponent;
 
@@ -129,6 +152,27 @@ protected:
     
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     FName DestinationSwitchTagToEnable;
+
+    /**
+     * Zusaetzliche Freischaltung auf einer ANDEREN Karte.
+     *
+     * DestinationSwitchTagToEnable schreibt den Tag immer fuer die ZIELkarte
+     * (MarkSwitchEnabledForMap mit State.MapLongPackageName). Gelesen wird ein Tag aber gegen die
+     * Karte, auf der der fragende Aktor steht (IsSwitchEnabledForMap mit CurrentLevelName).
+     * Beides trifft sich nur, wenn Ziel und Leser dieselbe Karte sind.
+     *
+     * Gemessen am 21.09.2026: der Hoehleneingang auf Level_3a schaltet fuer Level_3b frei, der
+     * Planet Mandible liest aber gegen SolarSystem - das Bossziel blieb deshalb dauerhaft
+     * gesperrt. Mit diesen zwei Feldern laesst sich der Tag dort setzen, wo er gebraucht wird.
+     *
+     * Leer gelassen aendert sich nichts.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    TSoftObjectPtr<UWorld> UnlockOnMap;
+
+    /** Der Tag, der auf UnlockOnMap freigeschaltet wird. Siehe dort. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    FName UnlockSwitchTag;
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

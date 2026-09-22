@@ -1,4 +1,4 @@
-// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Camera/RL/InferenceComponent.h"
 #include "NNE.h"
@@ -353,16 +353,71 @@ TArray<float> UInferenceComponent::StateToArray(const FGameStateData& GameStateD
     StateArray.Add(GameStateData.MyTotalAttackDamage);
     StateArray.Add(GameStateData.EnemyTotalAttackDamage);
     
-    // Add FVector components
-    StateArray.Add(GameStateData.AgentPosition.X);
-    StateArray.Add(GameStateData.AgentPosition.Y);
-    StateArray.Add(GameStateData.AgentPosition.Z);
-    StateArray.Add(GameStateData.AverageFriendlyPosition.X);
-    StateArray.Add(GameStateData.AverageFriendlyPosition.Y);
-    StateArray.Add(GameStateData.AverageFriendlyPosition.Z);
-    StateArray.Add(GameStateData.AverageEnemyPosition.X);
-    StateArray.Add(GameStateData.AverageEnemyPosition.Y);
-    StateArray.Add(GameStateData.AverageEnemyPosition.Z);
+    // Lage ORTSUNABHAENGIG statt als rohe Weltkoordinaten (20.09.2026).
+    //
+    // Hier standen AgentPosition, AverageFriendlyPosition und AverageEnemyPosition als rohe,
+    // unnormalisierte Weltkoordinaten. Normalisiert wird aber erst beim Export, und zwar aus den
+    // TRAININGSDATEN - auf einer anderen Karte liegen genau diese neun Werte damit weit ausserhalb
+    // des Gelernten. Gemessen am 10.09.2026: bis 6,57 Sigma, waehrend die uebrigen 46 Merkmale
+    // unter 2 blieben. Auf Level_6_Survive fiel das Netz daraufhin auf drei Aktionen zusammen
+    // (1029 von 1067 Entscheidungen) und baute 3 Gebaeude, wo die Regel-KI 33 baute.
+    //
+    // Die neun Werte unten tragen dieselbe Lageinformation, nur verschiebungs- und drehungsfrei:
+    // gemessen wird im Bezugssystem "eigener Schwerpunkt -> gegnerischer Schwerpunkt". Damit
+    // faellt sowohl die Verschiebung zwischen Karten weg als auch die Drehung - Level_AITest
+    // stellt die Basen diagonal, Helix_Basin nebeneinander, wodurch das eigene Y das Vorzeichen
+    // wechselte.
+    //
+    // Die ANZAHL bleibt neun. GetStateSize bleibt 55, die Netzform und der Python-Teil bleiben
+    // unberuehrt - aber ein mit den alten Werten trainiertes Netz ist damit wertlos und muss neu
+    // trainiert werden. Genauso die alten Aufnahmen: ihre Zeilen tragen die alten Merkmale.
+    {
+        const FVector Eigen = GameStateData.AverageFriendlyPosition;
+        const FVector Gegner = GameStateData.AverageEnemyPosition;
+        const FVector Agent = GameStateData.AgentPosition;
+
+        FVector2D Vorne(Gegner.X - Eigen.X, Gegner.Y - Eigen.Y);
+        const float Basisabstand = Vorne.Size();
+        if (Basisabstand > KINDA_SMALL_NUMBER)
+        {
+            Vorne /= Basisabstand;
+        }
+        else
+        {
+            // Fallen beide Schwerpunkte zusammen, gibt es keine Achse. Eine feste Richtung ist
+            // dann so gut wie jede andere und haelt die Werte endlich.
+            Vorne = FVector2D(1.f, 0.f);
+        }
+        const FVector2D Rechts(-Vorne.Y, Vorne.X);
+
+        const FVector2D ZuEigen(Agent.X - Eigen.X, Agent.Y - Eigen.Y);
+        const FVector2D ZuGegner(Agent.X - Gegner.X, Agent.Y - Gegner.Y);
+
+        // Der Basisabstand SELBST stand hier zuerst und fiel im Kartenvergleich mit 3,53 Sigma
+        // durch: 20199 uu auf Helix_Basin gegen 22695 uu auf Level_AITest, bei einer Streuung
+        // von nur 707 uu innerhalb einer Karte. Eine Groesse, die sich innerhalb einer Partie
+        // kaum bewegt, zwischen Karten aber deutlich, ist per Bauart ortsgebunden. Ersetzt durch
+        // den seitlichen Versatz des Agenten, auf den Basisabstand bezogen - dimensionslos.
+        StateArray.Add(Basisabstand > KINDA_SMALL_NUMBER
+            ? FVector2D::DotProduct(ZuEigen, Rechts) / Basisabstand
+            : 0.f);
+        StateArray.Add(FVector2D::DotProduct(ZuEigen, Vorne));
+        StateArray.Add(FVector2D::DotProduct(ZuEigen, Rechts));
+        StateArray.Add(Agent.Z - Eigen.Z);
+        StateArray.Add(FVector2D::DotProduct(ZuGegner, Vorne));
+        StateArray.Add(FVector2D::DotProduct(ZuGegner, Rechts));
+        StateArray.Add(Agent.Z - Gegner.Z);
+        // Zusaetzlich groessenunabhaengig: 0 = am eigenen Schwerpunkt, 1 = am gegnerischen.
+        StateArray.Add(Basisabstand > KINDA_SMALL_NUMBER
+            ? FVector2D::DotProduct(ZuEigen, Vorne) / Basisabstand
+            : 0.f);
+        // Ebenso der rohe Hoehenunterschied der Schwerpunkte: 5,58 Sigma im Kartenvergleich
+        // (-8 uu gegen 222 uu). Als Steigung auf den Basisabstand bezogen bleibt die Aussage
+        // "liegt der Gegner hoeher oder tiefer" erhalten, ohne die Kartenhoehe mitzuschleppen.
+        StateArray.Add(Basisabstand > KINDA_SMALL_NUMBER
+            ? (Gegner.Z - Eigen.Z) / Basisabstand
+            : 0.f);
+    }
 
     // Add resource counts
     StateArray.Add(GameStateData.PrimaryResource);

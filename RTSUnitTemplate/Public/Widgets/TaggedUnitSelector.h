@@ -36,6 +36,20 @@ public:
     UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
     void ToggleAbilityChooser();
 
+    /**
+     * Blendet das WinConditionWidget fuer WinConditionDisplaySeconds ein.
+     *
+     * Das Siegziel laeuft sonst nur zu Spielbeginn und beim Wechsel der Bedingung durch - wer
+     * es spaeter noch einmal lesen will, hatte keinen Weg dorthin. Das Ausblenden uebernimmt
+     * AExtendedCameraBase::ShowWinConditionWidget selbst per Zeitgeber.
+     */
+    UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+    void ShowWinCondition();
+
+    /** Wie lange der Knopf das Siegziel stehen laesst. */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+    float WinConditionDisplaySeconds = 12.f;
+
     // --- Pulsieren, solange Attributpunkte offen sind (19.09.2026) ---------------------------
     //
     // Der Attributbaum liegt hinter einem Knopf und einem Tab - dass ueberhaupt etwas zu
@@ -85,11 +99,17 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional))
     class UButton* AbilityChooserToggleButton;
 
+    UPROPERTY(meta = (BindWidgetOptional))
+    class UButton* WinConditionButton;
+
     UFUNCTION()
     void HandleAttributeTreeToggleClicked();
 
     UFUNCTION()
     void HandleAbilityChooserToggleClicked();
+
+    UFUNCTION()
+    void HandleWinConditionClicked();
 
     /** Liefert das Kamera-Pawn des eigenen Spielers, an dem beide Fenster haengen. */
     class AExtendedCameraBase* GetOwningCamera() const;

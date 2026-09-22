@@ -169,7 +169,10 @@ int32 UEnergyWallBatchSubsystem::BelegePlatz(EEnergyWallPart Teil,
 	}
 
 	ISM->SetCustomDataValue(Platz, CustomDataDespawnStart, -1.f, /*bMarkRenderStateDirty=*/false);
-	ISM->SetCustomDataValue(Platz, CustomDataSichtbar, 1.f, /*bMarkRenderStateDirty=*/true);
+	ISM->SetCustomDataValue(Platz, CustomDataSichtbar, 1.f, /*bMarkRenderStateDirty=*/false);
+	ISM->SetCustomDataValue(Platz, CustomDataSteigung, 0.f, /*bMarkRenderStateDirty=*/false);
+	ISM->SetCustomDataValue(Platz, CustomDataRichtungX, 1.f, /*bMarkRenderStateDirty=*/false);
+	ISM->SetCustomDataValue(Platz, CustomDataRichtungY, 0.f, /*bMarkRenderStateDirty=*/true);
 
 	++BelegteAnzahl;
 	return Platz;
@@ -185,6 +188,20 @@ void UEnergyWallBatchSubsystem::SetzeTransform(EEnergyWallPart Teil, int32 Index
 
 	ISMs[TeilIndex]->UpdateInstanceTransform(Index, WeltTransform, /*bWorldSpace=*/true,
 		/*bMarkRenderStateDirty=*/true, /*bTeleport=*/true);
+}
+
+void UEnergyWallBatchSubsystem::SetzeSteigung(EEnergyWallPart Teil, int32 Index, float SteigungJeEinheit, const FVector2D& RichtungXY)
+{
+	const int32 TeilIndex = static_cast<int32>(Teil);
+	// Dieselbe Pruefung wie in SetzeSichtbar: ISMs ist ein festes Array ohne IsValidIndex.
+	if (Index == INDEX_NONE || TeilIndex < 0 || TeilIndex >= static_cast<int32>(EEnergyWallPart::Anzahl) || !ISMs[TeilIndex])
+	{
+		return;
+	}
+
+	ISMs[TeilIndex]->SetCustomDataValue(Index, CustomDataSteigung, SteigungJeEinheit, /*bMarkRenderStateDirty=*/false);
+	ISMs[TeilIndex]->SetCustomDataValue(Index, CustomDataRichtungX, RichtungXY.X, /*bMarkRenderStateDirty=*/false);
+	ISMs[TeilIndex]->SetCustomDataValue(Index, CustomDataRichtungY, RichtungXY.Y, /*bMarkRenderStateDirty=*/true);
 }
 
 void UEnergyWallBatchSubsystem::SetzeSichtbar(EEnergyWallPart Teil, int32 Index, bool bSichtbar)

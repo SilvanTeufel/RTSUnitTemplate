@@ -50,6 +50,17 @@ struct FWinConditionData
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	EWinLoseCondition Condition = EWinLoseCondition::None;
 
+	/**
+	 * Freier Beschreibungstext fuer genau dieses Ziel. Ist er gesetzt, zeigt das
+	 * WinConditionWidget ihn ANSTELLE des automatisch gebauten Satzes.
+	 *
+	 * Gedacht fuer Ziele, die sich nicht aus Zahlen erklaeren lassen: TeamReachedLocation hatte
+	 * im Widget gar keinen Zweig und landete deshalb bei "Unknown". Leer gelassen bleibt alles
+	 * wie bisher.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose", meta = (MultiLine = "true"))
+	FText CustomDescription;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|WinLose")
 	FBuildingCost TargetResourceCount;
 

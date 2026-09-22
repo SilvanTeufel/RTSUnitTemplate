@@ -1,4 +1,4 @@
-// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #pragma once
 
@@ -252,6 +252,32 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	UWinConditionWidget* WinConditionWidget;
+
+	/**
+	 * Rueckfall, falls kein HUD das WinConditionWidget erzeugt hat.
+	 *
+	 * Gesetzt wird WinConditionWidget bisher AUSSCHLIESSLICH von den MainHUD-Blueprints
+	 * (BP_MainHUD_Singu_AH, _Xeno_AH, _Spectator_AH). Auf Karten, die ein anderes HUD fahren -
+	 * der Prologue etwa laeuft mit dem WeaponSelectionHUD -, blieb der Zeiger null, und
+	 * ShowWinConditionWidget kehrte still zurueck: der GOAL-Knopf tat nichts, ohne dass
+	 * irgendetwas nach Fehler aussah.
+	 *
+	 * Ist diese Klasse gesetzt, legt ShowWinConditionWidget das Widget bei Bedarf selbst an.
+	 * Hat ein HUD es bereits erzeugt, bleibt es unberuehrt - es entsteht also nie ein zweites.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class UWinConditionWidget> WinConditionWidgetClass;
+
+	/**
+	 * Das vom Rueckfall selbst erzeugte Widget - getrennt gemerkt, NICHT dasselbe Feld.
+	 *
+	 * Ein HUD kann WinConditionWidget spaeter mit seinem eigenen ueberschreiben (auf Level_3a
+	 * gemessen: beim Knopfdruck der Rueckfall, 20 s spaeter das HUD). Ohne diesen zweiten Zeiger
+	 * haette man den Ueberblick ueber das erste verloren und es haenge als Waise im Viewport -
+	 * zwei uebereinanderliegende Anzeigen.
+	 */
+	UPROPERTY()
+	UWinConditionWidget* FallbackWinConditionWidget = nullptr;
 
 	FTimerHandle WinConditionDisplayTimerHandle;
 	FTimerHandle InitialWinConditionDelayTimerHandle;

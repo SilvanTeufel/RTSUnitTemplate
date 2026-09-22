@@ -1,4 +1,4 @@
-// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Mass/ActorTransformSyncProcessor.h"
 #include "Mass/UnitMassTag.h"
 
@@ -65,6 +65,20 @@ static TAutoConsoleVariable<int32> CVarRTS_SkmDiag(
 	TEXT("")
 	TEXT("Die Zeile zeigt beides nebeneinander: Mass-Ziel, vorherige Lage, Aktorlage und ob der ")
 	TEXT("Uebertrag eingereiht wurde. Raten kostet mehr als messen."),
+	ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_ActorSyncStartUnits(
+	TEXT("RTS.ActorSync.StartUnits"),
+	-1,
+	TEXT("Ab wievielen Einheiten die Aktor-Taktung einsetzt. -1 = Wert aus dem Prozessor ")
+	TEXT("(ActorSyncScaleStartUnits, Vorgabe 300). Darunter wird jedes Bild uebertragen."),
+	ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_ActorSyncFullUnits(
+	TEXT("RTS.ActorSync.FullUnits"),
+	-1,
+	TEXT("Ab wievielen Einheiten die volle Taktung (ActorSyncMaxInterval) gilt. -1 = Wert aus ")
+	TEXT("dem Prozessor (ActorSyncScaleFullUnits, Vorgabe 500)."),
 	ECVF_Default);
 
 static TAutoConsoleVariable<float> CVarRTS_ActorSyncInterval(
@@ -438,6 +452,7 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
             CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
             const float TargetZ = Hit.ImpactPoint.Z + HeightOffset;
 
+
             // LUX-ANPASSUNG (28.08.2026) - dies ist der EINZIGE Zweig mit belegtem Boden unter der
             // Einheit. Genau hier - und nur hier - wird der Rettungsanker nachgefuehrt.
             CharFragment.LastSafeLocation = FVector(InOutFinalLocation.X, InOutFinalLocation.Y, TargetZ);
@@ -541,6 +556,7 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
 
             const float TargetZ = CharFragment.LastGroundLocation + HeightOffset;
 
+
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, VerticalInterpSpeed * 100.f);
 
             // Revert pitch and roll to zero (level) if not on valid ground
@@ -559,6 +575,7 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
         {
             const float TargetZ = bIsDead ? Hit.ImpactPoint.Z + HeightOffset : Hit.ImpactPoint.Z + CharFragment.FlyHeight;
             const float InterpSpeed = bIsDead ? VerticalDeadInterpSpeed : VerticalInterpSpeed;
+
             
             InOutFinalLocation.Z = FMath::FInterpConstantTo(CurrentZ, TargetZ, ActualDeltaTime, InterpSpeed * 100.f);
             CharFragment.LastGroundLocation = Hit.ImpactPoint.Z;
@@ -942,6 +959,21 @@ void UActorTransformSyncProcessor::DispatchPendingUpdates(TArray<FActorTransform
     }
 }
 
+// Die direkt gesteuerte Einheit des Spielers wird NIE gedrosselt.
+//
+// Sie steht unter der Hand des Spielers: ein Nachziehen erst alle halbe Sekunde ist dort sofort
+// als Ruckeln sichtbar, waehrend es bei einer von 500 Einheiten im Pulk niemandem auffaellt. Es
+// ist ausserdem genau EINE Einheit je Spieler - die Ausnahme kostet also nichts.
+static bool IsCameraUnit(const AUnitBase* Unit)
+{
+	static const FGameplayTag CameraUnitRootTag =
+		FGameplayTag::RequestGameplayTag(FName("Character.CameraUnit"), false);
+
+	return Unit != nullptr
+		&& CameraUnitRootTag.IsValid()
+		&& Unit->UnitTags.HasTag(CameraUnitRootTag);
+}
+
 float UActorTransformSyncProcessor::CalculateActorSyncInterval() const
 {
 	// Siehe ActorSyncScaleStartUnits im Header. Der CVar-Schalter hat Vorrang (Messungen).
@@ -950,14 +982,21 @@ float UActorTransformSyncProcessor::CalculateActorSyncInterval() const
 	{
 		return Override;
 	}
-	if (ActorSyncMaxInterval <= 0.f || ActorSyncScaleFullUnits <= ActorSyncScaleStartUnits)
+	// Die beiden Schwellen lassen sich zur Laufzeit ueberschreiben (RTS.ActorSync.StartUnits und
+	// RTS.ActorSync.FullUnits). Ohne das muesste man fuer jede Messreihe neu bauen.
+	const int32 StartUnitsOverride = CVarRTS_ActorSyncStartUnits.GetValueOnAnyThread();
+	const int32 FullUnitsOverride = CVarRTS_ActorSyncFullUnits.GetValueOnAnyThread();
+	const int32 StartUnits = StartUnitsOverride >= 0 ? StartUnitsOverride : ActorSyncScaleStartUnits;
+	const int32 FullUnits = FullUnitsOverride >= 0 ? FullUnitsOverride : ActorSyncScaleFullUnits;
+
+	if (ActorSyncMaxInterval <= 0.f || FullUnits <= StartUnits)
 	{
 		return VisualISMActorSyncTime;
 	}
 
 	const float Ratio = FMath::Clamp(
-		float(LastFrameUnitCount - ActorSyncScaleStartUnits)
-		/ float(ActorSyncScaleFullUnits - ActorSyncScaleStartUnits), 0.f, 1.f);
+		float(LastFrameUnitCount - StartUnits)
+		/ float(FullUnits - StartUnits), 0.f, 1.f);
 
 	return FMath::Max(VisualISMActorSyncTime, Ratio * ActorSyncMaxInterval);
 }
@@ -1266,7 +1305,8 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
             // Dieselbe Ausnahme wie im Server-Zweig - der Client zeichnet dieselben Ringe,
             // Lebensbalken und angehefteten Effekte und braucht deshalb dieselbe Regel.
             const bool bNeedsSyncEveryFrame =
-                UnitBase->bUseSkeletalMovement || UnitBase->HasActiveAttachedEffect();
+                UnitBase->bUseSkeletalMovement || UnitBase->HasActiveAttachedEffect()
+                || IsCameraUnit(UnitBase);
             if (bNeedsSyncEveryFrame) { ++ChunkExemptCount; }
 
             if (bLocationChanged || bRotationChanged || bVisualMoved)
@@ -1667,9 +1707,11 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
 
             // Siehe die ausfuehrliche Begruendung im Server-Zweig weiter oben: Skelett-Einheiten
             // zeichnen sich ueber den Aktor, angeheftete Niagara-Effekte werden vom Aktor
-            // mitgezogen - beide duerfen nicht gedrosselt werden.
+            // mitgezogen - beide duerfen nicht gedrosselt werden. Dazu die direkt gesteuerte
+            // Einheit des Spielers.
             const bool bNeedsSyncEveryFrame =
-                UnitBase->bUseSkeletalMovement || UnitBase->HasActiveAttachedEffect();
+                UnitBase->bUseSkeletalMovement || UnitBase->HasActiveAttachedEffect()
+                || IsCameraUnit(UnitBase);
 
             // [SkmDiag] Siehe RTS.SkmDiag.
             if (UnitBase->bUseSkeletalMovement && CVarRTS_SkmDiag.GetValueOnAnyThread() != 0)

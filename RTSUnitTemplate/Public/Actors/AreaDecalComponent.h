@@ -190,6 +190,20 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Area Decal")
 	void SetVirtualTextureWritingEnabled(bool bEnabled);
 
+	/**
+	 * Setzt den Zustand, den ein Replay-Stellvertreter braucht: sichtbar mit genau diesem Radius.
+	 *
+	 * Ein ueber das ReplayModule nachgebautes Decal hat nie Server_ActivateDecal gesehen - seine
+	 * Laufzeitfelder (bDecalIsVisible, CurrentDecalRadius) stehen deshalb auf dem Klassenstandard
+	 * und der RVT-Writer bleibt stumm. Ohne diesen Einstieg zeigt die Wiedergabe gar keinen Creep,
+	 * obwohl Material und Zieltextur am nachgebauten Decal korrekt stehen.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Area Decal")
+	void ApplyReplayState(float NewRadius);
+
+	/** Aktueller Radius - gebraucht vom ReplayModule, das ihn Bild fuer Bild mitschreibt. */
+	float GetCurrentDecalRadius() const { return CurrentDecalRadius; }
+
 protected:
 	/** Merkt, ob der Writer vor einem SetVirtualTextureWritingEnabled(false) ueberhaupt aktiv war. */
 	bool bVirtualTextureWritingWasEnabled = false;

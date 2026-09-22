@@ -21,6 +21,7 @@ ULookAtProcessor::ULookAtProcessor(): EntityQuery()
     bRequiresGameThreadExecution = true;
 }
 
+
 void ULookAtProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& EntityManager)
 {
     EntityQuery.Initialize(EntityManager);
@@ -128,21 +129,39 @@ void ULookAtProcessor::Execute(FMassEntityManager& EntityManager, FMassExecution
             FVector ActorLocation = MassTransform.GetLocation(); // Actor->GetActorLocation();
 
 
+            // HOEHENVERSATZ IMMER AUS DER KAPSEL, AUCH FUER ISM-EINHEITEN.
+            //
+            // Hier stand fuer den ISM-Zweig `InstanceScale.Z / 2` - das ist die halbe SKALIERUNG,
+            // nicht die halbe Hoehe. Weiter unten wird damit ActorLocation.Z = Boden + Versatz
+            // gerechnet und in Zeile ~202 ins FTransformFragment geschrieben.
+            //
+            // GEMESSEN am 22.09.2026 auf Level_6_Survive (rts.massz.dump): Singularian_Base steht
+            // auf Boden 512.1 mit Kapselhalbhoehe 200.0, der Aktor also auf 712.1. PositionedTransform
+            // hielt korrekt 712.1, das FTransformFragment dagegen 521.3 = 512.1 + 9.2 - und 9.2 ist
+            // genau die halbe ISM-Skalierung. Bei Skalierung 1 landet der Wert praktisch auf dem
+            // blanken Boden; das sind die gemessenen Abweichungen von -199 (eine volle Kapselhalbhoehe).
+            //
+            // GetMassActorLocation liest das FTransformFragment ZUERST. Dadurch schlug der Fehler auf
+            // alles durch, was die Mass-Position liest: Vorschauflaeche der Extension, Hoverpunkt,
+            // EnergyWall-Sockel, BuildArea auf Highground.
+            //
+            // Dieselbe Formel steht in ActorTransformSyncProcessor::HandleGroundAndHeight bereits
+            // AUSKOMMENTIERT und ist dort durch die Kapselhalbhoehe ersetzt - hier war sie stehengeblieben.
             float HeightOffset;
-            
+
             if (UnitBase->bUseSkeletalMovement)
             {
                 MassTransform.SetScale3D(UnitBase->GetActorScale3D());
-
-                HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
-            }else
-            {
-                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();; //UnitBase->ISMComponent->GetComponentTransform();
-                MassTransform.SetScale3D(ActorTransform.GetScale3D());
-                
-                FVector InstanceScale = ActorTransform.GetScale3D();
-                HeightOffset = InstanceScale.Z/2;
             }
+            else
+            {
+                const FTransform& ActorTransform = UnitBase->ISMComponent->GetComponentTransform();
+                MassTransform.SetScale3D(ActorTransform.GetScale3D());
+            }
+
+            HeightOffset = UnitBase->GetCapsuleComponent()
+                ? UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight()
+                : CharList[i].CapsuleHeight;
 
             
           
