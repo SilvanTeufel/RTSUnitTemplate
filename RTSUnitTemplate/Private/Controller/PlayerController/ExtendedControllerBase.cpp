@@ -17,12 +17,6 @@ static TAutoConsoleVariable<float> CVarRTS_WallPreviewInterpSpeed(
 	TEXT("Zeiger. Kleiner = traeger und damit sichtbar versetzt."),
 	ECVF_Default);
 
-static TAutoConsoleVariable<int32> CVarRTS_WallPreviewDiag(
-	TEXT("rts.wallpreview.diag"),
-	0,
-	TEXT("1 = meldet, wie weit die gezeichnete Bauvorschau von ihrer Zielposition entfernt ist."),
-	ECVF_Default);
-
 #include "EngineUtils.h"
 #include "GameplayTagsManager.h"
 #include "Landscape.h"
@@ -1764,16 +1758,6 @@ FVector AExtendedControllerBase::ComputeGroundedLocation(AWorkArea* DraggedArea,
 		// Unterkante auf den Boden statt den Pivot.
 		Result.Z = DesiredLocation.Z - OffsetActorToBottom;
 
-		// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
-		// Meldet, dass und warum der Rueckfall gegriffen hat. Bleibt die Zeile im Log aus,
-		// waehrend die Vorschau trotzdem zu tief sitzt, ist diese Erklaerung WIDERLEGT.
-		if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
-		{
-			UE_LOG(LogTemp, Warning,
-				TEXT("[WandVorschau] RUECKFALL: kein Landschaftstreffer nach %d Versuchen (zuletzt '%s'), ")
-				TEXT("Z %.0f -> %.0f, Unterkante liegt %.0f uu unter dem Aktorpunkt"),
-				Tries, *ZuletztGetroffen, DesiredLocation.Z, Result.Z, -OffsetActorToBottom);
-		}
 	}
 	return Result;
 }
@@ -3126,10 +3110,36 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		return false;
 	};
 
-	FVector StableMouseLocation = bHitOccurred ? Hit.Location : PlacementTraceEnd;
-	if (!FMath::IsNearlyZero(TraceDir.Z))
+	// WENN DER STRAHL DAS GELAENDE TRIFFT, IST DAS DER PUNKT. Keine Ebene, keine Iteration.
+	//
+	// GEMESSEN am 22.09.2026 im Dev-Paket: die Ebenen-Iteration konvergiert NICHT innerhalb eines
+	// Bildes. Sie startet je Bild auf der Turmsockelhoehe und hatte drei Runden; ueber die Stufe
+	// von 512 auf 190 reicht das nicht. Gemessene Restabweichung im ersten Bild 368 uu in XY und
+	// 278 in Z, danach 245/183, 112/83, 7/5, 0/0 - sie pendelt sich erst ueber mehrere BILDER ein,
+	// und solange steht die Vorschauflaeche sichtbar daneben.
+	//
+	// Der Mausstrahl wird oben ohnehin schon getract. Trifft er Gelaende, ist sein Treffer der
+	// exakte Punkt unter dem Zeiger - ohne Naeherung und ohne Konvergenzfrage. Die Ebene bleibt
+	// nur fuer den Fall, gegen den sie eingefuehrt wurde: der Strahl landet auf einem Gebaeude
+	// oder einer Bauflaeche, wo ein Sprung zwischen Dach und Boden das Ziel zittern liesse.
+	bool bZeigerAufGelaende = false;
+	if (bHitOccurred)
 	{
-		for (int32 Runde = 0; Runde < 3; ++Runde)
+		const AActor* GetroffenerAktor = Hit.GetActor();
+		bZeigerAufGelaende = !GetroffenerAktor
+			|| (!GetroffenerAktor->IsA(AWorkArea::StaticClass())
+			    && GetBuildingBaseFromActor(const_cast<AActor*>(GetroffenerAktor)) == nullptr);
+	}
+
+	FVector StableMouseLocation = bHitOccurred ? Hit.Location : PlacementTraceEnd;
+	if (bZeigerAufGelaende)
+	{
+		PlaneZ = Hit.Location.Z;   // damit die Diagnose die tatsaechlich benutzte Hoehe meldet
+	}
+	// Mehr Runden als zuvor: wo die Ebene noch gebraucht wird, soll sie wenigstens ankommen.
+	else if (!FMath::IsNearlyZero(TraceDir.Z))
+	{
+		for (int32 Runde = 0; Runde < 8; ++Runde)
 		{
 			const float t = (PlaneZ - PlacementTraceStart.Z) / TraceDir.Z;
 			if (t <= 0.f)
@@ -3171,7 +3181,9 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	// Der gemeldete Fehler rastet ein: war die Maus einmal auf einer tieferen Landschaftsebene,
 	// bleibt der Versatz. Ein je Bild neu gerechneter Wert kann das nicht - also schleppt eine
 	// der Quellen Zustand mit. Die Spur zeigt, welche zum Zeitpunkt des Einrastens gewonnen hat.
-	const TCHAR* HoehenQuelle = TEXT("Snap-Rechnung (UnitLoc.Z)");
+	// FString statt const TCHAR*, damit die Unterkanten-Korrektur ANHAENGEN kann statt zu
+	// ueberschreiben. Vorher loeschte sie die eigentliche Quelle - ein fehlgeschlagener Bodenstrahl
+	// meldete sich dadurch als "freier Pfad" und war im Log nicht von einem Erfolg zu unterscheiden.
 
 	// Rotation anwenden
 	DraggedWorkArea->SetActorRotation(TargetRot);
@@ -3365,14 +3377,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			bStreckeGeometrischBlockiert = true;
 			DraggedWorkArea->TemporarilyChangeMaterial();
 
-			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
-			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
-			{
-				UE_LOG(LogTemp, Warning,
-					TEXT("[WandVorschau] ROT: %s liegt auf der Wandstrecke ab %s (%s)"),
-					*Sperre->GetName(), *Unit->GetName(),
-					EndpunktGebaeude ? TEXT("bis Zielturm") : TEXT("bis Vorschauposition"));
-			}
 		}
 	}
 
@@ -3415,13 +3419,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		{
 			DraggedWorkArea->TemporarilyChangeMaterial();
 
-			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
-			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
-			{
-				UE_LOG(LogTemp, Warning,
-					TEXT("[WandVorschau] ROT: Bodenunterschied %.0f uu, erlaubt sind %.0f (ExtensionGroundZThreshold)"),
-					Unterschied, Grenze);
-			}
 		}
 	}
 
@@ -3457,7 +3454,34 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			if (bFoundValidGround)
 			{
 				TargetLoc.Z = GroundHit.Location.Z;
-				HoehenQuelle = TEXT("freier Bodenstrahl");
+			}
+			else
+			{
+				// STILLER RUECKFALL BESEITIGT.
+				//
+				// Hier stand KEIN else. Fand die Bodenspur nichts, behielt TargetLoc.Z den Wert aus
+				// GetSnappedExtensionTransform - also die MASS-POSITION DES TURMS plus Offset. Auf
+				// einer anderen Gelaendestufe ist das um die volle Stufenhoehe daneben, und die
+				// Unterkanten-Korrektur darunter trug den Fehler unveraendert weiter.
+				//
+				// GEMESSEN am 23.09.2026 im Dev-Paket ueber 6869 Bilder: im freien Pfad standen nur
+				// 77,7 % der Vorschauen richtig, Spanne -567 bis +150. Der Snap-Pfad, der diesen
+				// Rueckfall nicht hat, lag bei 98,8 %. Eine Race-Condition ist ausgeschlossen -
+				// 3575 verschiedene Zeigerstellen ergaben je genau EIN Ergebnis.
+				//
+				// Der Fehlschlag war zudem UNSICHTBAR: HoehenQuelle wird weiter unten von der
+				// Unterkanten-Korrektur ueberschrieben, das Log meldete also "freier Pfad" wie im
+				// Erfolgsfall. Deshalb steht die Quelle jetzt VOR der Ueberschreibung fest und es
+				// gibt eine eigene Zeile.
+				//
+				// Als Ersatz der Boden unter dem ZEIGER: der ist belegtes Gelaende (bHitOccurred)
+				// und liegt in der Naehe, waehrend die Turmhoehe eine ganz andere Stufe sein kann.
+				// Den verworfenen Wert VOR dem Ueberschreiben sichern - sonst meldet die Zeile
+				// unten zweimal denselben Wert und die Aussage geht verloren.
+				const float VerworfeneTurmhoehe = TargetLoc.Z;
+
+				TargetLoc.Z = Hit.Location.Z;
+
 			}
 
 			// Wirtshoehe schlaegt den Boden - siehe ABuildingBase::bExtensionFollowsHostHeight.
@@ -3467,14 +3491,12 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 				if (GetActorBoundsForSnap(Unit, WirtMitte, WirtAusdehnung))
 				{
 					TargetLoc.Z = WirtMitte.Z - WirtAusdehnung.Z;
-					HoehenQuelle = TEXT("Sockelhoehe des Wirtsturms");
 				}
 			}
 		}
 		else
 		{
 			TargetLoc.Z += Unit->ExtensionOffset.Z + UnitExtentBounds.Z;
-			HoehenQuelle = TEXT("ExtensionOffset ohne Bodenstrahl");
 		}
 
 		// Z-Korrektur für Mesh-Bodenabstand (Nur bei Bodenplatzierung)
@@ -3491,7 +3513,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			// aktuellen Transformation passen. Tun sie das nicht, traegt dieser Schritt den Fehler
 			// des Vorbildes weiter, und genau so sieht ein Einrasten aus.
 			TargetLoc.Z = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
-			HoehenQuelle = TEXT("freier Pfad + Unterkanten-Korrektur");
 		}
 
 		// 4. Overlap Snap Check (An der nun korrigierten Bodenposition)
@@ -3508,19 +3529,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			TArray<AActor*> Ignorieren; Ignorieren.Add(DraggedWorkArea);
 			GatherBlockersByBounds(GetWorld(), PruefMitte, PruefAusdehnung, Ignorieren, Overlaps);
 
-			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
-			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0 && Overlaps.Num() > 0)
-			{
-				FString Namen;
-				for (const AActor* OA : Overlaps)
-				{
-					if (!OA) continue;
-					Namen += (Namen.IsEmpty() ? TEXT("") : TEXT(", "));
-					Namen += FString::Printf(TEXT("%s(%s)"), *OA->GetName(),
-						OA->IsA(AWorkArea::StaticClass()) ? TEXT("WorkArea") : TEXT("Gebaeude"));
-				}
-				UE_LOG(LogTemp, Warning, TEXT("[WandVorschau] blockiert durch %d: %s"), Overlaps.Num(), *Namen);
-			}
 		}
 		
 		// Priorität 1: Kompatible Gebäude suchen
@@ -3620,7 +3628,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 				TargetLoc.Z = GroundHit.Location.Z;
 				bGroundSet = true;
-				HoehenQuelle = TEXT("Bodenstrahl am Snap-Gebaeude");
 				break;
 			}
 		}
@@ -3633,28 +3640,13 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			if (bBoundsOk)
 			{
 				TargetLoc.Z = TB_Center.Z - TB_Extent.Z;
-				HoehenQuelle = TEXT("Gebaeudeunterkante (Rueckfall)");
 			}
 			else
 			{
 				// If bounds fail, fall back to building center (pivot)
 				TargetLoc.Z = BuildingLoc.Z;
-				HoehenQuelle = TEXT("Gebaeude-PIVOT (grober Rueckfall)");
 			}
 
-			// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
-			//
-			// Dieser Anbau-Pfad hat eine EIGENE Bodensuche und laeuft nicht durch
-			// ComputeGroundedLocation - die dortige RUECKFALL-Zeile kann hier also nichts melden.
-			// Genau deshalb blieb "zu tief gestartet" bisher unsichtbar: gemessen wurde ein
-			// Rueckfall, den dieser Pfad gar nicht benutzt.
-			if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
-			{
-				UE_LOG(LogTemp, Warning,
-					TEXT("[WandVorschau] Bodensuche im Anbaupfad FEHLGESCHLAGEN - Hoehe kommt jetzt aus %s, Z = %.0f"),
-					bBoundsOk ? TEXT("der Gebaeudeunterkante") : TEXT("dem Gebaeude-PIVOT (grob)"),
-					TargetLoc.Z);
-			}
 		}
 
 		// Apply Z-Correction for WorkArea mesh bottom alignment
@@ -3665,7 +3657,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			const float CurrentActorZ = DraggedWorkArea->GetActorLocation().Z;
 			const float Clearance = 2.f; // Match the clearance used in non-snapped logic
 			TargetLoc.Z = CurrentActorZ + ((TargetLoc.Z + Clearance) - BottomZ);
-			HoehenQuelle = TEXT("Snap-Pfad + Unterkanten-Korrektur");
 		}
 	}
 
@@ -3748,106 +3739,6 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	// beginnt, wird sie zum Gebaeude hin nach unten versetzt. Eine pauschale Anhebung des ganzen
 	// Meshes trifft diesen Fall nicht - sie verschiebt beide Enden gleich.
 
-	// DIAGNOSE (bleibt stehen bis abbestellt), schaltbar ueber rts.wallpreview.diag 1.
-	// Meldet, wie weit die gezeichnete Flaeche vom Ziel entfernt ist - damit laesst sich
-	// belegen, ob der Versatz aus dieser Interpolation kommt oder woandersher.
-	if (CVarRTS_WallPreviewDiag.GetValueOnGameThread() != 0)
-	{
-		const float Abstand = FVector::Dist(DraggedWorkArea->GetActorLocation(), TargetLoc);
-
-		// ZWEITE moegliche Ursache mitmessen: sitzt der Mesh ueberhaupt auf dem Aktorpunkt?
-		//
-		// Die Interpolation erklaert nur einen Versatz WAEHREND der Mausbewegung - nach dem
-		// Anhalten holt sie in Sekundenbruchteilen auf. Ein Versatz, der stehen bleibt, kann
-		// daher nicht von ihr kommen, sondern nur von einem Mesh, dessen Mittelpunkt neben dem
-		// Aktorpunkt liegt (verschobener Pivot oder relativ versetzte Komponente). Genau diese
-		// Verschiebung berechnet MoveDraggedAreaFreely fuer den Ueberlapptest bereits - beim
-		// SETZEN der Position wird sie aber nirgends ausgeglichen.
-		float MittenVersatz = 0.f;
-		if (const UStaticMeshComponent* DiagMesh = DraggedWorkArea->Mesh)
-		{
-			const FBoxSphereBounds DiagBounds = DiagMesh->CalcBounds(DiagMesh->GetComponentTransform());
-			MittenVersatz = FVector::Dist2D(DiagBounds.Origin, DraggedWorkArea->GetActorLocation());
-		}
-
-		// Nach Achsen getrennt, denn "im Boden" ist ein Z-Problem und "zur Seite" ein XY-Problem.
-		// Der bisherige 3D-Abstand vermischte beides und konnte die Meldung nicht zuordnen.
-		const FVector Rest = DraggedWorkArea->GetActorLocation() - TargetLoc;
-		const float RestXY = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), TargetLoc);
-
-		// Die gruene Flaeche ist moeglicherweise GAR NICHT dieser Mesh, sondern ein eigener
-		// AAbilityIndicator mit eigener Positionierung (MoveAbilityIndicator_Local). Solange
-		// beide Orte nicht nebeneinander im Log stehen, misst man womoeglich das falsche
-		// Objekt - vier Erklaerungen am WorkArea waren sauber, waehrend der Nutzer weiter
-		// einen Versatz sah. Deshalb hier beide, mit ihrem Abstand zueinander.
-		FString MarkerText = TEXT("kein Marker");
-		if (CurrentDraggedAbilityIndicator)
-		{
-			const FVector MarkerOrt = CurrentDraggedAbilityIndicator->GetActorLocation();
-			const FVector MarkerRest = MarkerOrt - DraggedWorkArea->GetActorLocation();
-			MarkerText = FString::Printf(
-				TEXT("Marker %s steht XY %.0f / Z %+.0f neben der Flaeche"),
-				*CurrentDraggedAbilityIndicator->GetClass()->GetName(),
-				FVector::Dist2D(MarkerOrt, DraggedWorkArea->GetActorLocation()), MarkerRest.Z);
-		}
-
-		// BEWUSST OHNE SCHWELLE. Die alte Fassung protokollierte nur bei Rueckstand > 1 uu -
-		// mit rts.wallpreview.interpspeed 0 ist der Rueckstand null, also schwieg das Log
-		// zwangsweise. Diese Stille sah aus wie "kein Versatz", war aber eingebaut. Ein
-		// Messwerkzeug, das im Normalfall nichts sagt, kann seinen eigenen Ausfall nicht von
-		// einem Nullergebnis unterscheiden.
-		UE_LOG(LogTemp, Warning,
-			TEXT("[WandVorschau] Zweig '%s', Rueckstand %.0f uu (XY %.0f, Z %+.0f), Interp %.1f, dt %.4f, ")
-			TEXT("Meshmitte %.0f uu neben dem Aktorpunkt, %s"),
-			GenutzterZweig, Abstand, RestXY, Rest.Z, InterpSpeed, DeltaSeconds, MittenVersatz, *MarkerText);
-
-		// Sockel- und Mittelhoehe des Ausgangsturms fuer den Turmbezug unten.
-		float TurmMitteZ = Unit->GetMassActorLocation().Z;
-		float TurmSockelZ = TurmMitteZ;
-		{
-			FVector TurmMitte, TurmAusdehnung;
-			if (GetActorBoundsForSnap(Unit, TurmMitte, TurmAusdehnung))
-			{
-				TurmMitteZ = TurmMitte.Z;
-				TurmSockelZ = TurmMitte.Z - TurmAusdehnung.Z;
-			}
-		}
-
-		// DER EIGENTLICHE VERGLEICH.
-		//
-		// Die Zeile darueber misst Aktorposition gegen TargetLoc - beide stammen aus DERSELBEN
-		// Rechnung. "Rueckstand 0" heisst deshalb nur "dorthin gesetzt, wohin entschieden wurde",
-		// nicht "richtig entschieden". Die Maus kommt darin gar nicht vor, und genau deshalb waren
-		// vier Erklaerungen sauber, waehrend der Versatz sichtbar blieb.
-		//
-		// StableMouseLocation ist NICHT der Punkt unter dem Zeiger: es ist der Mausstrahl
-		// geschnitten mit einer waagerechten Ebene auf Sockelhoehe des Ausgangsgebaeudes
-		// (PlaneZ). Liegt das Gelaende unter dem Zeiger hoeher oder tiefer als dieser Sockel,
-		// weicht der projizierte Punkt seitlich UND in der Hoehe ab - der Fehler waechst mit
-		// Hangneigung und Abstand zum Gebaeude. Hier steht, wie gross er gerade ist.
-		const float EbenenFehlerXY = FVector::Dist2D(StableMouseLocation, Hit.Location);
-		const float EbenenFehlerZ  = StableMouseLocation.Z - Hit.Location.Z;
-		UE_LOG(LogTemp, Warning,
-			TEXT("[WandVorschau] Bezugsebene: Zeigerpunkt %s, projiziert %s -> Abweichung XY %.0f, Z %+.0f ")
-			TEXT("(Sockelhoehe %.0f, Treffer %s). Flaeche steht XY %.0f / Z %+.0f neben dem Zeigerpunkt, ")
-			TEXT("und Z %+.0f gegenueber dem TURM (Turmsockel %.0f, Turmmitte %.0f). Hoehe aus: %s"),
-			*Hit.Location.ToCompactString(), *StableMouseLocation.ToCompactString(),
-			EbenenFehlerXY, EbenenFehlerZ, PlaneZ, bHitOccurred ? TEXT("ja") : TEXT("nein"),
-			FVector::Dist2D(DraggedWorkArea->GetActorLocation(), Hit.Location),
-			DraggedWorkArea->GetActorLocation().Z - Hit.Location.Z,
-			// DER BEZUG, AUF DEN ES ANKOMMT.
-			//
-			// Bisher stand hier nur der Abstand zum Bodenpunkt unter dem Zeiger. Der Nutzer
-			// beschreibt aber den Abstand ZUM TURM ("die Flaeche startet am Tower versetzt nach
-			// unten"), und gegen diesen Bezug wurde nie gemessen - deshalb sah die Spalte immer
-			// unauffaellig aus (fast durchgehend +2), waehrend der Fehler sichtbar blieb.
-			//
-			// Turmsockel und Turmmitte beide mit ausgeben: die WorkArea steht auf dem Boden, der
-			// Turm auf Kapselmitte. Welcher der beiden der richtige Bezug ist, entscheidet erst
-			// der Vergleich mit dem, was am Schirm zu sehen ist.
-			DraggedWorkArea->GetActorLocation().Z - TurmSockelZ,
-			TurmSockelZ, TurmMitteZ, HoehenQuelle);
-	}
 
 	if (bFoundCompatible && TargetBuilding)
 	{
@@ -3905,6 +3796,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		if (AHUDBase* HUD = Cast<AHUDBase>(GetHUD()))
 		{
 			FColor LineColor = bPathBlocked ? FColor::Red : FColor::Green;
+
 			HUD->SetExtensionPreviewLine(TraceStart, TraceEnd, LineColor, TraceZOffset);
 		}
 
@@ -7138,6 +7030,34 @@ bool AExtendedControllerBase::WallTrace(ABuildingBase* Unit, AActor* TargetActor
 	}
 
 	OutStart = Unit->GetMassActorLocation() - FVector(0, 0, OutTraceZOffset);
+
+	// DEN MASS-REFERENZWERT NEHMEN, NICHT DAS FTransformFragment (24.09.2026).
+	//
+	// GetMassActorLocation liefert bei ISM-Einheiten das FTransformFragment, und das steht bei
+	// einem Teil der Gebaeude dauerhaft falsch: gemessen ueber rund 280.000 Zeilen haelt es
+	// Bodenhoehen ohne den Hoehenversatz (190.2 statt 389.2, 512.1 statt 711.1) und pendelt sogar
+	// um diese Werte. Wer den Wert dort verstellt, ist trotz 23 Messstellen nicht gefunden;
+	// dreiundzwanzig Prozessoren und Aktorstellen melden keine Schreibung.
+	//
+	// PositionedTransform ist in DERSELBEN Messung in keiner einzigen Zeile abgewichen. Es wird in
+	// UMassActorBindingComponent als LastGroundLocation + CapsuleHeight (Kapselhalbhoehe) gebildet,
+	// traegt den Hoehenversatz also bereits, und es ist derselbe Wert, aus dem die sichtbare ISM
+	// gezeichnet wird - die Vorschau deckt sich damit per Bauart mit dem Bild.
+	//
+	// Bewusst KEIN Rueckgriff auf GetActorLocation: der Wert bleibt ein Mass-Fragment.
+	if (const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(Unit))
+	{
+		const FMassEntityManager* EntityManager = nullptr;
+		FMassEntityHandle EntityHandle;
+		if (MassUnit->GetMassEntityData(EntityManager, EntityHandle) && EntityManager)
+		{
+			if (const FMassAgentCharacteristicsFragment* CharFragment =
+					EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+			{
+				OutStart = CharFragment->PositionedTransform.GetLocation() - FVector(0, 0, OutTraceZOffset);
+			}
+		}
+	}
 	OutEnd = TargetActor->GetActorLocation() - FVector(0, 0, OutTraceZOffset);
 
 	TArray<FHitResult> Hits;

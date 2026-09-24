@@ -219,10 +219,52 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			// VisualTopOffset kommt aus den Meshbounds und wird einmalig bei der Bindung erfasst.
 			// Fehlt er (0), gilt das alte Verhalten.
 			const float HalfHeight = CharFrag.bUseBoxComponent ? CharFrag.BoxExtent.Z : CharFrag.CapsuleHeight;
-			const float FootToTop = (CharFrag.VisualTopOffset > KINDA_SMALL_NUMBER)
-				? (CharFrag.VisualTopOffset + CharFrag.CapsuleHeight)
-				: (HalfHeight * 2.0f);
-			const float Height = FootToTop;
+
+			// UNTERKANTE AUS DEN MESHBOUNDS, NICHT AUS DER KAPSEL (24.09.2026).
+			//
+			// Bisher stammte nur die OBERkante aus VisualTopOffset, die Unterkante dagegen aus der
+			// Kapselhalbhoehe. Nutzerangabe: die ISM ist mitunter groesser als die Kapsel - dann
+			// steht die Trefferkapsel unten zu hoch, und zwar genau um die Differenz. Beim
+			// DataCenter faellt das am staerksten auf, weil dort beide Masse am weitesten
+			// auseinanderliegen.
+			//
+			// Zweite Angabe: ISMs werden skaliert. Die beiden Offsets stehen in Welteinheiten des
+			// ERFASSUNGSzeitpunkts; aendert sich die Skalierung danach, sind sie falsch. Deshalb
+			// werden sie ueber VisualCaptureScaleZ auf die Skalierung des aktuellen Transforms
+			// umgerechnet - derselbe Transform, aus dem die sichtbare Instanz gezeichnet wird.
+			//
+			// Der Rueckfall auf das alte Verhalten bleibt vollstaendig erhalten: fehlen die
+			// Meshbounds (Offsets 0), passiert exakt dasselbe wie vorher.
+			float BottomOffset = -CharFrag.CapsuleHeight;   // Kapselmitte -> Fuss, wie bisher
+			float Height = HalfHeight * 2.0f;
+
+			if (CharFrag.VisualTopOffset > KINDA_SMALL_NUMBER)
+			{
+				float TopOffset = CharFrag.VisualTopOffset;
+				float VisualBottom = (CharFrag.VisualBottomOffset < -KINDA_SMALL_NUMBER)
+					? CharFrag.VisualBottomOffset
+					: -CharFrag.CapsuleHeight;
+
+				// Umrechnen nur, wenn ein brauchbarer Bezugswert vorliegt UND sich die Skalierung
+				// tatsaechlich geaendert hat. Ohne Bezugswert (Altbestand, Offsets vor dieser
+				// Aenderung erfasst) bleiben die Werte so, wie sie gespeichert sind.
+				if (CharFrag.VisualCaptureScaleZ > KINDA_SMALL_NUMBER)
+				{
+					const float CurrentScaleZ = FMath::Abs(EntityTransform.GetScale3D().Z);
+					if (CurrentScaleZ > KINDA_SMALL_NUMBER)
+					{
+						const float ScaleRatio = CurrentScaleZ / CharFrag.VisualCaptureScaleZ;
+						TopOffset *= ScaleRatio;
+						VisualBottom *= ScaleRatio;
+					}
+				}
+
+				// Die Kapsel darf nie kleiner werden als bisher: wo das Mesh die Kapsel NICHT
+				// ueberragt, bleibt es bei der Kapsel. Sonst wuerden Einheiten mit kleinem Mesh
+				// und grosser Kapsel schlechter treffbar als vorher.
+				BottomOffset = FMath::Min(VisualBottom, -CharFrag.CapsuleHeight);
+				Height = FMath::Max(TopOffset - BottomOffset, KINDA_SMALL_NUMBER);
+			}
 
 			// Die Trefferkapsel aus der EIGENEN Pose aufbauen, nicht aus LastGroundLocation.
 			//
@@ -242,10 +284,16 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			// Der Versatz ist derselbe, den ActorTransformSyncProcessor beim Setzen der Pose
 			// abzieht (dort HeightOffset) - bei stimmendem Bodenwert kommt also exakt dieselbe
 			// Kapsel heraus wie vorher, nur ohne die Abhaengigkeit vom letzten Trace.
-			BaseLocation.Z -= CharFrag.bIsFlying ? HalfHeight : CharFrag.CapsuleHeight;
+			// BottomOffset traegt die Unterkante jetzt selbst (negativ, von der Aktormitte aus).
+			// Fliegende Einheiten behalten den alten Sonderweg: dort beschreibt die Kapsel den
+			// Koerper besser als die Meshbounds, weil der Flug die Hoehe ohnehin ueber dem
+			// Gelaende nachfuehrt.
+			BaseLocation.Z += CharFrag.bIsFlying ? -HalfHeight : BottomOffset;
 
 			FVector OutP1, OutP2;
-			FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, BaseLocation, BaseLocation + FVector(0,0,Height), OutP1, OutP2);
+			FVector SegmentStart = BaseLocation;
+			FVector SegmentEnd   = BaseLocation + FVector(0.f, 0.f, Height);
+			FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, SegmentStart, SegmentEnd, OutP1, OutP2);
 			float DistSq = FVector::DistSquared(OutP1, OutP2);
 
 			FVector DirToMouse = OutP1 - OutP2;
@@ -265,6 +313,33 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 				}
 			}
 			float Radius = CharFrag.GetRadiusInDirection(Dir2D, EntityTransform.GetRotation().Rotator());
+
+			// DIE ENDEN EINZIEHEN (24.09.2026).
+			//
+			// "Abstand zur Strecke <= Radius" beschreibt eine KAPSEL, und eine Kapsel hat oben und
+			// unten je eine Halbkugel vom Radius. Die Trefferflaeche ragte damit eine volle
+			// Radiuslaenge UEBER die Meshoberkante hinaus - und ebenso weit unter den Boden.
+			//
+			// Gemessen am 24.09.2026 an der Singularian_Base: das Mesh reicht von 509.0 bis 1606.3,
+			// die Trefferkapsel ging von 509-Radius bis 1606+Radius. Der Ueberstand haengt am
+			// GRUNDRISS-Radius, nicht an der Hoehe - deshalb faellt er bei der MainBase mit dem
+			// groessten Grundriss am staerksten auf und bei kleinen Gebaeuden nur wenig. Genau so
+			// hat der Nutzer es beschrieben.
+			//
+			// Der Einzug legt die beiden Halbkugeln auf die Mesh-Ober- und -Unterkante. Die
+			// Deckelung auf die halbe Hoehe verhindert, dass die Strecke sich bei flachen
+			// Gebaeuden umdreht; dort bleibt es praktisch beim alten Verhalten.
+			//
+			// Der Radius stammt aus dem ersten Durchgang - die Richtung aendert sich durch den
+			// Einzug nur unwesentlich, ein dritter Durchgang brachte nichts.
+			const float Einzug = FMath::Min(Radius, Height * 0.5f);
+			if (Einzug > KINDA_SMALL_NUMBER)
+			{
+				SegmentStart.Z += Einzug;
+				SegmentEnd.Z   -= Einzug;
+				FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, SegmentStart, SegmentEnd, OutP1, OutP2);
+				DistSq = FVector::DistSquared(OutP1, OutP2);
+			}
 
 			if (DistSq <= FMath::Square(Radius))
 			{
