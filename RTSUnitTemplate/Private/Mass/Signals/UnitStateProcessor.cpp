@@ -22,6 +22,7 @@
 #include "MassNavigationFragments.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "Core/RTSDateiMessung.h"
 #include "Components/StaticMeshComponent.h"
 #include "Actors/WorkArea.h"
 #include "Actors/Waypoint.h"
@@ -4190,11 +4191,35 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 		// value instead of the additive ramp seeing full health and adding nothing. AFTER that use the ADDITIVE
 		// step so damage taken during construction is preserved.
 		const float PreviousProgress = WA ? WA->LastAppliedBuildProgress : 0.f;
+
+		// MESSUNG (bleibt stehen bis abbestellt) -> Saved/Bauprozess.csv
+		//
+		// Nutzerbefund vom 24.09.2026: im SHIPPING zeigt die ConstructionUnit immer VOLLE Health,
+		// im Dev-Build nicht. Ueber das Log ist das dort nicht messbar (UE_LOG ist im Shipping
+		// wegkompiliert, siehe AstraHelix.Target.cs), deshalb ueber FFileHelper.
+		//
+		// Die Zeile trennt drei Faelle: laeuft diese Rechnung im Shipping ueberhaupt; rechnet sie
+		// mit anderen Werten; oder rechnet sie richtig und nur die ANZEIGE bleibt voll.
+		// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
+		// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
+		// als einzige Messung den Shipping-Build (UE_LOG ist dort wegkompiliert).
+//		RTSDateiMessung::Schreibe(TEXT("Bauprozess.csv"), FString::Printf(
+//			TEXT("Extension;%s;Timer=%.2f;Limit=%.2f;Progress=%.3f;Vorher=%.3f;MaxHP=%.1f;HP_vor=%.1f"),
+//			*Construction->GetName(), Construction->UnitControlTimer, BuildTimeLimit,
+//			Progress, PreviousProgress, MaxHP, Construction->Attributes->GetHealth()));
+
 		if (PreviousProgress <= 0.f)
 		{
 			Construction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
 			Construction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
 			Construction->UpdateWidget();
+			// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
+			// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
+			// als einzige Messung den Shipping-Build (UE_LOG ist dort wegkompiliert).
+//			RTSDateiMessung::Schreibe(TEXT("Bauprozess.csv"), FString::Printf(
+//				TEXT("Extension_ERST;%s;gesetzt=%.1f;HP_nach=%.1f"),
+//				*Construction->GetName(), MaxHP * FMath::Max(Progress, 0.05f),
+//				Construction->Attributes->GetHealth()));
 			if (WA) { WA->LastAppliedBuildProgress = FMath::Max(Progress, 0.05f); }
 		}
 		else
@@ -4205,6 +4230,12 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 				Construction->SetHealth(FMath::Clamp(Construction->Attributes->GetHealth() + MaxHP * StepProgress, 0.f, MaxHP));
 				Construction->SetShield(FMath::Clamp(Construction->Attributes->GetShield() + MaxShield * StepProgress, 0.f, MaxShield));
 				Construction->UpdateWidget();
+				// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
+				// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
+				// als einzige Messung den Shipping-Build (UE_LOG ist dort wegkompiliert).
+//				RTSDateiMessung::Schreibe(TEXT("Bauprozess.csv"), FString::Printf(
+//					TEXT("Extension_SCHRITT;%s;Schritt=%.3f;HP_nach=%.1f"),
+//					*Construction->GetName(), StepProgress, Construction->Attributes->GetHealth()));
 				if (WA) { WA->LastAppliedBuildProgress = Progress; }
 			}
 		}
@@ -4521,6 +4552,14 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					const float MaxShield = NewConstruction->Attributes->GetMaxShield();
 					NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
 					NewConstruction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
+					// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
+					// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
+					// als einzige Messung den Shipping-Build (UE_LOG ist dort wegkompiliert).
+//					RTSDateiMessung::Schreibe(TEXT("Bauprozess.csv"), FString::Printf(
+//						TEXT("Start;%s;Progress=%.3f;MaxHP=%.1f;gesetzt=%.1f;HP_nach=%.1f"),
+//						*NewConstruction->GetName(), Progress, MaxHP,
+//						MaxHP * FMath::Max(Progress, 0.05f),
+//						NewConstruction->Attributes->GetHealth()));
 					NewConstruction->OpenHealthWidget = true;
 					NewConstruction->bShowLevelOnly = false;
 					NewConstruction->UpdateWidget();

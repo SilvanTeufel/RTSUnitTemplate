@@ -9,6 +9,8 @@
 #include "MassRepresentationTypes.h"      // For FMassRepresentationLODParams, EMassLOD
 #include "MassActorSubsystem.h"           // Potentially useful, good to know about
 #include "Characters/Unit/UnitBase.h"
+#include "EngineUtils.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Actors/WorkArea.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/Volume.h"
@@ -1001,10 +1003,67 @@ float UActorTransformSyncProcessor::CalculateActorSyncInterval() const
 	return FMath::Max(VisualISMActorSyncTime, Ratio * ActorSyncMaxInterval);
 }
 
+// DIAGNOSE rts.massz.dump (Wert = Intervall in Spielsekunden, 0 = aus).
+//
+// WIEDER EINGEBAUT fuer die Messung im PAKET: die Vorschauflaeche der Extension sitzt im Editor
+// richtig und im gebauten Spiel wieder zu tief. Ob das FTransformFragment dort erneut vom Aktor
+// abweicht, laesst sich nur im Paket selbst messen.
+static TAutoConsoleVariable<int32> CVarMassZDump(
+	TEXT("rts.massz.dump"),
+	0,
+	TEXT("Intervall in Spielsekunden, in dem Fragment-Z und Aktor-Z aller Gebaeude verglichen werden. 0 = aus."),
+	ECVF_Default);
+
 void UActorTransformSyncProcessor::Execute(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
 	// Siehe mass_scopes: macht diesen Prozessor als Spalte Exclusive/UActorTransformSyncProcessor im CSV sichtbar.
 	CSV_SCOPED_TIMING_STAT_EXCLUSIVE(UActorTransformSyncProcessor);
+
+	{
+		const int32 DumpIntervalSeconds = CVarMassZDump.GetValueOnAnyThread();
+		static float MassZNextDumpTime = 0.f;
+		if (DumpIntervalSeconds > 0 && GetWorld() && GetWorld()->GetTimeSeconds() > MassZNextDumpTime)
+		{
+			MassZNextDumpTime = GetWorld()->GetTimeSeconds() + (float)DumpIntervalSeconds;
+			int32 Counted = 0;
+			int32 Deviating = 0;
+			for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+			{
+				ABuildingBase* Building = *It;
+				if (!IsValid(Building)) continue;
+
+				const FMassEntityHandle BuildingHandle = Building->MassActorBindingComponent
+					? Building->MassActorBindingComponent->GetEntityHandle()
+					: FMassEntityHandle();
+				const bool bGueltig = BuildingHandle.IsSet() && EntityManager.IsEntityValid(BuildingHandle);
+
+				float TFragZ = -99999.f, PosTransZ = -99999.f;
+				if (bGueltig)
+				{
+					if (const FTransformFragment* TFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(BuildingHandle))
+					{
+						TFragZ = TFrag->GetTransform().GetLocation().Z;
+					}
+					if (const FMassAgentCharacteristicsFragment* CharFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(BuildingHandle))
+					{
+						PosTransZ = CharFrag->PositionedTransform.GetLocation().Z;
+					}
+				}
+
+				const float ActorZ = Building->GetActorLocation().Z;
+				const float Deviation = Building->GetMassActorLocation().Z - ActorZ;
+				++Counted;
+				if (FMath::Abs(Deviation) > 1.f) ++Deviating;
+
+				UE_LOG(LogTemp, Warning,
+					TEXT("[MassZ] %s AktorZ=%.1f TFrag=%.1f PosTrans=%.1f Abweichung=%.1f"),
+					*GetNameSafe(Building), ActorZ, TFragZ, PosTransZ, Deviation);
+			}
+			UE_LOG(LogTemp, Warning,
+				TEXT("[MassZ] SUMME: %d Gebaeude geprueft, %d weichen um mehr als 1 uu ab."),
+				Counted, Deviating);
+		}
+	}
 
 	if (GetWorld() && GetWorld()->IsNetMode(NM_Client))
 	{
