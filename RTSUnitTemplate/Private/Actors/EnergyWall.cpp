@@ -12,6 +12,9 @@
 #include "NavigationSystem.h"
 #include "Net/UnrealNetwork.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/MassUnitBase.h"
+#include "Mass/UnitMassTag.h"
+#include "MassEntityManager.h"
 #include "Components/CapsuleComponent.h"
 #include "Characters/Unit/UnitBase.h"
 #include "AbilitySystemComponent.h"
@@ -267,8 +270,36 @@ void AEnergyWall::UpdateWallTransformAndDimensions()
 		// Deshalb: XY weiter aus Mass, Z aus der Kapsel des Aktors.
 		FVector Ort = Gebaeude->GetMassActorLocation();
 
-		// Von der Mitte auf die Unterkante: die Kapsel ist hier das verlaessliche Mass, denn die
-		// Aktorbounds schliessen Anbauten und Effekte mit ein und sitzen dadurch zu tief.
+		// SOCKEL AUS DEM MASS-REFERENZWERT, NICHT AUS DER KAPSEL DES AKTORS (24.09.2026).
+		//
+		// Der Umweg ueber die Aktorkapsel war ein Notbehelf gegen ein FTransformFragment, das bei
+		// einem Teil der Gebaeude dauerhaft falsch steht - gemessen ueber rund 280.000 Zeilen haelt
+		// es Bodenhoehen ohne den Hoehenversatz (190.2 statt 389.2, 512.1 statt 711.1).
+		//
+		// PositionedTransform ist in derselben Messung in KEINER Zeile abgewichen. Es wird in
+		// UMassActorBindingComponent als LastGroundLocation + CapsuleHeight gebildet, ist also die
+		// Kapselmitte, und es ist derselbe Wert, aus dem die sichtbare ISM gezeichnet wird. Die
+		// Wand setzt damit genau dort an, wo der Turm auf dem Schirm steht.
+		//
+		// CapsuleHeight im Fragment ist die HALBhoehe (MassActorBindingComponent:1213), der Abzug
+		// fuehrt also von der Mitte auf die Unterkante.
+		if (const AMassUnitBase* MassGebaeude = Cast<AMassUnitBase>(Gebaeude))
+		{
+			const FMassEntityManager* EntityManager = nullptr;
+			FMassEntityHandle EntityHandle;
+			if (MassGebaeude->GetMassEntityData(EntityManager, EntityHandle) && EntityManager)
+			{
+				if (const FMassAgentCharacteristicsFragment* CharFragment =
+						EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+				{
+					Ort = CharFragment->PositionedTransform.GetLocation();
+					Ort.Z -= CharFragment->CapsuleHeight;
+					return Ort;
+				}
+			}
+		}
+
+		// Rueckfall wie bisher, falls die Entitaet (noch) nicht gebunden ist.
 		if (const UCapsuleComponent* Kapsel = Gebaeude->FindComponentByClass<UCapsuleComponent>())
 		{
 			Ort.Z = Kapsel->GetComponentLocation().Z - Kapsel->GetScaledCapsuleHalfHeight();
