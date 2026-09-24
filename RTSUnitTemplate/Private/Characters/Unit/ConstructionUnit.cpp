@@ -3,6 +3,7 @@
 #include "Net/UnrealNetwork.h"
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Core/RTSDateiMessung.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "NiagaraComponent.h"
 #include "Components/BoxComponent.h"
@@ -242,7 +243,11 @@ FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit)
 
 	const bool bSkeletal = Unit->bUseSkeletalMovement;
 
-	Unit->ForEachComponent<UMeshComponent>(false, [&VisualBox, bSkeletal](const UMeshComponent* MeshComp)
+	// Nur fuer Gebaeude messen - diese Funktion laeuft auch fuer jede gewoehnliche Einheit.
+	const bool bMesseKomponenten = Unit->IsA(ABuildingBase::StaticClass());
+	const float AktorZ = Unit->GetActorLocation().Z;
+
+	Unit->ForEachComponent<UMeshComponent>(false, [&VisualBox, bSkeletal, bMesseKomponenten, AktorZ, Unit](const UMeshComponent* MeshComp)
 	{
 		if (!IsValid(MeshComp) || !MeshComp->IsRegistered())
 		{
@@ -283,7 +288,29 @@ FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit)
 		// CalcBounds instead of the cached Bounds: the ISM instance added during
 		// FinishSpawning (InitializeUnitMode) only invalidates the bounds cache, so right
 		// after spawn the cached value is still the pre-instance zero-extent point.
-		VisualBox += MeshComp->CalcBounds(MeshComp->GetComponentTransform()).GetBox();
+		const FBox KomponentenBox = MeshComp->CalcBounds(MeshComp->GetComponentTransform()).GetBox();
+
+		// MESSUNG (bleibt stehen bis abbestellt) -> Saved/VisualBounds.csv
+		//
+		// Gemessen am 24.09.2026: VisualTopOffset ist bei genau zwei Gebaeudetypen um ein
+		// Vielfaches zu gross (Base 894.3 bei Kapselhalbhoehe 200, WallTower 696.4 bei 199),
+		// waehrend vier andere plausibel liegen. Der Hover reagiert deshalb weit ueber dem
+		// Gebaeude. Welche Komponente die Box hochzieht, ist NICHT gemessen - diese Zeile gibt
+		// jede einzeln aus.
+		//
+		// Ueber FFileHelper statt UE_LOG, weil die Messung im SHIPPING laufen muss.
+		if (bMesseKomponenten)
+		{
+			// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
+			// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
+			// als einzige Messung den Shipping-Build (UE_LOG ist dort wegkompiliert).
+//			RTSDateiMessung::Schreibe(TEXT("VisualBounds.csv"), FString::Printf(
+//				TEXT("%s;%s;%s;%.1f;%.1f;%.1f;%.1f"),
+//				*Unit->GetName(), *MeshComp->GetName(), *MeshComp->GetClass()->GetName(),
+//				KomponentenBox.Min.Z, KomponentenBox.Max.Z, AktorZ, KomponentenBox.Max.Z - AktorZ));
+		}
+
+		VisualBox += KomponentenBox;
 	});
 
 	return VisualBox;
