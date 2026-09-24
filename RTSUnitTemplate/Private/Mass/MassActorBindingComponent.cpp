@@ -1220,7 +1220,16 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				const FBox VisualBox = AConstructionUnit::ComputeVisualBounds(UnitOwner);
 				if (VisualBox.IsValid)
 				{
-					CharFrag->VisualTopOffset = VisualBox.Max.Z - UnitOwner->GetActorLocation().Z;
+					const float ActorZ = UnitOwner->GetActorLocation().Z;
+					CharFrag->VisualTopOffset = VisualBox.Max.Z - ActorZ;
+
+					// Unterkante und Bezugsskalierung mit erfassen - siehe
+					// FMassAgentCharacteristicsFragment::VisualBottomOffset/VisualCaptureScaleZ.
+					// Beide Offsets bleiben in Welteinheiten, damit bestehende Leser unveraendert
+					// funktionieren; VisualCaptureScaleZ erlaubt dem Hover, spaeter auf eine
+					// geaenderte Skalierung umzurechnen.
+					CharFrag->VisualBottomOffset = VisualBox.Min.Z - ActorZ;
+					CharFrag->VisualCaptureScaleZ = UnitOwner->GetActorScale3D().Z;
 				}
 			}
 
@@ -1228,7 +1237,13 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 
 			if (TargetedBox) {
 				CharFrag->bUseBoxComponent = true;
-				CharFrag->BoxExtent = TargetedBox->GetUnscaledBoxExtent();
+				// SKALIERT erfassen (24.09.2026), wie CapsuleRadius und CapsuleHeight daneben.
+				// GetRadiusInDirection rechnet mit BoxExtent roh weiter und wendet nirgends eine
+				// Skalierung an - bei einer Box-Einheit mit Skalierung != 1 war der waagerechte
+				// Radius deshalb um genau den Skalierungsfaktor falsch, waehrend der Kapselradius
+				// daneben stimmte. Leser sind ausschliesslich der Hover-Prozessor und
+				// GetRadiusInDirection, beide wollen das sichtbare Mass.
+				CharFrag->BoxExtent = TargetedBox->GetScaledBoxExtent();
 			} else {
 				CharFrag->bUseBoxComponent = false;
 				CharFrag->BoxExtent = FVector::ZeroVector;
