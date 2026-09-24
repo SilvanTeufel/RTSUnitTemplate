@@ -1217,6 +1217,28 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	UPROPERTY()
 	float VisualTopOffset = 0.f;
 
+	/**
+	 * Unterkante der SICHTBAREN Einheit, relativ zur Aktormitte. Gegenstueck zu VisualTopOffset,
+	 * also normalerweise NEGATIV. 0 = nicht erfasst.
+	 *
+	 * Bisher wurde die Unterkante der Trefferkapsel aus der Kapselhalbhoehe gebildet. Nutzerangabe
+	 * vom 24.09.2026: die ISM ist mitunter groesser als die Kapsel. Dann steht die Trefferkapsel
+	 * unten zu hoch, und zwar genau um die Differenz - unabhaengig davon, ob die Oberkante stimmt.
+	 */
+	UPROPERTY()
+	float VisualBottomOffset = 0.f;
+
+	/**
+	 * Aktorskalierung in Z zum Zeitpunkt der Erfassung von VisualTopOffset/VisualBottomOffset.
+	 *
+	 * Die beiden Offsets stehen in WELTeinheiten und tragen damit die Skalierung des Erfassungs-
+	 * zeitpunkts bereits in sich. Nutzerangabe vom 24.09.2026: ISMs werden auch skaliert - aendert
+	 * sich die Skalierung danach, sind beide Werte falsch. Mit diesem Bezugswert laesst sich auf
+	 * die aktuelle Skalierung umrechnen, statt die Offsets neu zu erfassen.
+	 */
+	UPROPERTY()
+	float VisualCaptureScaleZ = 0.f;
+
 	float GetRadiusInDirection(const FVector& WorldDirection, const FRotator& WorldRotation) const
 	{
 		if (!bUseBoxComponent) return CapsuleRadius;
