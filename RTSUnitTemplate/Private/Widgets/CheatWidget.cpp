@@ -87,8 +87,9 @@ EVisibility UCheatWidget::GetPanelVisibility() const
 
 FText UCheatWidget::GetToggleLabel() const
 {
-	return bPanelOpen ? LOCTEXT("CheatClose", "CHEATS  ▲")
-	                  : LOCTEXT("CheatOpen", "CHEATS  ▼");
+	// Nur der Pfeil, kein Beschriftungstext - Nutzerwunsch vom 24.09.2026.
+	return bPanelOpen ? LOCTEXT("CheatClose", "▲")
+	                  : LOCTEXT("CheatOpen", "▼");
 }
 
 TSharedRef<SWidget> UCheatWidget::RebuildWidget()
