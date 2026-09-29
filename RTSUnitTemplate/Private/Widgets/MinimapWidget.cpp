@@ -235,8 +235,22 @@ void UMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     ACameraBase* CameraPawn = Cast<ACameraBase>(GetOwningPlayerPawn());
     if (CameraPawn && MinimapImage)
     {
-        // 2. Den aktuellen Yaw-Winkel der Kamera über unsere neue Getter-Funktion abfragen.
-        const float CameraYaw = CameraPawn->SpringArmRotator.Yaw;
+        // 2. Den Yaw der Kamera in WELTKOORDINATEN abfragen.
+        //
+        // Hier stand `CameraPawn->SpringArmRotator.Yaw`, und das ist der Yaw RELATIV zum Pawn.
+        // Der Pawn selbst wird nie gedreht (CameraBase dreht ausschliesslich den SpringArm), er
+        // behaelt also die Drehung seines PlayerStarts fuer die ganze Partie. Steht dieser
+        // PlayerStart nicht auf Yaw 0 - was bei der zweiten Fraktion der Normalfall ist, weil sie
+        // von der Gegenseite ins Feld schaut - fehlt der Minimap genau dieser feste Betrag.
+        // Das erklaert alle drei gemeldeten Symptome auf einmal, denn CurrentMapAngle treibt sie
+        // alle: verdrehtes Bild, falschherum stehende Kamerakennzeichnung und den Klickversatz
+        // (siehe ComputeWorldXY und MoveCameraToMinimapLocation).
+        // Die Weltdrehung des SpringArms enthaelt beides, Pawn- und Relativdrehung. Bei einem
+        // PlayerStart mit Yaw 0 kommt derselbe Wert heraus wie vorher - fuer die Fraktion, bei
+        // der es bisher stimmte, aendert sich also nichts.
+        const float CameraYaw = CameraPawn->SpringArm
+            ? CameraPawn->SpringArm->GetComponentRotation().Yaw
+            : CameraPawn->GetActorRotation().Yaw + CameraPawn->SpringArmRotator.Yaw;
 
         // 3. Den finalen Winkel für das Bild berechnen.
         // Wir starten mit unserer Basis-Rotation von -90 Grad.
