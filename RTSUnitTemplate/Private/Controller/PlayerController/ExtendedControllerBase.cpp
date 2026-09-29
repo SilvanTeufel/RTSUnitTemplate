@@ -5623,11 +5623,13 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		// enemies stand on two sides). Runs BEFORE the overlap guard so the pushed spot is the one checked.
 		// Logged BEFORE the branch: the first attempt logged only inside the success path, so when the
 		// push never happened there was no way to tell WHICH condition rejected it.
-		// Feuert bei JEDEM Ablegen, deshalb Verbose statt Warning: die Zeile bleibt zum Nachsehen
-		// erhalten, spammt aber kein normales Spiel voll.
-		UE_LOG(LogTemp, Verbose, TEXT("[Defense] drop %s: isDefense=%d push=%.0f unit=%d bIsAi=%d"),
+		// Feuert bei JEDEM Ablegen. Steht normalerweise auf Verbose, damit kein Spiel vollgespammt
+		// wird - fuer die laufende Messung "KI baut in der Spielmitte" (29.09.2026) voruebergehend
+		// auf Warning, weil der Schub eine der drei Verdaechtigen ist. Danach zurueck auf Verbose.
+		UE_LOG(LogTemp, Warning, TEXT("[Defense] drop %s: isDefense=%d push=%.0f unit=%d bIsAi=%d vorher=(%.0f,%.0f)"),
 		       *DraggedWorkArea->GetName(), DraggedWorkArea->bIsDefenseArea ? 1 : 0,
-		       DefenseAreaForwardPush, UnitBase ? 1 : 0, bIsAi ? 1 : 0);
+		       DefenseAreaForwardPush, UnitBase ? 1 : 0, bIsAi ? 1 : 0,
+		       DraggedWorkArea->GetActorLocation().X, DraggedWorkArea->GetActorLocation().Y);
 
 		// NUR fuer die KI. Der Schub raeumt den Fehler der KI-Kamera aus - ein MENSCH waehlt den
 		// Platz dagegen bewusst aus, und 5000 Einheiten Versatz Richtung Gegnerbasis machen aus
@@ -6100,6 +6102,14 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				}
 			}
 
+			// Nur fuer die [Bauplatz]-Diagnose weiter unten: der Umsetzblock hat einen eigenen
+			// Gueltigkeitsbereich, seine Werte sind danach nicht mehr erreichbar.
+			FVector DiagDropOrigin  = DraggedWorkArea ? DraggedWorkArea->GetActorLocation() : FVector::ZeroVector;
+			FVector DiagAnchor      = DiagDropOrigin;
+			bool    bDiagUsedMarker = false;
+			bool    bDiagMainBase   = false;
+			bool    bDiagRelocated  = false;
+
 			if (bForceAiRelocation)
 			{
 				// A human drags the ghost around until it turns valid. The agent only ever offers the single
@@ -6550,6 +6560,14 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					       UnitBase->TeamId, bPlacementValid ? TEXT("SUCCEEDED") : TEXT("FAILED"),
 					       *DraggedWorkArea->GetActorLocation().ToCompactString());
 				}
+
+				// Werte aus diesem Block nach draussen reichen, damit die [Bauplatz]-Zeile weiter
+				// unten sie noch hat - dort sind DropOrigin/Origin/bUsedMarker nicht mehr sichtbar.
+				DiagDropOrigin = DropOrigin;
+				DiagAnchor     = Origin;
+				bDiagUsedMarker = bUsedMarker;
+				bDiagMainBase   = bIsMainBase;
+				bDiagRelocated  = true;
 			}
 
 			// ERREICHBARKEIT - die Pruefung, die bisher fehlte (Nutzerpunkte 2 und 4).
@@ -6592,6 +6610,40 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 						}
 					}
 				}
+			}
+
+			// DIAGNOSE (29.09.2026, Nutzerbefund "die Singularianer bauen in der Spielmitte"):
+			// eine Zeile je KI-Ablage, damit sich die drei moeglichen Ursachen trennen lassen -
+			// der Anker (Marker gegen Lagerstaette gegen naechstes eigenes Gebaeude), der
+			// Ringsuchlauf (NormalSearchRadii bis 4000) und der Defense-Schub (5000). Bisher gab
+			// es nur fuer Hauptbasen eine Zeile, gewoehnliche Gebaeude liefen voellig stumm.
+			// Gemessen wird der Weg vom urspruenglichen Ablegepunkt bis zum Endstand und der
+			// Abstand zur naechsten EIGENEN Basis: baut die KI wirklich mittig, ist der zweite
+			// Wert gross, obwohl eine eigene Basis existiert.
+			if (bIsAi && DraggedWorkArea && UnitBase)
+			{
+				const FVector Endstand = DraggedWorkArea->GetActorLocation();
+				double NaechsteEigeneBasisSq = TNumericLimits<double>::Max();
+				for (TActorIterator<ABuildingBase> ItDiag(GetWorld()); ItDiag; ++ItDiag)
+				{
+					ABuildingBase* EigeneBasis = *ItDiag;
+					if (!IsValid(EigeneBasis) || !EigeneBasis->IsBase || EigeneBasis->TeamId != UnitBase->TeamId) continue;
+					NaechsteEigeneBasisSq = FMath::Min(NaechsteEigeneBasisSq,
+						(double)FVector::DistSquared2D(EigeneBasis->GetActorLocation(), Endstand));
+				}
+				const float ZurBasis = (NaechsteEigeneBasisSq == TNumericLimits<double>::Max())
+					? -1.f : FMath::Sqrt((float)NaechsteEigeneBasisSq);
+
+				const TCHAR* AnkerArt = !bDiagRelocated ? TEXT("KeineUmsetzung")
+					: (bDiagUsedMarker ? TEXT("Marker")
+					: (bDiagMainBase ? TEXT("Lagerstaette") : TEXT("EigenesGebaeude")));
+
+				UE_LOG(LogTemp, Warning,
+					TEXT("[Bauplatz] Team=%d %s Anker=%s Haupt=%d Defense=%d | Ablage=(%.0f,%.0f) AnkerPos=(%.0f,%.0f) Ende=(%.0f,%.0f) | verschoben=%.0f zurEigenenBasis=%.0f gueltig=%d"),
+					UnitBase->TeamId, *GetNameSafe(DraggedWorkArea->GetClass()), AnkerArt,
+					bDiagMainBase ? 1 : 0, DraggedWorkArea->bIsDefenseArea ? 1 : 0,
+					DiagDropOrigin.X, DiagDropOrigin.Y, DiagAnchor.X, DiagAnchor.Y, Endstand.X, Endstand.Y,
+					FVector::Dist2D(DiagDropOrigin, Endstand), ZurBasis, bPlacementValid ? 1 : 0);
 			}
 
 			if (!bPlacementValid)
