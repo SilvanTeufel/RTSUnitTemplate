@@ -1,6 +1,7 @@
 ﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/UnitBase.h"
+#include "Core/RTSSupplyMessung.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Actors/EffectArea.h"
 #include "Actors/AreaDecalComponent.h"
@@ -187,6 +188,9 @@ void AUnitBase::ApplyStartupSupplyCost()
 		EResourceType::Primary, EResourceType::Secondary, EResourceType::Tertiary,
 		EResourceType::Rare, EResourceType::Epic, EResourceType::Legendary };
 
+	// MESSUNG: Quelle benennen, damit die Bilanz je Herkunft aufsummierbar ist.
+	const RTSSupplyMessung::FQuelle Quelle(*FString::Printf(TEXT("Startkosten:%s"), *GetName()));
+
 	for (const EResourceType SupplyType : AllTypes)
 	{
 		if (!ResourceGameMode->IsSupplyLikeResource(SupplyType))
@@ -255,6 +259,9 @@ void AUnitBase::ReleaseUnitSupply()
 	static const EResourceType AllSupplyTypes[] = {
 		EResourceType::Primary, EResourceType::Secondary, EResourceType::Tertiary,
 		EResourceType::Rare, EResourceType::Epic, EResourceType::Legendary };
+
+	// MESSUNG: die Rueckgabe der Einheit beim Tod - der Gegenpart zur Bezahlung durch die Ability.
+	const RTSSupplyMessung::FQuelle Quelle(*FString::Printf(TEXT("Einheitentod:%s"), *GetName()));
 
 	for (const EResourceType SupplyType : AllSupplyTypes)
 	{
@@ -2428,8 +2435,38 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 				const int32 Rest = FMath::Max(0, BilledSupply) % Gesamt;
 				UnitBase->ChargedSupplyAmount = ProEinheit + ((i < Rest) ? 1 : 0);
 				UnitBase->bSupplyAmountKnown = true;
+
+				// Ab hier traegt die Einheit die Versorgung. Der erzeugenden Ability sagen, dass
+				// sie bei einem spaeteren Abbruch NICHT mehr erstatten darf - sonst kommt derselbe
+				// Betrag zweimal zurueck (hier und beim Tod der Einheit).
+				//
+				// Bewusst hier und nicht im Blueprint: so gilt die Regel fuer jede
+				// Produktions-Ability, auch fuer kuenftige, ohne dass jemand einen Knoten
+				// vergessen kann. ActivatedAbilityInstance ist die laufende Ability DIESES
+				// Erzeugers (AGASUnit::ActivatedAbilityInstance).
+				if (UGameplayAbilityBase* ErzeugendeAbility = ActivatedAbilityInstance)
+				{
+					ErzeugendeAbility->MarkSupplyHandedOverToUnit();
+				}
+
+				// MESSUNG (25.09.2026): ob die Uebergabe ueberhaupt ankommt.
+				//
+				// Ohne diese Zeile waere "keine unterdrueckte Erstattung" nicht davon zu trennen,
+				// dass ActivatedAbilityInstance leer ist und der Riegel nie scharf wird - also
+				// nicht von einem Fix, der gar nichts tut. Genau diese Verwechslung hat heute
+				// schon zweimal Zeit gekostet.
+				if (AResourceGameMode* MessGameMode = Cast<AResourceGameMode>(GameMode))
+				{
+					const float Verbraucht = MessGameMode->GetResource(UnitBase->TeamId, EResourceType::Rare);
+					RTSSupplyMessung::Buche(GetWorld(), TEXT("Uebergabe"), UnitBase->TeamId,
+						(int32)EResourceType::Rare, 0.f, Verbraucht, Verbraucht,
+						MessGameMode->GetMaxResource(EResourceType::Rare, UnitBase->TeamId),
+						FString::Printf(TEXT("Einheit=%s Betrag=%d Ability=%s"),
+							*UnitBase->GetName(), UnitBase->ChargedSupplyAmount,
+							ActivatedAbilityInstance ? *ActivatedAbilityInstance->GetName() : TEXT("KEINE")));
+				}
 			}
-			
+
 			if(UnitToChase && IsValid(UnitToChase))
 			{
 				UnitBase->UnitToChase = UnitToChase;

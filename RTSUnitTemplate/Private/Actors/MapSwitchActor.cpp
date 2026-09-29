@@ -1,5 +1,6 @@
 ﻿// Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 #include "Actors/MapSwitchActor.h"
+#include "System/GameSaveSubsystem.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
@@ -125,6 +126,50 @@ void AMapSwitchActor::BuildDestinationStates(TArray<FMapSwitchDestinationState>&
     }
 }
 
+void AMapSwitchActor::ApplyTravelUnlocks(const FString& TargetMapLongPackageName, FName DestinationTag)
+{
+    UWorld* World = GetWorld();
+    UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+    UMapSwitchSubsystem* Subsystem = GI ? GI->GetSubsystem<UMapSwitchSubsystem>() : nullptr;
+    if (!Subsystem)
+    {
+        return;
+    }
+
+    bool bEtwasFreigeschaltet = false;
+
+    if (DestinationTag != NAME_None && !TargetMapLongPackageName.IsEmpty())
+    {
+        Subsystem->MarkSwitchEnabledForMap(TargetMapLongPackageName, DestinationTag);
+        bEtwasFreigeschaltet = true;
+    }
+
+    // Siehe UnlockOnMap: derselbe Besuch kann zusaetzlich eine Tuer auf einer ANDEREN Karte
+    // oeffnen - typisch die Sternenkarte, von der aus man spaeter wieder hierher zurueck will.
+    // Ein Tag wird immer gegen die Karte gelesen, auf der der fragende Aktor steht; Ziel und
+    // Leser sind hier verschiedene Karten, deshalb reicht DestinationTag allein nicht.
+    if (!UnlockOnMap.IsNull() && UnlockSwitchTag != NAME_None)
+    {
+        const FString UnlockMapName = UnlockOnMap.ToSoftObjectPath().GetLongPackageName();
+        Subsystem->MarkSwitchEnabledForMap(UnlockMapName, UnlockSwitchTag);
+        bEtwasFreigeschaltet = true;
+        UE_LOG(LogTemp, Log,
+            TEXT("[MapSwitch] '%s' schaltet zusaetzlich '%s' auf der Karte '%s' frei."),
+            *GetName(), *UnlockSwitchTag.ToString(), *UnlockMapName);
+    }
+
+    // Sofort sichern. MarkSwitchEnabledForMap schreibt nur in den Speicher; ohne diesen Schritt
+    // war die Freischaltung nach dem Beenden des Spiels weg, weil sie erst beim naechsten
+    // vollen SaveCurrentGame mitgeschrieben worden waere.
+    if (bEtwasFreigeschaltet)
+    {
+        if (UGameSaveSubsystem* SaveSub = GI->GetSubsystem<UGameSaveSubsystem>())
+        {
+            SaveSub->PersistUnlocksToLatestSave();
+        }
+    }
+}
+
 void AMapSwitchActor::TravelToDestination(const FMapSwitchDestinationState& State)
 {
     if (!State.bUnlocked || State.MapLongPackageName.IsEmpty())
@@ -132,31 +177,7 @@ void AMapSwitchActor::TravelToDestination(const FMapSwitchDestinationState& Stat
         return;
     }
 
-    if (UWorld* World = GetWorld())
-    {
-        if (UGameInstance* GI = World->GetGameInstance())
-        {
-            if (UMapSwitchSubsystem* Subsystem = GI->GetSubsystem<UMapSwitchSubsystem>())
-            {
-                if (State.DestinationSwitchTagToEnable != NAME_None)
-                {
-                    Subsystem->MarkSwitchEnabledForMap(State.MapLongPackageName, State.DestinationSwitchTagToEnable);
-                }
-
-                // Siehe UnlockOnMap: derselbe Besuch kann zusaetzlich eine Tuer auf einer
-                // anderen Karte oeffnen - typisch die Sternenkarte, von der aus man spaeter
-                // wieder hierher zurueck will.
-                if (!UnlockOnMap.IsNull() && UnlockSwitchTag != NAME_None)
-                {
-                    const FString UnlockMapName = UnlockOnMap.ToSoftObjectPath().GetLongPackageName();
-                    Subsystem->MarkSwitchEnabledForMap(UnlockMapName, UnlockSwitchTag);
-                    UE_LOG(LogTemp, Warning,
-                        TEXT("[MapSwitch] '%s' schaltet zusaetzlich '%s' auf der Karte '%s' frei."),
-                        *GetName(), *UnlockSwitchTag.ToString(), *UnlockMapName);
-                }
-            }
-        }
-    }
+    ApplyTravelUnlocks(State.MapLongPackageName, State.DestinationSwitchTagToEnable);
 
     StartMapSwitch();
 

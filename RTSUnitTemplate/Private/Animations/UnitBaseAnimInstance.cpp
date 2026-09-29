@@ -13,6 +13,19 @@
 #include "Mass/MassActorBindingComponent.h"
 #include "Animations/UnitAnimationProcessor.h"   // RTSDiagIstAusgewaehlt
 #include "HAL/IConsoleManager.h"
+
+/**
+ * Vergleichsmessung Soldier gegen MassShooter.
+ *
+ * Drei Erklaerungen fuer "Mischung aus Schuss- und Idle-Animation" waren nicht zu unterscheiden:
+ * falsche Mischpunkte, falsche Laufrichtung, oder ein Zustand der zu schnell hin und her
+ * schaltet. Die Zeile zeigt alle drei Groessen nebeneinander - dann entscheidet die Messung.
+ */
+static TAutoConsoleVariable<int32> CVarRTS_AnimBlendDiag(
+	TEXT("rts.anim.blend.diag"),
+	0,
+	TEXT("1 = protokolliert Zustand, Mischpunkte, Tempo und Richtung je Einheit."),
+	ECVF_Default);
 #include "MassExecutionContext.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimMontage.h"
@@ -114,6 +127,76 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 
 			CharAnimState = UnitBase->GetUnitState();
 
+			// Anzeige-Zustand einer Faehigkeit hat Vorrang, solange er laeuft. Siehe
+			// AnimStateOverride in der .h - der echte Zustand der Einheit bleibt unberuehrt.
+			bool bStateBlendPointVorrang = false;
+			float StateBlendPointVorrang_1 = 0.f;
+			float StateBlendPointVorrang_2 = 0.f;
+			if (AnimStateOverride != UnitData::None)
+			{
+				const UWorld* OverrideWorld = UnitBase->GetWorld();
+				if (OverrideWorld && OverrideWorld->GetTimeSeconds() <= AnimStateOverrideUntil)
+				{
+					CharAnimState = AnimStateOverride;
+
+					// Die MISCHPUNKTE muessen mit - sonst ist der Vorrang wirkungslos.
+					//
+					// Gemessen (26.09.2026): die Mischpunkte kommen vom UUnitAnimationProcessor
+					// aus der Zeile des ECHTEN Zustands. Steht die Einheit auf Idle, sind das
+					// (25, 75). Ein bloss umgeschriebenes CharAnimState laesst den
+					// Attack-Zustand dann BS_Wraith bei (25, 75) abtasten - dort liegt
+					// Idle_NonCombat, nicht Fire_A_Slow bei (25, 25). Das ergibt die gemeldete
+					// "Mischung aus Schuss- und Idle-Animation".
+					//
+					// Beim WeaponModule-Charakter wechselt der ECHTE Zustand, deshalb setzt der
+					// Prozessor dort die Attack-Zeile und es sieht richtig aus.
+					if (AnimDataTable)
+					{
+						for (const TPair<FName, uint8*>& Eintrag : AnimDataTable->GetRowMap())
+						{
+							const FUnitAnimData* Zeile = reinterpret_cast<const FUnitAnimData*>(Eintrag.Value);
+							if (Zeile && Zeile->AnimState == AnimStateOverride)
+							{
+								// NUR die Zustandswerte - CurrentBlendPoint gehoert den Beinen.
+								StateBlendPointVorrang_1 = Zeile->BlendPoint_1;
+								StateBlendPointVorrang_2 = Zeile->BlendPoint_2;
+								bStateBlendPointVorrang = true;
+								break;
+							}
+						}
+					}
+				}
+				else
+				{
+					AnimStateOverride = UnitData::None;
+				}
+			}
+
+			// Der Anzeige-Zustand bringt seine eigenen Zustandswerte mit.
+			if (bStateBlendPointVorrang)
+			{
+				CurrentBlendPoint_1 = StateBlendPointVorrang_1;
+				CurrentBlendPoint_2 = StateBlendPointVorrang_2;
+			}
+
+			// Vollkoerper-Todespose: siehe bIsDeadPose in der .h.
+			bIsDeadPose = (CharAnimState == UnitData::Dead);
+
+			// Vergleichsmessung, siehe rts.anim.blend.diag.
+			if (CVarRTS_AnimBlendDiag.GetValueOnGameThread() != 0)
+			{
+				++BlendDiagZaehler;
+				if (BlendDiagZaehler % 20 == 1)
+				{
+					UE_LOG(LogTemp, Warning,
+						TEXT("[AnimMisch] %s Zustand=%d (Einheit=%d Vorrang=%d) Mischpunkte=(%.1f, %.1f) Tempo=%.0f gueltig=%d Richtung=%.0f"),
+						*GetNameSafe(UnitBase), (int32)CharAnimState.GetValue(),
+						(int32)UnitBase->GetUnitState(), (int32)AnimStateOverride.GetValue(),
+						CurrentBlendPoint_1, CurrentBlendPoint_2, MassSpeed,
+						bMassSpeedValid ? 1 : 0, LocomotionDirection);
+				}
+			}
+
 			// ================================================================================
 			// LUX-ANPASSUNG (26.08.2026) - Laufrichtung und Tempo. Siehe Kommentar an
 			// LocomotionDirection in der .h.
@@ -147,10 +230,39 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			// Umleitung der Blendpunkte auf die Bewegung - nur wenn ausdruecklich gewuenscht.
 			// Der Wert aus dem Fragment wurde weiter oben gelesen und wird hier bewusst
 			// ueberschrieben; der Fragment-Wert ist zustandsbasiert und kennt keine Richtung.
-			if (bUseDirectionalLocomotion)
+			// KORREKTUR (26.09.2026): im Tod NICHT ueberschreiben - sonst faellt die
+			// Todesanimation aus.
+			//
+			// Der Block lief bisher jeden Frame und ungefiltert. Beim Tod setzt der
+			// UUnitAnimationProcessor die Mischpunkte aus der Zeile "Dead" der
+			// DT_UnitAnimData auf (100, 0) - zwei Zeilen spaeter standen hier aber wieder
+			// Richtung (~0) und Tempo (0). Der Dead-Zustand des AnimBP tastet seinen
+			// Blendspace damit bei (0,0) ab statt bei (100,0): die Todesanimation ist
+			// vorhanden und auf dem richtigen Skelett, sie wird nur nie angesteuert.
+			//
+			// Betrifft nur Einheiten mit bUseDirectionalLocomotion - also den
+			// BP_Soldier_Weapon_AH; an den Xeno-AnimBPs steht der Schalter auf false,
+			// weshalb deren Todesanimation immer lief.
+			//
+			// CharAnimState ist hier schon frisch: es wird weiter oben aus
+			// UnitBase->GetUnitState() gesetzt.
+			if (bUseDirectionalLocomotion && CharAnimState != UnitData::Dead)
 			{
-				CurrentBlendPoint_1 = LocomotionDirection;
-				CurrentBlendPoint_2 = bMassSpeedValid ? MassSpeed : 0.0f;
+				// Bewusst NICHT CurrentBlendPoint: das sind die Zustandswerte fuer BS_Wraith.
+				// Siehe LocomotionBlendPoint_1 in der .h.
+				LocomotionBlendPoint_1 = LocomotionDirection;
+				LocomotionBlendPoint_2 = bMassSpeedValid ? MassSpeed : 0.0f;
+			}
+
+			// Diagnose: einmal je Einheit beim Uebergang in den Tod. Zeigt, ob die
+			// Mischpunkte der Dead-Zeile jetzt wirklich stehenbleiben.
+			if (CharAnimState == UnitData::Dead && !bTodesmischpunkteGemeldet)
+			{
+				bTodesmischpunkteGemeldet = true;
+				UE_LOG(LogTemp, Warning,
+					TEXT("[TodAnim] %s Zustand=Dead Richtungsmodus=%d Mischpunkte=(%.1f, %.1f)"),
+					*GetNameSafe(UnitBase), bUseDirectionalLocomotion ? 1 : 0,
+					CurrentBlendPoint_1, CurrentBlendPoint_2);
 			}
 			// ===================== ENDE LUX-ANPASSUNG (26.08.2026) ==========================
 
@@ -344,4 +456,11 @@ void UUnitBaseAnimInstance::SetBlendPoints(AUnitBase* Unit, float Deltaseconds)
 		
 	}
 
+}
+
+void UUnitBaseAnimInstance::SetAnimStateOverride(TEnumAsByte<UnitData::EState> NewState, float DurationSeconds)
+{
+	AnimStateOverride = NewState;
+	const UWorld* World = GetWorld();
+	AnimStateOverrideUntil = (World ? World->GetTimeSeconds() : 0.f) + FMath::Max(0.f, DurationSeconds);
 }

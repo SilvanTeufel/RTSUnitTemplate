@@ -1,6 +1,7 @@
 ﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "GAS/GameplayAbilityBase.h"
+#include "Core/RTSSupplyMessung.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "System/StoryTriggerQueueSubsystem.h"
@@ -153,6 +154,11 @@ void UGameplayAbilityBase::OnAbilityMouseHit_Implementation(const FHitResult& In
 
 void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
+	// Jede Aktivierung beginnt ohne uebergebene Versorgung.
+	//
+	// Wichtig bei InstancedPerActor: dieselbe Ability-Instanz wird wiederverwendet, ein Rest aus
+	// der vorigen Aktivierung wuerde sonst die naechste Erstattung faelschlich unterdruecken.
+	bSupplyHandedOverToUnit = false;
 
 	// Mark this ability class as executed in this play session (exact class type)
 	if (UClass* ThisClass = GetClass())
@@ -658,7 +664,19 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 		}
 	}
 	
-	if (bWasCancelled && bRefundOnCancel && ActorInfo && ActorInfo->OwnerActor.IsValid())
+	// Nach dem Spawn NICHT mehr erstatten.
+	//
+	// Ab da traegt die Einheit die Versorgung selbst (ChargedSupplyAmount ->
+	// AUnitBase::ReleaseUnitSupply beim Tod). Eine Erstattung hier waere die zweite.
+	// Belegt am 25.09.2026 in einer 662-Sekunden-Partie im Shipping-Build: 8 von 12
+	// Abbruch-Erstattungen liefen bei Erzeugern im Zustand Idle statt Casting, zusammen
+	// 10 Versorgung zu viel - ausschliesslich bei den Singularianern, deren
+	// Produktions-Abilities bRefundOnCancel = true tragen.
+	//
+	// Der Abbruch WAEHREND des Baus erstattet unveraendert weiter: dann ist keine Einheit
+	// entstanden, bSupplyHandedOverToUnit steht auf false.
+	if (bWasCancelled && bRefundOnCancel && !bSupplyHandedOverToUnit
+		&& ActorInfo && ActorInfo->OwnerActor.IsValid())
 	{
 		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
 		{
@@ -674,7 +692,46 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 					RefundCost.EpicCost = -ConstructionCost.EpicCost;
 					RefundCost.LegendaryCost = -ConstructionCost.LegendaryCost;
 
+					// MESSUNG (25.09.2026): DIE Stelle, um die es geht. Sie erstattet die vollen
+					// Kosten, ohne zu pruefen, ob je bezahlt wurde und ob die Einheit schon
+					// gespawnt ist. Der Name traegt die Ability, damit sich im Protokoll ablesen
+					// laesst, welche Produktion doppelt erstattet.
+					// Der Zustand des Erzeugers ist der Unterscheider, um den es geht:
+					// Casting = der Cast lief noch, die Einheit war "in Bau" und nie gespawnt -
+					// die Erstattung ist dann RICHTIG. Jeder andere Zustand heisst, dass der Cast
+					// bereits fertig war, die Einheit also existiert und ihre Versorgung selbst
+					// traegt (ChargedSupplyAmount) - dann erstattet diese Zeile ein zweites Mal.
+					const bool bNochImCast = (Unit->GetUnitState() == UnitData::Casting);
+					const RTSSupplyMessung::FQuelle Quelle(
+						*FString::Printf(TEXT("AbbruchErstattung:%s"), *GetName()));
+					const RTSSupplyMessung::FDetail ZusatzDetail(
+						*FString::Printf(TEXT("Erzeuger=%s Zustand=%d NochImCast=%d"),
+							*Unit->GetName(), (int32)Unit->GetUnitState(), bNochImCast ? 1 : 0));
+
 					RGMode->ModifyResourceCCost(RefundCost, Unit->TeamId);
+				}
+			}
+		}
+	}
+	else if (bWasCancelled && bRefundOnCancel && bSupplyHandedOverToUnit
+		&& ActorInfo && ActorInfo->OwnerActor.IsValid())
+	{
+		// MESSUNG (25.09.2026): die UNTERDRUECKTE Erstattung mitschreiben. Ohne diese Zeile
+		// laesst sich "keine Doppelbuchung mehr" nicht davon trennen, dass die Bedingung gar
+		// nicht greift - der Unterschied zwischen einer Behebung und einem Zufall.
+		if (const AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
+		{
+			if (Unit->HasAuthority())
+			{
+				if (AResourceGameMode* RGMode = Cast<AResourceGameMode>(Unit->GetWorld()->GetAuthGameMode()))
+				{
+					const float Verbraucht = RGMode->GetResource(Unit->TeamId, EResourceType::Rare);
+					RTSSupplyMessung::Buche(Unit->GetWorld(), TEXT("ErstattungUnterdrueckt"),
+						Unit->TeamId, (int32)EResourceType::Rare, 0.f, Verbraucht, Verbraucht,
+						RGMode->GetMaxResource(EResourceType::Rare, Unit->TeamId),
+						FString::Printf(TEXT("Ability=%s Erzeuger=%s Zustand=%d haettenErstattet=%d"),
+							*GetName(), *Unit->GetName(), (int32)Unit->GetUnitState(),
+							ConstructionCost.RareCost));
 				}
 			}
 		}

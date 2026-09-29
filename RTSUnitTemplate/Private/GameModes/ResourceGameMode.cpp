@@ -11,10 +11,24 @@
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/UnrealNetwork.h"
+#include "Core/RTSSupplyMessung.h"
 
 
 #include "System/MapSwitchSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "HAL/IConsoleManager.h"
+
+/**
+ * Schaltet alle CSV-Messungen ein (Versorgungsbilanz, Faehigkeits-Diagnose).
+ *
+ * Vorgabe 0: das Spiel schreibt keine Messdateien mehr. Die Aufrufstellen im Code bleiben
+ * stehen; gelesen wird der Schalter in RTSDateiMessung::MessungAktiv().
+ */
+static TAutoConsoleVariable<int32> CVarRTS_CsvMessung(
+	TEXT("rts.csv.messung"),
+	0,
+	TEXT("1 = CSV-Messungen nach Saved/ schreiben (SupplyBilanz, AbilityDiag). Vorgabe 0."),
+	ECVF_Default);
 
 AResourceGameMode::AResourceGameMode()
 {
@@ -29,6 +43,10 @@ AResourceGameMode::AResourceGameMode()
 void AResourceGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// MESSUNG (25.09.2026): Kopfzeile einmal je Partie. Die Datei wird angehaengt, ohne sie
+	// waere nach dem zweiten Start nicht zu erkennen, wo eine Partie beginnt.
+	RTSSupplyMessung::SchreibeKopfzeile();
 	// Initialize resources for the game
 	InitializeResources(NumberOfTeams);
 	GatherWorkAreas();
@@ -172,6 +190,14 @@ void AResourceGameMode::ModifyResource_Implementation(EResourceType ResourceType
 					{
 					}
 					ResourceArray.Resources[TeamId] = FMath::Max(0.f, Wanted);
+
+					// MESSUNG (25.09.2026): jede Supply-Buchung mitschreiben. Negativer Betrag =
+					// bezahlen, positiver = zurueckgeben. Weicht Nachher von Wanted ab, hat der
+					// Boden bei 0 gegriffen - genau das verdeckt die Unwucht im Spiel.
+					RTSSupplyMessung::Buche(GetWorld(), TEXT("ModifyResource"), TeamId,
+						(int32)ResourceType, -Amount, Before, ResourceArray.Resources[TeamId],
+						GetMaxResource(ResourceType, TeamId),
+						Wanted < 0.f ? FString::Printf(TEXT("BODEN_GRIFF Wunsch=%.0f"), Wanted) : FString());
 				}
 				else
 				{
@@ -198,7 +224,19 @@ void AResourceGameMode::ModifyMaxResource_Implementation(EResourceType ResourceT
 		{
 			if (ResourceArray.MaxResources.IsValidIndex(TeamId))
 			{
-				ResourceArray.MaxResources[TeamId] = FMath::Clamp(ResourceArray.MaxResources[TeamId] + Amount, 0.0f, HighestMaxResource);
+				const float MaxVorher = ResourceArray.MaxResources[TeamId];
+				ResourceArray.MaxResources[TeamId] = FMath::Clamp(MaxVorher + Amount, 0.0f, HighestMaxResource);
+
+				// MESSUNG (25.09.2026): der DECKEL, nicht der Verbrauch. Ohne diese Zeile laesst
+				// sich "0/45" nicht darin trennen, ob der Verbrauch fiel oder der Deckel stieg.
+				if (Amount != 0.f && IsSupplyLikeResource(ResourceType))
+				{
+					RTSSupplyMessung::Buche(GetWorld(), TEXT("Deckel"), TeamId, (int32)ResourceType,
+						Amount, ResourceArray.Resources.IsValidIndex(TeamId) ? ResourceArray.Resources[TeamId] : -1.f,
+						ResourceArray.Resources.IsValidIndex(TeamId) ? ResourceArray.Resources[TeamId] : -1.f,
+						ResourceArray.MaxResources[TeamId],
+						FString::Printf(TEXT("MaxVorher=%.0f"), MaxVorher));
+				}
 				break;
 			}
 		}
@@ -767,11 +805,20 @@ bool AResourceGameMode::ModifyResourceCCost(const FBuildingCost& ConstructionCos
 			{
 				// Same floor as in ModifyResource: a refund (negative cost, e.g. bRefundOnCancel)
 				// must not push the used amount below zero.
-				const float Wanted = ResourceArray.Resources[TeamId] + CostMap[ResourceArray.ResourceType];
+				const float Before = ResourceArray.Resources[TeamId];
+				const float Wanted = Before + CostMap[ResourceArray.ResourceType];
 				if (Wanted < 0.f)
 				{
 				}
 				ResourceArray.Resources[TeamId] = FMath::Max(0.f, Wanted);
+
+				// MESSUNG (25.09.2026): das ist der Weg, den die Produktions-Blueprints nehmen -
+				// positiver Betrag = bezahlen, negativer = Erstattung aus EndAbility.
+				RTSSupplyMessung::Buche(GetWorld(), TEXT("ModifyResourceCCost"), TeamId,
+					(int32)ResourceArray.ResourceType, (float)CostMap[ResourceArray.ResourceType],
+					Before, ResourceArray.Resources[TeamId],
+					GetMaxResource(ResourceArray.ResourceType, TeamId),
+					Wanted < 0.f ? FString::Printf(TEXT("BODEN_GRIFF Wunsch=%.0f"), Wanted) : FString());
 			}
 			else
 			{

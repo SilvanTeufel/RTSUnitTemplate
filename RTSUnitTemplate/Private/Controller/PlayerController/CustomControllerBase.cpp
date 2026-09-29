@@ -62,6 +62,9 @@
 void ACustomControllerBase::BeginPlay()
 {
 	Super::BeginPlay();
+	
+	// Selbsttest der Faehigkeiten, wenn rts.ability.autotest gesetzt ist. Ohne CVar passiert nichts.
+	StarteFaehigkeitsSelbsttest();
 
 	if (UWorld* World = GetWorld())
 	{
@@ -5720,4 +5723,125 @@ bool ACustomControllerBase::TierHasUnitsWithAbilityPoints(FGameplayTag TierTag) 
 		}
 	}
 	return false;
+}
+
+void ACustomControllerBase::RTSTestAbility(int32 Arrayindex, int32 InputIdRoh)
+{
+	// Erst die Einheit bestimmen und das AUCH sagen: ein leerer Auswahlsatz sieht sonst aus wie
+	// eine kaputte Faehigkeit.
+	AUnitBase* Ziel = nullptr;
+	const TCHAR* Herkunft = TEXT("nichts");
+
+	if (SelectedUnits.Num() > 0 && SelectedUnits[0])
+	{
+		Ziel = SelectedUnits[0];
+		Herkunft = TEXT("SelectedUnits[0]");
+	}
+	else if (CameraUnitWithTag)
+	{
+		Ziel = CameraUnitWithTag;
+		Herkunft = TEXT("CameraUnitWithTag");
+	}
+
+	if (!Ziel)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[AbilityTest] Keine Einheit: SelectedUnits=%d CameraUnitWithTag=%s"),
+			SelectedUnits.Num(), *GetNameSafe(CameraUnitWithTag));
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning,
+		TEXT("[AbilityTest] Einheit=%s (aus %s) Team=%d Zustand=%d | Default=%d Second=%d Third=%d Fourth=%d"),
+		*Ziel->GetName(), Herkunft, Ziel->TeamId, (int32)Ziel->GetUnitState(),
+		Ziel->DefaultAbilities.Num(), Ziel->SecondAbilities.Num(),
+		Ziel->ThirdAbilities.Num(), Ziel->FourthAbilities.Num());
+
+	// Ein Trefferpunkt vor der Einheit - die Wurffaehigkeiten brauchen ein Ziel.
+	FHitResult Treffer;
+	Treffer.Location = Ziel->GetActorLocation() + Ziel->GetActorForwardVector() * 800.f;
+	Treffer.ImpactPoint = Treffer.Location;
+
+	ActivateAbilitiesByIndex(Ziel, static_cast<EGASAbilityInputID>(InputIdRoh), Arrayindex, Treffer);
+
+	UE_LOG(LogTemp, Warning, TEXT("[AbilityTest] Aufruf zurueck. ActivatedAbilityInstance=%s"),
+		*GetNameSafe(Ziel->ActivatedAbilityInstance));
+
+	// DEN KLICK NACHSTELLEN.
+	//
+	// Faehigkeiten mit ActivationMode AT_CLICK (Granate, CC) tun beim Aktivieren noch nichts -
+	// sie zeigen den Indikator und warten auf den Klick. Der laeuft normalerweise ueber
+	// AGASUnit::FireMouseHitAbility. Ohne diesen Schritt misst der Selbsttest nur die halbe
+	// Kette: die CC-Ability war aktiv, aber kein Marker entstand, und im Protokoll sah das aus
+	// wie "der Marker wird nie konfiguriert".
+	//
+	// Zwei Takte spaeter, damit der Indikator seinen Start hinter sich hat.
+	if (Ziel->ActivatedAbilityInstance)
+	{
+		FTimerHandle KlickHandle;
+		const FHitResult Klick = Treffer;
+		TWeakObjectPtr<AUnitBase> SchwachesZiel(Ziel);
+		GetWorldTimerManager().SetTimer(KlickHandle, FTimerDelegate::CreateWeakLambda(this,
+			[SchwachesZiel, Klick]()
+			{
+				if (AUnitBase* U = SchwachesZiel.Get())
+				{
+					UE_LOG(LogTemp, Warning, TEXT("[AbilityTest] Klick nachgestellt auf %s"),
+						*Klick.Location.ToString());
+					U->FireMouseHitAbility(Klick);
+				}
+			}), 0.5f, false);
+	}
+}
+
+namespace
+{
+	/**
+	 * Selbsttest der Faehigkeiten, N Sekunden nach dem Start. 0 = aus.
+	 *
+	 * WOFUER: RTSTestAbility loest eine Faehigkeit ohne Tastendruck aus, laesst sich ueber
+	 * -ExecCmds aber nicht sinnvoll nutzen - das laeuft beim Start, lange bevor eine Einheit
+	 * gesteuert wird. Mit diesem CVar misst ein Lauf sich selbst:
+	 *
+	 *   -dpcvars=rts.ability.autotest=8,rts.ability.autotest.array=1,rts.ability.autotest.input=0
+	 *
+	 * Damit ist die Faehigkeit ohne Menschen pruefbar, und die [AbilityWeg]-Zeilen im Protokoll
+	 * sagen, wo es haengt.
+	 */
+	static float GAbilityAutotestSekunden = 0.f;
+	static FAutoConsoleVariableRef CVarAbilityAutotest(
+		TEXT("rts.ability.autotest"),
+		GAbilityAutotestSekunden,
+		TEXT("Sekunden nach Spielstart, nach denen RTSTestAbility automatisch laeuft. 0 = aus."),
+		ECVF_Default);
+
+	static int32 GAbilityAutotestArray = 1;
+	static FAutoConsoleVariableRef CVarAbilityAutotestArray(
+		TEXT("rts.ability.autotest.array"),
+		GAbilityAutotestArray,
+		TEXT("Arrayindex fuer den Selbsttest: 0=Default 1=Second 2=Third 3=Fourth."),
+		ECVF_Default);
+
+	static int32 GAbilityAutotestInput = 0;
+	static FAutoConsoleVariableRef CVarAbilityAutotestInput(
+		TEXT("rts.ability.autotest.input"),
+		GAbilityAutotestInput,
+		TEXT("InputID fuer den Selbsttest: 0=AbilityOne, 1=AbilityTwo ..."),
+		ECVF_Default);
+}
+
+void ACustomControllerBase::StarteFaehigkeitsSelbsttest()
+{
+	if (GAbilityAutotestSekunden <= 0.f || !IsLocalController())
+	{
+		return;
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[AbilityTest] Selbsttest in %.1f s (Array=%d InputID=%d)"),
+		GAbilityAutotestSekunden, GAbilityAutotestArray, GAbilityAutotestInput);
+
+	FTimerHandle Handle;
+	GetWorldTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(this, [this]()
+	{
+		RTSTestAbility(GAbilityAutotestArray, GAbilityAutotestInput);
+	}), GAbilityAutotestSekunden, false);
 }

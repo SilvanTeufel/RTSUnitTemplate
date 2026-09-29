@@ -67,6 +67,71 @@ public:
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float CurrentBlendPoint_2 = 0;
+
+	/**
+	 * Kurzzeitiger ANZEIGE-Zustand, der den Zustand der Einheit im AnimBP ueberstimmt.
+	 *
+	 * Wofuer: eine Faehigkeit soll eine Animation zeigen koennen, ohne den echten
+	 * UnitState zu setzen. Ein echter Zustandswechsel wuerde die Mass-Zustandsprozessoren
+	 * mitziehen - und die schreiben unter anderem die Geschwindigkeit. Beim MassShooter, der
+	 * seine Bewegung selbst fuehrt, wuerde das Feuern die Figur anhalten.
+	 *
+	 * None = kein Vorrang, alles laeuft wie bisher. Die Laufzeit begrenzt sich selbst, damit ein
+	 * vergessenes Zuruecksetzen die Einheit nicht dauerhaft in einer Pose stehenlaesst.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	TEnumAsByte<UnitData::EState> AnimStateOverride = UnitData::None;
+
+	/**
+	 * True, solange die Einheit tot ist - fuer die Vollkoerper-Todespose im AnimGraph.
+	 *
+	 * Wofuer: der LayeredBlendPerBone mischt ab spine_01 den Zustandsautomaten auf den
+	 * Lauf-Blendspace. Im Tod faellt deshalb nur der Oberkoerper, die Beine bleiben stehen -
+	 * der Blendspace im BasePose-Eingang kennt keine Todespose. Mit diesem Schalter blendet
+	 * der Graph hinter dem LayeredBlend auf einen eigenen Sequenzknoten mit Death_Backward um,
+	 * und der Koerper faellt vollstaendig.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bIsDeadPose = false;
+
+	/** Weltzeit, bis zu der AnimStateOverride gilt. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float AnimStateOverrideUntil = -1.f;
+
+	/** Setzt den Anzeige-Zustand fuer DurationSeconds. Siehe AnimStateOverride. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAnimStateOverride(TEnumAsByte<UnitData::EState> NewState, float DurationSeconds);
+
+	/** Merkt, dass die Todes-Diagnosezeile fuer diese Einheit schon geschrieben wurde. */
+	bool bTodesmischpunkteGemeldet = false;
+
+	/**
+	 * Mischpunkte fuer den LAUF-Blendspace (Beine, BasePose im AnimGraph).
+	 *
+	 * Warum getrennt von CurrentBlendPoint_1/_2: die beiden Blendspaces haben voellig
+	 * verschiedene Achsen.
+	 *
+	 *   BS_Wraith_Richtung_AH (Beine)       Richtung -180..180, Tempo 0..600
+	 *   BS_Wraith             (Zustaende)   0..100 / 0..100, Schuss liegt bei (25, 25)
+	 *
+	 * Ein einziges Wertepaar kann beides nicht bedienen: schreibt der Richtungsblock Richtung
+	 * und Tempo in CurrentBlendPoint, tastet der Attack-Zustand irgendwo ab statt auf
+	 * Fire_A_Slow; schreibt man die Tabellenwerte hinein, lesen die Beine "Tempo 25 von 600"
+	 * und bleiben stehen. Beides ist gemessen worden.
+	 *
+	 * Deshalb: CurrentBlendPoint_1/_2 bleiben die ZUSTANDSwerte (Tabelle bzw. Anzeige-Zustand),
+	 * und der Richtungsblock schreibt seine Werte hierher. Im AnimGraph haengt der
+	 * BasePose-Blendspace an diesen beiden.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float LocomotionBlendPoint_1 = 0.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	float LocomotionBlendPoint_2 = 0.f;
+
+	/** Zaehler fuer die Vergleichsmessung rts.anim.blend.diag. */
+	int32 BlendDiagZaehler = 0;
+
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float TransitionRate_1 = 0.5;

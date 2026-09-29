@@ -44,6 +44,27 @@ public:
     bool RestoreUnlocksFromLatestSave();
 
     /**
+     * Die Gegenstelle zu RestoreUnlocksFromLatestSave: schreibt NUR die Freischaltungen zurueck.
+     *
+     * Wofuer: UMapSwitchSubsystem::MarkSwitchEnabledForMap legt den Tag ausschliesslich im
+     * Speicher ab. Gesichert wurde er bisher erst beim naechsten vollen SaveCurrentGame - wer
+     * durch die Hoehle ging und danach das Spiel beendete, stand beim naechsten Start wieder
+     * vor dem verschlossenen Bossziel.
+     *
+     * Geschrieben wird in den JUENGSTEN vorhandenen Spielstand, also in denselben, aus dem die
+     * Leseseite holt. Alles andere darin bleibt unveraendert - Karte, Einheiten, Ressourcen
+     * werden weder gelesen noch ueberschrieben. Gibt es noch gar keinen Spielstand, entsteht
+     * einer, der nur Karte, Zeitstempel und die Freischaltungen traegt.
+     *
+     * Bewusst NICHT der Weg ueber SaveCurrentGame: der schriebe den Zustand der laufenden Karte
+     * mit hinein - beim Kartenwechsel also einen halb abgebauten Stand.
+     *
+     * @return true, wenn geschrieben wurde.
+     */
+    UFUNCTION(BlueprintCallable, Category="Save")
+    bool PersistUnlocksToLatestSave();
+
+    /**
      * Beginnt ein neues Spiel, OHNE etwas zu loeschen.
      *
      * Legt einen frischen Spielstand ohne Fortschritt an. Weil er den juengsten Zeitstempel
@@ -120,6 +141,21 @@ private:
 
     /** Einmal je Sitzung: die Freischaltungen sind schon geholt. */
     bool bUnlocksRestored = false;
+
+    /**
+     * Sucht den juengsten Spielstand - groesster SavedUnixTimeSeconds, nicht weitester Fortschritt.
+     *
+     * Herausgezogen, damit Lese- und Schreibseite der Freischaltungen zwingend denselben
+     * Spielstand treffen. Zwei Kopien derselben Suche waeren genau die Art Abweichung, die
+     * erst auffaellt, wenn ein Fortschritt verschwindet.
+     *
+     * Die Vorauswahl laeuft ueber das DATEIdatum und oeffnet hoechstens MaxKandidaten Dateien:
+     * im Speicherordner liegen nicht nur Spielstaende (gemessen 7860 Dateien, fast alle
+     * Faehigkeitsdateien je Einheit, dazu Replays). Entschieden wird danach ueber den im
+     * Spielstand gespeicherten Zeitstempel.
+     */
+    FString FindeJuengstenSpielstand(int64& OutZeitstempel, int32& OutGeprueft,
+                                     int32& OutKandidaten) const;
 
     // Callback wenn eine Map geladen wurde
     void OnPostLoadMapWithWorld(UWorld* LoadedWorld);
