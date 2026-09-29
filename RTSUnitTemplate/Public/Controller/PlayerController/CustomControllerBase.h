@@ -289,6 +289,24 @@ public:
 	UFUNCTION(Exec, BlueprintCallable, Category = "RTSUnitTemplate|Performance")
 	void RTSPerfSpawn(int32 Count = 90, int32 Id = -1, float Spread = 3000.f);
 
+	/**
+	 * Loest eine Faehigkeit der ausgewaehlten bzw. gesteuerten Einheit aus - OHNE Tastendruck.
+	 *
+	 * WOFUER: die Granaten- und Trankfaehigkeiten des Soldiers reagieren nicht, und ob der
+	 * Tastendruck ueberhaupt ankommt, laesst sich von aussen nicht sehen. Mit diesem Befehl
+	 * laeuft genau derselbe Weg wie bei einer Taste (ActivateAbilitiesByIndex), nur eben aus
+	 * der Konsole - damit ist die Faehigkeit vom EINGABEWEG trennbar. Ohne das bleibt nur
+	 * Raten, und davon war heute genug.
+	 *
+	 * @param Arrayindex   0=Default, 1=Second (Granaten), 2=Third, 3=Fourth (Traenke).
+	 * @param InputIdRoh   Wert von EGASAbilityInputID; 0=AbilityOne (erster Eintrag), 1=AbilityTwo ...
+	 */
+	UFUNCTION(Exec, BlueprintCallable, Category = "RTSUnitTemplate|Diagnose")
+	void RTSTestAbility(int32 Arrayindex = 1, int32 InputIdRoh = 0);
+
+	/** Startet den Selbsttest, wenn rts.ability.autotest > 0 ist. Aus BeginPlay gerufen. */
+	void StarteFaehigkeitsSelbsttest();
+
 protected:
 	/**
 	 * Ein Takt des Messfalls. Ruft sich selbst wieder auf, bis alle Phasen durch sind.

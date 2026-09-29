@@ -656,8 +656,18 @@ void AExtendedControllerBase::Client_PlaySound2D_Implementation(USoundBase* Soun
 
 void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, int32 InAbilityArrayIndex, const FHitResult& HitResult)
 {
+	// DIAGNOSE (25.09.2026): der EINTRITT, nicht nur die Ablehnungen.
+	//
+	// Anlass: die Granate des Soldiers loest nicht aus, und die vier Ablehnungsgruende weiter
+	// unten schweigen. Fehlt AUCH diese Zeile, kommt der Tastendruck gar nicht erst hier an -
+	// dann sitzt der Fehler im Eingabeweg und nicht in der Faehigkeit. Ohne den Eintritt laesst
+	// sich "abgelehnt" nicht von "nie gefragt" trennen.
+	UE_LOG(LogTemp, Warning, TEXT("[AbilityWeg] ActivateAbilitiesByIndex: Einheit=%s InputID=%d Arrayindex=%d"),
+		*GetNameSafe(UnitBase), (int32)InputID, InAbilityArrayIndex);
+
 	if (!UnitBase)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("[AbilityWeg] ABBRUCH: keine Einheit uebergeben"));
 		return;
 	}
 
@@ -731,6 +741,17 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		}
 	}
 
+	// DIAGNOSE: welcher Zweig genommen wird, und wie gross das jeweilige Array ist. Ein leeres
+	// Array an dieser Stelle sieht im Spiel exakt aus wie eine abgelehnte Faehigkeit.
+	if (const AUnitBase* AlsUnit = Cast<AUnitBase>(UnitBase))
+	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[AbilityWeg] Verteiler: Index=%d Default=%d Second=%d Third=%d Fourth=%d Zustand=%d"),
+			InAbilityArrayIndex, UnitBase->DefaultAbilities.Num(), UnitBase->SecondAbilities.Num(),
+			UnitBase->ThirdAbilities.Num(), UnitBase->FourthAbilities.Num(),
+			(int32)AlsUnit->GetUnitState());
+	}
+
 	switch (InAbilityArrayIndex)
 	{
 	case 0:
@@ -746,7 +767,7 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		ActivateFourthAbilities(UnitBase, InputID, HitResult);
 		break;
 	default:
-		// Optionally handle invalid indices
+		UE_LOG(LogTemp, Warning, TEXT("[AbilityWeg] ABBRUCH: Arrayindex %d hat keinen Zweig"), InAbilityArrayIndex);
 			break;
 	}
 }
@@ -5602,11 +5623,19 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		// enemies stand on two sides). Runs BEFORE the overlap guard so the pushed spot is the one checked.
 		// Logged BEFORE the branch: the first attempt logged only inside the success path, so when the
 		// push never happened there was no way to tell WHICH condition rejected it.
-		UE_LOG(LogTemp, Warning, TEXT("[Defense] drop %s: isDefense=%d push=%.0f unit=%d"),
+		// Feuert bei JEDEM Ablegen, deshalb Verbose statt Warning: die Zeile bleibt zum Nachsehen
+		// erhalten, spammt aber kein normales Spiel voll.
+		UE_LOG(LogTemp, Verbose, TEXT("[Defense] drop %s: isDefense=%d push=%.0f unit=%d bIsAi=%d"),
 		       *DraggedWorkArea->GetName(), DraggedWorkArea->bIsDefenseArea ? 1 : 0,
-		       DefenseAreaForwardPush, UnitBase ? 1 : 0);
+		       DefenseAreaForwardPush, UnitBase ? 1 : 0, bIsAi ? 1 : 0);
 
-		if (DraggedWorkArea->bIsDefenseArea && DefenseAreaForwardPush > 0.f && UnitBase)
+		// NUR fuer die KI. Der Schub raeumt den Fehler der KI-Kamera aus - ein MENSCH waehlt den
+		// Platz dagegen bewusst aus, und 5000 Einheiten Versatz Richtung Gegnerbasis machen aus
+		// seinem Klick einen anderen Ort. Danach laufen alle Pruefungen gegen DIESEN Ort: die
+		// Vorschau am Mauszeiger meldet gruen, der Drop scheitert am verschobenen Platz und spielt
+		// den Ablehnungston. Betroffen waren genau die zwei Xeno-Flaechen mit bIsDefenseArea
+		// (ThresherRoot, VenomCyst); alle neun anderen haben das Flag nicht und liessen sich setzen.
+		if (bIsAi && DraggedWorkArea->bIsDefenseArea && DefenseAreaForwardPush > 0.f && UnitBase)
 		{
 			const FVector From = DraggedWorkArea->GetActorLocation();
 			const ABuildingBase* NearestEnemy = nullptr;

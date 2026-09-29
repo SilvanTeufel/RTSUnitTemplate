@@ -1,6 +1,7 @@
 ﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/GASUnit.h"
+#include "Core/RTSDateiMessung.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "GAS/AttributeSetBase.h"
 #include "GAS/AbilitySystemComponentBase.h"
@@ -435,6 +436,10 @@ bool AGASUnit::ActivateAbilityByInputID(
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT: kein AbilitySystemComponent"),
 			*GetName(), TeamId, (int32)InputID);
+		// Auch in eine Datei: im Shipping ist UE_LOG wegkompiliert, und genau dort wird geprueft.
+		RTSDateiMessung::Schreibe(TEXT("AbilityDiag.csv"), FString::Printf(
+			TEXT("%.2f;%s;%d;%d;ABGELEHNT;kein AbilitySystemComponent;"),
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.f, *GetName(), TeamId, (int32)InputID));
 		return false;
 	}
 
@@ -446,6 +451,10 @@ bool AGASUnit::ActivateAbilityByInputID(
 	{
 		UE_LOG(LogTemp, Warning, TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT: kein Eintrag an diesem Index (Array=%d)"),
 			*GetName(), TeamId, (int32)InputID, AbilitiesArray.Num());
+		RTSDateiMessung::Schreibe(TEXT("AbilityDiag.csv"), FString::Printf(
+			TEXT("%.2f;%s;%d;%d;ABGELEHNT;kein Eintrag an diesem Index;Arraygroesse=%d"),
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.f, *GetName(), TeamId, (int32)InputID,
+			AbilitiesArray.Num()));
 		return false;
 	}
 	
@@ -482,6 +491,11 @@ bool AGASUnit::ActivateAbilityByInputID(
 			TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT: '%s' laeuft noch (Zustand=%d, Warteschlange=%d/%d)"),
 			*GetName(), TeamId, (int32)InputID, *GetNameSafe(ActivatedAbilityInstance),
 			AlsUnitBusy ? (int32)AlsUnitBusy->GetUnitState() : -1, AbilityQueueSize, MaxAbilityQueueSize);
+		RTSDateiMessung::Schreibe(TEXT("AbilityDiag.csv"), FString::Printf(
+			TEXT("%.2f;%s;%d;%d;ABGELEHNT;laeuft noch;%s Zustand=%d Warteschlange=%d/%d"),
+			GetWorld() ? GetWorld()->GetTimeSeconds() : -1.f, *GetName(), TeamId, (int32)InputID,
+			*GetNameSafe(ActivatedAbilityInstance),
+			AlsUnitBusy ? (int32)AlsUnitBusy->GetUnitState() : -1, AbilityQueueSize, MaxAbilityQueueSize));
 		return false;
 	}
 	else
@@ -501,6 +515,11 @@ bool AGASUnit::ActivateAbilityByInputID(
 				TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d ABGELEHNT von GAS: %s (Zustand=%d)"),
 				*GetName(), TeamId, (int32)InputID, *GetNameSafe(AbilityToActivate),
 				AlsUnitGas ? (int32)AlsUnitGas->GetUnitState() : -1);
+			RTSDateiMessung::Schreibe(TEXT("AbilityDiag.csv"), FString::Printf(
+				TEXT("%.2f;%s;%d;%d;ABGELEHNT;von GAS abgelehnt;%s Zustand=%d"),
+				GetWorld() ? GetWorld()->GetTimeSeconds() : -1.f, *GetName(), TeamId, (int32)InputID,
+				*GetNameSafe(AbilityToActivate),
+				AlsUnitGas ? (int32)AlsUnitGas->GetUnitState() : -1));
 		}
 		else
 		{

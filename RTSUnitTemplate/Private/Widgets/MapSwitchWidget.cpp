@@ -111,19 +111,15 @@ void UMapSwitchWidget::NativeConstruct()
 
 void UMapSwitchWidget::OnYesClicked()
 {
-    // Vor dem Travel den Ziel-Switch-Tag für die Ziel-Map aktivieren
-    if (UWorld* World = GetWorld())
+    // Freischaltungen ueber den Aktor setzen, nicht hier von Hand.
+    //
+    // Hier stand bis zum 25.09.2026 nur MarkSwitchEnabledForMap fuer die ZIELkarte. UnlockOnMap
+    // - die Freischaltung auf einer ANDEREN Karte - fehlte, und gespeichert wurde gar nichts.
+    // Dieser Weg laeuft immer dann, wenn ein Aktor nur EIN Ziel hat (der Hoehleneingang auf
+    // Level_3a zum Beispiel), also genau dort, wo die zweite Freischaltung gebraucht wird.
+    if (OwningActor)
     {
-        if (UGameInstance* GI = World->GetGameInstance())
-        {
-            if (UMapSwitchSubsystem* Subsystem = GI->GetSubsystem<UMapSwitchSubsystem>())
-            {
-                if (OwningActor && OwningActor->GetDestinationSwitchTagToEnable() != NAME_None && !TargetMapName.IsEmpty())
-                {
-                    Subsystem->MarkSwitchEnabledForMap(TargetMapName, OwningActor->GetDestinationSwitchTagToEnable());
-                }
-            }
-        }
+        OwningActor->ApplyTravelUnlocks(TargetMapName, OwningActor->GetDestinationSwitchTagToEnable());
     }
 
     // Get the owning player controller

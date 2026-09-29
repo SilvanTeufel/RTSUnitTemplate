@@ -36,7 +36,37 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bRefundOnCancel = false;
-	
+
+	/**
+	 * Hat diese Aktivierung ihre Versorgung bereits an eine gespawnte Einheit uebergeben?
+	 *
+	 * Ab dem Spawn gehoert die Versorgung der Einheit: SpawnUnitsFromParameters schreibt ihr
+	 * ChargedSupplyAmount, und ReleaseUnitSupply gibt genau das beim Sterben zurueck. Eine
+	 * Erstattung durch EndAbility waere dann die ZWEITE - gemessen am 25.09.2026 in einer
+	 * 662-Sekunden-Partie: 8 von 12 Abbruch-Erstattungen liefen nach fertigem Cast, zusammen
+	 * 10 Versorgung zu viel, alle auf Singularianer-Seite (deren Produktions-Abilities tragen
+	 * bRefundOnCancel = true, die der Xeno nicht).
+	 *
+	 * Die Invariante lautet: ENTWEDER die Ability erstattet (Abbruch waehrend des Baus) ODER
+	 * die Einheit gibt beim Sterben zurueck. Nie beides.
+	 *
+	 * Kein UPROPERTY mit Editor-Zugriff: das ist Zustand EINER Aktivierung, keine Einstellung.
+	 * ActivateAbility setzt ihn zurueck, damit eine wiederverwendete Instanz sauber startet.
+	 */
+	UPROPERTY(BlueprintReadOnly, Transient, Category = RTSUnitTemplate)
+	bool bSupplyHandedOverToUnit = false;
+
+	/**
+	 * Meldet, dass die Versorgung dieser Aktivierung an eine Einheit uebergangen ist.
+	 *
+	 * Wird von AUnitBase::SpawnUnitsFromParameters ueber ActivatedAbilityInstance gerufen -
+	 * bewusst dort und nicht im Blueprint: so gilt die Regel fuer jede Produktions-Ability,
+	 * auch fuer kuenftige, ohne dass jemand einen Knoten vergessen kann.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MarkSupplyHandedOverToUnit() { bSupplyHandedOverToUnit = true; }
+
+
 	// New: Ability can be globally disabled via this flag (per ability asset)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bDisabled = false;

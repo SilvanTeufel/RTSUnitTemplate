@@ -1002,43 +1002,10 @@ bool UGameSaveSubsystem::RestoreUnlocksFromLatestSave()
     // danach weiter ueber den im Spielstand gespeicherten Zeitstempel. Eine zurueckkopierte
     // Datei mit frischem Dateidatum kann also hoechstens in die Vorauswahl rutschen, nicht
     // faelschlich gewinnen.
-    const FString SpeicherOrdner = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"));
-    constexpr int32 MaxKandidaten = 50;
-
-    TArray<TPair<FDateTime, FString>> NachDatum;
-    for (const FString& Slot : GetAllSaveSlots())
-    {
-        const FString Pfad = FPaths::Combine(SpeicherOrdner, Slot + TEXT(".sav"));
-        NachDatum.Emplace(IFileManager::Get().GetTimeStamp(*Pfad), Slot);
-    }
-    NachDatum.Sort([](const TPair<FDateTime, FString>& A, const TPair<FDateTime, FString>& B)
-    {
-        return A.Key > B.Key;
-    });
-
-    FString BesterSlot;
     int64 BesteZeit = -1;
     int32 Geprueft = 0;
-    for (const TPair<FDateTime, FString>& Eintrag : NachDatum)
-    {
-        if (Geprueft >= MaxKandidaten)
-        {
-            break;
-        }
-        if (!IstSpielstandDatei(Eintrag.Value))
-        {
-            continue;   // Kostet nur den Dateikopf, nicht die ganze Datei.
-        }
-        ++Geprueft;
-
-        FString MapAsset, LongName;
-        int64 Zeit = 0;
-        if (LoadSaveSummary(Eintrag.Value, MapAsset, LongName, Zeit) && Zeit > BesteZeit)
-        {
-            BesteZeit = Zeit;
-            BesterSlot = Eintrag.Value;
-        }
-    }
+    int32 Kandidaten = 0;
+    const FString BesterSlot = FindeJuengstenSpielstand(BesteZeit, Geprueft, Kandidaten);
 
     if (BesterSlot.IsEmpty())
     {
@@ -1069,7 +1036,152 @@ bool UGameSaveSubsystem::RestoreUnlocksFromLatestSave()
         *BesterSlot, Freigeschaltet.Num(), AnzahlTags,
         *FDateTime::FromUnixTimestamp(BesteZeit).ToString());
     UE_LOG(LogTemp, Log, TEXT("[Spielstand] Dafuer %d von %d Dateien geoeffnet."),
-        Geprueft, NachDatum.Num());
+        Geprueft, Kandidaten);
+    return true;
+}
+
+FString UGameSaveSubsystem::FindeJuengstenSpielstand(int64& OutZeitstempel, int32& OutGeprueft,
+                                                     int32& OutKandidaten) const
+{
+    OutZeitstempel = -1;
+    OutGeprueft = 0;
+
+    // Vorauswahl ueber das DATEIdatum: im Speicherordner liegen weit mehr Dateien als
+    // Spielstaende (gemessen 7860, fast alle Faehigkeitsdateien je Einheit, dazu Replays von
+    // ueber 30 MB). Jede davon zu oeffnen kostet beim Betreten des Menues spuerbar Zeit.
+    //
+    // Das Dateidatum entscheidet NICHTS - es waehlt nur aus, in welche Dateien hineingesehen
+    // wird. Eine zurueckkopierte Datei mit frischem Dateidatum rutscht damit hoechstens in die
+    // Vorauswahl, gewinnen kann sie nur ueber ihren gespeicherten Zeitstempel.
+    const FString SpeicherOrdner = FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("SaveGames"));
+    constexpr int32 MaxKandidaten = 50;
+
+    TArray<TPair<FDateTime, FString>> NachDatum;
+    for (const FString& Slot : GetAllSaveSlots())
+    {
+        const FString Pfad = FPaths::Combine(SpeicherOrdner, Slot + TEXT(".sav"));
+        NachDatum.Emplace(IFileManager::Get().GetTimeStamp(*Pfad), Slot);
+    }
+    NachDatum.Sort([](const TPair<FDateTime, FString>& A, const TPair<FDateTime, FString>& B)
+    {
+        return A.Key > B.Key;
+    });
+    OutKandidaten = NachDatum.Num();
+
+    FString BesterSlot;
+    for (const TPair<FDateTime, FString>& Eintrag : NachDatum)
+    {
+        if (OutGeprueft >= MaxKandidaten)
+        {
+            break;
+        }
+        if (!IstSpielstandDatei(Eintrag.Value))
+        {
+            continue;   // Kostet nur den Dateikopf, nicht die ganze Datei.
+        }
+        ++OutGeprueft;
+
+        FString MapAsset, LongName;
+        int64 Zeit = 0;
+        if (LoadSaveSummary(Eintrag.Value, MapAsset, LongName, Zeit) && Zeit > OutZeitstempel)
+        {
+            OutZeitstempel = Zeit;
+            BesterSlot = Eintrag.Value;
+        }
+    }
+    return BesterSlot;
+}
+
+bool UGameSaveSubsystem::PersistUnlocksToLatestSave()
+{
+    UWorld* World = GetWorld();
+    if (!World || World->GetNetMode() == NM_Client)
+    {
+        // Wie bei SaveCurrentGame: ein Client schreibt keinen massgeblichen Spielstand.
+        return false;
+    }
+
+    UGameInstance* GI = GetGameInstance();
+    UMapSwitchSubsystem* MapSub = GI ? GI->GetSubsystem<UMapSwitchSubsystem>() : nullptr;
+    if (!MapSub)
+    {
+        return false;
+    }
+
+    TMap<FString, TArray<FName>> Exportiert;
+    MapSub->ExportStateForSave(Exportiert);
+
+    int64 BesteZeit = -1;
+    int32 Geprueft = 0;
+    int32 Kandidaten = 0;
+    FString Ziel = FindeJuengstenSpielstand(BesteZeit, Geprueft, Kandidaten);
+
+    URTSSaveGame* Save = nullptr;
+    if (!Ziel.IsEmpty())
+    {
+        Save = Cast<URTSSaveGame>(UGameplayStatics::LoadGameFromSlot(Ziel, 0));
+    }
+
+    if (!Save)
+    {
+        // Noch kein Spielstand da - einen anlegen, der NUR die Freischaltungen traegt.
+        // Ohne das waere die erste Freischaltung einer frischen Installation verloren.
+        Save = Cast<URTSSaveGame>(UGameplayStatics::CreateSaveGameObject(URTSSaveGame::StaticClass()));
+        if (!Save)
+        {
+            return false;
+        }
+        Save->SavedMapLongPackageName = World->GetOutermost()->GetName();
+        Save->SavedUnixTimeSeconds = FDateTime::UtcNow().ToUnixTimestamp();
+        Ziel = GetUniqueSaveSlotName(TEXT("Unlocks"));
+    }
+
+    // VEREINIGEN, nicht ersetzen.
+    //
+    // Der erste Entwurf schrieb die Menge der laufenden Sitzung einfach hinein. Das kann eine
+    // Freischaltung LOESCHEN: haette der Spielstand einen Tag, den die laufende Sitzung nicht
+    // kennt - etwa weil ein aelterer Stand geladen wurde -, waere er danach weg. Eine
+    // Freischaltung wird nie zurueckgenommen, also ist die Vereinigung die richtige Rechnung.
+    TMap<FString, TSet<FName>> Vereinigt;
+    for (const FMapSwitchTagsForMap& Vorhanden : Save->MapEnabledSwitchTags)
+    {
+        Vereinigt.FindOrAdd(Vorhanden.MapKey).Append(TSet<FName>(Vorhanden.Tags));
+    }
+    for (const TPair<FString, TArray<FName>>& Paar : Exportiert)
+    {
+        Vereinigt.FindOrAdd(Paar.Key).Append(TSet<FName>(Paar.Value));
+    }
+
+    // NUR dieses eine Feld anfassen. Karte, Einheiten und Ressourcen des Spielstands bleiben
+    // stehen - deshalb geht das hier und nicht ueber SaveCurrentGame.
+    Save->MapEnabledSwitchTags.Empty();
+    Save->MapEnabledSwitchTags.Reserve(Vereinigt.Num());
+    int32 AnzahlTags = 0;
+    TMap<FString, TArray<FName>> Zurueck;
+    for (TPair<FString, TSet<FName>>& Paar : Vereinigt)
+    {
+        FMapSwitchTagsForMap Eintrag;
+        Eintrag.MapKey = Paar.Key;
+        Eintrag.Tags = Paar.Value.Array();
+        AnzahlTags += Eintrag.Tags.Num();
+        Zurueck.Add(Paar.Key, Eintrag.Tags);
+        Save->MapEnabledSwitchTags.Add(MoveTemp(Eintrag));
+    }
+
+    if (!UGameplayStatics::SaveGameToSlot(Save, Ziel, 0))
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[Spielstand] Freischaltungen konnten nicht nach '%s' geschrieben werden."), *Ziel);
+        return false;
+    }
+
+    // Die vereinigte Menge auch in den laufenden Zustand zuruecknehmen, sonst kennt das Spiel
+    // weniger als seine eigene Datei - und beim naechsten Schreiben faellt der Unterschied
+    // wieder an und wieder auf.
+    MapSub->ImportStateFromSave(Zurueck);
+
+    UE_LOG(LogTemp, Log,
+        TEXT("[Spielstand] Freischaltungen gesichert: %d Karten, %d Ziele -> Slot '%s'."),
+        Save->MapEnabledSwitchTags.Num(), AnzahlTags, *Ziel);
     return true;
 }
 

@@ -99,6 +99,24 @@ public:
     UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
     void TravelToDestination(const FMapSwitchDestinationState& State);
 
+    /**
+     * Alle Freischaltungen dieses Durchgangs setzen und sofort sichern.
+     *
+     * EINE Stelle fuer BEIDE Reisewege. Der Grund: ein Aktor mit nur einem Ziel faellt auf den
+     * alten Ja/Nein-Dialog zurueck (siehe OpenWidget), und dessen UMapSwitchWidget::OnYesClicked
+     * kannte UnlockOnMap nicht. Der Hoehleneingang auf Level_3a hat genau ein Ziel - deshalb
+     * wurde 'BossMantis' fuer die Sternenkarte nie gesetzt und das zweite Ziel von Planet C
+     * blieb dauerhaft gesperrt, obwohl beide Seiten richtig konfiguriert waren.
+     *
+     * Gesichert wird hier auch: MarkSwitchEnabledForMap schreibt nur in den Speicher, und ohne
+     * ein anschliessendes SaveCurrentGame war die Freischaltung nach dem Beenden weg.
+     *
+     * @param TargetMapLongPackageName Zielkarte, fuer die DestinationTag gilt.
+     * @param DestinationTag           Tag fuer die Zielkarte. None = keiner.
+     */
+    UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+    void ApplyTravelUnlocks(const FString& TargetMapLongPackageName, FName DestinationTag);
+
 protected:
     virtual void BeginPlay() override;
 
