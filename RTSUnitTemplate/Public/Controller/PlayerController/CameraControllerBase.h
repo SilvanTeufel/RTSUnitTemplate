@@ -541,6 +541,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "HoldZoomOnLockedCharacter", Keywords = "TopDownRTSCamLib HoldZoomOnLockedCharacter"), Category = RTSUnitTemplate)
 	bool HoldZoomOnLockedCharacter = false;
 	
+	/** Fokuszustand des letzten Bildes - siehe die Sicherung in CameraBaseMachine. */
+	bool bHadFocusLastFrame = true;
+
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "ScrollZoomCount", Keywords = "TopDownRTSCamLib ScrollZoomCount"), Category = RTSUnitTemplate)
 	float ScrollZoomCount = 0.f;
 	

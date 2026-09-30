@@ -89,6 +89,106 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "SpringArmRotator", Keywords = "RTSUnitTemplate SpringArmRotator"), Category = RTSUnitTemplate)
 		FRotator SpringArmRotator = FRotator(-50, 0, 0);
 
+	// ---- Winkel auf gedrueckte Taste, danach zurueck -------------------------------------
+	//
+	// Gedacht fuer ein kurzes Hineinschauen: Taste halten, Winkel frei verstellen, loslassen -
+	// und die Kamera findet von selbst in ihren Ausgangswinkel zurueck. Der Ausgangswinkel wird
+	// beim DRUECKEN gemerkt, nicht fest verdrahtet: wer seine Kamera vorher dauerhaft anders
+	// eingestellt hat, bekommt seinen eigenen Winkel zurueck und nicht den der Vorgabe.
+
+	/** Laeuft die Rueckfahrt gerade? Nur lesen. */
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bIsReturningCameraAngle = false;
+
+	/** Wird die Taste gerade gehalten? Nur lesen. */
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bIsAdjustingCameraAngle = false;
+
+	/** Pitch-Grad je Mauseinheit waehrend des Haltens. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AngleAdjustPitchSpeed = 0.35f;
+
+	/** Yaw-Grad je Mauseinheit waehrend des Haltens. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AngleAdjustYawSpeed = 0.35f;
+
+	/** Grenzen fuer den Pitch waehrend des Verstellens, damit die Kamera nicht durchkippt. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AngleAdjustMinPitch = -85.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AngleAdjustMaxPitch = -5.f;
+
+	/**
+	 * Dreht die Richtung der Hochachse beim Verstellen (mittlere Maustaste gehalten).
+	 *
+	 * Aus (Vorgabe): Maus nach OBEN hebt den Blick an, Maus nach unten senkt ihn.
+	 * An: genau umgekehrt.
+	 *
+	 * Als Schalter und nicht fest im Code, weil sich die Vorliebe ohne neuen Build umstellen
+	 * laesst - ein Build verlangt jedes Mal, den Editor zu schliessen.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bInvertCameraAnglePitch = false;
+
+	/** Tempo der Rueckfahrt in Grad je Sekunde. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AngleReturnSpeed = 180.f;
+
+	/**
+	 * Wie schnell der Winkel dem Mausziel folgt (exponentiell, Einheit 1/s).
+	 *
+	 * Das Ruckeln kam daher, dass jedes Maus-Delta sofort und ungefiltert im Winkel landete -
+	 * Maus-Deltas kommen aber stossweise. Jetzt wandert nur ein ZIEL mit der Maus, und der
+	 * sichtbare Winkel laeuft dem Ziel hinterher. Exponentiell, weil das von selbst weich
+	 * anfaengt und weich auslaeuft, ohne eine eigene Beschleunigungsrechnung.
+	 *
+	 * Groesser = direkter und haerter, kleiner = weicher und traeger. Unter etwa 8 faengt es an,
+	 * sich schwammig anzufuehlen; 0 schaltet die Glaettung ganz ab.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AngleAdjustInterpSpeed = 14.f;
+
+	/**
+	 * Faehrt der Winkel beim Loslassen der Taste in den Ausgangswinkel zurueck?
+	 *
+	 * An die mittlere Maustaste gehaengt, weil das freie Drehen dort bereits liegt (RotateFree) -
+	 * so braucht es keine neue Eingabeaktion. Aus bedeutet: freies Drehen bleibt eine dauerhafte
+	 * Verstellung, wie bisher.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bReturnCameraAngleOnRelease = true;
+
+	/** Taste gedrueckt: merkt den aktuellen Winkel und gibt das Verstellen frei. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void BeginCameraAngleAdjust();
+
+	/** Taste losgelassen: startet die Rueckfahrt zum gemerkten Winkel. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void EndCameraAngleAdjust();
+
+	/** Mausbewegung waehrend des Haltens. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void AddCameraAngleInput(float PitchInput, float YawInput);
+
+private:
+	/** Der beim Druecken gemerkte Winkel, Ziel der Rueckfahrt. */
+	FRotator SavedCameraAngle = FRotator::ZeroRotator;
+
+	/** Das mit der Maus wandernde Ziel. Der sichtbare Winkel laeuft ihm geglaettet hinterher. */
+	FRotator TargetCameraAngle = FRotator::ZeroRotator;
+
+	/** Gefuehrte Scrollgeschwindigkeit fuer PanMoveCameraSmoothed. */
+	FVector CurrentPanVelocity = FVector::ZeroVector;
+
+	/** Fuehrt die Rueckfahrt aus; wird aus Tick gerufen. */
+	void TickCameraAngleReturn(float DeltaTime);
+
+	/** Fuehrt den sichtbaren Winkel an das Mausziel heran; wird aus Tick gerufen. */
+	void TickCameraAngleSmoothing(float DeltaTime);
+
+public:
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "CameraComp", Keywords = "RTSUnitTemplate CameraComp"), Category = RTSUnitTemplate)
 		UCameraComponent* CameraComp;
 
@@ -103,6 +203,34 @@ public:
 
 	UFUNCTION( BlueprintCallable, meta = (DisplayName = "PanMoveCamera", Keywords = "RTSUnitTemplate PanMoveCamera"), Category = RTSUnitTemplate)
 		void PanMoveCamera(const FVector& NewPanDirection);
+
+	/**
+	 * Wie PanMoveCamera, aber mit Anlauf und Auslauf.
+	 *
+	 * Das ruckartige Gefuehl am Bildschirmrand kam vom harten Ein/Aus: sobald die Maus die Kante
+	 * beruehrte, lief die Kamera mit voller Geschwindigkeit los, und beim Verlassen stand sie
+	 * schlagartig. Hier wird stattdessen eine Geschwindigkeit gefuehrt, die dem Ziel folgt.
+	 */
+	UFUNCTION( BlueprintCallable, Category = RTSUnitTemplate)
+		void PanMoveCameraSmoothed(const FVector& NewPanDirection, float DeltaTime);
+
+	/** Setzt die gefuehrte Scrollgeschwindigkeit sofort auf null. */
+	UFUNCTION( BlueprintCallable, Category = RTSUnitTemplate)
+		void ResetPanVelocity();
+
+	/**
+	 * Anlauf am Bildschirmrand (1/s). Groesser = schneller auf Tempo.
+	 * Bei 0 verhaelt sich das Randscrollen wieder wie frueher, also ohne Anlauf.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float EdgeScrollAcceleration = 9.f;
+
+	/**
+	 * Auslauf, wenn die Maus die Kante verlaesst (1/s). Absichtlich hoeher als der Anlauf -
+	 * ein langes Nachgleiten fuehlt sich wie ein Steuerungsfehler an, nicht wie Weichheit.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float EdgeScrollDeceleration = 14.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "Margin", Keywords = "RTSUnitTemplate Margin"), Category = RTSUnitTemplate)
 		float Margin = 15;

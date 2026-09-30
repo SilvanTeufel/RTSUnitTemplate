@@ -36,6 +36,21 @@ void UControlWidget::NativeConstruct()
 			SwapAttackMoveCheckBox->SetIsChecked(PC->SwapAttackMove);
 		}
 	}
+
+	if (InvertCameraAngleCheckBox)
+	{
+		InvertCameraAngleCheckBox->OnCheckStateChanged.AddDynamic(this, &UControlWidget::OnInvertCameraAngleChanged);
+
+		APlayerController* PC = GetOwningPlayer();
+		if (PC)
+		{
+			ACameraBase* Camera = Cast<ACameraBase>(PC->GetPawn());
+			if (Camera)
+			{
+				InvertCameraAngleCheckBox->SetIsChecked(Camera->bInvertCameraAnglePitch);
+			}
+		}
+	}
 }
 
 void UControlWidget::OnSwapScrollChanged(bool bIsChecked)
@@ -57,5 +72,18 @@ void UControlWidget::OnSwapAttackMoveChanged(bool bIsChecked)
 	if (PC)
 	{
 		PC->SwapAttackMove = bIsChecked;
+	}
+}
+
+void UControlWidget::OnInvertCameraAngleChanged(bool bIsChecked)
+{
+	APlayerController* PC = GetOwningPlayer();
+	if (PC)
+	{
+		ACameraBase* Camera = Cast<ACameraBase>(PC->GetPawn());
+		if (Camera)
+		{
+			Camera->bInvertCameraAnglePitch = bIsChecked;
+		}
 	}
 }

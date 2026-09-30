@@ -177,6 +177,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Ctrl_Released(const FInputActionValue& InputActionValue, int32 CamState);
 
+	/**
+	 * Bleibt die Maus beim Oeffnen der Tab-/Esc-Oberflaeche im Fenster eingesperrt?
+	 *
+	 * Tab und Esc schalten auf GameAndUI um und setzten dabei fest EMouseLockMode::DoNotLock.
+	 * Damit war die Projekteinstellung DefaultViewportMouseLockMode=LockAlways nach dem ersten
+	 * Tastendruck wirkungslos - der Zeiger konnte aus dem Fenster wandern.
+	 *
+	 * An (Vorgabe): der in den Projekteinstellungen gewuenschte Einschluss bleibt erhalten.
+	 * Aus: altes Verhalten, der Zeiger darf im UI-Modus aus dem Fenster.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bKeepMouseLockedInUiMode = true;
+
+	/** Setzt den GameAndUI-Modus samt gewuenschtem Maus-Einschluss. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ApplyGameAndUiInputMode();
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState);
 	

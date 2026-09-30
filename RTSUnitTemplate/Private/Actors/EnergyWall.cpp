@@ -54,9 +54,16 @@ AEnergyWall::AEnergyWall()
 	NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	NavObstacleBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	NavObstacleBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
-	NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	NavObstacleBox->SetCanEverAffectNavigation(true);
-	NavObstacleBox->OnComponentBeginOverlap.AddDynamic(this, &AEnergyWall::OnOverlapBegin);
+
+	// KEIN Overlap-Ereignis mehr. Einheiten haben keine Kollision (Nutzervorgabe, steht in den
+	// Blueprints), deshalb hat OnComponentBeginOverlap hier nie gefeuert - der Effekt beim
+	// Beruehren der Wand wurde nie angewandt. Das uebernimmt seit dem 29.09.2026 der
+	// UEnergyWallFieldProcessor: der liest die Geometrie dieser Box je Durchlauf und prueft die
+	// Einheiten in Mass, wo sie tatsaechlich stehen. Der Handler bleibt als Funktion erhalten,
+	// falls jemand die Box spaeter wieder an einen Kanal haengen will.
+	// NavObstacleBox->OnComponentBeginOverlap.AddDynamic(this, &AEnergyWall::OnOverlapBegin);
 
 	NavModifier = CreateDefaultSubobject<UNavModifierComponent>(TEXT("NavModifier"));
 	NavModifier->SetAreaClass(nullptr); 
@@ -622,6 +629,14 @@ void AEnergyWall::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* Ot
 	}
 }
 
+bool AEnergyWall::IsWallActive() const
+{
+	// bIsInitialized allein genuegt nicht: die Box wird erst in RegisterObstacle vermessen, und
+	// bis dahin hat sie keine Ausdehnung. Ein Quader ohne Ausdehnung wuerde jede Einheit als
+	// "nicht drin" melden - harmlos, aber die Pruefung kostet dann jeden Durchlauf umsonst.
+	return bIsInitialized && NavObstacleBox && NavObstacleBox->GetScaledBoxExtent().SizeSquared() > 1.f;
+}
+
 void AEnergyWall::RegisterObstacle(float Length, float Height)
 {
 	FVector StartPoint = CachedBuildingA ? CachedBuildingA->GetActorLocation() : FVector::ZeroVector;
@@ -637,9 +652,17 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 
 	if (NavObstacleBox)
 	{
-		// Toggle collision instead of CanEverAffectNavigation for more reliable updates
-		NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-		NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+		// Die Box blockiert keine Einheiten mehr - das wertet der UEnergyWallFieldProcessor in
+		// Mass aus. Zwei Dinge muessen aber bleiben:
+		//  - QueryOnly statt QueryAndPhysics: der Kollisionsschalter stand hier ueberhaupt nur,
+		//    um die Aktualisierung des Navigationsnetzes verlaesslich auszuloesen.
+		//  - ECC_WorldDynamic BLOCKIEREND: daran haengt die Projektilabwehr. Der Linientrace in
+		//    ProjectileVisualManager (bCanBeRepelledByEnergyWall) sucht die Wand genau auf
+		//    diesem Kanal. Auf Ignore gesetzt fliegen alle Geschosse durch die Wand.
+		NavObstacleBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		NavObstacleBox->SetCollisionResponseToAllChannels(ECR_Ignore);
+		NavObstacleBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
+		NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 
 		FVector BoxExtent;
 		
