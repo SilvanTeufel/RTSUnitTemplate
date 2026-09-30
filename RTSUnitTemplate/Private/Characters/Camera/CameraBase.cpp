@@ -90,6 +90,110 @@ void ACameraBase::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 	SetActorBasicLocation();
+	TickCameraAngleSmoothing(DeltaTime);
+	TickCameraAngleReturn(DeltaTime);
+}
+
+void ACameraBase::BeginCameraAngleAdjust()
+{
+	// Den AKTUELLEN Winkel merken, nicht die Vorgabe aus dem Blueprint: wer seine Kamera vorher
+	// bewusst anders gestellt hat, soll genau dorthin zurueckkommen.
+	// Laeuft noch eine Rueckfahrt, wird sie abgebrochen - das gemerkte Ziel bleibt aber stehen,
+	// sonst wuerde ein schnelles Nachfassen den Ausgangswinkel auf halbem Weg einfrieren.
+	if (!bIsAdjustingCameraAngle && !bIsReturningCameraAngle)
+	{
+		SavedCameraAngle = SpringArmRotator;
+	}
+	// Das Ziel beginnt dort, wo die Kamera gerade steht - sonst wuerde sie beim Druecken auf ein
+	// altes Ziel zuspringen.
+	TargetCameraAngle = SpringArmRotator;
+	bIsReturningCameraAngle = false;
+	bIsAdjustingCameraAngle = true;
+}
+
+void ACameraBase::EndCameraAngleAdjust()
+{
+	if (!bIsAdjustingCameraAngle)
+	{
+		return;
+	}
+	bIsAdjustingCameraAngle = false;
+	bIsReturningCameraAngle = true;
+}
+
+void ACameraBase::AddCameraAngleInput(float PitchInput, float YawInput)
+{
+	if (!bIsAdjustingCameraAngle || !SpringArm)
+	{
+		return;
+	}
+
+	// Nur das ZIEL bewegen. Den sichtbaren Winkel fuehrt TickCameraAngleSmoothing nach - so
+	// schlaegt ein stossweise ankommendes Maus-Delta nicht mehr unmittelbar auf das Bild durch.
+	TargetCameraAngle.Pitch = FMath::Clamp(TargetCameraAngle.Pitch + PitchInput * AngleAdjustPitchSpeed,
+		AngleAdjustMinPitch, AngleAdjustMaxPitch);
+	TargetCameraAngle.Yaw += YawInput * AngleAdjustYawSpeed;
+
+	// Ohne Glaettung sofort durchreichen, damit die Eigenschaft auf 0 wirklich das alte,
+	// unmittelbare Verhalten ergibt.
+	if (AngleAdjustInterpSpeed <= 0.f)
+	{
+		SpringArmRotator = TargetCameraAngle;
+		SpringArm->SetRelativeRotation(SpringArmRotator);
+	}
+}
+
+void ACameraBase::TickCameraAngleSmoothing(float DeltaTime)
+{
+	if (!bIsAdjustingCameraAngle || !SpringArm || AngleAdjustInterpSpeed <= 0.f)
+	{
+		return;
+	}
+
+	// Jede Achse einzeln: FRotator als Ganzes zu interpolieren laeuft beim Yaw ueber die falsche
+	// Seite, sobald die Differenz 180 Grad ueberschreitet.
+	const FRotator Diff = (TargetCameraAngle - SpringArmRotator).GetNormalized();
+	if (FMath::Abs(Diff.Pitch) < 0.01f && FMath::Abs(Diff.Yaw) < 0.01f)
+	{
+		return;
+	}
+
+	const float Alpha = FMath::Clamp(AngleAdjustInterpSpeed * DeltaTime, 0.f, 1.f);
+	SpringArmRotator.Pitch += Diff.Pitch * Alpha;
+	SpringArmRotator.Yaw   += Diff.Yaw   * Alpha;
+	SpringArm->SetRelativeRotation(SpringArmRotator);
+}
+
+void ACameraBase::TickCameraAngleReturn(float DeltaTime)
+{
+	if (!bIsReturningCameraAngle || !SpringArm)
+	{
+		return;
+	}
+
+	// Ueber die kuerzeste Strecke zurueck. FRotator direkt zu interpolieren laeuft beim Yaw ueber
+	// die falsche Seite, sobald die Differenz groesser als 180 Grad ist - deshalb die Differenz
+	// normalisieren und jede Achse einzeln mit fester Geschwindigkeit fuehren. Feste
+	// Geschwindigkeit statt Daempfung, weil eine Daempfung das Ziel nur asymptotisch erreicht und
+	// die Rueckfahrt dann nie sauber endet.
+	const float Step = FMath::Max(0.f, AngleReturnSpeed * DeltaTime);
+
+	FRotator Diff = (SavedCameraAngle - SpringArmRotator).GetNormalized();
+	const float Remaining = FMath::Max3(FMath::Abs(Diff.Pitch), FMath::Abs(Diff.Yaw), FMath::Abs(Diff.Roll));
+
+	if (Remaining <= Step || Remaining < 0.05f)
+	{
+		SpringArmRotator = SavedCameraAngle;
+		bIsReturningCameraAngle = false;
+	}
+	else
+	{
+		SpringArmRotator.Pitch += FMath::Clamp(Diff.Pitch, -Step, Step);
+		SpringArmRotator.Yaw   += FMath::Clamp(Diff.Yaw,   -Step, Step);
+		SpringArmRotator.Roll  += FMath::Clamp(Diff.Roll,  -Step, Step);
+	}
+
+	SpringArm->SetRelativeRotation(SpringArmRotator);
 }
 
 void ACameraBase::CreateCameraComp()
@@ -112,6 +216,42 @@ void ACameraBase::PanMoveCamera(const FVector& NewPanDirection) {
 	if (NewPanDirection != FVector::ZeroVector) {
 		AddActorWorldOffset(NewPanDirection * GetActorLocation().Z * 0.001);
 	}
+}
+
+void ACameraBase::ResetPanVelocity()
+{
+	CurrentPanVelocity = FVector::ZeroVector;
+}
+
+void ACameraBase::PanMoveCameraSmoothed(const FVector& NewPanDirection, float DeltaTime)
+{
+	// Ohne Anlaufwerte in den alten Weg zurueckfallen. So bleibt das Verhalten fuer alle
+	// unveraendert, die die Glaettung nicht wollen.
+	if (EdgeScrollAcceleration <= 0.f && EdgeScrollDeceleration <= 0.f)
+	{
+		PanMoveCamera(NewPanDirection);
+		return;
+	}
+
+	// Beim Bremsen schneller nachfuehren als beim Beschleunigen: die Kamera soll zuegig stehen,
+	// wenn die Maus die Kante verlaesst.
+	const bool  bIsBraking = NewPanDirection.IsNearlyZero();
+	const float Rate  = bIsBraking ? EdgeScrollDeceleration : EdgeScrollAcceleration;
+	const float Alpha = (Rate <= 0.f) ? 1.f : FMath::Clamp(Rate * DeltaTime, 0.f, 1.f);
+
+	CurrentPanVelocity += (NewPanDirection - CurrentPanVelocity) * Alpha;
+
+	// Reste abschneiden, sonst kriecht die Kamera durch die exponentielle Annaeherung ewig weiter.
+	if (bIsBraking && CurrentPanVelocity.SizeSquared() < 1.f)
+	{
+		CurrentPanVelocity = FVector::ZeroVector;
+		return;
+	}
+
+	// Auf 60 Bilder je Sekunde normiert: der alte Pfad rechnete ohne DeltaTime, war also
+	// bildratenabhaengig. Der Faktor haelt die gewohnte Geschwindigkeit bei 60 fps und macht sie
+	// darunter und darueber gleich schnell.
+	AddActorWorldOffset(CurrentPanVelocity * GetActorLocation().Z * 0.001 * DeltaTime * 60.f);
 }
 
 void ACameraBase::RotateSpringArm(bool Invert)
@@ -287,6 +427,31 @@ bool ACameraBase::RotateFree(FVector MouseLocation)
 {
 	// Assume PreviousMouseLocation is a member variable that tracks the last mouse position
 	FVector Delta = MouseLocation - PreviousMouseLocation;
+
+	// Solange die Winkelverstellung laeuft, gehen BEIDE Achsen ueber AddCameraAngleInput.
+	// Der alte Pfad darunter konnte den Pitch faktisch nie bewegen: RotateSpringArmPitchFree
+	// verlangt fuers Hochkippen zusaetzlich TargetArmLength < SpringArmStartRotator und fuers
+	// Absenken Pitch >= SpringArmMaxRotator. Im normalen Zoombereich ist keine der beiden
+	// Bedingungen erfuellt, also blieb nur das Drehen nach links und rechts uebrig.
+	if (bIsAdjustingCameraAngle)
+	{
+		// Kleine Totzone gegen Zittern - aber keine 100 Pixel wie im alten Pfad, sonst laesst
+		// sich der Winkel nicht feinfuehlig setzen.
+		const float AngleDeadZone = 1.f;
+		const float YawInput   = FMath::Abs(Delta.X) > AngleDeadZone ? Delta.X : 0.f;
+		const float PitchRaw   = FMath::Abs(Delta.Y) > AngleDeadZone ? Delta.Y : 0.f;
+		// Grundrichtung: Maus nach oben hebt den Blick an. Das Vorzeichen steht hier und nicht in
+		// AddCameraAngleInput, damit die Tastenbelegung nicht die Winkelrechnung mitdreht.
+		const float PitchInput = bInvertCameraAnglePitch ? PitchRaw : -PitchRaw;
+
+		AddCameraAngleInput(PitchInput, YawInput);
+
+		// Basislinie auf die AKTUELLE Mausposition. Der alte Pfad schob sie nur um einen
+		// normalisierten Schritt weiter; dadurch blieb das Delta gross und die Kamera drehte
+		// weiter, obwohl die Maus stand.
+		PreviousMouseLocation = MouseLocation;
+		return !Delta.IsNearlyZero();
+	}
 	FVector Direction = Delta.GetSafeNormal();
 	// Determine rotation direction based on mouse movement
 	// Here, I assume horizontal rotation. You might need to adjust for vertical rotation

@@ -1817,7 +1817,17 @@ FVector ACameraControllerBase::GetCameraPanDirection() {
 	float CamDirectionX = 0;
 	float CamDirectionY = 0;
 
-	GetMousePosition(MousePosX, MousePosY);
+	// OHNE GUELTIGE MAUSPOSITION WIRD NICHT GESCROLLT.
+	//
+	// Das war die Ursache der haengenden Kamera: GetMousePosition liefert false, sobald der
+	// Zeiger das Fenster verlaesst oder der Fokus weg ist (Alt-Tab, Menue, erfasster Cursor).
+	// Der Rueckgabewert wurde bisher verworfen, MousePosX/Y blieben auf ihrer 0 stehen - und
+	// 0 <= Margin ist wahr. Die Kamera scrollte daraufhin dauerhaft nach links-oben, ohne dass
+	// jemand die Maus bewegte oder eine Taste hielt.
+	if (!GetMousePosition(MousePosX, MousePosY))
+	{
+		return FVector::ZeroVector;
+	}
 
 	// Wie in ACameraBase::MoveInDirection: die Blickrichtung ist Pawn-Drehung PLUS
 	// SpringArm-Drehung. Mit nur dem relativen Anteil scrollt der Bildschirmrand bei
@@ -1826,28 +1836,36 @@ FVector ACameraControllerBase::GetCameraPanDirection() {
 	const float CosYaw = FMath::Cos(WorldYaw*PI/180);
 	const float SinYaw = FMath::Sin(WorldYaw*PI/180);
 	
+	// ZWEI RAENDER GLEICHZEITIG.
+	//
+	// Hier stand vorher in jedem Zweig eine Zuweisung. In einer Ecke laufen aber ZWEI Zweige,
+	// und der zweite loeschte das Ergebnis des ersten wieder - in der oberen linken Ecke gewann
+	// schlicht der zuletzt gepruefte Rand, die Kamera fuhr nur hoch statt hoch UND links.
+	// Aufaddieren statt zuweisen, und am Ende normieren, damit die Diagonale nicht schneller ist
+	// als eine gerade Kante (sonst waere sie um den Faktor Wurzel 2 schneller).
 	if (MousePosX <= CameraBase->Margin)
 	{
-		CamDirectionY = -CosYaw;
-		CamDirectionX = SinYaw;
+		CamDirectionY += -CosYaw;
+		CamDirectionX += SinYaw;
 	}
 	if (MousePosY <= CameraBase->Margin)
 	{
-		CamDirectionX = CosYaw;
-		CamDirectionY = SinYaw;
+		CamDirectionX += CosYaw;
+		CamDirectionY += SinYaw;
 	}
 	if (MousePosX >= CameraBase->ScreenSizeX - CameraBase->Margin)
 	{
-		CamDirectionY = CosYaw;
-		CamDirectionX = -SinYaw;
+		CamDirectionY += CosYaw;
+		CamDirectionX += -SinYaw;
 	}
 	if (MousePosY >= CameraBase->ScreenSizeY - CameraBase->Margin)
 	{
-		CamDirectionX = -CosYaw;
-		CamDirectionY = -SinYaw;
+		CamDirectionX += -CosYaw;
+		CamDirectionY += -SinYaw;
 	}
-	
-	return FVector(CamDirectionX, CamDirectionY, 0);
+
+	// Gegenueberliegende Raender heben sich auf - das ist gewollt und ergibt Null.
+	return FVector(CamDirectionX, CamDirectionY, 0).GetSafeNormal();
 }
 
 void ACameraControllerBase::SetCameraZDistance(int Index)
@@ -2006,6 +2024,9 @@ void ACameraControllerBase::StopAllCameraMovement()
 	if (CameraBase)
 	{
 		CameraBase->BlockControls = true;
+		// Die gefuehrte Scrollgeschwindigkeit gehoert genauso angehalten. Sonst rollt die Kamera
+		// nach einem Fokusverlust noch ein Stueck weiter, obwohl "alles anhalten" gemeint war.
+		CameraBase->ResetPanVelocity();
 		if (CameraBase->GetCharacterMovement())
 		{
 			CameraBase->GetCharacterMovement()->StopMovementImmediately();
@@ -2016,6 +2037,22 @@ void ACameraControllerBase::StopAllCameraMovement()
 void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 {
 	if(!CameraBase) return;
+
+	// SICHERUNG GEGEN HAENGENGEBLIEBENE BEWEGUNG BEI FOKUSVERLUST.
+	//
+	// Verlaesst das Spiel den Vordergrund (Alt-Tab, Fenster verschoben, Dialog davor), kommt das
+	// Loslassen einer Taste nicht mehr an - der Tastenzustand bleibt gedrueckt und die Kamera
+	// faehrt weiter, auch wenn der Nutzer nichts mehr beruehrt. Beim Zurueckkommen sieht das aus
+	// wie eine Kamera, die "in einer Richtung haengt".
+	//
+	// Beim ERSTEN Bild ohne Fokus einmal alles anhalten. Danach nicht mehr, damit ein
+	// Hintergrundfenster nicht jeden Frame in die Steuerung greift.
+	const bool bHasFocus = FApp::HasFocus();
+	if (!bHasFocus && bHadFocusLastFrame)
+	{
+		StopAllCameraMovement();
+	}
+	bHadFocusLastFrame = bHasFocus;
 
 	if (CameraBase && SelectedUnits.Num() && LockCameraToUnit)
 	{
@@ -2112,8 +2149,17 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 
 void ACameraControllerBase::CameraState_UseScreenEdges()
 {
-	if(!CameraBase->DisableEdgeScrolling)
-		CameraBase->PanMoveCamera(GetCameraPanDirection()*CameraBase->EdgeScrollCamSpeed);
+	// DeltaTime hier holen statt als Parameter: die Funktion ist BlueprintCallable, eine
+	// geaenderte Signatur wuerde bestehende Blueprint-Aufrufe brechen.
+	const float FrameTime = GetWorld() ? GetWorld()->GetDeltaSeconds() : 0.f;
+
+	// Auch bei abgeschaltetem Randscrollen mit Null weiterfuettern, damit eine noch laufende
+	// Restgeschwindigkeit sauber ausrollt statt eingefroren stehen zu bleiben.
+	const FVector EdgeScrollTarget = CameraBase->DisableEdgeScrolling
+		? FVector::ZeroVector
+		: GetCameraPanDirection() * CameraBase->EdgeScrollCamSpeed;
+
+	CameraBase->PanMoveCameraSmoothed(EdgeScrollTarget, FrameTime);
 
 	if(AIsPressedState || DIsPressedState || WIsPressedState || SIsPressedState) CameraBase->SetCameraState(CameraData::MoveWASD);
 	else if(LockCameraToCharacter) CameraBase->SetCameraState(CameraData::LockOnCharacter);

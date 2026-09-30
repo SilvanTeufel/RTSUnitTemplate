@@ -1339,16 +1339,27 @@ void AExtendedCameraBase::Input_Ctrl_Released(const FInputActionValue& InputActi
 
 
 
-void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
+void AExtendedCameraBase::ApplyGameAndUiInputMode()
 {
 	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (PC)
+	if (!PC)
 	{
-		FInputModeGameAndUI InputMode;
-		InputMode.SetHideCursorDuringCapture(false);
-		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		PC->SetInputMode(InputMode);
+		return;
 	}
+
+	FInputModeGameAndUI InputMode;
+	InputMode.SetHideCursorDuringCapture(false);
+	// LockAlways statt DoNotLock: sonst hebt jeder Tab- oder Esc-Druck den Einschluss auf, den
+	// die Projekteinstellung vorgibt, und der Zeiger wandert beim naechsten Randscrollen aus
+	// dem Fenster.
+	InputMode.SetLockMouseToViewportBehavior(
+		bKeepMouseLockedInUiMode ? EMouseLockMode::LockAlways : EMouseLockMode::DoNotLock);
+	PC->SetInputMode(InputMode);
+}
+
+void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
+{
+	ApplyGameAndUiInputMode();
 
 	if(BlockControls) return;
 
@@ -1401,14 +1412,7 @@ void AExtendedCameraBase::Input_Shift_Released(const FInputActionValue& InputAct
 
 void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputActionValue, int32 CamState)
 {
-	APlayerController* PC = Cast<APlayerController>(GetController());
-	if (PC)
-	{
-		FInputModeGameAndUI InputMode;
-		InputMode.SetHideCursorDuringCapture(false);
-		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
-		PC->SetInputMode(InputMode);
-	}
+	ApplyGameAndUiInputMode();
 
 	if (MapMenuWidget)
 	{
@@ -1712,9 +1716,8 @@ void AExtendedCameraBase::HandleState_MoveW(ACameraControllerBase* CameraControl
 
 void AExtendedCameraBase::HandleState_StopMoveW(ACameraControllerBase* CameraControllerBase)
 {
-
-	if (CameraControllerBase->CameraUnitWithTag) return;
-	
+	// KEIN vorzeitiges Aussteigen: siehe Kommentar am Kopf dieser Datei -
+	// ein verschlucktes Loslassen laesst die Kamera endlos weiterfahren.
     CameraControllerBase->WIsPressedState = 2;
 }
 
@@ -1735,9 +1738,8 @@ void AExtendedCameraBase::HandleState_MoveS(ACameraControllerBase* CameraControl
 
 void AExtendedCameraBase::HandleState_StopMoveS(ACameraControllerBase* CameraControllerBase)
 {
-
-	if (CameraControllerBase->CameraUnitWithTag) return;
-	
+	// KEIN vorzeitiges Aussteigen: siehe Kommentar am Kopf dieser Datei -
+	// ein verschlucktes Loslassen laesst die Kamera endlos weiterfahren.
     CameraControllerBase->SIsPressedState = 2;
 }
 
@@ -1759,8 +1761,8 @@ void AExtendedCameraBase::HandleState_MoveA(ACameraControllerBase* CameraControl
 
 void AExtendedCameraBase::HandleState_StopMoveA(ACameraControllerBase* CameraControllerBase)
 {
-	if (CameraControllerBase->CameraUnitWithTag) return;
-
+	// KEIN vorzeitiges Aussteigen: siehe Kommentar am Kopf dieser Datei -
+	// ein verschlucktes Loslassen laesst die Kamera endlos weiterfahren.
     CameraControllerBase->AIsPressedState = 2;
 }
 
@@ -1782,9 +1784,8 @@ void AExtendedCameraBase::HandleState_MoveD(ACameraControllerBase* CameraControl
 
 void AExtendedCameraBase::HandleState_StopMoveD(ACameraControllerBase* CameraControllerBase)
 {
-
-	if (CameraControllerBase->CameraUnitWithTag) return;
-	
+	// KEIN vorzeitiges Aussteigen: siehe Kommentar am Kopf dieser Datei -
+	// ein verschlucktes Loslassen laesst die Kamera endlos weiterfahren.
     CameraControllerBase->DIsPressedState = 2;
 }
 
@@ -2102,13 +2103,26 @@ void AExtendedCameraBase::HandleState_MiddleMousePressed(ACameraControllerBase* 
 	PreviousMouseLocation.Y = MouseY;
 				
 	CameraControllerBase->MiddleMouseIsPressed = true;
+
+	// Winkel merken, solange die Taste gehalten wird. Das freie Drehen selbst macht weiterhin
+	// RotateFree - hier wird nur der Ausgangswinkel festgehalten, damit die Kamera ihn beim
+	// Loslassen wiederfindet.
+	if (bReturnCameraAngleOnRelease)
+	{
+		BeginCameraAngleAdjust();
+	}
 }
 
 void AExtendedCameraBase::HandleState_MiddleMouseReleased(ACameraControllerBase* CameraControllerBase)
 {
-
-
     CameraControllerBase->MiddleMouseIsPressed = false;
+
+	// Und zurueck in den gemerkten Winkel. Ohne Schalter waere das eine erzwungene Aenderung
+	// fuer alle, die das freie Drehen bisher als dauerhafte Verstellung benutzt haben.
+	if (bReturnCameraAngleOnRelease)
+	{
+		EndCameraAngleAdjust();
+	}
 }
 
 void AExtendedCameraBase::HandleState_AbilityOne(ACameraControllerBase* CameraControllerBase)

@@ -49,6 +49,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UBoxComponent* NavObstacleBox;
 
+	/**
+	 * Steht die Wand und ist ihre Sperrflaeche vermessen?
+	 *
+	 * Gebraucht vom UEnergyWallFieldProcessor: der liest die NavObstacleBox jeden Durchlauf neu
+	 * und muss Waende ueberspringen, die noch im Aufbau sind - deren Box ist dann noch leer.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|EnergyWall")
+	bool IsWallActive() const;
+
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "EnergyWall")
 	int32 TeamId;
 
