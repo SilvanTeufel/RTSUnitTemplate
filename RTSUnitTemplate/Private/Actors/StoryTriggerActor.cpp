@@ -10,6 +10,8 @@
 #include "Engine/GameInstance.h"
 #include "Engine/Engine.h"
 #include "Engine/DataTable.h"
+#include "EngineUtils.h"
+#include "Core/UnitData.h"
 
 AStoryTriggerActor::AStoryTriggerActor()
 {
@@ -33,44 +35,138 @@ void AStoryTriggerActor::BeginPlay()
 
     // Load row from DataTable: either a random row (if UseRandomRow) or by StoryRowId.
     // Bei einer Zeilenfolge (StoryRowIds) entfaellt das - die wird erst beim Ausloesen gelesen.
-    if (StoryDataTable && StoryRowIds.Num() == 0)
-    {
-        static const FString ContextString(TEXT("StoryTriggerActor_Load"));
-        const FStoryWidgetTable* Row = nullptr;
-        if (UseRandomRow)
-        {
-            const TArray<FName> RowNames = StoryDataTable->GetRowNames();
-            if (RowNames.Num() > 0)
-            {
-                const int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
-                Row = StoryDataTable->FindRow<FStoryWidgetTable>(RowNames[Index], ContextString, true);
-            }
-        }
-        else if (!StoryRowId.IsNone())
-        {
-            Row = StoryDataTable->FindRow<FStoryWidgetTable>(StoryRowId, ContextString, true);
-        }
-
-        if (Row)
-        {
-            StoryWidgetClass = Row->StoryWidgetClass;
-            TriggerSound = Row->TriggerSound;
-            StoryText = Row->StoryText;
-            StoryImage = Row->StoryImage;
-            StoryMaterial = Row->StoryMaterial;
-            StoryImageSoft = Row->StoryImageSoft;
-            StoryMaterialSoft = Row->StoryMaterialSoft;
-            // ScreenOffsetX = Row->ScreenOffsetX;
-            // ScreenOffsetY = Row->ScreenOffsetY;
-            WidgetLifetimeSeconds = Row->WidgetLifetimeSeconds;
-            bTillAudioEnds = Row->bTillAudioEnds;
-            AudioEndExtraDelay = Row->AudioEndExtraDelay;
-        }
-    }
+    LoadRow(false);
 
     if (TriggerBox)
     {
         TriggerBox->OnComponentBeginOverlap.AddDynamic(this, &AStoryTriggerActor::OnOverlapBegin);
+    }
+
+    if (UWorld* World = GetWorld())
+    {
+        if (RepeatIntervalSeconds > 0.f)
+        {
+            const float FirstDelay = RepeatFirstDelaySeconds >= 0.f ? RepeatFirstDelaySeconds : RepeatIntervalSeconds;
+            World->GetTimerManager().SetTimer(RepeatTimer, this, &AStoryTriggerActor::HandleRepeat,
+                                              RepeatIntervalSeconds, true, FMath::Max(0.01f, FirstDelay));
+        }
+        if (ProximityRadius > 0.f)
+        {
+            World->GetTimerManager().SetTimer(ProximityTimer, this, &AStoryTriggerActor::CheckProximity,
+                                              FMath::Max(0.1f, ProximityCheckInterval), true);
+        }
+    }
+}
+
+void AStoryTriggerActor::LoadRow(bool bReroll)
+{
+    if (!StoryDataTable || StoryRowIds.Num() > 0)
+    {
+        return;
+    }
+
+    // A table of another row type (e.g. a StoryModule FStoryLineRow table) finds no row at all and
+    // the widget shows its placeholder "This is a StoryText" without audio - say so instead.
+    if (StoryDataTable->GetRowStruct() && !StoryDataTable->GetRowStruct()->IsChildOf(FStoryWidgetTable::StaticStruct()))
+    {
+        UE_LOG(LogTemp, Error, TEXT("[Story] '%s': StoryDataTable '%s' has row type '%s', expected FStoryWidgetTable."),
+               *GetName(), *StoryDataTable->GetName(), *StoryDataTable->GetRowStruct()->GetName());
+        return;
+    }
+
+    static const FString ContextString(TEXT("StoryTriggerActor_Load"));
+    const FStoryWidgetTable* Row = nullptr;
+    if (UseRandomRow)
+    {
+        const TArray<FName> RowNames = StoryDataTable->GetRowNames();
+        if (RowNames.Num() > 0)
+        {
+            int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
+            if (bReroll && RowNames.Num() > 1 && RowNames[Index] == LastRandomRow)
+            {
+                Index = (Index + 1 + FMath::RandRange(0, RowNames.Num() - 2)) % RowNames.Num();
+            }
+            LastRandomRow = RowNames[Index];
+            Row = StoryDataTable->FindRow<FStoryWidgetTable>(RowNames[Index], ContextString, true);
+        }
+    }
+    else if (!StoryRowId.IsNone())
+    {
+        Row = StoryDataTable->FindRow<FStoryWidgetTable>(StoryRowId, ContextString, true);
+    }
+
+    if (Row)
+    {
+        StoryWidgetClass = Row->StoryWidgetClass;
+        TriggerSound = Row->TriggerSound;
+        StoryText = Row->StoryText;
+        StoryImage = Row->StoryImage;
+        StoryMaterial = Row->StoryMaterial;
+        StoryImageSoft = Row->StoryImageSoft;
+        StoryMaterialSoft = Row->StoryMaterialSoft;
+        WidgetLifetimeSeconds = Row->WidgetLifetimeSeconds;
+        bTillAudioEnds = Row->bTillAudioEnds;
+        AudioEndExtraDelay = Row->AudioEndExtraDelay;
+    }
+}
+
+bool AStoryTriggerActor::LocalPlayerMatchesTeam() const
+{
+    APlayerController* LocalPC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
+    const AControllerBase* LocalRTSController = LocalPC ? Cast<AControllerBase>(LocalPC) : nullptr;
+    return LocalRTSController && LocalRTSController->SelectableTeamId == TeamId;
+}
+
+void AStoryTriggerActor::HandleRepeat()
+{
+    if (!LocalPlayerMatchesTeam())
+    {
+        return;
+    }
+    LoadRow(true);
+    StoryEinreihen();
+}
+
+void AStoryTriggerActor::CheckProximity()
+{
+    if (bTriggerOnce && bHasTriggered)
+    {
+        GetWorldTimerManager().ClearTimer(ProximityTimer);
+        return;
+    }
+    if (!LocalPlayerMatchesTeam())
+    {
+        return;
+    }
+
+    const FVector Here = GetActorLocation();
+    const float RadiusSq = FMath::Square(ProximityRadius);
+    for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+    {
+        const AUnitBase* Unit = *It;
+        if (!IsValid(Unit) || Unit->TeamId != TriggerTeamId || Unit->bIsBuilding)
+        {
+            continue;
+        }
+        if (Unit->GetUnitState() == UnitData::Dead)
+        {
+            continue;
+        }
+        if (FVector::DistSquared2D(Unit->GetMassActorLocation(), Here) <= RadiusSq)
+        {
+            bHasTriggered = true;
+            if (bTriggerOnce)
+            {
+                GetWorldTimerManager().ClearTimer(ProximityTimer);
+                if (TriggerBox)
+                {
+                    TriggerBox->SetGenerateOverlapEvents(false);
+                    TriggerBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+                }
+            }
+            StoryEinreihen();
+            return;
+        }
     }
 }
 

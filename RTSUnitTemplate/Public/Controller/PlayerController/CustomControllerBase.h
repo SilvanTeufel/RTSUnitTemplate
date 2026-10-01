@@ -545,6 +545,34 @@ public:
 	void LeftClickReleasedMass();
 
 	// ------------------------------------------------------------------------------------------
+	// KLEMMENDE AUSWAHL NACH ALT+TAB (01.10.2026).
+	//
+	// AltIsPressed/IsCtrlPressed/IsShiftPressed sind eigene Flags, keine Abfrage der Taste. Bei
+	// Alt+Tab kommt das Loslassen von Alt nie an - AltIsPressed blieb true, jeder Linksklick lief
+	// in den Alt-Zweig (Bauplatz zerstoeren, Abilities abbrechen) statt auszuwaehlen, und
+	// ActivateKeyboardAbilitiesOnMultipleUnits kehrte sofort zurueck. Seit LockAlways kommt man
+	// nur noch per Alt+Tab aus dem Fenster, deshalb trat es erst seitdem auf.
+	// ------------------------------------------------------------------------------------------
+
+	/** Engine ruft das bei Fokusverlust des Viewports (UGameViewportClient::LostFocus). */
+	virtual void FlushPressedKeys() override;
+
+	/** Setzt alle Modifikator-Flags und einen offenen Linksklick zurueck. Reason landet in der Diagnose. */
+	void ResetModifierKeyFlags(const TCHAR* Reason);
+
+	/**
+	 * Vergleicht die Flags mit der echten Tastenlage (Slate) und setzt veraltete zurueck.
+	 * Nur ereignisgetrieben aufrufen (Klick, Tastendruck) - kein Tick. Nur fuer den lokalen
+	 * menschlichen Spieler; der RL-Agent setzt Alt/Ctrl selbst und darf nicht korrigiert werden.
+	 */
+	void HealStaleModifierFlags(const TCHAR* Where);
+
+	/** Eine Zeile Saved/SelectionDiag.csv mit dem ganzen Auswahlzustand. Schalter: rts.selection.diag */
+	void WriteSelectionDiag(const TCHAR* Where, const TCHAR* Outcome);
+
+	bool IsHumanLocalPlayer() const;
+
+	// ------------------------------------------------------------------------------------------
 	// Formation drag line: hold right mouse (move) or left mouse while attack-move is armed,
 	// drag out a line, and on release the selection spreads evenly along it.
 	//

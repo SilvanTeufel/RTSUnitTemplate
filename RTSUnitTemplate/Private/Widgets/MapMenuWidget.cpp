@@ -42,6 +42,11 @@ void UMapMenuWidget::NativeConstruct()
 		SurrenderButton->OnClicked.AddUniqueDynamic(this, &UMapMenuWidget::OnSurrenderClicked);
 	}
 
+	if (ResumeButton)
+	{
+		ResumeButton->OnClicked.AddUniqueDynamic(this, &UMapMenuWidget::OnResumeClicked);
+	}
+
 	AktualisiereNachAufgabe();
 }
 
@@ -75,6 +80,29 @@ void UMapMenuWidget::OnSurrenderClicked()
 		{
 			SetVisibility(ESlateVisibility::Collapsed);
 		}
+	}
+}
+
+void UMapMenuWidget::OnResumeClicked()
+{
+	// Zurueck ins Spiel heisst auch: eine Pause aus dem Menue endet hier.
+	if (UWorld* World = GetWorld())
+	{
+		if (UGameplayStatics::IsGamePaused(World))
+		{
+			UGameplayStatics::SetGamePaused(World, false);
+			AktualisierePauseBeschriftung();
+		}
+	}
+
+	// Derselbe Weg wie Esc: Sichtbarkeit, BlockControls und Blur - siehe OnSurrenderClicked.
+	if (AExtendedCameraBase* Kamera = Cast<AExtendedCameraBase>(GetOwningPlayerPawn()))
+	{
+		Kamera->CloseMapMenu();
+	}
+	else
+	{
+		SetVisibility(ESlateVisibility::Collapsed);
 	}
 }
 

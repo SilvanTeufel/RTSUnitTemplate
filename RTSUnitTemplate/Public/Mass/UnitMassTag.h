@@ -1239,6 +1239,84 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	UPROPERTY()
 	float VisualCaptureScaleZ = 0.f;
 
+	// ------------------------------------------------------------------------------------------
+	// HOVER-FORMEN (01.10.2026)
+	//
+	// Nutzervorgabe: der Hover trifft, wenn der Mausstrahl EINE von drei Formen trifft - die
+	// echte Kapsel, die echte BoxCollision-Box oder die Mesh-Box. Jede Form wird NUR aus ihren
+	// eigenen Massen geprueft. Der fruehere Mix (Radius aus der Box ueber GetRadiusInDirection,
+	// Hoehe aus VisualTop/BottomOffset, Unterkante min(VisualBottom, -CapsuleHeight)) blies die
+	// Trefferflaeche beim DataCenter weit ueber das Bild hinaus auf.
+	//
+	// Alle Lagen stehen im AKTORRAHMEN (Aktordrehung herausgerechnet, Skalierung NICHT), also in
+	// Welteinheiten der Erfassungsskalierung HoverCaptureScale. Erfasst einmalig in
+	// UMassActorBindingComponent::InitializeMassEntityStatsFromOwner; der Hover rechnet ueber das
+	// Verhaeltnis aktuelle Skalierung / HoverCaptureScale auf die aktuelle Pose um.
+	// ------------------------------------------------------------------------------------------
+
+	/** true = die Hover-Formen unten sind erfasst. false = der Hover nimmt nur CapsuleRadius/CapsuleHeight. */
+	UPROPERTY()
+	bool bHoverShapesCaptured = false;
+
+	/**
+	 * true = the shapes are anchored on LastGroundLocation + CapsuleHeight instead of the transform
+	 * fragment's Z (stationary units, i.e. buildings). See RTSUnitGeometry::GetAnchor.
+	 */
+	UPROPERTY()
+	bool bHoverGroundAnchored = false;
+
+	/** Echte Kapsel: Radius und Halbhoehe der CollisionCylinder, OHNE AdditionalCapsuleRadius. */
+	UPROPERTY()
+	float HoverCapsuleRadius = 0.f;
+
+	UPROPERTY()
+	float HoverCapsuleHalfHeight = 0.f;
+
+	/** Kapselmitte im Aktorrahmen (bei ACharacter die Wurzel, also praktisch 0). */
+	UPROPERTY()
+	FVector3f HoverCapsuleCenter = FVector3f::ZeroVector;
+
+	/** Echte BoxCollision-Box (Tag BoxCollision): Mitte und Drehung im Aktorrahmen, skalierte Halbausdehnung in Boxachsen. */
+	UPROPERTY()
+	bool bHoverHasBox = false;
+
+	UPROPERTY()
+	FVector3f HoverBoxCenter = FVector3f::ZeroVector;
+
+	UPROPERTY()
+	FVector3f HoverBoxExtent = FVector3f::ZeroVector;
+
+	UPROPERTY()
+	FQuat4f HoverBoxRotation = FQuat4f::Identity;
+
+	/** Mesh-Box aus AConstructionUnit::ComputeVisualBounds im Aktorrahmen: Mitte und Halbausdehnung. */
+	UPROPERTY()
+	bool bHoverHasMesh = false;
+
+	UPROPERTY()
+	FVector3f HoverMeshCenter = FVector3f::ZeroVector;
+
+	UPROPERTY()
+	FVector3f HoverMeshExtent = FVector3f::ZeroVector;
+
+	/** Aktorskalierung bei der Erfassung der Hover-Formen. */
+	UPROPERTY()
+	FVector3f HoverCaptureScale = FVector3f::OneVector;
+
+	/**
+	 * Grobtest: senkrechter Zylinder um die Entitaetsachse, der alle drei Formen umschliesst
+	 * (waagerechte Reichweite, Unter-/Oberkante relativ zur Entitaetsmitte). Nur Vorfilter - ein
+	 * Treffer hier entscheidet NICHTS, erst die drei genauen Tests.
+	 */
+	UPROPERTY()
+	float HoverBroadRadius = 0.f;
+
+	UPROPERTY()
+	float HoverBroadBottom = 0.f;
+
+	UPROPERTY()
+	float HoverBroadTop = 0.f;
+
 	float GetRadiusInDirection(const FVector& WorldDirection, const FRotator& WorldRotation) const
 	{
 		if (!bUseBoxComponent) return CapsuleRadius;

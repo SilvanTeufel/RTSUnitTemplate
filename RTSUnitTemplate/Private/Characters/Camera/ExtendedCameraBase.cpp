@@ -1169,9 +1169,17 @@ bool AExtendedCameraBase::LuxUseLeftClickAsAbility(ACameraControllerBase* Camera
 
 void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& InputActionValue, int32 Camstate)
 {
-	if(BlockControls) return;
-
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
+
+	if(BlockControls)
+	{
+		// Diagnose klemmende Auswahl (01.10.2026): auch der Klick, der hier schon endet, gehoert in die CSV.
+		if (CameraControllerBase)
+		{
+			CameraControllerBase->WriteSelectionDiag(TEXT("Input_LeftClick_Pressed"), TEXT("Blocked_BlockControls"));
+		}
+		return;
+	}
 
 	// ============================================================================================
 	// LUX-ANPASSUNG (16.08.2026) â€” siehe LuxUseLeftClickAsAbility() oben.
@@ -1198,6 +1206,7 @@ void AExtendedCameraBase::Input_LeftClick_Pressed(const FInputActionValue& Input
 		// SetAbilityInputHeld(AbilityOne, true), damit Dauerfeuer beim Halten laeuft.
 		ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilityOne, CameraControllerBase);
 		bLuxLeftClickWasAbility = true;
+		CameraControllerBase->WriteSelectionDiag(TEXT("Input_LeftClick_Pressed"), TEXT("LuxDirectControl_Ability"));
 		return;
 	}
 	bLuxLeftClickWasAbility = false;
@@ -1306,8 +1315,9 @@ void AExtendedCameraBase::Input_Alt_Pressed(const FInputActionValue& InputAction
 
 void AExtendedCameraBase::Input_Alt_Released(const FInputActionValue& InputActionValue, int32 Camstate)
 {
-	if(BlockControls) return;
-	
+	// KEIN BlockControls-Ausstieg (01.10.2026): ein Loslassen muss immer ankommen, sonst klemmt
+	// AltIsPressed, sobald waehrend des Haltens ein Menue aufgeht - dieselbe Regel wie bei den
+	// Ability-Tasten in SwitchControllerStateMachine.
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
@@ -1328,8 +1338,7 @@ void AExtendedCameraBase::Input_Ctrl_Pressed(const FInputActionValue& InputActio
 
 void AExtendedCameraBase::Input_Ctrl_Released(const FInputActionValue& InputActionValue, int32 Camstate)
 {
-	if(BlockControls) return;
-	
+	// KEIN BlockControls-Ausstieg (01.10.2026), siehe Input_Alt_Released.
 	ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());
 	if(CameraControllerBase)
 	{
@@ -1500,6 +1509,11 @@ void AExtendedCameraBase::SwitchControllerStateMachine(const FInputActionValue& 
 
     // Everything below is a real control action and stays blocked while a menu is open.
     if (BlockControls) return;
+
+    // Klemmende Auswahl (01.10.2026): ein veraltetes Alt/Ctrl wuerde den Tastendruck sonst in den
+    // falschen Zweig lenken bzw. ActivateKeyboardAbilitiesOnMultipleUnits sperren. Nur hier bei
+    // einem echten Tastendruck, kein Tick. Der RL-Agent ist ausgenommen (IsHumanLocalPlayer).
+    CameraControllerBase->HealStaleModifierFlags(TEXT("SwitchControllerStateMachine"));
 
     if (CameraControllerBase->AltIsPressed)
     	{  switch (NewCameraState)
