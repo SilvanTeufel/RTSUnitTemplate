@@ -233,7 +233,7 @@ void AConstructionUnit::ApplyBuildingFootprintScale(const AWorkArea* InWorkArea)
 	SetActorScale3D(FVector(Faktor));
 }
 
-FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit)
+FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit, const FTransform* InFrame)
 {
 	FBox VisualBox(ForceInit);
 	if (!Unit)
@@ -247,9 +247,19 @@ FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit)
 	const bool bMesseKomponenten = Unit->IsA(ABuildingBase::StaticClass());
 	const float AktorZ = Unit->GetActorLocation().Z;
 
-	Unit->ForEachComponent<UMeshComponent>(false, [&VisualBox, bSkeletal, bMesseKomponenten, AktorZ, Unit](const UMeshComponent* MeshComp)
+	Unit->ForEachComponent<UMeshComponent>(false, [&VisualBox, bSkeletal, bMesseKomponenten, AktorZ, Unit, InFrame](const UMeshComponent* MeshComp)
 	{
 		if (!IsValid(MeshComp) || !MeshComp->IsRegistered())
+		{
+			return;
+		}
+
+		// Components that never show up in the picture do not belong in the visual box: runtime
+		// virtual texture writers (flat planes that only render into the RVT, e.g. the Xeno creep
+		// RVTWriterMesh). They stretched the box - and with it hover, snap and the wall path
+		// check - beyond the building. Hidden state is NOT a filter: fog of war and ISM mode
+		// toggle it, and the capture may run in either state.
+		if (!MeshComp->bRenderInMainPass)
 		{
 			return;
 		}
@@ -288,7 +298,13 @@ FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit)
 		// CalcBounds instead of the cached Bounds: the ISM instance added during
 		// FinishSpawning (InitializeUnitMode) only invalidates the bounds cache, so right
 		// after spawn the cached value is still the pre-instance zero-extent point.
-		const FBox KomponentenBox = MeshComp->CalcBounds(MeshComp->GetComponentTransform()).GetBox();
+		//
+		// Mit InFrame (01.10.2026) im uebergebenen Rahmen statt in Weltachsen vermessen. Der Rahmen
+		// traegt keine Skalierung, die Box bleibt also in Welteinheiten - nur ohne Aktordrehung.
+		const FTransform MessTransform = InFrame
+			? MeshComp->GetComponentTransform().GetRelativeTransform(*InFrame)
+			: MeshComp->GetComponentTransform();
+		const FBox KomponentenBox = MeshComp->CalcBounds(MessTransform).GetBox();
 
 		// MESSUNG (bleibt stehen bis abbestellt) -> Saved/VisualBounds.csv
 		//

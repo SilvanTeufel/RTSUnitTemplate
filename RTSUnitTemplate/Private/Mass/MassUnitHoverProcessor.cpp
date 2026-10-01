@@ -22,6 +22,8 @@
 #include "MassEntitySubsystem.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 #include "HAL/IConsoleManager.h"
+#include "DrawDebugHelpers.h"
+#include "Core/RTSUnitGeometry.h"
 
 static TAutoConsoleVariable<float> CVarHoverInterval(
 	TEXT("rts.hover.interval"),
@@ -35,6 +37,25 @@ static TAutoConsoleVariable<int32> CVarHoverDiag(
 	0,
 	TEXT("1 = meldet alle 5 s, wie weit die Hover-Trefferkapsel vom gemerkten Bodenwert abweicht."),
 	ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarHoverDebugDraw(
+	TEXT("rts.hover.debugdraw"),
+	0,
+	TEXT("1 = zeichnet fuer die ueberfahrene Einheit die drei Hover-Formen: Kapsel gruen, ")
+	TEXT("BoxCollision-Box blau, Mesh-Box gelb; die getroffene Form dick. 2 = zusaetzlich den ")
+	TEXT("Vorfilter-Zylinder (grau) jedes Kandidaten."),
+	ECVF_Default);
+
+// DIE DREI HOVER-FORMEN (01.10.2026).
+//
+// Nutzervorgabe: Hover = Strahl trifft die echte Kapsel ODER die echte BoxCollision-Box ODER die
+// Mesh-Box - jede nur aus ihren EIGENEN Massen, der vorderste Treffer gewinnt.
+//
+// Die Geometrie selbst steht seit 01.10.2026 (zweiter Durchgang) in RTSUnitGeometry: derselbe Satz
+// Formen dient auch dem Einrasten und der Pfadpruefung der EnergyWall. Gebaeude sind dort an
+// LastGroundLocation verankert statt am FTransformFragment - dessen Z lag bei einem Teil der
+// Gebaeude eine Kapselhalbhoehe zu tief, und genau so tief lag der Hover am WallTower.
+namespace HoverShapes = RTSUnitGeometry;
 
 UMassUnitHoverProcessor::UMassUnitHoverProcessor()
 {
@@ -179,7 +200,15 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 	int32 CheckedEntities = 0;
 
 	FMassEntityHandle BestEntity;
-	float ClosestDistanceSq = FLT_MAX;
+	// Eintrittsdistanz des besten Treffers entlang des Strahls (01.10.2026). Bisher gewann die
+	// Entitaet mit dem kameranaechsten MITTELPUNKT - ein grosses Gebaeude schluckte so Einheiten,
+	// die vor ihm standen. Jetzt gewinnt, was der Strahl ZUERST trifft.
+	double BestEntryDistance = TNumericLimits<double>::Max();
+	const double RayLength = 100000.0;
+	const int32 DebugDrawMode = CVarHoverDebugDraw.GetValueOnGameThread();
+	const float DebugDrawLifeTime = UpdateInterval + 0.02f;
+	HoverShapes::FShapeSet BestShapes;
+	HoverShapes::EHitShape BestHitShape = HoverShapes::EHitShape::None;
 	int32 BestInstanceIndex = INDEX_NONE;
 	TWeakObjectPtr<UInstancedStaticMeshComponent> BestISM = nullptr;
 	TWeakObjectPtr<USkeletalMeshComponent> BestMesh = nullptr;
@@ -208,140 +237,38 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 			const FTransform& EntityTransform = Transforms[i].GetTransform();
 			const FMassAgentCharacteristicsFragment& CharFrag = CharFrags[i];
 
-			FVector BaseLocation = EntityTransform.GetLocation();
-			// Die Trefferstrecke reicht vom FUSS bis zur SICHTBAREN OBERKANTE.
+			// TREFFERPRUEFUNG (01.10.2026): Vorfilter, dann drei getrennte Formen.
 			//
-			// Vorher stand hier der Wert der gerade gewaehlten Kollisionsform, danach kurzzeitig das
-			// Maximum aus Kapsel und Box. Beides beschreibt nicht, was auf dem Schirm steht: die
-			// Kapsel ist auf die Bewegung ausgelegt, die Box auf den Grundriss. Das Maximum fiel
-			// deshalb je nach Einheit zu hoch oder zu niedrig aus - bei den meisten zu hoch.
+			// Der Vorfilter ist ein senkrechter Zylinder, der alle drei Formen umschliesst - ein
+			// einziger Strecken-Abstand je Entitaet wie bisher. Nur wer ihn trifft, bekommt die
+			// genauen Tests. Ein Vorfilter-Treffer allein entscheidet nichts.
 			//
-			// VisualTopOffset kommt aus den Meshbounds und wird einmalig bei der Bindung erfasst.
-			// Fehlt er (0), gilt das alte Verhalten.
-			const float HalfHeight = CharFrag.bUseBoxComponent ? CharFrag.BoxExtent.Z : CharFrag.CapsuleHeight;
-
-			// UNTERKANTE AUS DEN MESHBOUNDS, NICHT AUS DER KAPSEL (24.09.2026).
-			//
-			// Bisher stammte nur die OBERkante aus VisualTopOffset, die Unterkante dagegen aus der
-			// Kapselhalbhoehe. Nutzerangabe: die ISM ist mitunter groesser als die Kapsel - dann
-			// steht die Trefferkapsel unten zu hoch, und zwar genau um die Differenz. Beim
-			// DataCenter faellt das am staerksten auf, weil dort beide Masse am weitesten
-			// auseinanderliegen.
-			//
-			// Zweite Angabe: ISMs werden skaliert. Die beiden Offsets stehen in Welteinheiten des
-			// ERFASSUNGSzeitpunkts; aendert sich die Skalierung danach, sind sie falsch. Deshalb
-			// werden sie ueber VisualCaptureScaleZ auf die Skalierung des aktuellen Transforms
-			// umgerechnet - derselbe Transform, aus dem die sichtbare Instanz gezeichnet wird.
-			//
-			// Der Rueckfall auf das alte Verhalten bleibt vollstaendig erhalten: fehlen die
-			// Meshbounds (Offsets 0), passiert exakt dasselbe wie vorher.
-			float BottomOffset = -CharFrag.CapsuleHeight;   // Kapselmitte -> Fuss, wie bisher
-			float Height = HalfHeight * 2.0f;
-
-			if (CharFrag.VisualTopOffset > KINDA_SMALL_NUMBER)
+			// Danach Hover = Kapsel ODER BoxCollision-Box ODER Mesh-Box, jede nur aus ihren eigenen
+			// Massen (siehe HoverShapes oben). Die fruehere Mischform aus Box-Radius und Mesh-Hoehe
+			// samt Kappeneinzug (24.09.2026) ist damit abgeloest.
+			HoverShapes::FShapeSet Shapes;
+			HoverShapes::Build(CharFrag, EntityTransform, Shapes);
+			if (!Shapes.bValid)
 			{
-				float TopOffset = CharFrag.VisualTopOffset;
-				float VisualBottom = (CharFrag.VisualBottomOffset < -KINDA_SMALL_NUMBER)
-					? CharFrag.VisualBottomOffset
-					: -CharFrag.CapsuleHeight;
-
-				// Umrechnen nur, wenn ein brauchbarer Bezugswert vorliegt UND sich die Skalierung
-				// tatsaechlich geaendert hat. Ohne Bezugswert (Altbestand, Offsets vor dieser
-				// Aenderung erfasst) bleiben die Werte so, wie sie gespeichert sind.
-				if (CharFrag.VisualCaptureScaleZ > KINDA_SMALL_NUMBER)
-				{
-					const float CurrentScaleZ = FMath::Abs(EntityTransform.GetScale3D().Z);
-					if (CurrentScaleZ > KINDA_SMALL_NUMBER)
-					{
-						const float ScaleRatio = CurrentScaleZ / CharFrag.VisualCaptureScaleZ;
-						TopOffset *= ScaleRatio;
-						VisualBottom *= ScaleRatio;
-					}
-				}
-
-				// Die Kapsel darf nie kleiner werden als bisher: wo das Mesh die Kapsel NICHT
-				// ueberragt, bleibt es bei der Kapsel. Sonst wuerden Einheiten mit kleinem Mesh
-				// und grosser Kapsel schlechter treffbar als vorher.
-				BottomOffset = FMath::Min(VisualBottom, -CharFrag.CapsuleHeight);
-				Height = FMath::Max(TopOffset - BottomOffset, KINDA_SMALL_NUMBER);
+				continue;
 			}
-
-			// Die Trefferkapsel aus der EIGENEN Pose aufbauen, nicht aus LastGroundLocation.
-			//
-			// Bisher stand der Fuss der Kapsel auf dem zuletzt getracten Boden. Stimmt dieser Wert
-			// nicht mehr - Rampe, Plattform, Dach, oder ein fehlgeschlagener Bodentrace -, sitzt die
-			// Trefferkapsel senkrecht versetzt zu der Einheit, die man auf dem Schirm sieht.
-			//
-			// Und genau dieser Versatz haengt am Kamerawinkel: schaut die Kamera steil von oben,
-			// laeuft der Strahl fast senkrecht und ein Hoehenfehler verschiebt den Abstand zum
-			// Strahl kaum. Wird die Kamera herausgezoomt und flacher gestellt, wandert derselbe
-			// Hoehenfehler direkt in die Seite - die Einheit laesst sich dann nicht mehr
-			// ueberfahren, obwohl der Mauszeiger auf ihr steht. Das erklaert das "stimmt nicht
-			// immer".
-			//
-			// Der Entitaets-Transform ist dieselbe Quelle, aus der auch die sichtbare Instanz
-			// gezeichnet wird. Damit deckt sich die Trefferkapsel per Bauart mit dem Bild.
-			// Der Versatz ist derselbe, den ActorTransformSyncProcessor beim Setzen der Pose
-			// abzieht (dort HeightOffset) - bei stimmendem Bodenwert kommt also exakt dieselbe
-			// Kapsel heraus wie vorher, nur ohne die Abhaengigkeit vom letzten Trace.
-			// BottomOffset traegt die Unterkante jetzt selbst (negativ, von der Aktormitte aus).
-			// Fliegende Einheiten behalten den alten Sonderweg: dort beschreibt die Kapsel den
-			// Koerper besser als die Meshbounds, weil der Flug die Hoehe ohnehin ueber dem
-			// Gelaende nachfuehrt.
-			BaseLocation.Z += CharFrag.bIsFlying ? -HalfHeight : BottomOffset;
 
 			FVector OutP1, OutP2;
-			FVector SegmentStart = BaseLocation;
-			FVector SegmentEnd   = BaseLocation + FVector(0.f, 0.f, Height);
-			FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, SegmentStart, SegmentEnd, OutP1, OutP2);
-			float DistSq = FVector::DistSquared(OutP1, OutP2);
-
-			FVector DirToMouse = OutP1 - OutP2;
-			DirToMouse.Z = 0.f;
-			FVector Dir2D = DirToMouse.GetSafeNormal2D();
-			if (Dir2D.IsNearlyZero())
+			FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, Shapes.BroadStart, Shapes.BroadEnd, OutP1, OutP2);
+			if (FVector::DistSquared(OutP1, OutP2) > FMath::Square(Shapes.BroadRadius))
 			{
-				// Steht der Mauszeiger genau auf der Achse der Einheit, hat der Verbindungsvektor
-				// keine waagerechte Komponente mehr. GetRadiusInDirection liefert dann fuer
-				// Box-Einheiten ausdruecklich 0 und der Treffer faellt an der Stelle durch, an
-				// der er am sichersten sein muesste. Ersatzweise waagerecht von der Kamera weg
-				// peilen - diese Richtung ist immer definiert.
-				Dir2D = (BaseLocation - RayOrigin).GetSafeNormal2D();
-				if (Dir2D.IsNearlyZero())
-				{
-					Dir2D = FVector(1.f, 0.f, 0.f);
-				}
-			}
-			float Radius = CharFrag.GetRadiusInDirection(Dir2D, EntityTransform.GetRotation().Rotator());
-
-			// DIE ENDEN EINZIEHEN (24.09.2026).
-			//
-			// "Abstand zur Strecke <= Radius" beschreibt eine KAPSEL, und eine Kapsel hat oben und
-			// unten je eine Halbkugel vom Radius. Die Trefferflaeche ragte damit eine volle
-			// Radiuslaenge UEBER die Meshoberkante hinaus - und ebenso weit unter den Boden.
-			//
-			// Gemessen am 24.09.2026 an der Singularian_Base: das Mesh reicht von 509.0 bis 1606.3,
-			// die Trefferkapsel ging von 509-Radius bis 1606+Radius. Der Ueberstand haengt am
-			// GRUNDRISS-Radius, nicht an der Hoehe - deshalb faellt er bei der MainBase mit dem
-			// groessten Grundriss am staerksten auf und bei kleinen Gebaeuden nur wenig. Genau so
-			// hat der Nutzer es beschrieben.
-			//
-			// Der Einzug legt die beiden Halbkugeln auf die Mesh-Ober- und -Unterkante. Die
-			// Deckelung auf die halbe Hoehe verhindert, dass die Strecke sich bei flachen
-			// Gebaeuden umdreht; dort bleibt es praktisch beim alten Verhalten.
-			//
-			// Der Radius stammt aus dem ersten Durchgang - die Richtung aendert sich durch den
-			// Einzug nur unwesentlich, ein dritter Durchgang brachte nichts.
-			const float Einzug = FMath::Min(Radius, Height * 0.5f);
-			if (Einzug > KINDA_SMALL_NUMBER)
-			{
-				SegmentStart.Z += Einzug;
-				SegmentEnd.Z   -= Einzug;
-				FMath::SegmentDistToSegmentSafe(RayOrigin, RayEnd, SegmentStart, SegmentEnd, OutP1, OutP2);
-				DistSq = FVector::DistSquared(OutP1, OutP2);
+				continue;
 			}
 
-			if (DistSq <= FMath::Square(Radius))
+			if (DebugDrawMode >= 2)
+			{
+				HoverShapes::DrawBroad(World, Shapes, DebugDrawLifeTime);
+			}
+
+			HoverShapes::EHitShape HitShape = HoverShapes::EHitShape::None;
+			const double EntryDistance = HoverShapes::RayTrace(Shapes, RayOrigin, RayDirection, RayLength, HitShape);
+
+			if (EntryDistance >= 0.0)
 			{
 				bHit = true;
 
@@ -374,10 +301,11 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 
 			if (bHit)
 			{
-				float DistToCamSq = FVector::DistSquared(RayOrigin, EntityTransform.GetLocation());
-				if (DistToCamSq < ClosestDistanceSq)
+				if (EntryDistance < BestEntryDistance)
 				{
-					ClosestDistanceSq = DistToCamSq;
+					BestEntryDistance = EntryDistance;
+					BestShapes = Shapes;
+					BestHitShape = HitShape;
 					BestEntity = Entity;
 					BestInstanceIndex = CurrentInstanceIndex;
 					BestISM = CurrentISM;
@@ -395,6 +323,13 @@ void UMassUnitHoverProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
 	// geloescht werden, sonst bliebe die zuletzt ueberfahrene Einheit fuer immer bevorzugtes
 	// Klickziel und man koennte nichts anderes mehr anklicken.
 	LocalPC->SetHoveredUnit(BestUnit.Get());
+
+	// Pruefzeichnung ueber rts.hover.debugdraw (01.10.2026): die drei Formen der ueberfahrenen
+	// Einheit, die getroffene dick. Damit laesst sich im Spiel nachsehen, welche Form greift.
+	if (DebugDrawMode >= 1 && BestEntity.IsValid())
+	{
+		HoverShapes::DrawShapes(World, BestShapes, BestHitShape, DebugDrawLifeTime);
+	}
 
 	// Detect if we changed entity OR instance index/mesh for the same entity
 	bool bInstanceChanged = false;
