@@ -2020,6 +2020,9 @@ void ACameraControllerBase::StopAllCameraMovement()
 	MiddleMouseIsPressed = false;
 	// Held ability keys are input state too: blocking controls stops their release from arriving.
 	ClearHeldAbilityInputs();
+	// Modifikatoren genauso (01.10.2026): nach Alt+Tab blieb AltIsPressed sonst true und jeder
+	// Linksklick brach Abilities ab, statt auszuwaehlen. Siehe CustomControllerBase.h.
+	ResetModifierKeyFlags(TEXT("StopAllCameraMovement"));
 
 	if (CameraBase)
 	{
