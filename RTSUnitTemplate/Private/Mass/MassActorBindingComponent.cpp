@@ -1249,6 +1249,88 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				CharFrag->BoxExtent = FVector::ZeroVector;
 			}
 
+			// HOVER-FORMEN ERFASSEN (01.10.2026) - siehe FMassAgentCharacteristicsFragment::bHoverShapesCaptured.
+			//
+			// Drei getrennte Formen, jede nur aus ihren EIGENEN Massen: die echte Kapsel (ohne
+			// AdditionalCapsuleRadius - der vergroessert Reichweiten, nicht das Bild), die echte
+			// BoxCollision-Box und die Mesh-Box. Alles im Aktorrahmen (Aktorort + Aktordrehung,
+			// Skalierung 1), damit der Hover die Formen mit der Entitaetsdrehung mitdrehen kann.
+			// Dazu ein umschliessender Zylinder als billiger Vorfilter.
+			{
+				CharFrag->bHoverShapesCaptured = false;
+				CharFrag->bHoverHasBox = false;
+				CharFrag->bHoverHasMesh = false;
+
+				if (const UCapsuleComponent* HoverCapsule = UnitOwner->GetCapsuleComponent())
+				{
+					const FTransform ActorFrame(UnitOwner->GetActorQuat(), UnitOwner->GetActorLocation());
+
+					float BroadRadius = 0.f;
+					float BroadBottom = TNumericLimits<float>::Max();
+					float BroadTop = -TNumericLimits<float>::Max();
+					auto AddBroadPoint = [&BroadRadius, &BroadBottom, &BroadTop](const FVector& LocalPoint)
+					{
+						BroadRadius = FMath::Max(BroadRadius, (float)LocalPoint.Size2D());
+						BroadBottom = FMath::Min(BroadBottom, (float)LocalPoint.Z);
+						BroadTop = FMath::Max(BroadTop, (float)LocalPoint.Z);
+					};
+					auto AddBroadBox = [&AddBroadPoint](const FVector& Center, const FQuat& Rotation, const FVector& Extent)
+					{
+						for (int32 Corner = 0; Corner < 8; ++Corner)
+						{
+							const FVector Sign((Corner & 1) ? 1.f : -1.f, (Corner & 2) ? 1.f : -1.f, (Corner & 4) ? 1.f : -1.f);
+							AddBroadPoint(Center + Rotation.RotateVector(Extent * Sign));
+						}
+					};
+
+					// (1) Kapsel
+					const float CapsuleRadiusReal = HoverCapsule->GetScaledCapsuleRadius();
+					const float CapsuleHalfHeightReal = HoverCapsule->GetScaledCapsuleHalfHeight();
+					const FVector CapsuleCenterLocal = ActorFrame.InverseTransformPosition(HoverCapsule->GetComponentLocation());
+					CharFrag->HoverCapsuleRadius = CapsuleRadiusReal;
+					CharFrag->HoverCapsuleHalfHeight = CapsuleHalfHeightReal;
+					CharFrag->HoverCapsuleCenter = FVector3f(CapsuleCenterLocal);
+					AddBroadBox(CapsuleCenterLocal, FQuat::Identity, FVector(CapsuleRadiusReal, CapsuleRadiusReal, CapsuleHalfHeightReal));
+
+					// (2) BoxCollision-Box - dieselbe Quelle wie BoxExtent oben.
+					if (TargetedBox)
+					{
+						const FVector BoxCenterLocal = ActorFrame.InverseTransformPosition(TargetedBox->GetComponentLocation());
+						const FQuat BoxRotationLocal = UnitOwner->GetActorQuat().Inverse() * TargetedBox->GetComponentQuat();
+						const FVector BoxExtentReal = TargetedBox->GetScaledBoxExtent();
+						if (BoxExtentReal.X > KINDA_SMALL_NUMBER && BoxExtentReal.Y > KINDA_SMALL_NUMBER && BoxExtentReal.Z > KINDA_SMALL_NUMBER)
+						{
+							CharFrag->bHoverHasBox = true;
+							CharFrag->HoverBoxCenter = FVector3f(BoxCenterLocal);
+							CharFrag->HoverBoxRotation = FQuat4f(BoxRotationLocal);
+							CharFrag->HoverBoxExtent = FVector3f(BoxExtentReal);
+							AddBroadBox(BoxCenterLocal, BoxRotationLocal, BoxExtentReal);
+						}
+					}
+
+					// (3) Mesh-Box - dieselbe Messung wie VisualTopOffset, nur im Aktorrahmen.
+					const FBox MeshBoxLocal = AConstructionUnit::ComputeVisualBounds(UnitOwner, &ActorFrame);
+					if (MeshBoxLocal.IsValid)
+					{
+						const FVector MeshExtent = MeshBoxLocal.GetExtent();
+						if (MeshExtent.X > KINDA_SMALL_NUMBER && MeshExtent.Y > KINDA_SMALL_NUMBER && MeshExtent.Z > KINDA_SMALL_NUMBER)
+						{
+							CharFrag->bHoverHasMesh = true;
+							CharFrag->HoverMeshCenter = FVector3f(MeshBoxLocal.GetCenter());
+							CharFrag->HoverMeshExtent = FVector3f(MeshExtent);
+							AddBroadBox(MeshBoxLocal.GetCenter(), FQuat::Identity, MeshExtent);
+						}
+					}
+
+					CharFrag->HoverBroadRadius = BroadRadius;
+					CharFrag->HoverBroadBottom = BroadBottom;
+					CharFrag->HoverBroadTop = BroadTop;
+					CharFrag->HoverCaptureScale = FVector3f(UnitOwner->GetActorScale3D());
+					CharFrag->bHoverGroundAnchored = !UnitOwner->CanMove;
+					CharFrag->bHoverShapesCaptured = true;
+				}
+			}
+
 			// Construction sites: seed the HUD-ONLY indicator footprint from the replicated
 			// values set before FinishSpawning, so the selection indicator matches the building
 			// this site will become — identical on server and client, because both run this

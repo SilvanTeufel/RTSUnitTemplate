@@ -67,8 +67,23 @@ static TAutoConsoleVariable<float> CVarRTS_WallPreviewInterpSpeed(
 #include "Subsystems/UnitVisualManager.h"
 #include "Core/UnitData.h"
 #include "Core/RTSUnitUtils.h"
+#include "Core/RTSUnitGeometry.h"
 
 using namespace RTSUnitUtils;
+
+// A dead building keeps its actor, bounds and EnergyWallArray (emptied) until EndDead destroys it
+// DespawnTime + 1 s later. It must not block a drop, snap a wall or count as a wall target:
+// players rebuild on the spot of a destroyed tower, and the corpse despawns anyway.
+static bool IsDeadForPlacement(const AActor* Actor)
+{
+	const AUnitBase* Unit = Cast<AUnitBase>(Actor);
+	if (!Unit)
+	{
+		return false;
+	}
+	return Unit->GetUnitState() == UnitData::Dead
+		|| (Unit->Attributes && Unit->Attributes->GetHealth() <= 0.f);
+}
 
 // Helper: compute snap center/extent for any actor (works with ISMs too)
 // Vorwaertsdeklaration: GatherBlockersByBounds braucht sie, steht aber davor.
@@ -124,88 +139,82 @@ static const AActor* FindBlockerAlongWallSpan(UWorld* World, const FVector& VonO
 		return nullptr;
 	}
 
-	const FVector Mitte = (VonOrt + BisOrt) * 0.5f;
-	const FVector Halb = (BisOrt - VonOrt) * 0.5f;
-	const FVector Ausdehnung(
-		FMath::Abs(Halb.X) + SpannBreite * 0.5f,
-		FMath::Abs(Halb.Y) + SpannBreite * 0.5f,
-		FMath::Max(FMath::Abs(Halb.Z), 100.f));
+	// DIESELBE GEOMETRIE WIE HOVER UND SNAP (01.10.2026, zweiter Durchgang).
+	//
+	// Vorher: ein achsparalleler Grobkasten, dann ein KREIS mit dem groessten XY-Mass der
+	// sichtbaren Aktorbounds als Radius. Bei einem laenglichen oder gedrehten Gebaeude ist dieser
+	// Kreis viel groesser als der Grundriss - die Wand galt als blockiert, obwohl sie sichtbar
+	// daneben lief. Dazu lagen die Aktorbounds von ISM-Gebaeuden nicht dort, wo ihr Bild ist.
+	//
+	// Jetzt: Strecke gegen Kapsel, BoxCollision-Box und Mesh-Box (RTSUnitGeometry), jede als
+	// gedrehter Grundriss, verankert an der Mass-Entitaet. Breite = Wandbreite, nicht Flaechenbreite.
+	const FVector2D A(VonOrt.X, VonOrt.Y);
+	const FVector2D B(BisOrt.X, BisOrt.Y);
+	const float Grenze = FMath::Max(0.f, SpannBreite * 0.5f + Spielraum);
 
-	TArray<AActor*> Treffer;
-	GatherBlockersByBounds(World, Mitte, Ausdehnung, ActorsToIgnore, Treffer);
-
-	for (AActor* Kandidat : Treffer)
+	auto Blockiert = [&](const RTSUnitGeometry::FShapeSet& Formen) -> bool
 	{
-		// Nur Bauplaetze blockieren; Ressourcenstellen sind keine Hindernisse - dieselbe Regel wie
-		// bei der Ablagepruefung, sonst koennte die KI neben Ressourcen gar nicht mehr bauen.
-		if (const AWorkArea* WA = Cast<AWorkArea>(Kandidat))
+		if (!Formen.bValid)
 		{
-			if (WA->Type != WorkAreaData::BuildArea) continue;
+			return false;
+		}
+		// Billiger Vorfilter ueber den Umkreis.
+		const FVector2D Achse(Formen.BroadStart.X, Formen.BroadStart.Y);
+		const FVector2D AB = B - A;
+		const float Len2 = AB.SizeSquared();
+		const float T = Len2 > KINDA_SMALL_NUMBER ? FMath::Clamp(FVector2D::DotProduct(Achse - A, AB) / Len2, 0.f, 1.f) : 0.f;
+		if ((Achse - (A + AB * T)).Size() > Formen.BroadRadius + Grenze)
+		{
+			return false;
+		}
+		return RTSUnitGeometry::SegmentDistanceToFootprint2D(Formen, A, B) <= Grenze;
+	};
+
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		ABuildingBase* Kandidat = *It;
+		if (!IsValid(Kandidat) || ActorsToIgnore.Contains(Kandidat) || IsDeadForPlacement(Kandidat))
+		{
+			continue;
 		}
 
-		// ANDERE TUERME DERSELBEN ART SIND KEINE SPERRE.
-		//
-		// Messung vom 22.09.2026: die erste Fassung meldete 256 Mal "WallTower_C_2 liegt auf der
-		// Wandstrecke zwischen WallTower_C_9 und WallTower_C_1". WallTower stehen bauartbedingt in
-		// einer Reihe - ein dritter Turm zwischen zweien ist der Normalfall und nicht das, was der
-		// Spieler als Hindernis meint. Wer dieselbe Klasse hat wie die beiden Endpunkte, gehoert
-		// zur Wandkette und wird uebergangen.
+		// ANDERE TUERME DERSELBEN ART SIND KEINE SPERRE (22.09.2026): WallTower stehen bauartbedingt
+		// in einer Reihe, ein dritter Turm zwischen zweien ist der Normalfall.
 		if (BauartDerEndpunkte && Kandidat->GetClass() == BauartDerEndpunkte)
 		{
 			continue;
 		}
 
-		// ZWEITE, GENAUE STUFE.
-		//
-		// Der Kasten oben ist achsparallel. Bei einer DIAGONALEN Wand ist das umschliessende
-		// Rechteck riesig: ein Gebaeude in einer seiner Ecken liegt weit neben der Verbindungslinie
-		// und wurde trotzdem als Hindernis gemeldet - der Spieler sah eine Wand, die das Gebaeude
-		// gar nicht beruehrt, und konnte den Turm nicht setzen.
-		//
-		// Der Kasten bleibt als grobe Vorauswahl (er ist billig und nimmt nur wenige Aktoren in die
-		// Hand). Hier wird der tatsaechliche ABSTAND ZUR STRECKE gerechnet, und zwar gegen die
-		// SICHTBARE Ausdehnung des Kandidaten - die Aktorbounds schliessen Anbauten und Effekte mit
-		// ein und sitzen dadurch zu weit aussen.
-		float KandidatRadius = 0.f;
-		if (const AUnitBase* KandidatEinheit = Cast<AUnitBase>(Kandidat))
+		RTSUnitGeometry::FShapeSet Formen;
+		if (RTSUnitGeometry::BuildForUnit(Kandidat, Formen) && Blockiert(Formen))
 		{
-			const FBox Sichtbar = AConstructionUnit::ComputeVisualBounds(KandidatEinheit);
-			if (Sichtbar.IsValid)
-			{
-				const FVector Aus = Sichtbar.GetExtent();
-				KandidatRadius = FMath::Max(Aus.X, Aus.Y);
-			}
-		}
-		else if (const AWorkArea* KandidatFlaeche = Cast<AWorkArea>(Kandidat))
-		{
-			if (KandidatFlaeche->Mesh)
-			{
-				const FVector Aus = KandidatFlaeche->Mesh->Bounds.BoxExtent;
-				KandidatRadius = FMath::Max(Aus.X, Aus.Y);
-			}
-		}
-		if (KandidatRadius <= KINDA_SMALL_NUMBER)
-		{
-			// Ohne sichtbares Mesh bleibt nur der grobe Kasten - dann lieber sperren als eine Wand
-			// durch etwas ziehen zu lassen, dessen Groesse unbekannt ist.
 			return Kandidat;
 		}
+	}
 
-		const FVector KandidatOrt = Kandidat->GetActorLocation();
-		const FVector VonFlach(VonOrt.X, VonOrt.Y, 0.f);
-		const FVector BisFlach(BisOrt.X, BisOrt.Y, 0.f);
-		const FVector KandidatFlach(KandidatOrt.X, KandidatOrt.Y, 0.f);
-		const float AbstandZurStrecke =
-			FMath::PointDistToSegment(KandidatFlach, VonFlach, BisFlach);
-
-		// Spielraum ist ueblicherweise NEGATIV und macht die Sperre damit nachsichtiger.
-		const float Grenze = SpannBreite * 0.5f + KandidatRadius + Spielraum;
-		if (AbstandZurStrecke > Grenze)
+	// Nur Bauplaetze blockieren; Ressourcenstellen sind keine Hindernisse - dieselbe Regel wie
+	// bei der Ablagepruefung, sonst koennte die KI neben Ressourcen gar nicht mehr bauen.
+	for (TActorIterator<AWorkArea> It(World); It; ++It)
+	{
+		AWorkArea* Flaeche = *It;
+		if (!IsValid(Flaeche) || ActorsToIgnore.Contains(Flaeche) || Flaeche->Type != WorkAreaData::BuildArea || !Flaeche->Mesh)
 		{
 			continue;
 		}
-
-		return Kandidat;
+		const FBoxSphereBounds Bounds = Flaeche->Mesh->Bounds;
+		RTSUnitGeometry::FShapeSet Formen;
+		Formen.bBox = true;
+		Formen.BoxCenter = Bounds.Origin;
+		Formen.BoxRotation = FQuat::Identity;
+		Formen.BoxExtent = Bounds.BoxExtent;
+		Formen.BroadStart = FVector(Bounds.Origin.X, Bounds.Origin.Y, Bounds.Origin.Z - Bounds.BoxExtent.Z);
+		Formen.BroadEnd = FVector(Bounds.Origin.X, Bounds.Origin.Y, Bounds.Origin.Z + Bounds.BoxExtent.Z);
+		Formen.BroadRadius = FVector2D(Bounds.BoxExtent.X, Bounds.BoxExtent.Y).Size();
+		Formen.bValid = true;
+		if (Blockiert(Formen))
+		{
+			return Flaeche;
+		}
 	}
 
 	return nullptr;
@@ -239,7 +248,7 @@ static void GatherBlockersByBounds(UWorld* World, const FVector& TestCenter, con
 
 	auto Pruefe = [&](AActor* Kandidat)
 	{
-		if (!IsValid(Kandidat) || ActorsToIgnore.Contains(Kandidat))
+		if (!IsValid(Kandidat) || ActorsToIgnore.Contains(Kandidat) || IsDeadForPlacement(Kandidat))
 		{
 			return;
 		}
@@ -288,6 +297,16 @@ static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& Ou
 	// For buildings: approximate footprint as a square using the capsule radius (radius*2 side length)
 	if (ABuildingBase* Bld = Cast<ABuildingBase>(Actor))
 	{
+		// AN DER MASS-ENTITAET MESSEN, NICHT AM AKTOR (01.10.2026). Bei ISM-Gebaeuden steht der
+		// Aktor nicht zwingend dort, wo das Bild ist; Kapsel und Box werden deshalb um den Versatz
+		// zwischen Aktor und Mass-Anker (RTSUnitGeometry::GetUnitAnchor) verschoben.
+		FVector MassVersatz = FVector::ZeroVector;
+		FVector MassAnker;
+		if (RTSUnitGeometry::GetUnitAnchor(Bld, MassAnker))
+		{
+			MassVersatz = MassAnker - Bld->GetActorLocation();
+		}
+
 		// EINE BOX SCHLAEGT DIE KAPSEL.
 		//
 		// Der Kapselradius ist ein grober Ersatz und bei laenglichen oder grossen Gebaeuden deutlich
@@ -297,10 +316,11 @@ static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& Ou
 		for (UActorComponent* Komponente : Bld->GetComponents())
 		{
 			UBoxComponent* Box = Cast<UBoxComponent>(Komponente);
-			if (!Box && Komponente && !Komponente->ComponentHasTag(TEXT("BoxCollision"))) continue;
 			if (!Box) continue;
+			// Dieselbe Box wie Hover und Mass-Fragment, nicht irgendeine (Trigger-Boxen o. ae.).
+			if (Bld->BoxCollisionComponent && Box != Bld->BoxCollisionComponent) continue;
 
-			OutCenter = Box->GetComponentLocation();
+			OutCenter = Box->GetComponentLocation() + MassVersatz;
 			OutExtent = Box->GetScaledBoxExtent();
 			return true;
 		}
@@ -312,7 +332,7 @@ static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& Ou
 			{
 				R += Bld->MassActorBindingComponent->AdditionalCapsuleRadius;
 			}
-			OutCenter = Bld->GetActorLocation();
+			OutCenter = Bld->GetActorLocation() + MassVersatz;
 			// Use radius for XY half-extents; keep Z from capsule half-height
 			OutExtent.X = R;
 			OutExtent.Y = R;
@@ -656,18 +676,8 @@ void AExtendedControllerBase::Client_PlaySound2D_Implementation(USoundBase* Soun
 
 void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* UnitBase, EGASAbilityInputID InputID, int32 InAbilityArrayIndex, const FHitResult& HitResult)
 {
-	// DIAGNOSE (25.09.2026): der EINTRITT, nicht nur die Ablehnungen.
-	//
-	// Anlass: die Granate des Soldiers loest nicht aus, und die vier Ablehnungsgruende weiter
-	// unten schweigen. Fehlt AUCH diese Zeile, kommt der Tastendruck gar nicht erst hier an -
-	// dann sitzt der Fehler im Eingabeweg und nicht in der Faehigkeit. Ohne den Eintritt laesst
-	// sich "abgelehnt" nicht von "nie gefragt" trennen.
-	UE_LOG(LogTemp, Warning, TEXT("[AbilityWeg] ActivateAbilitiesByIndex: Einheit=%s InputID=%d Arrayindex=%d"),
-		*GetNameSafe(UnitBase), (int32)InputID, InAbilityArrayIndex);
-
 	if (!UnitBase)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("[AbilityWeg] ABBRUCH: keine Einheit uebergeben"));
 		return;
 	}
 
@@ -741,17 +751,6 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		}
 	}
 
-	// DIAGNOSE: welcher Zweig genommen wird, und wie gross das jeweilige Array ist. Ein leeres
-	// Array an dieser Stelle sieht im Spiel exakt aus wie eine abgelehnte Faehigkeit.
-	if (const AUnitBase* AlsUnit = Cast<AUnitBase>(UnitBase))
-	{
-		UE_LOG(LogTemp, Warning,
-			TEXT("[AbilityWeg] Verteiler: Index=%d Default=%d Second=%d Third=%d Fourth=%d Zustand=%d"),
-			InAbilityArrayIndex, UnitBase->DefaultAbilities.Num(), UnitBase->SecondAbilities.Num(),
-			UnitBase->ThirdAbilities.Num(), UnitBase->FourthAbilities.Num(),
-			(int32)AlsUnit->GetUnitState());
-	}
-
 	switch (InAbilityArrayIndex)
 	{
 	case 0:
@@ -767,8 +766,7 @@ void AExtendedControllerBase::ActivateAbilitiesByIndex_Implementation(AGASUnit* 
 		ActivateFourthAbilities(UnitBase, InputID, HitResult);
 		break;
 	default:
-		UE_LOG(LogTemp, Warning, TEXT("[AbilityWeg] ABBRUCH: Arrayindex %d hat keinen Zweig"), InAbilityArrayIndex);
-			break;
+		break;
 	}
 }
 
@@ -3065,6 +3063,16 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 	Unit->ShowWorkAreaIfNoFog_Implementation(DraggedWorkArea);
 
+	// EIN Sperrzustand fuer Flaeche UND Linie (01.10.2026). Bisher faerbten Hoehenunterschied und
+	// Ueberlappung nur die Flaeche ein, die Linie hing allein an der Pfadpruefung - gemeldet als
+	// "die Wall ist gruen, die WorkArea aber ausgeblendet" (Sperrmaterial).
+	bool bVorschauGesperrt = false;
+	auto SperreVorschau = [&bVorschauGesperrt, DraggedWorkArea]()
+	{
+		bVorschauGesperrt = true;
+		DraggedWorkArea->TemporarilyChangeMaterial();
+	};
+
 	// 1. Stable Cursor Trace
 	FVector PlacementTraceStart, TraceDir;
 	if (!DeprojectMousePositionToWorld(PlacementTraceStart, TraceDir)) return;
@@ -3296,7 +3304,11 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			}
 			else
 			{
-				const float DistToCurrent = FVector::Dist2D(StableMouseLocation, CurrentBB->GetActorLocation());
+				// Abstand zum GRUNDRISS des Ziels, nicht zu seinem Aktorpunkt (siehe RTSUnitGeometry).
+				RTSUnitGeometry::FShapeSet ZielFormen;
+				const float DistToCurrent = RTSUnitGeometry::BuildForUnit(CurrentBB, ZielFormen)
+					? RTSUnitGeometry::DistanceToFootprint2D(ZielFormen, FVector2D(StableMouseLocation))
+					: FVector::Dist2D(StableMouseLocation, CurrentBB->GetMassActorLocation());
 				if (DistToCurrent <= ReleaseDist)
 				{
 					TargetBuilding = CurrentBB;
@@ -3321,37 +3333,38 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		{
 			ABuildingBase* Best = nullptr; float BestD = TNumericLimits<float>::Max();
 
-			// a) Direct hit under cursor
-			ABuildingBase* DirectTarget = GetBuildingBaseFromActor(Hit.GetActor());
-			if (DirectTarget && IsCompatibleForEnergyWall(Unit, DirectTarget) && IsWithinSnapReach(DirectTarget))
+			// EINRASTEN UEBER DIE GEOMETRIE (01.10.2026, zweiter Durchgang).
+			//
+			// Vorher kamen Kandidaten nur aus dem Cursor-Strahl (ECC_Visibility - Gebaeude haben
+			// dort keine Kollision mehr) oder aus der Ueberlappung der gezogenen Flaeche mit den
+			// AKTOR-Boxen der Gebaeude. Die Flaeche ist aber auf die Reichweite des Wirtsturms
+			// begrenzt und laeuft der Maus hinterher, und die Aktorbox eines ISM-Gebaeudes steht
+			// nicht zwingend dort, wo sein Bild ist - gemeldet: "ich bekomme nie einen Snap".
+			//
+			// Jetzt zaehlt der Abstand des ZEIGERS zum Grundriss jedes passenden Turms, gemessen an
+			// derselben Geometrie wie Hover und Pfadpruefung.
+			const FVector2D Zeiger(StableMouseLocation.X, StableMouseLocation.Y);
+			for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
 			{
-				const float D = FVector::Dist2D(StableMouseLocation, DirectTarget->GetMassActorLocation());
-				Best = DirectTarget; BestD = D;
-			}
-
-			// b) Overlaps as secondary source - ueber die Geometrie, siehe GetDraggedTestBox.
-			TArray<AActor*> CurrentOverlaps;
-			{
-				FVector PruefMitte, PruefAusdehnung;
-				GetDraggedTestBox(DraggedWorkArea, DraggedWorkArea->GetActorLocation(), PruefMitte, PruefAusdehnung);
-				TArray<AActor*> Ignorieren; Ignorieren.Add(DraggedWorkArea);
-				GatherBlockersByBounds(GetWorld(), PruefMitte, PruefAusdehnung, Ignorieren, CurrentOverlaps);
-			}
-			for (AActor* OA : CurrentOverlaps)
-			{
-				ABuildingBase* BB = GetBuildingBaseFromActor(OA);
-				if (BB && IsCompatibleForEnergyWall(Unit, BB) && IsWithinSnapReach(BB))
+				ABuildingBase* BB = *It;
+				if (!IsValid(BB) || BB == Unit || !IsCompatibleForEnergyWall(Unit, BB) || !IsWithinSnapReach(BB))
 				{
-					const float D = FVector::Dist2D(StableMouseLocation, BB->GetActorLocation());
-					if (D < BestD)
-					{
-						Best = BB; BestD = D;
-					}
+					continue;
+				}
+				RTSUnitGeometry::FShapeSet Formen;
+				const float D = RTSUnitGeometry::BuildForUnit(BB, Formen)
+					? RTSUnitGeometry::DistanceToFootprint2D(Formen, Zeiger)
+					: FVector::Dist2D(StableMouseLocation, BB->GetMassActorLocation());
+				if (D < BestD)
+				{
+					Best = BB; BestD = D;
 				}
 			}
 
 			// c) Acquire only within tighter radius and respect snap cooldown for switching
-			if (Best && BestD <= AcquireDist && Now >= NextAllowedSnapTime)
+			// Gemessen wird jetzt zum Grundriss, nicht zur Mitte: SnapDistance (Rand) genuegt, die
+			// alte Mittelpunktsgrenze AcquireDist bleibt als grosszuegigere Obergrenze erhalten.
+			if (Best && BestD <= FMath::Max(SnapDistance, AcquireDist) && Now >= NextAllowedSnapTime)
 			{
 				TargetBuilding = Best;
 				bFoundCompatible = true;
@@ -3381,9 +3394,9 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 			? TargetBuilding->GetActorLocation()
 			: DraggedWorkArea->GetActorLocation();
 		ABuildingBase* EndpunktGebaeude = (bFoundCompatible && TargetBuilding) ? TargetBuilding : nullptr;
-		FVector EigeneMitte, EigeneAusdehnung;
-		GetDraggedTestBox(DraggedWorkArea, DraggedWorkArea->GetActorLocation(), EigeneMitte, EigeneAusdehnung);
-		const float SpannBreite = FMath::Max(EigeneAusdehnung.X, EigeneAusdehnung.Y) * 2.f;
+		// Breite der WAND, nicht der Bauflaeche: die Flaeche ist mehrere hundert Einheiten breit,
+		// die Wand nicht - mit Flaechenbreite galt jedes Gebaeude neben der Strecke als Sperre.
+		const float SpannBreite = WallPathHalfWidth * 2.f;
 
 		TArray<AActor*> Ignorieren;
 		Ignorieren.Add(DraggedWorkArea);
@@ -3396,7 +3409,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		                                                    WallSpanClearance))
 		{
 			bStreckeGeometrischBlockiert = true;
-			DraggedWorkArea->TemporarilyChangeMaterial();
+			SperreVorschau();
 
 		}
 	}
@@ -3438,7 +3451,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 		if (Unterschied > Grenze)
 		{
-			DraggedWorkArea->TemporarilyChangeMaterial();
+			SperreVorschau();
 
 		}
 	}
@@ -3578,7 +3591,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 				// Feedback bei Überlappung mit Initiator
 				if (Unit->ExtensionMovementAllowed && OA == Unit)
 				{
-					DraggedWorkArea->TemporarilyChangeMaterial();
+					SperreVorschau();
 					break;
 				}
 
@@ -3586,7 +3599,7 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 
 				if (OA->IsA(AWorkArea::StaticClass()) || OA->IsA(ABuildingBase::StaticClass()))
 				{
-					DraggedWorkArea->TemporarilyChangeMaterial();
+					SperreVorschau();
 					break;
 				}
 			}
@@ -3794,7 +3807,11 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 	{
 		FVector TraceStart, TraceEnd;
 		float TraceZOffset = 0.f;
-		bool bPathBlocked = WallTrace(Unit, DraggedWorkArea, TraceStart, TraceEnd, TraceZOffset, TargetBuilding);
+		// WallTrace liefert nur noch die Endpunkte der Vorschaulinie. Als SPERRE taugt er nicht: der
+		// Sichtbarkeitsstrahl traf Einheiten, Felsen und Vegetation und machte die Wand rot, obwohl
+		// kein Gebaeude im Weg stand. Gesperrt wird ueber die Geometrie (Abschnitt 2a).
+		WallTrace(Unit, DraggedWorkArea, TraceStart, TraceEnd, TraceZOffset, TargetBuilding);
+		bool bPathBlocked = false;
 
 		// DIE GEOMETRISCHE PRUEFUNG MUSS HIER MIT EINFLIESSEN.
 		//
@@ -3816,14 +3833,14 @@ void AExtendedControllerBase::UpdateExtensionWorkAreaPosition(AWorkArea* Dragged
 		// Visualisierung im HUD via Puffer
 		if (AHUDBase* HUD = Cast<AHUDBase>(GetHUD()))
 		{
-			FColor LineColor = bPathBlocked ? FColor::Red : FColor::Green;
+			FColor LineColor = (bPathBlocked || bVorschauGesperrt) ? FColor::Red : FColor::Green;
 
 			HUD->SetExtensionPreviewLine(TraceStart, TraceEnd, LineColor, TraceZOffset);
 		}
 
 		if (bPathBlocked)
 		{
-			DraggedWorkArea->TemporarilyChangeMaterial();
+			SperreVorschau();
 		}
 	}
 }
@@ -5626,7 +5643,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		// Feuert bei JEDEM Ablegen. Steht normalerweise auf Verbose, damit kein Spiel vollgespammt
 		// wird - fuer die laufende Messung "KI baut in der Spielmitte" (29.09.2026) voruebergehend
 		// auf Warning, weil der Schub eine der drei Verdaechtigen ist. Danach zurueck auf Verbose.
-		UE_LOG(LogTemp, Warning, TEXT("[Defense] drop %s: isDefense=%d push=%.0f unit=%d bIsAi=%d vorher=(%.0f,%.0f)"),
+		UE_LOG(LogTemp, Verbose, TEXT("[Defense] drop %s: isDefense=%d push=%.0f unit=%d bIsAi=%d vorher=(%.0f,%.0f)"),
 		       *DraggedWorkArea->GetName(), DraggedWorkArea->bIsDefenseArea ? 1 : 0,
 		       DefenseAreaForwardPush, UnitBase ? 1 : 0, bIsAi ? 1 : 0,
 		       DraggedWorkArea->GetActorLocation().X, DraggedWorkArea->GetActorLocation().Y);
@@ -5670,6 +5687,15 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			}
 		}
 
+		// WANDVERBINDUNG ZUERST (01.10.2026). Eine eingerastete Flaeche liegt per Bauart genau auf dem
+		// Zielturm - die Ueberlappungssperre direkt darunter hielt den Zielturm deshalb fuer ein
+		// Hindernis, schob die Flaeche weg oder verwarf sie, und TryConnectEnergyWall fand danach
+		// keinen Turm mehr. Ergebnis: der Snap "funktionierte nie".
+		if (bIsExtensionArea && TryConnectEnergyWall(UnitBase, DraggedWorkArea, bWorkAreaIsSnapped))
+		{
+			return true;
+		}
+
 		// A work area must NEVER come down on top of an existing building or another work area - not on
 		// one's own team's, and least of all on an enemy's. Extension areas used to skip the whole rule
 		// set below, which is how Singularian extensions ended up sitting on Xeno BroodHives; base areas
@@ -5709,7 +5735,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			for (TActorIterator<ABuildingBase> ItB(GetWorld()); ItB; ++ItB)
 			{
 				ABuildingBase* Other = *ItB;
-				if (!IsValid(Other) || Other == ParentBuilding) continue;
+				if (!IsValid(Other) || Other == ParentBuilding || IsDeadForPlacement(Other)) continue;
 
 				// The building's real footprint beats any fixed radius: a BroodHive and a Tesla are not
 				// the same size, and a single constant is wrong for one of them.
@@ -5826,7 +5852,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					for (TActorIterator<ABuildingBase> ItB2(GetWorld()); ItB2 && !RestBlocker; ++ItB2)
 					{
 						ABuildingBase* Other2 = *ItB2;
-						if (!IsValid(Other2) || Other2 == ParentBuilding) continue;
+						if (!IsValid(Other2) || Other2 == ParentBuilding || IsDeadForPlacement(Other2)) continue;
 						if (StecktIneinander(Other2)) RestBlocker = Other2;
 					}
 					for (TActorIterator<AWorkArea> ItW2(GetWorld()); ItW2 && !RestBlocker; ++ItW2)
@@ -6717,55 +6743,10 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				}
 			}
 
-			// Pfad-Blockierungs-Check
-			if (InitiatingBuilding && InitiatingBuilding->ExtensionMovementAllowed)
-			{
-				ABuildingBase* TargetBuilding = nullptr;
-				TArray<AActor*> OverlappingActors;
-				DraggedWorkArea->GetOverlappingActors(OverlappingActors);
-				for (AActor* OA : OverlappingActors)
-				{
-					ABuildingBase* BB = GetBuildingBaseFromActor(OA);
-					if (BB && IsCompatibleForEnergyWall(InitiatingBuilding, BB))
-					{
-						TargetBuilding = BB;
-						break;
-					}
-				}
-
-				// Fallback: Proximity search if snapped but overlap is missing on server
-				if (!TargetBuilding && bWorkAreaIsSnapped)
-				{
-					float BestD = 250.f; // Small radius search
-					for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
-					{
-						ABuildingBase* BB = *It;
-						if (BB && BB != InitiatingBuilding && IsCompatibleForEnergyWall(InitiatingBuilding, BB))
-						{
-							float D = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), BB->GetActorLocation());
-							if (D < BestD)
-							{
-								TargetBuilding = BB;
-								BestD = D;
-							}
-						}
-					}
-				}
-
-				FVector DummyStart, DummyEnd;
-				float DummyTraceZOffset = 0.f;
-				if (WallTrace(InitiatingBuilding, DraggedWorkArea, DummyStart, DummyEnd, DummyTraceZOffset, TargetBuilding))
-				{
-					if (InDropWorkAreaFailedSound) Client_PlaySound2D(InDropWorkAreaFailedSound);
-					DraggedWorkArea->Destroy();
-					UnitBase->BuildArea = nullptr;
-					UnitBase->CurrentDraggedWorkArea = nullptr;
-					CancelCurrentAbility(UnitBase);
-					SendWorkerToBase(UnitBase);
-					return true;
-				}
-			}
-
+			// Der fruehere Pfad-Check ueber WallTrace (Sichtbarkeitsstrahl) ist entfernt: er sperrte
+			// auch bei Einheiten, Felsen und Vegetation. Die Wandstrecke prueft unten
+			// FindBlockerAlongWallSpan ueber die Gebaeudegeometrie, das Verbinden mit einem
+			// Zielturm prueft TryConnectEnergyWall selbst.
 			if (TryConnectEnergyWall(UnitBase, DraggedWorkArea, bWorkAreaIsSnapped))
 			{
 				return true;
@@ -6778,6 +6759,11 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			FCollisionQueryParams TraceParams;
 			TraceParams.AddIgnoredActor(UnitBase);
 			TraceParams.AddIgnoredActor(DraggedWorkArea);
+			// A corpse still standing on the spot would otherwise become the "ground" and fail the height check.
+			for (TActorIterator<ABuildingBase> ItDead(GetWorld()); ItDead; ++ItDead)
+			{
+				if (IsDeadForPlacement(*ItDead)) TraceParams.AddIgnoredActor(*ItDead);
+			}
 
 			float UnitGroundZ = UnitBase->GetMassActorLocation().Z;
 			float WAGroundZ = DraggedWorkArea->GetActorLocation().Z;
@@ -6802,9 +6788,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			if (ABuildingBase* WirtsTurm = Cast<ABuildingBase>(UnitBase))
 			{
 				const FVector AblageOrt = DraggedWorkArea->GetActorLocation();
-				FVector EigeneMitte, EigeneAusdehnung;
-				GetDraggedTestBox(DraggedWorkArea, AblageOrt, EigeneMitte, EigeneAusdehnung);
-				const float SpannBreite = FMath::Max(EigeneAusdehnung.X, EigeneAusdehnung.Y) * 2.f;
+				const float SpannBreite = WallPathHalfWidth * 2.f;
 
 				TArray<AActor*> Ignorieren;
 				Ignorieren.Add(DraggedWorkArea);
@@ -6970,38 +6954,66 @@ bool AExtendedControllerBase::TryConnectEnergyWall(AUnitBase* UnitBase, AWorkAre
 
 	ABuildingBase* TargetBuilding = nullptr;
 
-	TArray<AActor*> OverlappingActors;
-	DraggedWorkArea->GetOverlappingActors(OverlappingActors);
-
-	for (AActor* OverlappedActor : OverlappingActors)
+	// 1. Der Turm, an dem die Vorschau eingerastet war - der Spieler hat ihn gesehen.
+	if (bIsSnapped)
 	{
-		if (!OverlappedActor || OverlappedActor == InitiatingBuilding) continue;
-
-		ABuildingBase* OverlappedBuilding = GetBuildingBaseFromActor(OverlappedActor);
-
-		if (OverlappedBuilding && IsCompatibleForEnergyWall(InitiatingBuilding, OverlappedBuilding))
+		ABuildingBase* Gemerkt = Cast<ABuildingBase>(CurrentSnapActor);
+		if (IsValid(Gemerkt) && Gemerkt != InitiatingBuilding && IsCompatibleForEnergyWall(InitiatingBuilding, Gemerkt))
 		{
-			TargetBuilding = OverlappedBuilding;
-			break;
+			TargetBuilding = Gemerkt;
 		}
 	}
 
-	// Fallback: Proximity search if snapped but physics overlaps are missing on server
-	if (!TargetBuilding && bIsSnapped)
+	// 2. Sonst ueber die Geometrie: ein passender Turm, auf dessen Grundriss die Flaeche liegt.
+	//    Laeuft auch auf dem Server, wo CurrentSnapActor im Mehrspieler nicht gesetzt ist. Die
+	//    fruehere Suche ueber GetOverlappingActors brauchte Kollision, die Gebaeude nicht mehr haben.
+	if (!TargetBuilding)
 	{
-		float BestD = 250.f;
+		const FVector2D Ablage(DraggedWorkArea->GetActorLocation().X, DraggedWorkArea->GetActorLocation().Y);
+		const float Fang = bIsSnapped ? FMath::Max(SnapDistance, 250.f) : 0.f;
+		float BestD = TNumericLimits<float>::Max();
 		for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
 		{
 			ABuildingBase* BB = *It;
-			if (BB && BB != InitiatingBuilding && IsCompatibleForEnergyWall(InitiatingBuilding, BB))
+			if (!IsValid(BB) || BB == InitiatingBuilding || !IsCompatibleForEnergyWall(InitiatingBuilding, BB))
 			{
-				float D = FVector::Dist2D(DraggedWorkArea->GetActorLocation(), BB->GetActorLocation());
-				if (D < BestD)
-				{
-					TargetBuilding = BB;
-					BestD = D;
-				}
+				continue;
 			}
+			RTSUnitGeometry::FShapeSet Formen;
+			if (!RTSUnitGeometry::BuildForUnit(BB, Formen))
+			{
+				continue;
+			}
+			const float D = RTSUnitGeometry::DistanceToFootprint2D(Formen, Ablage);
+			if (D <= Fang && D < BestD)
+			{
+				TargetBuilding = BB;
+				BestD = D;
+			}
+		}
+	}
+
+	// 3. Steht ein Gebaeude zwischen den beiden Tuermen, entsteht keine Wand - dieselbe Pruefung
+	//    wie die Vorschau (Abschnitt 2a in UpdateExtensionWorkAreaPosition).
+	if (TargetBuilding)
+	{
+		TArray<AActor*> Ignorieren;
+		Ignorieren.Add(DraggedWorkArea);
+		Ignorieren.Add(InitiatingBuilding);
+		Ignorieren.Add(TargetBuilding);
+		if (const AActor* Sperre = FindBlockerAlongWallSpan(GetWorld(), InitiatingBuilding->GetMassActorLocation(),
+			TargetBuilding->GetMassActorLocation(), WallPathHalfWidth * 2.f, Ignorieren,
+			InitiatingBuilding->GetClass(), WallSpanClearance))
+		{
+			UE_LOG(LogTemp, Warning, TEXT("[WandVorschau] VERBINDUNG ABGELEHNT: %s liegt zwischen %s und %s"),
+				*Sperre->GetName(), *InitiatingBuilding->GetName(), *TargetBuilding->GetName());
+			if (DropWorkAreaFailedSound) Client_PlaySound2D(DropWorkAreaFailedSound);
+			DraggedWorkArea->Destroy();
+			UnitBase->BuildArea = nullptr;
+			UnitBase->CurrentDraggedWorkArea = nullptr;
+			CancelCurrentAbility(UnitBase);
+			SendWorkerToBase(UnitBase);
+			return true;
 		}
 	}
 
@@ -7044,7 +7056,7 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWall(ABuildingBase* Initiator
 bool AExtendedControllerBase::IsCompatibleForEnergyWallDetailed(ABuildingBase* Initiator, ABuildingBase* Target,
                                                                 bool& bOutOnlyHeightFailed, float& OutHeightDiff) const
 {
-	if (!Initiator || !Target || Initiator == Target)
+	if (!Initiator || !Target || Initiator == Target || IsDeadForPlacement(Target))
 	{
 		return false;
 	}
@@ -7194,6 +7206,7 @@ bool AExtendedControllerBase::WallTrace(ABuildingBase* Unit, AActor* TargetActor
 			if (HitBuilding)
 			{
 				if (HitBuilding == Unit) continue;
+				if (IsDeadForPlacement(HitBuilding)) continue;
 				if (IgnoreBuildingBase && HitBuilding == IgnoreBuildingBase) continue;
 				// Fallback if IgnoreBuildingBase was not resolvable but IgnoreBuilding matches
 				if (IgnoreBuilding && (HitBuilding == GetBuildingBaseFromActor(IgnoreBuilding))) continue;

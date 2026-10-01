@@ -90,7 +90,12 @@ public:
 	// instances / skeletal when the unit runs in skeletal mode). Excludes widgets, Niagara and
 	// other non-mesh primitives whose asymmetric bounds used to skew the
 	// GetComponentsBoundingBox-based centering. Returns an invalid box when no mesh bounds exist.
-	static FBox ComputeVisualBounds(const AUnitBase* Unit);
+	//
+	// InFrame (01.10.2026): optionaler Bezugsrahmen. Ohne ihn (Vorgabe) kommt wie bisher die
+	// achsparallele WELTbox heraus. Mit ihm wird jede Komponente in diesem Rahmen vermessen -
+	// der Hover uebergibt Aktorort + Aktordrehung (Skalierung 1) und bekommt so die Mesh-Box im
+	// Aktorrahmen, aus der er eine mitgedrehte Box bauen kann.
+	static FBox ComputeVisualBounds(const AUnitBase* Unit, const FTransform* InFrame = nullptr);
 
 	// Center a construction unit's visual bounds on AnchorXY — pass the WorkArea ACTOR location,
 	// the same reference SpawnSingleUnit later uses for the finished building — and rest the
