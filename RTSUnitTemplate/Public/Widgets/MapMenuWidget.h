@@ -71,6 +71,13 @@ protected:
 	UPROPERTY(meta = (BindWidgetOptional))
 	UButton* SpectatorButton;
 
+	/** "Back to Game": closes the menu (same path as Esc) and lifts a pause set from the menu. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	UButton* ResumeButton;
+
+	UFUNCTION()
+	void OnResumeClicked();
+
 	virtual void NativeConstruct() override;
 
 	UFUNCTION()

@@ -57,6 +57,11 @@
 #include "Actors/WorkArea.h"
 #include "GAS/AttributeSetBase.h"
 #include "Blueprint/UserWidget.h"
+#include "Framework/Application/SlateApplication.h" // echte Modifikatorlage fuer HealStaleModifierFlags
+#include "Misc/App.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
+#include "HAL/FileManager.h"
 
 
 void ACustomControllerBase::BeginPlay()
@@ -3943,19 +3948,199 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 }
 
 
+// ================================================================================================
+// KLEMMENDE AUSWAHL NACH ALT+TAB (01.10.2026) - siehe Header.
+// ================================================================================================
+
+// Diagnose der Auswahl. Schreibt per FFileHelper, weil UE_LOG im Shipping wegkompiliert ist
+// (siehe AstraHelix.Target.cs). Eigener Schalter statt rts.csv.messung: der steht auf 0, und die
+// Messung soll beim naechsten Auftreten ohne Konsole schon da sein. Je Klick eine Zeile - Klicks
+// sind selten, das kostet nichts Messbares.
+static TAutoConsoleVariable<int32> CVarSelectionDiag(
+	TEXT("rts.selection.diag"),
+	1,
+	TEXT("1 = jede Linksklick-Auswahl und jedes Zuruecksetzen der Modifikator-Flags nach ")
+	TEXT("Saved/SelectionDiag.csv schreiben. 0 = aus."),
+	ECVF_Default);
+
+bool ACustomControllerBase::IsHumanLocalPlayer() const
+{
+	if (!IsLocalPlayerController())
+	{
+		return false;
+	}
+	const APawn* ControlledPawn = GetPawn();
+	return !(ControlledPawn && ControlledPawn->IsA<ARLAgent>());
+}
+
+void ACustomControllerBase::WriteSelectionDiag(const TCHAR* Where, const TCHAR* Outcome)
+{
+	if (CVarSelectionDiag.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+
+	// Physische Tastenlage neben die Flags: genau der Unterschied ist der Befund.
+	bool bAltDown = false, bCtrlDown = false, bShiftDown = false;
+	if (FSlateApplication::IsInitialized())
+	{
+		const FModifierKeysState Mods = FSlateApplication::Get().GetModifierKeys();
+		bAltDown = Mods.IsAltDown();
+		bCtrlDown = Mods.IsControlDown();
+		bShiftDown = Mods.IsShiftDown();
+	}
+
+	int32 AimingUnits = 0;
+	for (const AUnitBase* U : SelectedUnits)
+	{
+		if (U && (U->CurrentSnapshot.AbilityClass || U->CurrentDraggedWorkArea))
+		{
+			++AimingUnits;
+		}
+	}
+
+	const AExtendedCameraBase* ExtCam = Cast<AExtendedCameraBase>(CameraBase);
+	const UWorld* World = GetWorld();
+
+	const FString Line = FString::Printf(
+		TEXT("%s;t=%.2f;%s;%s;Focus=%d;BlockControls=%d;TabToggled=%d;TabMode=%d;")
+		TEXT("Alt=%d/%d;Ctrl=%d/%d;Shift=%d/%d;LeftClickIsPressed=%d;SelectFriendly=%d;")
+		TEXT("AttackToggled=%d;SwapAttackMove=%d;UsedKeyboardAbility=%d;DraggedIndicator=%d;DraggedUnit=%d;")
+		TEXT("AimingUnits=%d;HeldAbilityInputs=%d;DeselectOnNextClick=%d;FormationDrag=%d;Selected=%d;HudSelected=%d"),
+		*FDateTime::Now().ToString(TEXT("%Y-%m-%d %H:%M:%S")),
+		World ? World->GetTimeSeconds() : -1.f,
+		Where, Outcome,
+		FApp::HasFocus() ? 1 : 0,
+		CameraBase ? (CameraBase->BlockControls ? 1 : 0) : -1,
+		CameraBase ? (CameraBase->TabToggled ? 1 : 0) : -1,
+		ExtCam ? ExtCam->TabMode : -1,
+		AltIsPressed ? 1 : 0, bAltDown ? 1 : 0,
+		IsCtrlPressed ? 1 : 0, bCtrlDown ? 1 : 0,
+		IsShiftPressed ? 1 : 0, bShiftDown ? 1 : 0,
+		LeftClickIsPressed ? 1 : 0,
+		HUDBase ? (HUDBase->bSelectFriendly ? 1 : 0) : -1,
+		AttackToggled ? 1 : 0,
+		SwapAttackMove ? 1 : 0,
+		bUsedKeyboardAbilityBeforeClick ? 1 : 0,
+		CurrentDraggedAbilityIndicator ? 1 : 0,
+		CurrentDraggedUnitBase ? 1 : 0,
+		AimingUnits,
+		HeldAbilityInputs.Num(),
+		bDeselectOnNextClick ? 1 : 0,
+		bFormationLineDragActive ? 1 : 0,
+		SelectedUnits.Num(),
+		HUDBase ? HUDBase->SelectedUnits.Num() : -1);
+
+	const FString Path = FPaths::ProjectSavedDir() / TEXT("SelectionDiag.csv");
+	FFileHelper::SaveStringToFile(
+		Line + LINE_TERMINATOR,
+		*Path,
+		FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM,
+		&IFileManager::Get(),
+		EFileWrite::FILEWRITE_Append);
+}
+
+void ACustomControllerBase::FlushPressedKeys()
+{
+	// Super raeumt die gehaltenen Ability-Tasten ab (AExtendedControllerBase::FlushPressedKeys).
+	Super::FlushPressedKeys();
+	ResetModifierKeyFlags(TEXT("FlushPressedKeys"));
+}
+
+void ACustomControllerBase::ResetModifierKeyFlags(const TCHAR* Reason)
+{
+	if (!IsHumanLocalPlayer())
+	{
+		return;
+	}
+
+	const bool bAnySet = AltIsPressed || IsCtrlPressed || IsShiftPressed || LeftClickIsPressed
+		|| (HUDBase && HUDBase->bSelectFriendly);
+	if (!bAnySet)
+	{
+		return;
+	}
+
+	WriteSelectionDiag(Reason, TEXT("ResetModifierFlags"));
+
+	AltIsPressed = false;
+	IsCtrlPressed = false;
+	if (IsShiftPressed)
+	{
+		// Ueber ShiftReleased, damit der Server-Spiegel (Server_SetShiftPressed) mitzieht.
+		ShiftReleased();
+	}
+
+	// Ein offener Linksklick bei Fokusverlust: das Loslassen kommt genauso wenig an wie bei Alt.
+	// Ohne diesen Zweig bliebe bSelectFriendly true und die Rechteckauswahl baute die Auswahl
+	// jedes Bild aus dem alten Rahmen neu - eine zweite Form von "Auswahl klemmt".
+	// LeftClickReleasedMass greift ungeprueft auf HUDBase zu - ohne HUD nur das Flag loeschen.
+	if (!HUDBase)
+	{
+		LeftClickIsPressed = false;
+	}
+	else if (LeftClickIsPressed || HUDBase->bSelectFriendly)
+	{
+		LeftClickReleasedMass();
+	}
+}
+
+void ACustomControllerBase::HealStaleModifierFlags(const TCHAR* Where)
+{
+	if (!IsHumanLocalPlayer() || !FSlateApplication::IsInitialized() || !FApp::HasFocus())
+	{
+		return;
+	}
+
+	const FModifierKeysState Mods = FSlateApplication::Get().GetModifierKeys();
+	const bool bStaleAlt = AltIsPressed && !Mods.IsAltDown();
+	const bool bStaleCtrl = IsCtrlPressed && !Mods.IsControlDown();
+	const bool bStaleShift = IsShiftPressed && !Mods.IsShiftDown();
+	if (!bStaleAlt && !bStaleCtrl && !bStaleShift)
+	{
+		return;
+	}
+
+	// Wenn das hier feuert, hat FlushPressedKeys den Fall NICHT erwischt - dann gibt es eine
+	// weitere Ursache, und die Zeile davor in der CSV zeigt, welche Taste es war.
+	WriteSelectionDiag(Where, TEXT("HealStaleModifierFlags"));
+
+	if (bStaleAlt)
+	{
+		AltIsPressed = false;
+	}
+	if (bStaleCtrl)
+	{
+		IsCtrlPressed = false;
+	}
+	if (bStaleShift)
+	{
+		ShiftReleased();
+	}
+}
+// ===================== ENDE KLEMMENDE AUSWAHL ===================================================
+
 void ACustomControllerBase::LeftClickPressedMass()
 {
+    // Vor allem anderen: ein haengengebliebenes Alt wuerde den Klick sonst in den Alt-Zweig lenken.
+    HealStaleModifierFlags(TEXT("LeftClickPressedMass"));
+
     LeftClickIsPressed = true;
     int32 SavedAbilityIndex = AbilityArrayIndex;
     AbilityArrayIndex = 0;
 
-    if (!CameraBase || CameraBase->TabToggled) return;
+    if (!CameraBase || CameraBase->TabToggled)
+    {
+        WriteSelectionDiag(TEXT("LeftClickPressedMass"), CameraBase ? TEXT("Blocked_TabToggled") : TEXT("Blocked_NoCameraBase"));
+        return;
+    }
 
     if (SwapAttackMove) AttackToggled = false;
 	
     // --- ALT: cancel / destroy area ---
 	if (AltIsPressed)
     {
+        WriteSelectionDiag(TEXT("LeftClickPressedMass"), TEXT("AltBranch_CancelInsteadOfSelect"));
         DestroyWorkArea();
         for (AUnitBase* U : SelectedUnits)
         {
@@ -3977,6 +4162,7 @@ void ACustomControllerBase::LeftClickPressedMass()
             }
         }
 
+        WriteSelectionDiag(TEXT("LeftClickPressedMass"), TEXT("AttackMove"));
         HandleAttackMovePressed();
     }
     else
@@ -4013,6 +4199,7 @@ void ACustomControllerBase::LeftClickPressedMass()
 
         if (bAnyUnitIsAimingOrDragging)
         {
+            WriteSelectionDiag(TEXT("LeftClickPressedMass"), TEXT("AbilityUnderCursor"));
             // Indicator Cleanup (Client-side)
             for (AUnitBase* U : SelectedUnits)
             {
@@ -4040,6 +4227,7 @@ void ACustomControllerBase::LeftClickPressedMass()
         else
         {
             // Skip server and just continue with selection locally
+            WriteSelectionDiag(TEXT("LeftClickPressedMass"), HitPawn.bBlockingHit ? TEXT("ContinueSelection_Hit") : TEXT("ContinueSelection_NoHit"));
             Client_ContinueSelectionAfterAbility(HitPawn);
         }
         return;
@@ -4135,6 +4323,7 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
     if (bFromCooldown) {
         // Ability attempt failed due to cooldown; skip deselection now and set flag for next click
         bDeselectOnNextClick = true;
+        WriteSelectionDiag(TEXT("ContinueSelection"), TEXT("Skipped_FromCooldown"));
         return; 
     }
 
@@ -4143,12 +4332,14 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
 
     if (bResetFlagOnly)
     {
+        WriteSelectionDiag(TEXT("ContinueSelection"), TEXT("Skipped_ResetFlagOnly"));
         return;
     }
 
     // Prevent any selection changes or deselection if an ability button is currently held down
     if (!HeldAbilityInputs.IsEmpty())
     {
+        WriteSelectionDiag(TEXT("ContinueSelection"), TEXT("Blocked_HeldAbilityInputs"));
         return;
     }
 

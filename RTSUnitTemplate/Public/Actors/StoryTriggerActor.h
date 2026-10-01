@@ -210,12 +210,49 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, Category = Story)
 	bool bHasTriggered = false;
 
+	/**
+	 * Repeats the story every this many seconds (> 0). Each repeat rolls a NEW random row when
+	 * UseRandomRow is set, so a timer actor walks through the table instead of replaying one line.
+	 * Independent of bTriggerOnce and of the trigger box. Only the local player of TeamId sees it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Repeat", meta = (ClampMin = "0.0"))
+	float RepeatIntervalSeconds = 0.f;
+
+	/** Delay before the first repeat. < 0 uses RepeatIntervalSeconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Repeat")
+	float RepeatFirstDelaySeconds = -1.f;
+
+	/**
+	 * Fires when a living unit of TriggerTeamId comes within this radius (> 0), measured from its
+	 * Mass position. Mass units carry no collision, so the overlap box alone never sees them.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Proximity", meta = (ClampMin = "0.0"))
+	float ProximityRadius = 0.f;
+
+	/** How often the proximity check runs, in seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Proximity", meta = (ClampMin = "0.1"))
+	float ProximityCheckInterval = 0.5f;
+
 private:
 	// Track the spawned widget to allow timed removal
 	UPROPERTY(Transient)
 	TObjectPtr<UStoryWidgetBase> ActiveWidget = nullptr;
 
 	FTimerHandle RemoveWidgetTimer;
+	FTimerHandle RepeatTimer;
+	FTimerHandle ProximityTimer;
+
+	/** Copies a table row into the actor's story fields. bReroll picks a new random row (not the last one). */
+	void LoadRow(bool bReroll);
+
+	/** The local player's team matches TeamId - the story is only shown to that side. */
+	bool LocalPlayerMatchesTeam() const;
+
+	void HandleRepeat();
+	void CheckProximity();
+
+	/** Last random row, so a repeat does not play the same line twice in a row. */
+	FName LastRandomRow;
 
 	void RemoveActiveWidget();
 

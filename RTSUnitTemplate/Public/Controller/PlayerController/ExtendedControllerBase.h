@@ -390,6 +390,14 @@ public:
 	float WallSpanClearance = -50.f;
 
 	/**
+	 * Halbe Breite der Energiewand fuer die Pfadpruefung, in Einheiten. Die Strecke Turm-Turm wird
+	 * um diesen Betrag verbreitert und gegen den Grundriss jedes Gebaeudes geprueft (Kapsel,
+	 * BoxCollision-Box, Mesh-Box - siehe RTSUnitGeometry). WallSpanClearance kommt dazu.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = BuildingSnap, meta = (ClampMin = "0.0"))
+	float WallPathHalfWidth = 50.f;
+
+	/**
 	 * Der tatsaechlich geltende Grenzwert: die Ueberschreibung des Gebaeudes, sonst der Wert oben.
 	 *
 	 * Ueber diese eine Stelle lesen BEIDE Verwender - die Rotfaerbung der Vorschau und die
