@@ -30,6 +30,49 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction)
 	bool ScaleZ = false;
 
+	/**
+	 * Faktor auf die Passform der Baustelle (02.10.2026). Die Passform macht die Baustelle etwa
+	 * doppelt so gross wie ihren Bauplatz (x2 im BuildStateProcessor); 0,5 bringt sie auf
+	 * Gebaeudegroesse und laesst die Groessenunterschiede zwischen den Gebaeuden bestehen. Wirkt vor
+	 * Min/MaxConstructionScale.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction, meta = (ClampMin = "0.01"))
+	float ConstructionScaleMultiplier = 1.f;
+
+	/**
+	 * Untergrenze der Baustellen-Skalierung beim Baustart (Aktorskalierung je Achse). Die Baustelle
+	 * wird an die WorkArea angepasst; ohne Grenze wird sie bei kleinen Bauplaetzen winzig. 0 = aus.
+	 * Wirkt auch auf das Pulsieren, das um diese Skalierung schwingt.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction, meta = (ClampMin = "0.0"))
+	float MinConstructionScale = 0.f;
+
+	/** Obergrenze der Baustellen-Skalierung beim Baustart, gegen riesige Baustellen. 0 = aus. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Construction, meta = (ClampMin = "0.0"))
+	float MaxConstructionScale = 0.f;
+
+	/**
+	 * Wendet MinConstructionScale/MaxConstructionScale an - gemessen an der BREITE (X/Y), die ganze
+	 * Skalierung wird dann gleichmaessig um denselben Faktor veraendert.
+	 *
+	 * NICHT je Achse: mit ScaleZ folgt die Hoehe dem Gebaeude, bei hohen schmalen Gebaeuden
+	 * (ApexChamber: Z ~2) schnitt eine Achsenklemme die Hoehe auf den Deckel ab und drueckte die
+	 * Baustelle flach (02.10.2026).
+	 */
+	FVector ClampConstructionScale(const FVector& InScaleRaw) const
+	{
+		const FVector InScale = InScaleRaw * ConstructionScaleMultiplier;
+		const float Breite = FMath::Max(FMath::Abs(InScale.X), FMath::Abs(InScale.Y));
+		if (Breite <= KINDA_SMALL_NUMBER)
+		{
+			return InScale;
+		}
+		float Ziel = Breite;
+		if (MinConstructionScale > 0.f) Ziel = FMath::Max(Ziel, MinConstructionScale);
+		if (MaxConstructionScale > 0.f) Ziel = FMath::Min(Ziel, MaxConstructionScale);
+		return InScale * (Ziel / Breite);
+	}
+
 	// Whether the work/build area for this construction site
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	AWorkArea* WorkArea = nullptr;

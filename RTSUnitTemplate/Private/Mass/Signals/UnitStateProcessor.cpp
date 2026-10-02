@@ -686,6 +686,11 @@ void UUnitStateProcessor::SwitchState(FName SignalName, FMassEntityHandle& Entit
                         			if (Worker->BuildArea)
                         			{
                         				Worker->BuildArea->AddWorkerToArray(Worker);
+                        				// Baustart als replizierter Zustand (02.10.2026). Bisher setzte nur
+                        				// AWorkArea::HandleBuildArea StartedBuilding - und dieser Weg feuert im
+                        				// Mass-Bauablauf nie. Hier, im selben Moment wie StartBuild(), auf dem
+                        				// Server; die Clients bekommen es ueber OnRep_StartedBuilding.
+                        				Worker->BuildArea->SetStartedBuilding(true);
                         			}
                         		}
                         	}
@@ -2816,7 +2821,20 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
    								if(UnitBase->BuildArea && UnitBase->BuildArea->DestroyAfterBuild && NewUnit)
    								{
 									   UnitBase->BuildArea->RemoveAreaFromGroup();
-									   UnitBase->BuildArea->Destroy(false, true);
+									   // Nicht sofort zerstoeren (02.10.2026): auf dem Client kam die Zerstoerung
+									   // sofort an, das neue Gebaeude braucht aber noch Replikation, Mass-Init und
+									   // ISM - dazwischen stand nichts. Jede Maschine blendet die Flaeche aus, sobald
+									   // FinishedBuilding dort sichtbar gezeichnet ist (AWorkArea::Tick); die
+									   // Lebensdauer ist nur die Sicherheitsfrist fuer die Zerstoerung.
+									   UnitBase->BuildArea->FinishedBuilding = NewUnit;
+									   if (UnitBase->BuildArea->DestroyAfterBuildDelay > 0.f)
+									   {
+										   UnitBase->BuildArea->SetLifeSpan(UnitBase->BuildArea->DestroyAfterBuildDelay);
+									   }
+									   else
+									   {
+										   UnitBase->BuildArea->Destroy(false, true);
+									   }
 									   UnitBase->BuildArea = nullptr;
 								}
 							}
@@ -4439,7 +4457,13 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 								NewScale.Z = ScaleZ;
 							}
 						}
-						NewConstruction->SetActorScale3D(NewScale * 2.f * UnitBase->BuildArea->ScaleConstructionUnit);
+						// Grenzen der Baustelle (MinConstructionScale/MaxConstructionScale), wie im BuildStateProcessor.
+						FVector BauScale = NewScale * 2.f * UnitBase->BuildArea->ScaleConstructionUnit;
+						if (const AConstructionUnit* GrenzCU = Cast<AConstructionUnit>(NewConstruction))
+						{
+							BauScale = GrenzCU->ClampConstructionScale(BauScale);
+						}
+						NewConstruction->SetActorScale3D(BauScale);
 
 						// Blockierende Kapsel getrennt von der Optik verkleinern.
 						//
