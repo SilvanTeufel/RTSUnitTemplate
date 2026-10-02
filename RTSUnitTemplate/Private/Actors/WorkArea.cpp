@@ -3,6 +3,7 @@
 #include "Actors/WorkArea.h"
 
 #include "Characters/Unit/BuildingBase.h"
+#include "Mass/MassUnitVisualFragments.h"
 #include "EngineUtils.h"   // TActorIterator (AbandonIfUnclaimed: find a worker still walking here)
 #include "Controller/PlayerController/ControllerBase.h"   // bIsAi / SelectableTeamId (AI-only orphan cleanup)
 #include "Core/WorkerData.h"
@@ -419,11 +420,16 @@ void AWorkArea::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	if (FinishedBuilding && !bHiddenForFinishedBuilding)
+	{
+		HideWhenFinishedBuildingVisible();
+	}
+
 	
 	if(Building && Building->GetUnitState() == UnitData::Dead)
 	{
 		PlannedBuilding = false;
-		StartedBuilding = false;
+		SetStartedBuilding(false);
 		Building = nullptr;
 	}
 
@@ -443,7 +449,7 @@ void AWorkArea::Tick(float DeltaTime)
 			if (Workers.Num() == 0)
 			{
 				PlannedBuilding = false;
-				StartedBuilding = false;
+				SetStartedBuilding(false);
 			}
 		}
 		ControlTimer = 0.f;
@@ -629,6 +635,90 @@ void AWorkArea::ApplyFogHidden(bool bHide)
 	}
 }
 
+void AWorkArea::HideWhenFinishedBuildingVisible()
+{
+	// Sichtbar gezeichnet = der Placement-Prozessor hat eine Visual-Instanz des Gebaeudes einmal sichtbar
+	// gesetzt (bWasVisible). Bei Skeletal-Einheiten genuegt der sichtbare Aktor.
+	bool bGebaeudeSichtbar = false;
+	if (const AMassUnitBase* MassGebaeude = Cast<AMassUnitBase>(FinishedBuilding))
+	{
+		if (MassGebaeude->bUseSkeletalMovement)
+		{
+			bGebaeudeSichtbar = !MassGebaeude->IsHidden();
+		}
+		else if (const FMassUnitVisualFragment* Visual = MassGebaeude->GetVisualFragment())
+		{
+			for (const FMassUnitVisualInstance& Instanz : Visual->VisualInstances)
+			{
+				if (Instanz.bWasVisible)
+				{
+					bGebaeudeSichtbar = true;
+					break;
+				}
+			}
+		}
+	}
+	else
+	{
+		bGebaeudeSichtbar = FinishedBuilding && !FinishedBuilding->IsHidden();
+	}
+
+	if (!bGebaeudeSichtbar)
+	{
+		return;
+	}
+
+	bHiddenForFinishedBuilding = true;
+	if (RootComponent)
+	{
+		RootComponent->SetVisibility(false, /*bPropagateToChildren=*/true);
+	}
+}
+
+void AWorkArea::SetStartedBuilding(bool bNewStarted)
+{
+	// Nur der Server schreibt den Zustand. Der Tick laeuft auch auf Clients und setzte dort
+	// StartedBuilding lokal zurueck (Building ist nicht repliziert, also auf dem Client immer leer) -
+	// das holte das ausgeblendete Mesh auf dem Client sofort wieder hervor (Dedicated Server, 02.10.2026).
+	// Clients bekommen den Wert ausschliesslich ueber OnRep_StartedBuilding.
+	if (!HasAuthority())
+	{
+		return;
+	}
+	if (StartedBuilding == bNewStarted)
+	{
+		return;
+	}
+	StartedBuilding = bNewStarted;
+	ApplyStartedBuildingVisuals();
+}
+
+void AWorkArea::OnRep_StartedBuilding()
+{
+	ApplyStartedBuildingVisuals();
+}
+
+void AWorkArea::ApplyStartedBuildingVisuals()
+{
+	if (bHideMeshOnBuildStart && Mesh)
+	{
+		if (StartedBuilding)
+		{
+			if (Mesh->IsVisible())
+			{
+				Mesh->SetVisibility(false, /*bPropagateToChildren=*/false);
+				bMeshHiddenByBuildStart = true;
+			}
+		}
+		else if (bMeshHiddenByBuildStart)
+		{
+			Mesh->SetVisibility(true, /*bPropagateToChildren=*/false);
+			bMeshHiddenByBuildStart = false;
+		}
+	}
+	OnBuildStarted(StartedBuilding);
+}
+
 void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
@@ -655,6 +745,7 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, CurrentWorkers);
 	DOREPLIFETIME(AWorkArea, PlannedBuilding);
 	DOREPLIFETIME(AWorkArea, StartedBuilding);
+	DOREPLIFETIME(AWorkArea, FinishedBuilding);
 	DOREPLIFETIME(AWorkArea, bMIDEnabled);
 	DOREPLIFETIME(AWorkArea, BuildTime);
 	DOREPLIFETIME(AWorkArea, CurrentBuildTime);
@@ -1017,7 +1108,7 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 				return;
 			}
 
-			StartedBuilding = true;
+			SetStartedBuilding(true);
 			StartedBuild();
 
 
