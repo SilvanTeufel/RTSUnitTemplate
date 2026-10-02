@@ -5234,7 +5234,13 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 							NewScale.Z = ScaleZComp;
 						}
 					}
-					NewConstruction->SetActorScale3D(NewScale * 2.f * WA->ScaleConstructionUnit);
+					// Grenzen der Baustelle (MinConstructionScale/MaxConstructionScale), wie im BuildStateProcessor.
+					FVector BauScale = NewScale * 2.f * WA->ScaleConstructionUnit;
+					if (const AConstructionUnit* GrenzCU = Cast<AConstructionUnit>(NewConstruction))
+					{
+						BauScale = GrenzCU->ClampConstructionScale(BauScale);
+					}
+					NewConstruction->SetActorScale3D(BauScale);
 				}
 				else if (Cast<AConstructionUnit>(NewConstruction) && Cast<AConstructionUnit>(NewConstruction)->DroneBehavior && AreaSize.X > KINDA_SMALL_NUMBER && AreaSize.Y > KINDA_SMALL_NUMBER)
 				{
@@ -7418,7 +7424,7 @@ void AExtendedControllerBase::StopWork_Implementation(AWorkingUnitBase* Worker)
 {
 	if(Worker && (Worker->GetUnitState() == UnitData::Build || Worker->GetUnitState() == UnitData::GoToBuild) && Worker->BuildArea)
 	{
-		Worker->BuildArea->StartedBuilding = false;
+		Worker->BuildArea->SetStartedBuilding(false);
 		Worker->BuildArea->PlannedBuilding = false;
 		Worker->BuildArea->RemoveWorkerFromArray(Worker);
 		

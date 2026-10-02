@@ -319,7 +319,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	{
 		if (IsValid(Worker->BuildArea))
 		{
-			Worker->BuildArea->StartedBuilding = false;
+			Worker->BuildArea->SetStartedBuilding(false);
 			Worker->BuildArea->PlannedBuilding = false;
 			Worker->BuildArea->RemoveWorkerFromArray(Worker);
 			Worker->BuildArea = nullptr;
@@ -626,7 +626,7 @@ void ACustomControllerBase::ExecuteBatchMove(UObject* WorldContextObject,
 			Worker->AutoMining = false;
 			if (IsValid(Worker->BuildArea))
 			{
-				Worker->BuildArea->StartedBuilding = false;
+				Worker->BuildArea->SetStartedBuilding(false);
 				Worker->BuildArea->PlannedBuilding = false;
 				Worker->BuildArea->RemoveWorkerFromArray(Worker);
 				Worker->BuildArea = nullptr;
@@ -1354,7 +1354,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 		Worker->AutoMining = false;
 		if (IsValid(Worker->BuildArea))
 		{
-			Worker->BuildArea->StartedBuilding = false;
+			Worker->BuildArea->SetStartedBuilding(false);
 			Worker->BuildArea->PlannedBuilding = false;
 			Worker->BuildArea->RemoveWorkerFromArray(Worker);
 			Worker->BuildArea = nullptr;

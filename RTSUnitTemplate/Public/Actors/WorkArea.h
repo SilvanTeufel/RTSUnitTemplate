@@ -294,11 +294,58 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool PlannedBuilding = false;
 
-	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	/**
+	 * Bau hat begonnen. Repliziert MIT OnRep (02.10.2026): jede Maschine erfaehrt den Baustart als
+	 * ZUSTAND - auch bei spaeterem Beitritt oder wenn die Flaeche erst spaeter relevant wird. Ein
+	 * Multicast im Arbeiter-Blueprint ging in diesen Faellen verloren. Aus C++ ueber
+	 * SetStartedBuilding setzen, damit auch der Server die Optik nachzieht.
+	 */
+	UPROPERTY(ReplicatedUsing = OnRep_StartedBuilding, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool StartedBuilding = false;
+
+	/** Setzt StartedBuilding und wendet die Baustart-Optik lokal an (Server/Standalone; Clients ueber OnRep). */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetStartedBuilding(bool bNewStarted);
+
+	UFUNCTION()
+	void OnRep_StartedBuilding();
+
+	/** Feuert auf JEDER Maschine, wenn StartedBuilding wechselt - Ersatz fuer Multicasts beim Baustart. */
+	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
+	void OnBuildStarted(bool bStarted);
+
+	/** Blendet das Mesh der Flaeche beim Baustart aus (SetVisibility, nicht bHiddenInGame - das gehoert dem Fog). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bHideMeshOnBuildStart = false;
+
+private:
+	/** Das Mesh wurde von bHideMeshOnBuildStart versteckt - nur dann beim Zuruecksetzen wieder zeigen. */
+	bool bMeshHiddenByBuildStart = false;
+
+	void ApplyStartedBuildingVisuals();
+
+public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
     bool DestroyAfterBuild = true;
+
+	/**
+	 * Sicherheitsfrist in Sekunden, nach der der Server die Flaeche nach dem Bauende spaetestens zerstoert
+	 * (0 = sofort). AUSGEBLENDET wird sie vorher auf jeder Maschine genau dann, wenn das fertige Gebaeude
+	 * dort zum ersten Mal sichtbar gezeichnet wurde (FinishedBuilding) - keine Luecke, keine Ueberlappung.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.0"))
+	float DestroyAfterBuildDelay = 3.f;
+
+	/** Das fertige Gebaeude dieser Flaeche (vom Server gesetzt, repliziert). Siehe DestroyAfterBuildDelay. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
+	TObjectPtr<AActor> FinishedBuilding = nullptr;
+
+	/** true, sobald die Flaeche lokal fuer FinishedBuilding ausgeblendet wurde. */
+	bool bHiddenForFinishedBuilding = false;
+
+	/** Blendet die Flaeche lokal aus, sobald FinishedBuilding hier sichtbar gezeichnet wurde. */
+	void HideWhenFinishedBuildingVisible();
 
 	/**
 	 * Marks this as a DEFENSE build area (tower, spore, bunker...). Such areas are pushed toward the

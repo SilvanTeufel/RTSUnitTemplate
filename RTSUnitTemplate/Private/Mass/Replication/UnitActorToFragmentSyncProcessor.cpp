@@ -101,7 +101,8 @@ void UUnitActorToFragmentSyncProcessor::Execute(FMassEntityManager& EntityManage
 				if (MoveTargetList.Num() > 0) SyncMoveTarget(*Unit, MoveTargetList[EntityIndex]);
 				if (AITargetList.Num() > 0) SyncAITarget(*Unit, AITargetList[EntityIndex], EntityManager);
 				if (VisibilityList.Num() > 0) SyncVisibility(*Unit, VisibilityList[EntityIndex]);
-				if (VisualEffectList.Num() > 0) SyncVisualEffect(*Unit, VisualEffectList[EntityIndex]);
+				if (VisualEffectList.Num() > 0) SyncVisualEffect(*Unit, VisualEffectList[EntityIndex],
+					CharacteristicsList.Num() > 0 ? &CharacteristicsList[EntityIndex] : nullptr);
 				if (AllianceList.Num() > 0) AllianceList[EntityIndex].AlliedTeamsMask = Unit->AlliedTeamsMask;
 				
 				// KORREKTUR: Zugriff Ã¼ber EntityManager fÃ¼r optionale Fragmente
@@ -357,7 +358,8 @@ void UUnitActorToFragmentSyncProcessor::SyncVisibility(const AUnitBase& Unit, FM
 	}
 }
 
-void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, FMassVisualEffectFragment& VisualEffect)
+void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, FMassVisualEffectFragment& VisualEffect,
+                                                         const FMassAgentCharacteristicsFragment* Characteristics)
 {
 	const AMassUnitBase* MassUnit = Cast<AMassUnitBase>(&Unit);
 	if (!MassUnit) return;
@@ -413,6 +415,30 @@ void UUnitActorToFragmentSyncProcessor::SyncVisualEffect(const AUnitBase& Unit, 
 						FVector(Uniform, Uniform, Uniform) * 2.f * ConstructionUnit->WorkArea->ScaleConstructionUnit;
 				}
 			}
+		}
+
+		// DROHNEN-ANKER JEDEN SYNC NEU, IM ZEICHENRAHMEN (02.10.2026).
+		//
+		// Gezeichnet wird die Drohne relativ zu CharFrag.PositionedTransform (MassUnitPlacementProcessor:
+		// CurrentRelativeTransform * PositionedTransform). Der Anker wurde aber gegen die AKTOR-Transform
+		// umgerechnet, und das nur einmal beim ersten Sync. Auf dem Client weichen beide in Z voneinander ab
+		// bzw. steht die WorkArea beim ersten Sync noch nicht - die Drohne flog dort deutlich niedriger.
+		if (ConstructionUnit->DroneBehavior && VisualEffect.bDroneEnabled && Characteristics)
+		{
+			// Hoehe aus dem BODEN UNTER DER BAUSTELLE (LastGroundLocation), nicht aus der Lage der
+			// WorkArea: die repliziert ihre Bewegung nicht (SetReplicateMovement(false)) und steht auf dem
+			// Client nach einem serverseitigen Verschieben an der alten, tieferen Stelle - mit ihr als Anker
+			// versank die Drohne auf dem Client im Boden. XY ist die Baustelle selbst, sie sitzt mittig.
+			//
+			// NUR POSITIVE VERSAETZE: die vorhandenen negativen DroneVerticalOffset-Werte (-150 bis -700)
+			// waren Ausgleich fuer den alten Anker, der Aktor- und Mass-Transform vermischte und dadurch auf
+			// dem Server um die Kapselhoehe der Baustelle zu hoch lag. Gegen den Boden gerechnet zogen sie
+			// die Drohne unter die Oberflaeche (gemessen 02.10.2026: WeltZ 387 bei Boden 512).
+			const AWorkArea* AnkerWA = ConstructionUnit->WorkArea;
+			const FVector BaustellenOrt = Characteristics->PositionedTransform.GetLocation();
+			const FVector AnkerWelt(BaustellenOrt.X, BaustellenOrt.Y,
+				Characteristics->LastGroundLocation + (AnkerWA ? FMath::Max(0.f, AnkerWA->DroneVerticalOffset) : 0.f));
+			VisualEffect.DroneOrbitCenter = Characteristics->PositionedTransform.InverseTransformPosition(AnkerWelt);
 		}
 
 		if (ConstructionUnit->DroneBehavior && !VisualEffect.bDroneEnabled)

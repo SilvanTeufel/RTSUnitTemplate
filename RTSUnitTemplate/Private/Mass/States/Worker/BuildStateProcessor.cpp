@@ -271,6 +271,14 @@ void UBuildStateProcessor::CalculateConstructionScale(FName SignalName, TArray<F
                     }
                     
                     FVector FinalActorScale = NewScale * 2.f * WA->ScaleConstructionUnit;
+
+                    // Grenzen der Baustelle selbst (02.10.2026): die Passform folgt der WorkArea ohne
+                    // Deckel - bei einem grossen Bauplatz wurde die pulsierende Baustelle riesig, bei
+                    // einem kleinen winzig. 0 = keine Grenze.
+                    if (const AConstructionUnit* GrenzCU = Cast<AConstructionUnit>(CU))
+                    {
+                        FinalActorScale = GrenzCU->ClampConstructionScale(FinalActorScale);
+                    }
                     CU->SetActorScale3D(FinalActorScale);
 
                     // Update Mass Fragment
