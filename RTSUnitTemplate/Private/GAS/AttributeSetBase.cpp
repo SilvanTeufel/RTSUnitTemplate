@@ -279,14 +279,8 @@ void UAttributeSetBase::FireHealthThresholdEvents(float OldHealth, float NewHeal
 	const float OldPct = FromHealth / MaxH;
 	const float NewPct = NewHealth / MaxH;
 
-	auto Fire = [UnitBase, NewHealth, OldPct, NewPct](bool bIncrease, bool bLow, bool bHigh)
+	auto Fire = [UnitBase, NewHealth](bool bIncrease, bool bLow, bool bHigh)
 	{
-		// DIAGNOSE (20.09.2026, Rauch bleibt nach der Reparatur stehen): zeigt Richtung,
-		// Schwelle und Prozentwerte. Belegt, dass der Weg nach oben jetzt ueberhaupt meldet.
-		UE_LOG(LogTemp, Log,
-			TEXT("[Schwelle] %s: %s ueber %s (%.0f%% -> %.0f%%)."),
-			*UnitBase->GetName(), bIncrease ? TEXT("AUFWAERTS") : TEXT("abwaerts"),
-			bLow ? TEXT("25%") : TEXT("50%"), OldPct * 100.f, NewPct * 100.f);
 		UnitBase->OnHealthThresholdCrossed(bIncrease, bLow, bHigh, NewHealth);
 	};
 
