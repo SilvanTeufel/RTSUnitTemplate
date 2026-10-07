@@ -1030,7 +1030,7 @@ void AExtendedControllerBase::GetClosestUnitTo(FVector Position, int PlayerTeamI
  			// Cast to AGASUnit to make sure it's of the correct type
 			AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
 			// Check if the unit is valid and has the same TeamId as the camera and is eligible for selection
-			if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected) // && !Unit->BuildArea
+			if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected && !Unit->IsInsideTransport) // cargo in a transporter is not selectable
 			{
 				float DistanceSquared = FVector::DistSquared(Position, Unit->GetMassActorLocation());
 				// Check if this unit is closer than the currently tracked closest unit
@@ -1065,7 +1065,7 @@ void AExtendedControllerBase::ServerGetClosestUnitTo_Implementation(FVector Posi
 		// Cast to AUnitBase to make sure it's of the correct type
 		AUnitBase* Unit = Cast<AUnitBase>(UnitActor);
 		// Check if the unit is valid, belongs to the player, is a worker, not building, and is selectable
-		if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected) // && !Unit->BuildArea
+		if (Unit && Unit->IsWorker && Unit->TeamId == PlayerTeamId && !Unit->BuildArea && Unit->CanBeSelected && !Unit->IsInsideTransport) // cargo in a transporter is not selectable
 		{
 			float DistanceSquared = FVector::DistSquared(Position, Unit->GetMassActorLocation());
 			// Check if this unit is closer than the currently tracked closest unit

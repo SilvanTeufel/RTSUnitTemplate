@@ -13,6 +13,7 @@
 #include "Sound/SoundBase.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Blueprint/UserWidget.h"
+#include "EngineUtils.h"
 
 UStoryTriggerQueueSubsystem::UStoryTriggerQueueSubsystem()
 {
@@ -24,6 +25,7 @@ void UStoryTriggerQueueSubsystem::Deinitialize()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(NextStoryTimerHandle);
+		World->GetTimerManager().ClearTimer(MusicRestoreTimerHandle);
 	}
 	Pending.Empty();
 	Super::Deinitialize();
@@ -68,6 +70,7 @@ void UStoryTriggerQueueSubsystem::EnqueueStory(const FStoryQueueItem& Item)
 
 void UStoryTriggerQueueSubsystem::StoryEndeAnAlleMelden()
 {
+	TSet<UObject*> Gemeldet;
 	for (const TWeakObjectPtr<UObject>& Quelle : QuellenSeitRuhe)
 	{
 		if (!Quelle.IsValid())
@@ -83,9 +86,25 @@ void UStoryTriggerQueueSubsystem::StoryEndeAnAlleMelden()
 		{
 			Comp->OnStoryFinished.Broadcast();
 		}
+		Gemeldet.Add(Quelle.Get());
 	}
 
 	QuellenSeitRuhe.Empty();
+
+	// A source that lowered the music can be gone by now (a boss with its trigger, a destroyed
+	// actor) - then nobody restored it and the music stayed quiet until the level changed.
+	// All trigger actors share the one cassette and RestoreVolume is idempotent, so every
+	// trigger actor still in the world is told as well.
+	if (UWorld* World = GetWorld())
+	{
+		for (TActorIterator<AStoryTriggerActor> It(World); It; ++It)
+		{
+			if (IsValid(*It) && !Gemeldet.Contains(*It))
+			{
+				It->OnStoryFinished.Broadcast();
+			}
+		}
+	}
 }
 
 void UStoryTriggerQueueSubsystem::ClearActive()
@@ -95,22 +114,14 @@ void UStoryTriggerQueueSubsystem::ClearActive()
 		World->GetTimerManager().ClearTimer(ActiveTimerHandle);
 	}
 
+	// 03.10.2026: OnStoryFinished is NOT sent per item any more while more stories are waiting.
+	// The source BPs restore the music on it - mid-queue that raised the music for the next
+	// story, and the next story never lowered it again (it had broadcast OnStoryTriggered
+	// already when it was enqueued). The end of the whole queue below notifies everyone.
 	if (bIsStoryActive)
 	{
 		bIsStoryActive = false;
 		GlobalSoundMultiplier = 1.0f;
-
-		if (CurrentItem.TriggeringSource.IsValid())
-		{
-			if (AStoryTriggerActor* Actor = Cast<AStoryTriggerActor>(CurrentItem.TriggeringSource.Get()))
-			{
-				Actor->OnStoryFinished.Broadcast();
-			}
-			else if (UStoryTriggerComponent* Comp = Cast<UStoryTriggerComponent>(CurrentItem.TriggeringSource.Get()))
-			{
-				Comp->OnStoryFinished.Broadcast();
-			}
-		}
 	}
 
 	if (ActiveWidget)
@@ -261,12 +272,17 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	// Fall back to the fixed LifetimeSeconds when bTillAudioEnds is off, there is no sound, or the
 	// sound loops indefinitely (GetDuration returns INDEFINITELY_LOOPING_DURATION).
 	float DisplayTime = Item.LifetimeSeconds;
+	World->GetTimerManager().ClearTimer(MusicRestoreTimerHandle);
 	if (Item.bTillAudioEnds && Item.Sound)
 	{
 		const float Dur = Item.Sound->GetDuration();
 		if (Dur > 0.f && Dur < INDEFINITELY_LOOPING_DURATION)
 		{
 			DisplayTime = Dur + FMath::Max(0.f, Item.AudioEndExtraDelay);
+			// The text may stay up a little longer for reading; the music comes back shortly after
+			// the voice ends (the cassette fades it up).
+			World->GetTimerManager().SetTimer(MusicRestoreTimerHandle, this,
+				&UStoryTriggerQueueSubsystem::OnMusicRestoreDue, Dur + MusicRestoreDelay, false);
 		}
 	}
 
@@ -280,6 +296,16 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		DisplayTime = FallbackDisplaySeconds;
 	}
 	World->GetTimerManager().SetTimer(ActiveTimerHandle, this, &UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished, DisplayTime, false);
+}
+
+void UStoryTriggerQueueSubsystem::OnMusicRestoreDue()
+{
+	// Only when nothing else is waiting - otherwise the next line follows and the music stays down.
+	// ClearActive later notifies again; RestoreVolume ignores the repeat.
+	if (Pending.Num() == 0)
+	{
+		StoryEndeAnAlleMelden();
+	}
 }
 
 void UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished()

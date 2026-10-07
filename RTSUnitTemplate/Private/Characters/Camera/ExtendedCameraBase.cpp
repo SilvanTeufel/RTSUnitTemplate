@@ -309,8 +309,11 @@ void AExtendedCameraBase::ShowWinConditionWidget(float Duration)
 
 	if (WinConditionWidget)
 	{
-		WinConditionWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
-        
+		// SelfHitTestInvisible, not HitTestInvisible: the widget itself still lets clicks through
+		// to the game, but its close button ("X") must be clickable.
+		WinConditionWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		WinConditionWidget->ResetAutoClose();
+
 		GetWorldTimerManager().ClearTimer(WinConditionDisplayTimerHandle);
 		if (Duration > 0)
 		{
@@ -508,6 +511,7 @@ void AExtendedCameraBase::UpdateTabModeUI()
 	if (WinConditionWidget)
 	{
 		WinConditionWidget->SetVisibility(ESlateVisibility::Collapsed);
+		WinConditionWidget->SetAutoClosePaused(false);
 	}
 	if (MapMenuWidget)
 	{
@@ -550,6 +554,8 @@ void AExtendedCameraBase::UpdateTabModeUI()
 			if (WinConditionWidget)
 			{
 				WinConditionWidget->SetVisibility(ESlateVisibility::Visible);
+				// Explicit tab view: stays until the player switches the tab (or clicks X).
+				WinConditionWidget->SetAutoClosePaused(true);
 			}
 
 			ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(GetController());

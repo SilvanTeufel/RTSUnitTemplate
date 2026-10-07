@@ -144,6 +144,15 @@ private:
 	FTimerHandle ActiveTimerHandle;
 	FTimerHandle NextStoryTimerHandle;
 
+	/**
+	 * Seconds after the voice line ends until the music is allowed back up (OnStoryFinished), if no
+	 * further story is waiting. Before 05.10.2026 the music only returned when the widget closed -
+	 * audio end + AudioEndExtraDelay (2.5 s by default) - which felt like a long gap.
+	 */
+	float MusicRestoreDelay = 0.5f;
+	FTimerHandle MusicRestoreTimerHandle;
+	void OnMusicRestoreDue();
+
 	void TryPlayNext();
 	void OnActiveLifetimeFinished();
 };

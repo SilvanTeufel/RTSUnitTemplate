@@ -3953,12 +3953,11 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 // ================================================================================================
 
 // Diagnose der Auswahl. Schreibt per FFileHelper, weil UE_LOG im Shipping wegkompiliert ist
-// (siehe AstraHelix.Target.cs). Eigener Schalter statt rts.csv.messung: der steht auf 0, und die
-// Messung soll beim naechsten Auftreten ohne Konsole schon da sein. Je Klick eine Zeile - Klicks
-// sind selten, das kostet nichts Messbares.
+// (siehe AstraHelix.Target.cs). Je Klick eine Zeile - Klicks sind selten, das kostet nichts
+// Messbares. Vorgabe AUS seit 07.10.2026 (Fab-Auslieferung); bei Bedarf "rts.selection.diag 1".
 static TAutoConsoleVariable<int32> CVarSelectionDiag(
 	TEXT("rts.selection.diag"),
-	1,
+	0,
 	TEXT("1 = jede Linksklick-Auswahl und jedes Zuruecksetzen der Modifikator-Flags nach ")
 	TEXT("Saved/SelectionDiag.csv schreiben. 0 = aus."),
 	ECVF_Default);

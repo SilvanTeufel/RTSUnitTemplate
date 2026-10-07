@@ -64,6 +64,13 @@ class RTSUNITTEMPLATE_API ACameraControllerBase : public ACustomControllerBase
 	UPROPERTY()
 	class ULoadingWidget* ActiveLoadingWidget = nullptr;
 
+	/**
+	 * True while the start-of-match loading screen is up: its widget is on screen, or the loading
+	 * window configured in the GameState has not run out yet (covers the moment before the widget
+	 * arrives on a client). Screen-edge scrolling stays off during that time.
+	 */
+	bool IsLoadingScreenActive() const;
+
 	int32 LastProcessedLoadingTriggerId = -1;
 
 	UFUNCTION(Client, Reliable)

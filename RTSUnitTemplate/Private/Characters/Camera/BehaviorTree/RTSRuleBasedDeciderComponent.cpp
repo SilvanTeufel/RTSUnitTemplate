@@ -1915,7 +1915,7 @@ void URTSRuleBasedDeciderComponent::PopulateAttackPositions()
 			{
 				if (EinheitenZahl > 0)
 				{
-					UE_LOG(LogTemp, Warning,
+					UE_LOG(LogTemp, Verbose,
 						TEXT("[AttackZiel] Team=%d Regel='%s' Gebaeude bevorzugt: %d Gebaeude, %d Einheiten verworfen"),
 						MyTeamId, *RowNames[i].ToString(), GebaeudeLocations.Num(), EinheitenZahl);
 				}
