@@ -5,6 +5,8 @@
 #include "EngineUtils.h"
 #include "Components/RichTextBlock.h"
 #include "Components/Image.h"
+#include "Components/Button.h"
+#include "TimerManager.h"
 
 static FString SplitPascalCase(const FString& InString)
 {
@@ -172,6 +174,62 @@ void UWinConditionWidget::NativeConstruct()
 
 	StartUpdateTimer();
 	UpdateConditionText();
+
+	if (CloseButton)
+	{
+		CloseButton->OnClicked.RemoveDynamic(this, &UWinConditionWidget::OnCloseClicked);
+		CloseButton->OnClicked.AddDynamic(this, &UWinConditionWidget::OnCloseClicked);
+	}
+
+	// Runs on its own timer, not on tick: a collapsed widget does not tick, and this has to see
+	// every way the widget becomes visible (03.10.2026: on the survival map it stayed open).
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimer(AutoCloseTimerHandle, this, &UWinConditionWidget::CheckAutoClose,
+		                                  AutoCloseCheckInterval, true);
+	}
+}
+
+void UWinConditionWidget::NativeDestruct()
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AutoCloseTimerHandle);
+	}
+	Super::NativeDestruct();
+}
+
+void UWinConditionWidget::ResetAutoClose()
+{
+	VisibleSeconds = 0.f;
+}
+
+void UWinConditionWidget::SetAutoClosePaused(bool bPaused)
+{
+	bAutoClosePaused = bPaused;
+	VisibleSeconds = 0.f;
+}
+
+void UWinConditionWidget::CheckAutoClose()
+{
+	if (!IsVisible() || bAutoClosePaused || AutoCloseSeconds <= 0.f)
+	{
+		VisibleSeconds = 0.f;
+		return;
+	}
+
+	VisibleSeconds += AutoCloseCheckInterval;
+	if (VisibleSeconds >= AutoCloseSeconds)
+	{
+		VisibleSeconds = 0.f;
+		SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UWinConditionWidget::OnCloseClicked()
+{
+	VisibleSeconds = 0.f;
+	SetVisibility(ESlateVisibility::Collapsed);
 }
 
 void UWinConditionWidget::StartUpdateTimer()

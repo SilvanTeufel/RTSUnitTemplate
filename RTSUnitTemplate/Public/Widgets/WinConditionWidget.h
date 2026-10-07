@@ -125,8 +125,39 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void StopTimer();
 
+	/** Optional close button ("X"). Collapses the widget when clicked. */
+	UPROPERTY(meta = (BindWidgetOptional))
+	class UButton* CloseButton;
+
+	/**
+	 * Safety net: the widget collapses itself after being visible this long, no matter who showed it
+	 * (game start, condition change, HUD, GOAL button). 0 disables it. Only the explicit tab view
+	 * (SetAutoClosePaused) keeps it open.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UI", meta = (ClampMin = "0.0"))
+	float AutoCloseSeconds = 20.f;
+
+	/** Restarts the auto-close countdown - called whenever the widget is shown again. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ResetAutoClose();
+
+	/** While paused (explicit tab view), the widget does not close itself. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void SetAutoClosePaused(bool bPaused);
+
 protected:
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
+
+	FTimerHandle AutoCloseTimerHandle;
+	float VisibleSeconds = 0.f;
+	bool bAutoClosePaused = false;
+	static constexpr float AutoCloseCheckInterval = 0.5f;
+
+	void CheckAutoClose();
+
+	UFUNCTION()
+	void OnCloseClicked();
 
 	FTimerHandle UpdateTimerHandle;
 	const float UpdateInterval = 1.0f;
