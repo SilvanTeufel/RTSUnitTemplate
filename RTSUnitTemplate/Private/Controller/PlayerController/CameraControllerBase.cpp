@@ -2150,6 +2150,28 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 	}
 }
 
+bool ACameraControllerBase::IsLoadingScreenActive() const
+{
+	if (ActiveLoadingWidget && ActiveLoadingWidget->IsInViewport())
+	{
+		return true;
+	}
+
+	const UWorld* World = GetWorld();
+	const AResourceGameState* GS = World ? World->GetGameState<AResourceGameState>() : nullptr;
+	if (!GS)
+	{
+		return false;
+	}
+
+	const FLoadingWidgetConfig& Config = GS->LoadingWidgetConfig;
+	if (!Config.WidgetClass || Config.Duration <= 0.f || Config.ServerWorldTimeStart < 0.f)
+	{
+		return false;
+	}
+	return GS->GetServerWorldTimeSeconds() < Config.ServerWorldTimeStart + Config.Duration;
+}
+
 void ACameraControllerBase::CameraState_UseScreenEdges()
 {
 	// DeltaTime hier holen statt als Parameter: die Funktion ist BlueprintCallable, eine
@@ -2158,7 +2180,9 @@ void ACameraControllerBase::CameraState_UseScreenEdges()
 
 	// Auch bei abgeschaltetem Randscrollen mit Null weiterfuettern, damit eine noch laufende
 	// Restgeschwindigkeit sauber ausrollt statt eingefroren stehen zu bleiben.
-	const FVector EdgeScrollTarget = CameraBase->DisableEdgeScrolling
+	// No edge scrolling while the loading screen is up: the mouse resting at a screen edge during
+	// loading would otherwise drag the camera away from the start position (05.10.2026).
+	const FVector EdgeScrollTarget = (CameraBase->DisableEdgeScrolling || IsLoadingScreenActive())
 		? FVector::ZeroVector
 		: GetCameraPanDirection() * CameraBase->EdgeScrollCamSpeed;
 
