@@ -22,6 +22,7 @@
 #include "Engine/World.h"
 #include "TimerManager.h"
 #include "GameModes/RTSGameModeBase.h"
+#include "System/LogisticsSubsystem.h"
 
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -29,6 +30,63 @@ void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AAbilityUnit, UnitStatePlaceholder);
 	DOREPLIFETIME(AAbilityUnit, StoredUnitState);
 	DOREPLIFETIME(AAbilityUnit, ContinuousAttackDuration);
+	DOREPLIFETIME(AAbilityUnit, UnitRole);
+	DOREPLIFETIME(AAbilityUnit, LogisticsCargo);
+	DOREPLIFETIME(AAbilityUnit, LogisticsJobState);
+}
+
+void AAbilityUnit::SyncUnitRoleMirror()
+{
+	// Legacy data: saved before UnitRole existed, so only the bool says "worker". Only upgrades the
+	// default role - a role someone picked on purpose always wins over the old flag.
+	if (UnitRole == EUnitRole::Combat && IsWorker)
+	{
+		UnitRole = EUnitRole::Worker;
+	}
+	IsWorker = (UnitRole == EUnitRole::Worker);
+}
+
+void AAbilityUnit::PostLoad()
+{
+	Super::PostLoad();
+	SyncUnitRoleMirror();
+}
+
+#if WITH_EDITOR
+void AAbilityUnit::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	// The role was edited: derive the mirror from it. Not via SyncUnitRoleMirror - choosing Combat on
+	// a former worker must not be turned straight back into Worker by the stale bool.
+	if (PropertyChangedEvent.GetPropertyName() == GET_MEMBER_NAME_CHECKED(AAbilityUnit, UnitRole))
+	{
+		IsWorker = (UnitRole == EUnitRole::Worker);
+	}
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+}
+#endif
+
+void AAbilityUnit::SetUnitRole(EUnitRole NewRole)
+{
+	UnitRole = NewRole;
+	IsWorker = (UnitRole == EUnitRole::Worker);
+
+	if (HasAuthority())
+	{
+		if (ULogisticsSubsystem* Logistics = GetWorld() ? GetWorld()->GetSubsystem<ULogisticsSubsystem>() : nullptr)
+		{
+			Logistics->RefreshLogisticsUnit(this);
+		}
+	}
+}
+
+float AAbilityUnit::GetLogisticsCargoTotal() const
+{
+	float Total = 0.f;
+	for (const float Amount : LogisticsCargo)
+	{
+		Total += Amount;
+	}
+	return Total;
 }
 
 void AAbilityUnit::PossessedBy(AController* NewController)
@@ -75,6 +133,16 @@ void AAbilityUnit::LevelUp_Implementation()
 void AAbilityUnit::BeginPlay()
 {
 	Super::BeginPlay();
+
+	SyncUnitRoleMirror();
+
+	if (HasAuthority() && UnitRole == EUnitRole::Logistics)
+	{
+		if (ULogisticsSubsystem* Logistics = GetWorld() ? GetWorld()->GetSubsystem<ULogisticsSubsystem>() : nullptr)
+		{
+			Logistics->RefreshLogisticsUnit(this);
+		}
+	}
 
 	// Server-side fallback: in case PossessedBy isn't called for some units, ensure grant + activation is scheduled
 	if (HasAuthority())

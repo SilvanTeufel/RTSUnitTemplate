@@ -2296,8 +2296,11 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 								// walk on, still carrying. If none exists anywhere (e.g. the player re-configured
 								// the bases while this worker was already loaded), fall through and credit as
 								// before, so a full worker can never get stuck in an endless delivery loop.
+								// A CollectOnly base with a full store refuses too - the worker then tries a base
+								// that still has room, exactly like a base that rejects the type.
 								const bool bBaseAcceptsCargo =
-									IsValid(UnitBase->Base) && UnitBase->Base->AcceptsResourceType(CarriedFrag->ResourceType);
+									IsValid(UnitBase->Base) && UnitBase->Base->AcceptsResourceType(CarriedFrag->ResourceType)
+									&& !UnitBase->Base->IsStorageFull();
 
 								if (!bBaseAcceptsCargo)
 								{
@@ -2318,7 +2321,17 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 									}
 								}
 
-								ResourceGameMode->ModifyResource(CarriedFrag->ResourceType, UnitBase->TeamId, CarriedFrag->MinedAmount);
+								// Through the base, which credits the team or - for a CollectOnly base - keeps it
+								// in storage for the logistics units. bForce: if we got here, no other base can
+								// take it, and the load must never be lost or leave the worker stuck.
+								if (IsValid(UnitBase->Base))
+								{
+									UnitBase->Base->ReceiveResource(CarriedFrag->ResourceType, CarriedFrag->MinedAmount, UnitBase->TeamId, /*bForce=*/true);
+								}
+								else
+								{
+									ResourceGameMode->ModifyResource(CarriedFrag->ResourceType, UnitBase->TeamId, CarriedFrag->MinedAmount);
+								}
 								CarriedFrag->bIsCarrying = false;
 								CarriedFrag->MinedAmount = 0.f;
 							}
@@ -2763,6 +2776,14 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 										}
 									}
 									SpawnedBuilding->BuilderWorkers.AddUnique(UnitBase);
+
+									// A building that extracts by itself takes over the resource place its BuildArea
+									// was dropped on. The area releases the place in its EndPlay; the building holds it.
+									if (UnitBase->BuildArea && IsValid(UnitBase->BuildArea->TargetResourcePlace)
+										&& SpawnedBuilding->ExtractsByItself())
+									{
+										SpawnedBuilding->SetExtractionResourcePlace(UnitBase->BuildArea->TargetResourcePlace);
+									}
 								}
    									
 								if (bHasSavedStats && NewUnit && SpawnedBuilding)
@@ -3315,7 +3336,7 @@ void UUnitStateProcessor::SyncCastTime(FName SignalName, TArray<FMassEntityHandl
 
 									if (UnitBase->ActivatedAbilityInstance)
 									{
-										UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete();
+										UnitBase->ActivatedAbilityInstance->HandleCastComplete();
 									}
 									StateFrag->StateTimer = 0.f;
 									UnitBase->UnitControlTimer = 0.f;

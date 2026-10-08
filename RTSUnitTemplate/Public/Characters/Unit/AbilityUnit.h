@@ -3,6 +3,7 @@
 
 #include "CoreMinimal.h"
 #include "Core/UnitData.h"
+#include "Core/LogisticsData.h"
 #include "LevelUnit.h"
 #include "TimerManager.h"
 #include "AbilityUnit.generated.h"
@@ -54,8 +55,69 @@ public:
 	UFUNCTION(BlueprintCallable, Category=Ability)
 	void ActivateStartAbilitiesOnSpawn();
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	/** What this unit is for: combat, worker, or logistics (drives the roads on its own). */
+	UPROPERTY(ReplicatedUsing = OnRep_UnitRole, EditAnywhere, BlueprintReadOnly, Category = Worker)
+	EUnitRole UnitRole = EUnitRole::Combat;
+
+	UFUNCTION()
+	void OnRep_UnitRole() { IsWorker = (UnitRole == EUnitRole::Worker); }
+
+	/**
+	 * Read-only mirror of UnitRole == Worker, kept so the many existing worker checks (C++ and
+	 * Blueprint) keep working unchanged. Set UnitRole instead. Assets saved with the old
+	 * IsWorker = true are migrated to UnitRole = Worker when they load.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Worker)
 	bool IsWorker = false;
+
+	/** Changes the role at runtime (server). Also registers / unregisters with the logistics dispatcher. */
+	UFUNCTION(BlueprintCallable, Category = Worker)
+	void SetUnitRole(EUnitRole NewRole);
+
+	UFUNCTION(BlueprintPure, Category = Logistics)
+	bool IsLogisticsUnit() const { return UnitRole == EUnitRole::Logistics; }
+
+	/** How much a logistics unit carries per trip, all resource types together. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics, meta = (ClampMin = "1"))
+	float LogisticsCapacity = 20.f;
+
+	/** Seconds spent loading at the CollectOnly base and unloading at the storing base. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics)
+	float LogisticsLoadTime = 1.5f;
+
+	/**
+	 * Flying logistics units land to load and unload: they stand on the ground for at least this
+	 * long (or LogisticsLoadTime, whichever is longer), then take off again. 0 = stay airborne.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics, meta = (ClampMin = "0"))
+	float LogisticsLandingTime = 3.f;
+
+	/**
+	 * After the player gives this logistics unit an order of their own, it goes back to work once it
+	 * has stood idle for this long. Right-clicking one of the team's bases sends it back at once.
+	 * Negative = never resume on its own.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics)
+	float LogisticsResumeDelay = 1.f;
+
+	/** Cargo per EResourceType (index = enum value). Replicated for HUD and widgets. Server-owned. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
+	TArray<float> LogisticsCargo;
+
+	UFUNCTION(BlueprintPure, Category = Logistics)
+	float GetLogisticsCargoTotal() const;
+
+	/** Current step of the round trip. Replicated for HUD only, the server's dispatcher owns it. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
+	ELogisticsJobState LogisticsJobState = ELogisticsJobState::Idle;
+
+	virtual void PostLoad() override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
+	/** Migrates a legacy IsWorker = true into UnitRole and re-derives the IsWorker mirror. Idempotent. */
+	void SyncUnitRoleMirror();
 
 	/** Wiedereintrittsschutz fuer die Bauuebergabe - siehe AAbilityUnit::SetUnitState. */
 	bool bUebergabeLaeuft = false;

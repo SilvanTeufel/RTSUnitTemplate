@@ -91,11 +91,49 @@ protected:
 	void AssignWorkAreasToWorkers();
 
 public:
+	// --- Logistics (roads between CollectOnly bases and the bases that store) -------------------
+	// Read by ULogisticsSubsystem on the server. Without any CollectOnly base or logistics unit in
+	// the level none of this does anything.
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	bool bEnableLogistics = true;
+
+	/** Road actor spawned per CollectOnly base. Subclass ALogisticsRoad in Blueprint for meshes / materials. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	TSubclassOf<class ALogisticsRoad> LogisticsRoadClass;
+
+	/** How often the dispatcher looks at the logistics units (seconds). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0.05"))
+	float LogisticsTickInterval = 0.25f;
+
+	/** How often the road network is re-checked even without a base appearing or dying (seconds). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0.5"))
+	float LogisticsRoadRefreshInterval = 2.f;
+
+	/** A logistics unit only sets off when at least this much (or its full capacity, if smaller) is waiting. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	float LogisticsMinPickupAmount = 10.f;
+
+	/** Straight-line limit for a road. 0 = any distance. A CollectOnly base without a sink in range gets no road. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	float LogisticsMaxRoadLength = 0.f;
+
+	/** Height of the air lane above the higher of its two ends. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	float LogisticsAirLaneHeight = 600.f;
+
+	/** Distance from a base's edge at which roads end and units load / unload. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	float LogisticsEndMargin = 250.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	float ResourceDistanceMultiplier = 2.0f;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	ABuildingBase* GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases);
+
+	/** GetClosestBaseFromArray, measured from Location instead of the worker's resource place. */
+	ABuildingBase* GetClosestBaseToLocation(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases, const FVector& Location);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	AWorkArea* GetClosestWorkArea(AWorkingUnitBase* Worker, const TArray<AWorkArea*>& WorkAreas);

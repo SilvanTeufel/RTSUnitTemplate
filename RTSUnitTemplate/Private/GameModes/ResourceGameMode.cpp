@@ -50,7 +50,11 @@ void AResourceGameMode::BeginPlay()
 	// Initialize resources for the game
 	InitializeResources(NumberOfTeams);
 	GatherWorkAreas();
-	//GatherBases();
+	// Every placed base, before any placed worker picks one. Bases otherwise register in their own
+	// BeginPlay, and placed actors begin play in level order: a worker that came first only saw the
+	// bases before it, and a worker standing next to a CollectOnly outpost was sent to the far main
+	// base. AddUnique on both paths, so the later AddBaseToGroup does not duplicate an entry.
+	GatherBases();
 	AResourceGameState* RGState = GetGameState<AResourceGameState>();
 	if (RGState)
 	{
@@ -108,7 +112,7 @@ void AResourceGameMode::GatherBases()
 
 		if(BuildingBase->IsBase)
 		{
-			WorkAreaGroups.BaseAreas.Add(BuildingBase);
+			WorkAreaGroups.BaseAreas.AddUnique(BuildingBase);
 		}
 	}
 
@@ -117,7 +121,7 @@ void AResourceGameMode::GatherBases()
 void AResourceGameMode::AddBaseToGroup(ABuildingBase* BuildingBase)
 {
 	if(BuildingBase && BuildingBase->IsBase && BuildingBase->GetUnitState() != UnitData::Dead)
-		WorkAreaGroups.BaseAreas.Add(BuildingBase);
+		WorkAreaGroups.BaseAreas.AddUnique(BuildingBase);
 }
 
 void AResourceGameMode::RemoveBaseFromGroup(ABuildingBase* BuildingBase)
@@ -446,8 +450,19 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 	
 	if (!Worker || !Worker->IsWorker) return;
 
-	// Assign the closest base
-	Worker->Base = GetClosestBaseFromArray(Worker, WorkAreaGroups.BaseAreas);
+	// The base closest to the WORKER. GetClosestBaseFromArray would measure from the resource place
+	// the worker already holds - and this runs twice per worker (BeginPlay, then the UnitSpawned
+	// signal). In the first run a base whose BeginPlay has not happened yet is missing from BaseAreas,
+	// so a worker standing next to it got a far base plus deposits around that base; the second run
+	// then measured from those far deposits and confirmed the far base for good.
+	// Right after spawning the Mass transform is not seeded yet and reads as the world origin - the
+	// actor location is the real spawn point then.
+	FVector WorkerLocation = Worker->GetMassActorLocation();
+	if (WorkerLocation.IsNearlyZero())
+	{
+		WorkerLocation = Worker->GetActorLocation();
+	}
+	Worker->Base = GetClosestBaseToLocation(Worker, WorkAreaGroups.BaseAreas, WorkerLocation);
 
 	// Get the closest resource places (sorted by distance to base)
 	TArray<AWorkArea*> WorkPlaces = GetFiveClosestResourcePlaces(Worker);
@@ -598,10 +613,21 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 			Worker->Base = AcceptingBase;
 		}
 	}
-
 }
 
 ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases)
+{
+    if (!IsValid(Worker))
+    {
+        return nullptr;
+    }
+    const FVector Location = Worker->ResourcePlace
+        ? Worker->ResourcePlace->GetActorLocation()
+        : Worker->GetMassActorLocation();
+    return GetClosestBaseToLocation(Worker, Bases, Location);
+}
+
+ABuildingBase* AResourceGameMode::GetClosestBaseToLocation(AWorkingUnitBase* Worker, const TArray<ABuildingBase*>& Bases, const FVector& Location)
 {
     if (!IsValid(Worker))
     {
@@ -623,25 +649,19 @@ ABuildingBase* AResourceGameMode::GetClosestBaseFromArray(AWorkingUnitBase* Work
           continue;
        }
 
+       // A CollectOnly base whose store is full: send the worker to one that still has room.
+       if (IsValid(Base) && RoutingType != EResourceType::MAX && Base->IsStorageFull())
+       {
+          continue;
+       }
+
        if (IsValid(Base) && Worker->TeamId == Base->TeamId && Base->GetUnitState() != UnitData::Dead)
        {
-			if (Worker->ResourcePlace)
+			const float DistanceSquared = (Base->GetActorLocation() - Location).SizeSquared();
+			if (DistanceSquared < MinDistanceSquared)
 			{
-				float DistanceSquared = (Base->GetActorLocation() - Worker->ResourcePlace->GetActorLocation()).SizeSquared();
-				if (DistanceSquared < MinDistanceSquared)
-				{
-					MinDistanceSquared = DistanceSquared;
-					ClosestBase = Base;
-				}
-			}	
-			else
-			{
-				float DistanceSquared = (Base->GetActorLocation() - Worker->GetMassActorLocation()).SizeSquared();
-				if (DistanceSquared < MinDistanceSquared)
-				{
-					MinDistanceSquared = DistanceSquared;
-					ClosestBase = Base;
-				}
+				MinDistanceSquared = DistanceSquared;
+				ClosestBase = Base;
 			}
        }
     }

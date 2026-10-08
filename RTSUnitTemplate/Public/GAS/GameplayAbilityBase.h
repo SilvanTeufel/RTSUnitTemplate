@@ -122,6 +122,14 @@ public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = RTSUnitTemplate)
 	void OnAbilityCastComplete( const FHitResult& InHitResult = FHitResult());
+
+	/**
+	 * Native entry point for "the cast finished". The engine paths that complete a cast call this,
+	 * not the Blueprint event directly. The default just raises OnAbilityCastComplete, so every
+	 * Blueprint ability behaves exactly as before; C++ abilities override it, because a
+	 * BlueprintImplementableEvent cannot be implemented in C++.
+	 */
+	virtual void HandleCastComplete(const FHitResult& InHitResult = FHitResult()) { OnAbilityCastComplete(InHitResult); }
 	
 	UFUNCTION(BlueprintNativeEvent, Category = RTSUnitTemplate)
 	void OnAbilityMouseHit(const FHitResult& InHitResult);
