@@ -3,6 +3,7 @@
 #include "Mass/Replication/ClientReplicationProcessor.h"
 #include "HAL/IConsoleManager.h"
 #include "ProfilingDebugging/CsvProfiler.h"
+#include "Mass/Traits/UnitReplicationFragments.h" // FUnitReplicatedTransformFragment::GetServerStillTime (unten definiert)
 
 // CVARs for ClientReplicationProcessor (client)
 static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_EnableCache(
@@ -74,6 +75,21 @@ static TAutoConsoleVariable<int32> CVarRTS_ClientSnapClearsPrediction(
 // ActualAuthMove==0 (NO fresh data) for units that ARE moving server-side. The stop/blocked detector misreads that
 // as "stopped/blocked" and kills+damps the prediction -> units FREEZE. With the guard on, a stop/blocked conclusion
 // is only drawn on ticks where FRESH authoritative data actually arrived (ActualAuthMove > FreshEps).
+/**
+ * Ab wie vielen Sekunden ohne jede gemeldete Serverbewegung der Server als STEHEND gilt (Client).
+ * Ersetzt fuer Bremse und Reconciler die Zaehlung "Reconcile-Takte ohne Bewegung", die ein 5-Hz-
+ * Datenloch nicht von einem stehenden Server unterscheiden konnte.
+ */
+static TAutoConsoleVariable<float> CVarRTS_ClientServerStillTime(
+    TEXT("RTS.ClientServerStillTime"),
+    0.6f,
+    TEXT("Client: Server gilt als stehend, wenn so viele Sekunden keine Bewegung gemeldet wurde (0 = alte Taktzaehlung)."),
+    ECVF_Default);
+
+float FUnitReplicatedTransformFragment::GetServerStillTime()
+{
+    return CVarRTS_ClientServerStillTime.GetValueOnAnyThread();
+}
 static TAutoConsoleVariable<int32> CVarRTS_ClientReplStaleGuard(
     TEXT("RTS.ClientReplStaleGuard"),
     1,
@@ -175,8 +191,8 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 	if (TimeSinceLastRun < ReconcileInterval) return;
 	const float AccumulatedDelta = TimeSinceLastRun;
 	TimeSinceLastRun = 0.f;
-	
-	UWorld* World = GetWorld();
+
+		UWorld* World = GetWorld();
 	if (!World || !World->IsNetMode(NM_Client)) return;
 	if (RTSReplicationSettings::GetReplicationMode() != RTSReplicationSettings::Mass) return;
 
@@ -280,6 +296,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 			// b) Replikations-Daten aus der Bubble holen
 			FTransform FinalXf = TransformList[EntityIdx].GetTransform();
 			bool bFromBubble = false;
+			double ItemArrivalTime = -1.0; // wann diese Serverlage WIRKLICH ankam (siehe StampClientArrival)
 
 			if (URTSWorldCacheSubsystem* CacheSub = World->GetSubsystem<URTSWorldCacheSubsystem>())
 			{
@@ -293,6 +310,7 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 
 						FVector LocalScale = CharList.IsValidIndex(EntityIdx) ? CharList[EntityIdx].Scale : FVector::OneVector;
 						FinalXf = FTransform(FQuat(FRotator(0.f, LYaw, 0.f)), FVector(UseItem->Location), LocalScale);
+						ItemArrivalTime = UseItem->ClientArrivalTime;
 						bFromBubble = true;
 
 						// Apply TagBits. The authoritative move speed (MoveData bits 8-19, same decode as
@@ -464,6 +482,37 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 				const float ActualAuthMove = PrevAuthLocation.IsNearlyZero() ? 1.0e9f : FVector::Dist2D(TargetLocation, PrevAuthLocation);
 				ReplicatedTransformList[EntityIdx].Transform = FinalXf; // fuer den naechsten Reconcile-Tick merken
 
+				// Servertempo aus zwei FRISCHEN Updates schaetzen (Bubble nur 5 Hz). Die Abstandsbremse im
+				// UnitMovementProcessor rechnet damit die Serverlage auf JETZT hoch, statt gegen eine bis zu
+				// 200 ms alte Lage zu bremsen (gemessen 07.10.2026: Stop-and-go-Ruckeln auf dem Client).
+				{
+					FUnitReplicatedTransformFragment& Repl = ReplicatedTransformList[EntityIdx];
+					// Ankunftszeit des Pakets statt Zeitpunkt dieses Reconcile-Takts: der laeuft nur mit 10 Hz
+					// und machte die Lage im Mittel ~50 ms (bis 100 ms) aelter, als die Hochrechnung annahm.
+					const double Now = (ItemArrivalTime >= 0.0 && ItemArrivalTime <= World->GetTimeSeconds())
+						? ItemArrivalTime : World->GetTimeSeconds();
+					if (!PrevAuthLocation.IsNearlyZero() && ActualAuthMove > CVarRTS_ClientReplFreshEps.GetValueOnAnyThread()
+						&& ActualAuthMove < 1.0e8f)
+					{
+						if (Repl.LastFreshTime >= 0.0)
+						{
+
+							const double Dt = FMath::Clamp(Now - Repl.LastFreshTime, 0.05, 1.0);
+							FVector Velocity = (TargetLocation - PrevAuthLocation) / static_cast<float>(Dt);
+							Velocity.Z = 0.f;
+							Repl.EstimatedVelocity = FMath::Lerp(Repl.EstimatedVelocity, Velocity, 0.6f);
+						}
+						Repl.LastFreshTime = Now;
+					}
+					else if (Repl.LastFreshTime < 0.0 || Now - Repl.LastFreshTime > 0.5)
+					{
+						// Lange keine Bewegung mehr gemeldet: der Server steht (oder es kommt nichts) -
+						// nicht weiter hochrechnen.
+						Repl.EstimatedVelocity = FVector::ZeroVector;
+						if (Repl.LastFreshTime < 0.0) { Repl.LastFreshTime = Now; }
+					}
+				}
+
 					// === Client-side prediction must DRIVE local movement when server data is STALE ===
 					// ActualAuthMove==0 EXACTLY means NO fresh bubble update arrived this reconcile (common at 120 units
 					// under load). Reconciling a PREDICTING unit back toward its last (stale) authoritative position fights
@@ -475,7 +524,16 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 					const float FreshAuthEps = CVarRTS_ClientReplFreshEps.GetValueOnAnyThread();
 					const bool bFreshAuthData = !bStaleGuard || (ActualAuthMove > FreshAuthEps);
 					const bool bIsPredicting = PredList.IsValidIndex(EntityIdx) && PredList[EntityIdx].bHasData;
-					const bool bLetPredictionRun = bStaleGuard && bIsPredicting && !bFreshAuthData;
+					// Steht der Server erkennbar (laenger als RTS.ClientServerStillTime keine Bewegung), ist
+					// "keine neue Bewegung" KEIN Datenloch mehr. Ohne diese Ausnahme blockierten sich Reconciler
+					// und Client-Halt gegenseitig: gemessen 07.10.2026 standen 16 Einheiten 6,6 m vor dem Ziel,
+					// der Server war laengst angekommen.
+					// Nur wenn der Server auch KEIN Tempo meldet - Positionsluecken allein (Dedicated Server:
+					// bis mehrere Sekunden) heissen nicht, dass er steht.
+					const bool bServerKnownStill = ReplicatedTransformList[EntityIdx].IsServerStill(
+						World->GetTimeSeconds(), FUnitReplicatedTransformFragment::GetServerStillTime())
+						&& !(MoveTargetList.IsValidIndex(EntityIdx) && MoveTargetList[EntityIdx].DesiredSpeed.Get() > 10.f);
+					const bool bLetPredictionRun = bStaleGuard && bIsPredicting && !bFreshAuthData && !bServerKnownStill;
 
 				// --- NEU: Following detection ---
 				const bool bIsFollowing = (AITargetList.IsValidIndex(EntityIdx) && EntityManager.IsEntityActive(AITargetList[EntityIdx].FriendlyTargetEntity)) ||
