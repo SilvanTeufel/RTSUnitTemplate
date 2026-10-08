@@ -43,6 +43,7 @@
 #include "NavAreas/NavArea_Obstacle.h"
 #include "NavMesh/RecastNavMesh.h"
 #include "System/PlayerTeamSubsystem.h"
+#include "System/LogisticsSubsystem.h"
 #include "TimerManager.h"
 #include "Templates/Function.h"
 #include "GAS/GameplayAbilityBase.h"
@@ -1964,12 +1965,36 @@ void ACustomControllerBase::LoadUnitsMass_Implementation(const TArray<AUnitBase*
 }
 
 
-void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TArray<AUnitBase*>& Units, AUnitBase* FollowTarget, bool AttackT)
+void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TArray<AUnitBase*>& InUnits, AUnitBase* FollowTarget, bool AttackT)
 {
 	// Authority-only: schedule retries if Mass or units are not ready yet
 	if (!HasAuthority())
 	{
 		return;
+	}
+
+	// Logistics units right-clicked onto one of their team's bases go back to work instead of
+	// following the building - the same gesture that sends a worker to its base.
+	TArray<AUnitBase*> Units = InUnits;
+	if (const ABuildingBase* ClickedBase = Cast<ABuildingBase>(FollowTarget))
+	{
+		if (ClickedBase->BaseType != EBaseType::None)
+		{
+			ULogisticsSubsystem* Logistics = GetWorld() ? GetWorld()->GetSubsystem<ULogisticsSubsystem>() : nullptr;
+			Units.RemoveAll([&](AUnitBase* Unit)
+			{
+				if (Logistics && Unit && Unit->IsLogisticsUnit() && Unit->TeamId == ClickedBase->TeamId)
+				{
+					Logistics->ResumeLogistics(Unit);
+					return true;
+				}
+				return false;
+			});
+			if (Units.Num() == 0)
+			{
+				return;
+			}
+		}
 	}
 
 	for (AUnitBase* Unit : Units)
