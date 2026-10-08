@@ -753,6 +753,11 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, MaxAvailableResourceAmount);
 	DOREPLIFETIME(AWorkArea, ShrinkResource);
 	DOREPLIFETIME(AWorkArea, AreaDropped);
+	DOREPLIFETIME(AWorkArea, bPlaceOnResource);
+	DOREPLIFETIME(AWorkArea, RequiredResourceType);
+	DOREPLIFETIME(AWorkArea, TargetResourcePlace);
+	DOREPLIFETIME(AWorkArea, OccupyingBuildArea);
+	DOREPLIFETIME(AWorkArea, OccupyingBuilding);
 }
 
 void AWorkArea::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
@@ -1346,10 +1351,103 @@ void AWorkArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		}
 	}
 
+	// Release the resource-place links. A BuildArea that ends (built, cancelled, rejected) frees its
+	// place - the finished building took over by then. A resource place that ends (depleted) leaves
+	// its building and BuildArea without a place.
+	if (HasAuthority())
+	{
+		if (IsValid(TargetResourcePlace) && TargetResourcePlace->OccupyingBuildArea == this)
+		{
+			TargetResourcePlace->OccupyingBuildArea = nullptr;
+		}
+		TargetResourcePlace = nullptr;
+
+		if (IsValid(OccupyingBuildArea) && OccupyingBuildArea->TargetResourcePlace == this)
+		{
+			OccupyingBuildArea->TargetResourcePlace = nullptr;
+		}
+		OccupyingBuildArea = nullptr;
+
+		if (IsValid(OccupyingBuilding) && OccupyingBuilding->ExtractionResourcePlace == this)
+		{
+			OccupyingBuilding->ExtractionResourcePlace = nullptr;
+		}
+		OccupyingBuilding = nullptr;
+	}
+
 	Super::EndPlay(EndPlayReason);
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(OverflowWorkersTimerHandle);
+	}
+}
+
+bool AWorkArea::IsResourcePlace() const
+{
+	return Type == WorkAreaData::Primary || Type == WorkAreaData::Secondary || Type == WorkAreaData::Tertiary
+		|| Type == WorkAreaData::Rare || Type == WorkAreaData::Epic || Type == WorkAreaData::Legendary;
+}
+
+bool AWorkArea::IsOccupiedByBuilding() const
+{
+	if (IsValid(OccupyingBuildArea))
+	{
+		return true;
+	}
+	return IsValid(OccupyingBuilding) && OccupyingBuilding->GetUnitState() != UnitData::Dead;
+}
+
+AWorkArea* AWorkArea::FindFreeResourcePlace(const UWorld* World, const FVector& Location, EResourceType ResourceType,
+	float MaxDistance, const AWorkArea* IgnoreBuildArea)
+{
+	if (!World)
+	{
+		return nullptr;
+	}
+
+	AWorkArea* Best = nullptr;
+	float BestDistSq = MaxDistance > 0.f ? FMath::Square(MaxDistance) : TNumericLimits<float>::Max();
+	for (TActorIterator<AWorkArea> It(World); It; ++It)
+	{
+		AWorkArea* Place = *It;
+		if (!IsValid(Place) || !Place->IsResourcePlace() || ConvertToResourceType(Place->Type) != ResourceType)
+		{
+			continue;
+		}
+		if (Place->AvailableResourceAmount <= 0.f)
+		{
+			continue;
+		}
+		const bool bOccupiedByOther = Place->IsOccupiedByBuilding()
+			&& !(IgnoreBuildArea && Place->OccupyingBuildArea == IgnoreBuildArea && !IsValid(Place->OccupyingBuilding));
+		if (bOccupiedByOther)
+		{
+			continue;
+		}
+		const float DistSq = FVector::DistSquared2D(Place->GetActorLocation(), Location);
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			Best = Place;
+		}
+	}
+	return Best;
+}
+
+void AWorkArea::SetTargetResourcePlace(AWorkArea* Place)
+{
+	if (!HasAuthority() || Place == TargetResourcePlace)
+	{
+		return;
+	}
+	if (IsValid(TargetResourcePlace) && TargetResourcePlace->OccupyingBuildArea == this)
+	{
+		TargetResourcePlace->OccupyingBuildArea = nullptr;
+	}
+	TargetResourcePlace = Place;
+	if (IsValid(Place))
+	{
+		Place->OccupyingBuildArea = this;
 	}
 }
 
@@ -1387,6 +1485,12 @@ void AWorkArea::OnRep_WorkerCount()
 bool AWorkArea::HasFreeMiningSlotFor(const AWorkArea* Area, const AWorkingUnitBase* Worker)
 {
 	if (!IsValid(Area) || Area->AvailableResourceAmount <= 0.f)
+	{
+		return false;
+	}
+
+	// A building extracts this place (or is being built on it) - no worker slots left.
+	if (Area->IsOccupiedByBuilding())
 	{
 		return false;
 	}

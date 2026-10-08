@@ -58,6 +58,26 @@ struct FAttributeTreeNodeSaveData
     int32 Points = 0;
 };
 
+// One entry of AUnitBase::SummonedUnitsDataSet. The summoned unit is referenced by its saved
+// UnitIndex (stable across a load) and, as fallback, by the actor name it had when the game was saved.
+USTRUCT(BlueprintType)
+struct FSummonedUnitSaveData
+{
+    GENERATED_BODY()
+
+    UPROPERTY()
+    int32 Id = 0;
+
+    UPROPERTY()
+    int32 UnitIndex = INDEX_NONE;
+
+    UPROPERTY()
+    FString ActorName;
+
+    UPROPERTY()
+    FUnitSpawnParameter SpawnParameter;
+};
+
 USTRUCT(BlueprintType)
 struct FUnitSaveData
 {
@@ -120,6 +140,19 @@ struct FUnitSaveData
 
     UPROPERTY()
     TMap<FString, FString> SerializedModuleData;
+
+    // Logistics: what a CollectOnly base holds and what a logistics unit carries, per EResourceType
+    // (index = enum value). Empty for everything else - and in saves made before logistics existed.
+    UPROPERTY()
+    TArray<float> StoredResources;
+
+    UPROPERTY()
+    TArray<float> LogisticsCargo;
+
+    // The living units this unit has summoned (its SummonedUnitsDataSet). Without it every summon
+    // limit counted from zero after a load and summoners produced their units a second time.
+    UPROPERTY()
+    TArray<FSummonedUnitSaveData> SummonedUnits;
 };
 
 /**

@@ -15,6 +15,7 @@
 #include "Actors/WorkArea.h"
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/WorkingUnitBase.h"
+#include "System/LogisticsSubsystem.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -38,6 +39,203 @@ void ABuildingBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(ABuildingBase, EnergyWallArray);
 	DOREPLIFETIME(ABuildingBase, bHasRallyPoint);
 	DOREPLIFETIME(ABuildingBase, RallyPointLocation);
+	DOREPLIFETIME(ABuildingBase, StoredResources);
+	DOREPLIFETIME(ABuildingBase, ExtractionResourcePlace);
+}
+
+void ABuildingBase::SetExtractionResourcePlace(AWorkArea* Place)
+{
+	if (!HasAuthority() || Place == ExtractionResourcePlace)
+	{
+		return;
+	}
+	if (IsValid(ExtractionResourcePlace) && ExtractionResourcePlace->OccupyingBuilding == this)
+	{
+		ExtractionResourcePlace->OccupyingBuilding = nullptr;
+	}
+	ExtractionResourcePlace = Place;
+	if (IsValid(Place))
+	{
+		Place->OccupyingBuilding = this;
+	}
+}
+
+void ABuildingBase::LinkResourcePlaceUnderneath()
+{
+	if (!HasAuthority() || !ExtractsByItself() || IsValid(ExtractionResourcePlace) || !GetWorld())
+	{
+		return;
+	}
+
+	// The building stands where its BuildArea stood, i.e. on the place. Its own BuildArea may still
+	// hold the place - that is fine, only another living building makes it taken.
+	constexpr float MaxOffset = 300.f;
+	AWorkArea* Best = nullptr;
+	float BestDistSq = FMath::Square(MaxOffset);
+	for (TActorIterator<AWorkArea> It(GetWorld()); It; ++It)
+	{
+		AWorkArea* Place = *It;
+		if (!IsValid(Place) || !Place->IsResourcePlace() || Place->AvailableResourceAmount <= 0.f)
+		{
+			continue;
+		}
+		if (IsValid(Place->OccupyingBuilding) && Place->OccupyingBuilding != this
+			&& Place->OccupyingBuilding->GetUnitState() != UnitData::Dead)
+		{
+			continue;
+		}
+		const float DistSq = FVector::DistSquared2D(Place->GetActorLocation(), GetActorLocation());
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			Best = Place;
+		}
+	}
+	SetExtractionResourcePlace(Best);
+}
+
+void ABuildingBase::ExtractionTick()
+{
+	if (GetUnitState() == UnitData::Dead)
+	{
+		// A ruin extracts nothing and frees its place for a new building.
+		SetExtractionResourcePlace(nullptr);
+		GetWorldTimerManager().ClearTimer(ExtractionTimerHandle);
+		return;
+	}
+
+	LinkResourcePlaceUnderneath();
+	AWorkArea* Place = ExtractionResourcePlace;
+	if (!IsValid(Place) || ExtractionAmount <= 0.f)
+	{
+		return;
+	}
+
+	float Amount = FMath::Min(ExtractionAmount, Place->AvailableResourceAmount);
+	if (StorageCapacity > 0.f)
+	{
+		Amount = FMath::Min(Amount, StorageCapacity - GetStoredResourceTotal());
+	}
+	if (Amount <= 0.f)
+	{
+		return;   // store full - the logistics units have to empty it first
+	}
+
+	const EResourceType ResourceType = ConvertToResourceType(Place->Type);
+	if (StoredResources.Num() < static_cast<int32>(EResourceType::MAX))
+	{
+		StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+	}
+	StoredResources[static_cast<int32>(ResourceType)] += Amount;
+
+	Place->AvailableResourceAmount = FMath::Max(0.f, Place->AvailableResourceAmount - Amount);
+	if (Place->AvailableResourceAmount <= KINDA_SMALL_NUMBER)
+	{
+		// Depleted, as when workers empty it: the place goes away (its EndPlay clears our pointer).
+		Place->Destroy();
+	}
+}
+
+void ABuildingBase::SyncBaseTypeMirror()
+{
+	// Legacy data: saved before BaseType existed, so only the bool says "base". Only upgrades the
+	// default - a type someone picked on purpose always wins over the old flag.
+	if (BaseType == EBaseType::None && IsBase)
+	{
+		BaseType = EBaseType::CollectAndStore;
+	}
+	IsBase = AcceptsWorkerDelivery();
+}
+
+void ABuildingBase::PostLoad()
+{
+	Super::PostLoad();
+	SyncBaseTypeMirror();
+}
+
+#if WITH_EDITOR
+void ABuildingBase::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	// Derive straight from the edited type - picking None on a former base must not be turned back
+	// into CollectAndStore by the stale bool.
+	if (PropertyChangedEvent.GetPropertyName() == GET_MEMBER_NAME_CHECKED(ABuildingBase, BaseType))
+	{
+		IsBase = AcceptsWorkerDelivery();
+	}
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+}
+#endif
+
+float ABuildingBase::GetStoredResourceAmount(EResourceType ResourceType) const
+{
+	const int32 Index = static_cast<int32>(ResourceType);
+	return StoredResources.IsValidIndex(Index) ? StoredResources[Index] : 0.f;
+}
+
+float ABuildingBase::GetStoredResourceTotal() const
+{
+	float Total = 0.f;
+	for (const float Amount : StoredResources)
+	{
+		Total += Amount;
+	}
+	return Total;
+}
+
+bool ABuildingBase::IsStorageFull() const
+{
+	return StoresLocally() && StorageCapacity > 0.f && GetStoredResourceTotal() >= StorageCapacity;
+}
+
+float ABuildingBase::ReceiveResource(EResourceType ResourceType, float Amount, int32 FromTeamId, bool bForce)
+{
+	if (!HasAuthority() || Amount <= 0.f || ResourceType == EResourceType::MAX)
+	{
+		return 0.f;
+	}
+
+	if (StoresLocally())
+	{
+		float Accepted = Amount;
+		if (!bForce && StorageCapacity > 0.f)
+		{
+			Accepted = FMath::Clamp(StorageCapacity - GetStoredResourceTotal(), 0.f, Amount);
+		}
+		if (Accepted <= 0.f)
+		{
+			return 0.f;
+		}
+
+		const int32 Index = static_cast<int32>(ResourceType);
+		if (StoredResources.Num() < static_cast<int32>(EResourceType::MAX))
+		{
+			StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+		}
+		StoredResources[Index] += Accepted;
+		return Accepted;
+	}
+
+	// CollectAndStore, StoreOnly - and None, so a stray delivery is never lost: the team gets it, as
+	// it did before BaseType existed.
+	if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
+	{
+		ResourceGameMode->ModifyResource(ResourceType, FromTeamId, Amount);
+		return Amount;
+	}
+	return 0.f;
+}
+
+float ABuildingBase::TakeStoredResource(EResourceType ResourceType, float MaxAmount)
+{
+	const int32 Index = static_cast<int32>(ResourceType);
+	if (!HasAuthority() || MaxAmount <= 0.f || !StoredResources.IsValidIndex(Index))
+	{
+		return 0.f;
+	}
+
+	const float Taken = FMath::Min(StoredResources[Index], MaxAmount);
+	StoredResources[Index] -= Taken;
+	return Taken;
 }
 
 void ABuildingBase::SetRallyPoint(FVector NewLocation, AWorkArea* ResourceArea)
@@ -149,7 +347,9 @@ void ABuildingBase::ApplyRallyPointToUnit(AUnitBase* NewUnit)
 
 	// Everything else walks to the point. Workers without a rallied deposit are left alone: their own
 	// GoToBase/SwitchResourceArea cycle already assigns them, and a move order would only cancel it.
-	if (NewUnit->IsWorker)
+	// Logistics units likewise - the dispatcher sends them onto a road; a rally order would only be
+	// read as "the player took over" and park them.
+	if (NewUnit->IsWorker || NewUnit->IsLogisticsUnit())
 	{
 		return;
 	}
@@ -216,10 +416,32 @@ void ABuildingBase::BeginPlay()
 		SpawnEnergyWall(EnergyWallClass, Origin);
 	}
 
+	// Before AddBaseToGroup, which reads IsBase.
+	SyncBaseTypeMirror();
+	if (StoredResources.Num() < static_cast<int32>(EResourceType::MAX))
+	{
+		StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+	}
+
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 
 	if(ResourceGameMode)
 		ResourceGameMode->AddBaseToGroup(this);
+
+	if (HasAuthority() && BaseType != EBaseType::None)
+	{
+		if (ULogisticsSubsystem* Logistics = GetWorld()->GetSubsystem<ULogisticsSubsystem>())
+		{
+			Logistics->MarkRoadsDirty();
+		}
+	}
+
+	if (HasAuthority() && ExtractsByItself())
+	{
+		LinkResourcePlaceUnderneath();
+		GetWorldTimerManager().SetTimer(ExtractionTimerHandle, this, &ABuildingBase::ExtractionTick,
+			FMath::Max(0.1f, ExtractionInterval), true);
+	}
 
 	// Grant this building's supply capacity. Deferred a moment because TeamId is assigned after spawn - the
 	// Singularian Reactor's Blueprint waits half a second for exactly the same reason.
@@ -424,12 +646,25 @@ void ABuildingBase::Destroyed()
 
 	ReleaseSupplyCapacity();
 
+	if (HasAuthority())
+	{
+		SetExtractionResourcePlace(nullptr);
+	}
+
 	Super::Destroyed();
 
 	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
 	
 	if(ResourceGameMode)
 		ResourceGameMode->RemoveBaseFromGroup(this);
+
+	if (BaseType != EBaseType::None && GetWorld())
+	{
+		if (ULogisticsSubsystem* Logistics = GetWorld()->GetSubsystem<ULogisticsSubsystem>())
+		{
+			Logistics->MarkRoadsDirty();
+		}
+	}
 }
 
 void ABuildingBase::EndPlay(const EEndPlayReason::Type EndPlayReason)

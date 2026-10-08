@@ -8,6 +8,7 @@
 #include "GameFramework/Character.h"
 #include "Components/WidgetComponent.h"
 #include "Core/UnitData.h"
+#include "Core/LogisticsData.h"
 #include "Actors/WorkArea.h"
 #include "Actors/WorkResource.h"
 #include "PathSeekerBase.h"
@@ -70,8 +71,112 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool CancelsAbilityOnRightClick = false;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	/**
+	 * What this building does with delivered resources - see EBaseType.
+	 *   CollectAndStore: workers deliver, credited at once (the old IsBase = true).
+	 *   CollectOnly:     workers deliver, kept in StoredResources until logistics units haul it away.
+	 *   StoreOnly:       only logistics units deliver; credited at once.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	EBaseType BaseType = EBaseType::None;
+
+	/**
+	 * Read-only mirror: true when WORKERS deliver here (CollectAndStore or CollectOnly). Kept so every
+	 * existing IsBase check - worker routing, AI base logic, Blueprints - keeps working. A StoreOnly
+	 * depot is deliberately not IsBase. Set BaseType instead; assets saved with IsBase = true are
+	 * migrated to CollectAndStore when they load.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool IsBase = false;
+
+	/** Migrates a legacy IsBase = true into BaseType and re-derives the IsBase mirror. Idempotent. */
+	void SyncBaseTypeMirror();
+
+	virtual void PostLoad() override;
+#if WITH_EDITOR
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
+	/** Workers may drop their load here (CollectAndStore, CollectOnly). */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool AcceptsWorkerDelivery() const { return BaseType == EBaseType::CollectAndStore || BaseType == EBaseType::CollectOnly; }
+
+	/** Delivered resources go straight to the team counter (CollectAndStore, StoreOnly) - a road ends here. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool CreditsOnReceive() const { return BaseType == EBaseType::CollectAndStore || BaseType == EBaseType::StoreOnly; }
+
+	/** Delivered resources are kept here until logistics units collect them (CollectOnly) - a road starts here. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool StoresLocally() const { return BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker; }
+
+	/** Extracts the resource place it stands on by itself (CollectOnlyWithoutWorker). */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool ExtractsByItself() const { return BaseType == EBaseType::CollectOnlyWithoutWorker; }
+
+	/** Total amount a CollectOnly base can hold, all types together. 0 = unlimited. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
+	          meta = (EditCondition = "BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker", ClampMin = "0"))
+	float StorageCapacity = 0.f;
+
+	/** CollectOnlyWithoutWorker: amount taken from the resource place per extraction cycle. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
+	          meta = (EditCondition = "BaseType == EBaseType::CollectOnlyWithoutWorker", ClampMin = "0"))
+	float ExtractionAmount = 5.f;
+
+	/** CollectOnlyWithoutWorker: seconds between two extraction cycles. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
+	          meta = (EditCondition = "BaseType == EBaseType::CollectOnlyWithoutWorker", ClampMin = "0.1"))
+	float ExtractionInterval = 2.f;
+
+	/**
+	 * CollectOnlyWithoutWorker: the resource place this building extracts. Set when its BuildArea
+	 * finishes; a building placed in the level (or restored from a save) finds the place it stands on.
+	 */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	AWorkArea* ExtractionResourcePlace = nullptr;
+
+	/** Links this building and Place both ways (nullptr releases the current place). Server only. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics")
+	void SetExtractionResourcePlace(AWorkArea* Place);
+
+	/** CollectOnlyWithoutWorker without a place: link the free resource place it stands on, if any. Server only. */
+	void LinkResourcePlaceUnderneath();
+
+private:
+	FTimerHandle ExtractionTimerHandle;
+
+	/** One extraction cycle: moves ExtractionAmount from the resource place into StoredResources. */
+	void ExtractionTick();
+
+public:
+
+	/** What a CollectOnly base currently holds, per EResourceType (index = enum value). Server-owned. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	TArray<float> StoredResources;
+
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	float GetStoredResourceAmount(EResourceType ResourceType) const;
+
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	float GetStoredResourceTotal() const;
+
+	/** True when a capacity is set and reached. Workers then look for another base. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool IsStorageFull() const;
+
+	/**
+	 * The one place delivered resources enter a base (server). Credits the team or keeps them in
+	 * storage, depending on BaseType. bForce stores past a full capacity: workers deliver with it,
+	 * because they only come here while the store still has room (or no other base can take the
+	 * load) - so a load is always taken whole and a worker is never stuck holding it. Returns the
+	 * amount accepted.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics")
+	float ReceiveResource(EResourceType ResourceType, float Amount, int32 FromTeamId, bool bForce = false);
+
+	/** Removes up to MaxAmount of one type from storage (server). Returns what was taken. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics")
+	float TakeStoredResource(EResourceType ResourceType, float MaxAmount);
 
 	/**
 	 * Resource capacity this building adds to its team while it stands, and gives back when it dies.

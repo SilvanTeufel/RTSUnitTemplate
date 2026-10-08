@@ -261,6 +261,50 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ABuildingBase* Building;
 
+	// ---- Buildings that stand ON a resource place (BaseType CollectOnlyWithoutWorker) ----
+
+	/**
+	 * BuildArea only: this area can only be placed on a free resource place of RequiredResourceType.
+	 * While dragged it snaps onto the nearest one; the server checks the same when it is dropped.
+	 */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	bool bPlaceOnResource = false;
+
+	/** BuildArea with bPlaceOnResource: the only resource this area may be placed on. */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
+	          meta = (EditCondition = "bPlaceOnResource"))
+	EResourceType RequiredResourceType = EResourceType::Primary;
+
+	/** BuildArea with bPlaceOnResource: the resource place it was dropped on. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	AWorkArea* TargetResourcePlace = nullptr;
+
+	/** Resource place: the BuildArea that was placed on it and is not finished yet. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	AWorkArea* OccupyingBuildArea = nullptr;
+
+	/** Resource place: the building that stands on it and extracts it. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	ABuildingBase* OccupyingBuilding = nullptr;
+
+	/** True for a resource type area (Primary..Legendary), false for Base, BuildArea and NoBuildZone. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool IsResourcePlace() const;
+
+	/** Resource place: a BuildArea or a living building already sits on it - nobody else may use it. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool IsOccupiedByBuilding() const;
+
+	/**
+	 * The resource place of ResourceType nearest to Location that still holds resources and is not
+	 * occupied (a place occupied by IgnoreBuildArea counts as free). MaxDistance <= 0: no limit.
+	 */
+	static AWorkArea* FindFreeResourcePlace(const UWorld* World, const FVector& Location, EResourceType ResourceType,
+		float MaxDistance = 0.f, const AWorkArea* IgnoreBuildArea = nullptr);
+
+	/** BuildArea: links this area and Place both ways (nullptr releases the current place). Server only. */
+	void SetTargetResourcePlace(AWorkArea* Place);
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float BuildTime = 5.f;
 

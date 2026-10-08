@@ -1334,6 +1334,7 @@ void AHUDBase::DrawHUD()
 	DrawAllSelectedUnitsIndicators();
 	DrawAllHealthBars();
 	DrawAllResourceCounts();
+	DrawLogisticsAmounts();
 	DrawDamageNumbers();
 
 	if (ExtensionPreviewLine.bIsActive)
@@ -2585,6 +2586,90 @@ void AHUDBase::DrawAllResourceCounts()
 		TextItem.Position.X -= 10.f * FontScale; // rough horizontal centering over the node
 		Canvas->DrawItem(TextItem);
 	}
+}
+
+void AHUDBase::DrawLogisticsAmounts()
+{
+	if ((!bShowLogisticsStorage && !bShowLogisticsCargo) || !Canvas || !LevelFont) return;
+
+	APlayerController* PC = GetOwningPlayerController();
+	UWorld* World = GetWorld();
+	const AControllerBase* LocalPC = Cast<AControllerBase>(PC);
+	if (!PC || !World || !LocalPC) return;
+
+	const int32 LocalTeam = LocalPC->SelectableTeamId;
+	const float FontScale = FMath::Clamp(LogisticsTextScale, 0.1f, 10.f);
+
+	auto DrawText = [&](const FVector& WorldPos, const FString& Text, const FColor& Color, float PixelOffsetY = 0.f)
+	{
+		FVector2D ScreenPos;
+		if (!PC->ProjectWorldLocationToScreen(WorldPos, ScreenPos)) return;
+		ScreenPos.Y += PixelOffsetY;
+
+		FCanvasTextItem TextItem(ScreenPos, FText::FromString(Text), LevelFont, FLinearColor(Color));
+		TextItem.Scale = FVector2D(FontScale, FontScale);
+		TextItem.bOutlined = true;
+		TextItem.OutlineColor = FLinearColor::Black;
+		TextItem.BlendMode = SE_BLEND_Translucent;
+		TextItem.Position.X -= 4.f * Text.Len() * FontScale; // rough horizontal centering
+		Canvas->DrawItem(TextItem);
+	};
+
+	if (bShowLogisticsStorage)
+	{
+		for (TActorIterator<ABuildingBase> It(World); It; ++It)
+		{
+			const ABuildingBase* Base = *It;
+			if (!IsValid(Base) || !Base->StoresLocally() || Base->TeamId != LocalTeam) continue;
+			if (Base->GetUnitState() == UnitData::Dead) continue;
+
+			const int32 Stored = FMath::FloorToInt(Base->GetStoredResourceTotal());
+			const FString Text = Base->StorageCapacity > 0.f
+				? FString::Printf(TEXT("%d/%d"), Stored, FMath::FloorToInt(Base->StorageCapacity))
+				: FString::Printf(TEXT("%d"), Stored);
+			const FColor Color = Base->IsStorageFull() ? LogisticsStorageFullColor : LogisticsStorageColor;
+			if (Base->TimerWidgetComp)
+			{
+				DrawText(Base->TimerWidgetComp->GetComponentLocation(), Text, Color, LogisticsStorageTimerPixelOffset * FontScale);
+			}
+			else
+			{
+				DrawText(Base->GetActorLocation() + FVector(0.f, 0.f, LogisticsStorageHeightOffset), Text, Color);
+			}
+		}
+	}
+
+	if (bShowLogisticsCargo)
+	{
+		for (TActorIterator<AUnitBase> It(World); It; ++It)
+		{
+			const AUnitBase* Unit = *It;
+			if (!IsValid(Unit) || !Unit->IsLogisticsUnit() || Unit->TeamId != LocalTeam) continue;
+			if (Unit->IsInsideTransport || Unit->GetUnitState() == UnitData::Dead) continue;
+
+			const int32 Cargo = FMath::FloorToInt(Unit->GetLogisticsCargoTotal());
+			if (Cargo <= 0) continue;
+
+			// Colour of the resource type that makes up most of the load.
+			int32 MainType = INDEX_NONE;
+			for (int32 TypeIndex = 0; TypeIndex < Unit->LogisticsCargo.Num(); ++TypeIndex)
+			{
+				if (Unit->LogisticsCargo[TypeIndex] > 0.f
+					&& (MainType == INDEX_NONE || Unit->LogisticsCargo[TypeIndex] > Unit->LogisticsCargo[MainType]))
+				{
+					MainType = TypeIndex;
+				}
+			}
+			const FColor* TypeColor = MainType != INDEX_NONE
+				? LogisticsCargoResourceColors.Find(static_cast<EResourceType>(MainType))
+				: nullptr;
+
+			DrawText(Unit->GetMassActorLocation() + FVector(0.f, 0.f, LogisticsCargoHeightOffset),
+				FString::Printf(TEXT("%d/%d"), Cargo, FMath::FloorToInt(Unit->LogisticsCapacity)),
+				TypeColor ? *TypeColor : LogisticsCargoColor);
+		}
+	}
+
 }
 
 float AHUDBase::GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHealthBarSettings& Settings)

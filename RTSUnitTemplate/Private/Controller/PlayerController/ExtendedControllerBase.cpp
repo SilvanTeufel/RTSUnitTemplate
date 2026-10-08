@@ -2619,6 +2619,29 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
         }
     }
 
+    // An area that stands ON a resource (CollectOnlyWithoutWorker) skips the side-by-side snapping and
+    // the spacing pass below - both push it AWAY from resources. It always sits on the free resource
+    // place of its type nearest to the cursor; with none left it follows the cursor and flashes, and
+    // the drop will refuse it.
+    if (DraggedWorkArea->bPlaceOnResource)
+    {
+        if (AWorkArea* Place = AWorkArea::FindFreeResourcePlace(GetWorld(), MouseGround,
+                DraggedWorkArea->RequiredResourceType, 0.f, DraggedWorkArea))
+        {
+            DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Place->GetActorLocation()));
+            WorkAreaIsSnapped = true;
+            CurrentSnapActor = Place;
+        }
+        else
+        {
+            DraggedWorkArea->SetActorLocation(DesiredGrounded);
+            DraggedWorkArea->TemporarilyChangeMaterial();
+            WorkAreaIsSnapped = false;
+            CurrentSnapActor = nullptr;
+        }
+        return true;
+    }
+
     // Persist last safe location per dragged area (function-local static state to avoid header changes)
     static TWeakObjectPtr<AWorkArea> LastAreaRef = nullptr;
     static FVector LastSafeLoc = FVector::ZeroVector;
@@ -5702,11 +5725,38 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			return true;
 		}
 
+		// An area that must stand ON a resource place (CollectOnlyWithoutWorker). The client snapped the
+		// ghost already; the server decides again from where the ghost was dropped - for the AI, which
+		// drops wherever its camera is, this is the snap. Then none of the spacing rules below apply:
+		// they all treat the resource underneath as an obstacle.
+		const bool bResourceArea = !bIsExtensionArea && DraggedWorkArea->bPlaceOnResource;
+		if (bResourceArea)
+		{
+			AWorkArea* Place = AWorkArea::FindFreeResourcePlace(GetWorld(), DraggedWorkArea->GetActorLocation(),
+				DraggedWorkArea->RequiredResourceType, 0.f, DraggedWorkArea);
+			if (!Place)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because no free resource place of the required type is left."));
+				if (InDropWorkAreaFailedSound)
+				{
+					Client_PlaySound2D(InDropWorkAreaFailedSound);
+				}
+				DraggedWorkArea->Destroy();
+				UnitBase->BuildArea = nullptr;
+				UnitBase->CurrentDraggedWorkArea = nullptr;
+				CancelCurrentAbility(UnitBase);
+				SendWorkerToBase(UnitBase);
+				return true;
+			}
+			DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Place->GetActorLocation()));
+			DraggedWorkArea->SetTargetResourcePlace(Place);
+		}
 		// A work area must NEVER come down on top of an existing building or another work area - not on
 		// one's own team's, and least of all on an enemy's. Extension areas used to skip the whole rule
 		// set below, which is how Singularian extensions ended up sitting on Xeno BroodHives; base areas
 		// had no such check at all, which is how a Xeno BroodHive area landed on a Singularian DataCenter.
 		// The single legitimate exception is an extension overlapping the building it attaches to.
+		if (!bResourceArea)
 		{
 			ABuildingBase* ParentBuilding = nullptr;
 			if (bIsExtensionArea)
@@ -5890,7 +5940,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		}
 
 		// 1. Ensure grounded and resolve distances (move if colliding or too close to resources)
-		if (!bIsExtensionArea)
+		if (bResourceArea)
+		{
+			// Checked and placed above: it stands on its resource place, which every rule below
+			// would count as an obstacle.
+		}
+		else if (!bIsExtensionArea)
 		{
 			// 2. Final check for valid placement.
 			bool bIsOverlappingWithValidArea = false;
@@ -7980,7 +8035,7 @@ void AExtendedControllerBase::CastEndsEvent(AUnitBase* UnitBase)
 		GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
 		if (UnitBase->ActivatedAbilityInstance)
 		{
-			UnitBase->ActivatedAbilityInstance->OnAbilityCastComplete(Hit);
+			UnitBase->ActivatedAbilityInstance->HandleCastComplete(Hit);
 		}
 }
 
