@@ -156,6 +156,13 @@ bool AWorkingUnitBase::CanMineWorkArea(const AWorkArea* Area) const
 		return false;
 	}
 
+	// Occupied by a building that extracts it by itself (or its build site): workers keep off, and a
+	// worker that still holds the place releases it on its next trip (the forbidden-place path).
+	if (Area->IsOccupiedByBuilding())
+	{
+		return false;
+	}
+
 	return CanMineResourceType(ConvertToResourceType(Area->Type));
 }
 
