@@ -391,6 +391,58 @@ public:
 	// Draws the N/Max worker count over all resource WorkAreas (called from DrawHUD).
 	void DrawAllResourceCounts();
 
+	// --- Logistics display -----------------------------------------------------------------------
+	// Same Canvas world-text as the resource counts: the stock of every own CollectOnly base
+	// ("Stored/Capacity", or just "Stored" without a capacity) and the cargo of own logistics units
+	// while they carry something. Only the local player's team - a store's content is not something
+	// the enemy should be able to read.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	bool bShowLogisticsStorage = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	bool bShowLogisticsCargo = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	FColor LogisticsStorageColor = FColor(255, 170, 60, 255);
+
+	// Turns to this colour when the store is full - workers are being sent elsewhere then.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	FColor LogisticsStorageFullColor = FColor(255, 80, 60, 255);
+
+	// Fallback cargo colour for a resource type missing from LogisticsCargoResourceColors.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	FColor LogisticsCargoColor = FColor(120, 220, 255, 255);
+
+	// Cargo text colour per resource type; a mixed load takes the colour of its largest part.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	TMap<EResourceType, FColor> LogisticsCargoResourceColors = {
+		{ EResourceType::Primary,   FColor(255, 215,  70, 255) },
+		{ EResourceType::Secondary, FColor( 90, 225,  95, 255) },
+		{ EResourceType::Tertiary,  FColor( 80, 170, 255, 255) },
+		{ EResourceType::Rare,      FColor(185, 110, 255, 255) },
+		{ EResourceType::Epic,      FColor(255,  90, 200, 255) },
+		{ EResourceType::Legendary, FColor(255, 140,  40, 255) },
+	};
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	float LogisticsTextScale = 1.0f;
+
+	// World-space Z offset above the base / unit origin at which the text is drawn.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	float LogisticsStorageHeightOffset = 350.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	float LogisticsCargoHeightOffset = 180.f;
+
+	// The store amount is drawn relative to the base's cast timer bar (when it has one), shifted by
+	// this many screen pixels - negative is above. It used to sit on a fixed world height that
+	// landed exactly on the timer bar and hid the summon cast.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	float LogisticsStorageTimerPixelOffset = -22.f;
+
+	// Draws store and cargo amounts (called from DrawHUD).
+	void DrawLogisticsAmounts();
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorRadius = 15.f;
 
