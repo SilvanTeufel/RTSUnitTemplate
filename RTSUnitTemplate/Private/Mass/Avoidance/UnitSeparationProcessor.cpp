@@ -301,8 +301,11 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			// Einheit auf der Kante steht - nicht erst, wenn sie schon darueber hinaus ist.
 			const FVector Vorausschau = Info.Location + Richtung * SeparationNavLookahead;
 
-			FNavLocation NavLoc;
-			if (!NavCheck->ProjectPointToNavigation(Vorausschau, NavLoc, FVector(60.f, 60.f, 200.f)))
+			// Navmesh-Strahl statt Punktprojektion: die Projektion (Box 60/60/200) fand an einer Klippe
+			// das Netz UNTEN neben dem Zielpunkt und liess den Schub durch. Der Strahl bleibt auf dem
+			// Netz und meldet die Kante.
+			FVector Hit;
+			if (UNavigationSystemV1::NavigationRaycast(NavCheck->GetWorld(), Info.Location, Vorausschau, Hit))
 			{
 				*Push = FVector::ZeroVector;
 				++Verworfen;

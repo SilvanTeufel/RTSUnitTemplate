@@ -99,6 +99,14 @@ struct FUnitReplicationItem : public FFastArraySerializerItem
 	float PredictionTimer = 0.f;
 	bool bPredictedLatch = false;
 
+	// Client only (not replicated): world time when a CHANGED Location arrived. Lets the client know how
+	// old the server position really is, independent of the 10 Hz reconcile tick that reads it later.
+	double ClientArrivalTime = -1.0;
+	FVector ClientArrivalLocation = FVector::ZeroVector;
+
+	/** Stamps ClientArrivalTime when Location actually changed. Called from the replication callbacks. */
+	void StampClientArrival(const UWorld* World);
+
 	FUnitReplicationItem() {}
 	void PostReplicatedAdd(const FUnitReplicationArray& InArraySerializer);
 	void PostReplicatedChange(const FUnitReplicationArray& InArraySerializer);
@@ -112,22 +120,53 @@ struct FUnitReplicationArray : public FFastArraySerializer
 	UPROPERTY() TArray<FUnitReplicationItem> Items;
 	class AUnitClientBubbleInfo* OwnerBubble = nullptr;
 
+	// Nur lokal, nicht repliziert: NetID -> Index in Items. Items wird an vielen Stellen direkt veraendert
+	// (Add, RemoveAll, Empfang auf dem Client), deshalb wird jeder Treffer gegengeprueft und der Index bei
+	// Abweichung neu aufgebaut. Gemessen 07.10.2026: die lineare Suche kostete bei 1000 Einheiten je
+	// Aufruf im Schnitt 500 Vergleiche - pro Einheit und Durchlauf, auf Server UND Client.
+	mutable TMap<uint32, int32> IndexByNetID;
+
+	int32 FindIndexByNetID(const FMassNetworkID& NetID) const
+	{
+		if (const int32* Cached = IndexByNetID.Find(NetID.GetValue()))
+		{
+			if (Items.IsValidIndex(*Cached) && Items[*Cached].NetID == NetID)
+			{
+				return *Cached;
+			}
+		}
+		for (int32 Index = 0; Index < Items.Num(); ++Index)
+		{
+			if (Items[Index].NetID == NetID)
+			{
+				RebuildIndexByNetID();
+				return Index;
+			}
+		}
+		return INDEX_NONE;
+	}
+
+	void RebuildIndexByNetID() const
+	{
+		IndexByNetID.Reset();
+		IndexByNetID.Reserve(Items.Num());
+		for (int32 Index = 0; Index < Items.Num(); ++Index)
+		{
+			// FindOrAdd behaelt den ersten Eintrag - wie die fruehere lineare Suche bei doppelten NetIDs.
+			IndexByNetID.FindOrAdd(Items[Index].NetID.GetValue(), Index);
+		}
+	}
+
 	FUnitReplicationItem* FindItemByNetID(const FMassNetworkID& NetID)
 	{
-		for (FUnitReplicationItem& Item : Items)
-		{
-			if (Item.NetID == NetID) return &Item;
-		}
-		return nullptr;
+		const int32 Index = FindIndexByNetID(NetID);
+		return Index != INDEX_NONE ? &Items[Index] : nullptr;
 	}
 
 	const FUnitReplicationItem* FindItemByNetID(const FMassNetworkID& NetID) const
 	{
-		for (const FUnitReplicationItem& Item : Items)
-		{
-			if (Item.NetID == NetID) return &Item;
-		}
-		return nullptr;
+		const int32 Index = FindIndexByNetID(NetID);
+		return Index != INDEX_NONE ? &Items[Index] : nullptr;
 	}
 
 	bool RemoveItemByNetID(const FMassNetworkID& NetID)

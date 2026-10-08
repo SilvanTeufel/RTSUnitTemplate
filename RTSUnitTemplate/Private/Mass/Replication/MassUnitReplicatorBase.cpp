@@ -10,6 +10,8 @@ namespace ReplicationSliceControl
 {
 	static int32 GStartIndex = -1;
 	static int32 GCount = -1;
+	// Alternative zum Bereich: genau diese Chunk-Indizes (nur geaenderte Einheiten). Hat Vorrang.
+	static const TArray<int32>* GIndices = nullptr;
 	static bool IsActive()
 	{
 		return GStartIndex >= 0 && GCount >= 0;
@@ -19,14 +21,23 @@ namespace ReplicationSliceControl
 		GStartIndex = FMath::Max(0, StartIndex);
 		GCount = Count;
 	}
+	void SetIndices(const TArray<int32>* Indices)
+	{
+		GIndices = Indices;
+	}
 	void ClearSlice()
 	{
 		GStartIndex = -1; GCount = -1;
+		GIndices = nullptr;
 	}
 	void GetSlice(int32& OutStartIndex, int32& OutCount)
 	{
 		OutStartIndex = GStartIndex;
 		OutCount = GCount;
+	}
+	const TArray<int32>* GetIndices()
+	{
+		return GIndices;
 	}
 }
 #include "MassReplicationTypes.h"
@@ -631,6 +642,26 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
     const int32 LoopStart = bUseSlice ? FMath::Clamp(SliceStart, 0, FMath::Max(0, NumEntities-1)) : 0;
     const int32 LoopEnd = bUseSlice ? FMath::Clamp(SliceStart + SliceCount, LoopStart, NumEntities) : NumEntities;
 
+    // Der Kick-Prozessor reicht nur die geaenderten Einheiten als Indexliste durch; sonst gilt der Bereich.
+    TArray<int32, TInlineAllocator<64>> LoopIndices;
+    if (const TArray<int32>* SliceIndices = ReplicationSliceControl::GetIndices())
+    {
+        for (const int32 Idx : *SliceIndices)
+        {
+            if (Idx >= 0 && Idx < NumEntities)
+            {
+                LoopIndices.Add(Idx);
+            }
+        }
+    }
+    else
+    {
+        for (int32 Idx = LoopStart; Idx < LoopEnd; ++Idx)
+        {
+            LoopIndices.Add(Idx);
+        }
+    }
+
     // Use World from replication context to branch server/client
     if (ReplicationContext.World.GetNetMode() != NM_Client)
     {
@@ -660,16 +691,6 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
         const TConstArrayView<FMassNetworkIDFragment> NetIDList = Context.GetFragmentView<FMassNetworkIDFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
-        // Build a quick lookup from NetID->(OwnerName,UnitIndex) using the authoritative registry for logging
-        TMap<uint32, TPair<FName,int32>> ByID;
-        if (AUnitRegistryReplicator* Reg = AUnitRegistryReplicator::GetOrSpawn(*World))
-        {
-            for (const FUnitRegistryItem& It : Reg->Registry.Items)
-            {
-                ByID.Add(It.NetID.GetValue(), TPair<FName,int32>(It.OwnerName, It.UnitIndex));
-            }
-        }
-
         // Acquire EntityManager for tag checks
         UMassEntitySubsystem* EntitySubsystem = World->GetSubsystem<UMassEntitySubsystem>();
         FMassEntityManager* EM = EntitySubsystem ? &EntitySubsystem->GetMutableEntityManager() : nullptr;
@@ -691,7 +712,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
         bool bChunkNeedsMouse = false;
         if (EM)
         {
-            for (int32 Idx = LoopStart; Idx < LoopEnd; ++Idx)
+            for (const int32 Idx : LoopIndices)
             {
                 if (DoesEntityHaveTag(*EM, Context.GetEntity(Idx), FMassRotateToMouseTag::StaticStruct()))
                 {
@@ -714,7 +735,7 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
             }
 
             bool bAnyDirty = false;
-            for (int32 Idx = LoopStart; Idx < LoopEnd; ++Idx)
+            for (const int32 Idx : LoopIndices)
             {
                 const FMassNetworkID& NetID = NetIDList[Idx].NetID;
 
@@ -729,22 +750,6 @@ void UMassUnitReplicatorBase::ProcessClientReplication(FMassExecutionContext& Co
 
                 const FVector Loc = VisualXf.GetLocation();
                 const FRotator Rot = VisualXf.Rotator();
-                const FVector Sca = VisualXf.GetScale3D();
-
-                // Detailed server log for diagnostics: which NetID/transform we are replicating with identity from registry
-                FName OwnerName = NAME_None;
-                int32 OwnerUnitIndex = INDEX_NONE;
-                if (const TPair<FName,int32>* FoundPair = ByID.Find(NetID.GetValue()))
-                {
-                    OwnerName = FoundPair->Key;
-                    OwnerUnitIndex = FoundPair->Value;
-                }
-                if (RepLogLevel() >= 2)
-                {
-                    //UE_LOG(LogTemp, Log, TEXT("ServerReplicate: NetID=%u Owner=%s UnitIndex=%d Loc=(%.1f,%.1f,%.1f) Rot=(P%.1f Y%.1f R%.1f) Scale=(%.2f,%.2f,%.2f)"),
-                    //    NetID.GetValue(), *OwnerName.ToString(), OwnerUnitIndex,
-                    //    Loc.X, Loc.Y, Loc.Z, Rot.Pitch, Rot.Yaw, Rot.Roll, Sca.X, Sca.Y, Sca.Z);
-                }
 
                 FUnitReplicationItem* Item = BubbleInfo->Agents.FindItemByNetID(NetID);
                 if (!Item)

@@ -30,11 +30,14 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/ConstructionUnit.h"
 #include "ProfilingDebugging/CsvProfiler.h"
+#include "MassNavigationFragments.h"
+#include "Mass/MassUnitVisualFragments.h"
 
 // Forward-declare slice control API implemented in MassUnitReplicatorBase.cpp
 namespace ReplicationSliceControl
 {
 	void SetSlice(int32 StartIndex, int32 Count);
+	void SetIndices(const TArray<int32>* Indices);
 	void ClearSlice();
 }
 
@@ -51,15 +54,10 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_Enable(
 	1,
 	TEXT("Enable/disable ServerReplicationKickProcessor."),
 	ECVF_Default);
-static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerChunk(
-	TEXT("net.RTS.ServerReplicationKick.MaxPerChunk"),
-	64, // Increased back to 64; throttling now handled by smart slice skipping
-	TEXT("Max entities allowed per chunk this tick; chunks exceeding are deferred. Default 64."),
-	ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_MaxPerTick(
 		TEXT("net.RTS.ServerReplicationKick.MaxPerTick"),
-		128, // Increased to 128 to allow checking more units per frame
-		TEXT("Max total entities processed by this processor per tick; extra chunks are skipped. Default 128."),
+		256,
+		TEXT("Max CHANGED entities replicated per run (10 Hz). Unchanged entities are only checked and cost no budget. Default 256."),
 		ECVF_Default);
 static TAutoConsoleVariable<int32> CVarRTS_ServerKick_LogLevel(
 	TEXT("net.RTS.ServerReplicationKick.LogLevel"),
@@ -75,13 +73,18 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ProcessCleanChunks(
 	TEXT("Process chunks even when signature unchanged (0=skip clean chunks, 1=process anyway). Default 1 to ensure tag-only changes replicate."),
 	ECVF_Default);
 
-// CVAR: Enforce full slices (Count == MaxPerChunk) when possible. If remaining budget is smaller,
-// defer the chunk to the next tick to avoid short, jittery updates between ticks. Chunks with fewer
-// than MaxPerChunk entities are processed with their actual size.
-static TAutoConsoleVariable<int32> CVarRTS_ServerKick_EnforceFullSlices(
-	TEXT("net.RTS.ServerReplicationKick.EnforceFullSlices"),
-	1,
-	TEXT("When 1, only process a chunk if at least MaxPerChunk budget remains (unless the chunk has < MaxPerChunk entities). This keeps slices consistently filled and avoids partial slices."),
+// Sicherheitsnetz: auch Einheiten ohne erkannte Aenderung gehen spaetestens nach RefreshSeconds einmal durch den
+// Replikator. Der vergleicht selbst mit dem zuletzt gesendeten Stand und sendet nur echte Unterschiede - kostet
+// also nur CPU, keine Bandbreite, und faengt alles ab, was die Signatur unten nicht kennt.
+static TAutoConsoleVariable<float> CVarRTS_ServerKick_RefreshSeconds(
+	TEXT("net.RTS.ServerReplicationKick.RefreshSeconds"),
+	2.0f,
+	TEXT("Unchanged entities are re-checked by the replicator at least this often (seconds). 0 disables. Default 2."),
+	ECVF_Default);
+static TAutoConsoleVariable<int32> CVarRTS_ServerKick_RefreshMaxPerTick(
+	TEXT("net.RTS.ServerReplicationKick.RefreshMaxPerTick"),
+	64,
+	TEXT("Max unchanged entities re-checked per run (counts toward MaxPerTick). Default 64."),
 	ECVF_Default);
 
 // CVAR: Control the legacy server-side re-registration fallback. Now enabled by default for robust startup registration.
@@ -98,6 +101,14 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				FVector Loc; uint16 P=0,Y=0,R=0; FVector Scale; uint32 TagBits = 0u;
 				float Health = 0.f; float Shield = 0.f;
 				uint8 FireCounter = 0; uint32 TargetNetID = 0;
+				// Bewegungsauftrag: neuer Befehl oder neues Tempo (Formationsregler) muss raus, auch bevor
+				// sich die Position merklich aendert.
+				FVector MoveCenter = FVector::ZeroVector; float MoveSpeed = 0.f; uint16 MoveActionID = 0;
+				// Was der Replikator sonst noch sendet und sich auch im Stand aendern kann: Unsichtbarkeit,
+				// HoldPosition, CanAttack/CanMove, Zielerfassung, Animation, Effekte, Faehigkeitsziel.
+				uint32 StateBits = 0u; FVector AbilityLoc = FVector::ZeroVector; uint32 RunAnimData = 0u;
+				// Zeitpunkt des letzten Durchgangs durch den Replikator (fuer das Sicherheitsnetz)
+				double SentTime = 0.0;
 				
 				// Optional: track uncritical data hash to detect changes without full replication? 
 				// No, FSig is just for the "Kick" decision.
@@ -109,6 +120,12 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 					if (TargetNetID != O.TargetNetID) return false;
 					if (!FMath::IsNearlyEqual(Health, O.Health, 0.1f)) return false;
 					if (!FMath::IsNearlyEqual(Shield, O.Shield, 0.1f)) return false;
+					if (MoveActionID != O.MoveActionID) return false;
+					if (!FMath::IsNearlyEqual(MoveSpeed, O.MoveSpeed, 1.f)) return false;
+					if (!MoveCenter.Equals(O.MoveCenter, LocThresh)) return false;
+					if (StateBits != O.StateBits) return false;
+					if (RunAnimData != O.RunAnimData) return false;
+					if (!AbilityLoc.Equals(O.AbilityLoc, LocThresh)) return false;
 
 					// If the unit is dead, we don't care about transform changes for the purpose of kicking replication
 					const bool bIsDead = (TagBits & UnitTagBits::Dead) != 0;
@@ -134,8 +151,6 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				}
 			};
 			static TMap<uint32, FSig> GLastSigByID; // server-only, cleared on world cleanup
-			static TMap<const UWorld*, int32> GProcessedCountByWorld;
-			static TMap<const UWorld*, double> GLastExecTimeByWorld;
 			// Per-chunk slice start offset: key built from replicator and chunk identity
 			static TMap<uint64, int32> GStartOffsetByChunk;
 			static bool GCleanupRegistered = false;
@@ -146,8 +161,6 @@ static TAutoConsoleVariable<int32> CVarRTS_ServerKick_ReRegisterMissing(
 				{
 					GCleanupHandle = FWorldDelegates::OnWorldCleanup.AddStatic([](UWorld* InWorld, bool, bool){
  					GLastSigByID.Reset();
-						GProcessedCountByWorld.Remove(InWorld);
-						GLastExecTimeByWorld.Remove(InWorld);
 						// Reset all per-chunk cursors on world cleanup (safe since chunks are world-bound)
 						GStartOffsetByChunk.Reset();
 					});
@@ -211,6 +224,11 @@ void UServerReplicationKickProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassAIStateFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddRequirement<FMassAITargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassMoveTargetFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FRunAnimationFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassVisualEffectFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FEffectAreaImpactFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	// Do NOT require FMassReplicationSharedFragment here. We want to include entities that are missing it,
 	// so the replicator fallback below can still process them and populate the bubble.
 	EntityQuery.RegisterWithProcessor(*this);
@@ -566,6 +584,7 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 										}
 									}
 								}
+							}
 						}
 						if (!bHaveNetID)
 						{
@@ -596,237 +615,108 @@ void UServerReplicationKickProcessor::Execute(FMassEntityManager& EntityManager,
 		}
 	}
 
-	// Per-tick budgeting across chunks
-	int32& ProcessedThisTick = GProcessedCountByWorld.FindOrAdd(World);
-	double& LastExecTime = GLastExecTimeByWorld.FindOrAdd(World);
-	if (LastExecTime != Now)
-	{
-		LastExecTime = Now;
-		ProcessedThisTick = 0;
-	}
-	const int32 MaxPerChunk = CVarRTS_ServerKick_MaxPerChunk.GetValueOnGameThread();
-	const int32 MaxPerTick = CVarRTS_ServerKick_MaxPerTick.GetValueOnGameThread();
+	// Budget je Durchlauf (10 Hz): zaehlt nur Einheiten, die sich seit dem letzten Senden geaendert haben.
+	// Gemessen 07.10.2026: vorher verbrauchten stehende Einheiten das Budget mit (ganze 64er-Scheiben,
+	// geaendert oder nicht) - fahrende kamen beim Client nur alle 0,3-0,7 s an, einzelne erst nach 5 s.
+	const int32 MaxPerTick = FMath::Max(1, CVarRTS_ServerKick_MaxPerTick.GetValueOnGameThread());
+	int32 ProcessedThisTick = 0;
 
-// Fair chunk scheduling: rotate starting chunk each tick to avoid starving the last chunks
-int32 TotalChunksThisTick = 0;
-EntityQuery.ForEachEntityChunk(Context, [&TotalChunksThisTick](FMassExecutionContext&){ ++TotalChunksThisTick; });
-static TMap<const UWorld*, int32> GChunkStartIndexByWorld;
-int32& ChunkStartIndex = GChunkStartIndexByWorld.FindOrAdd(World);
-if (TotalChunksThisTick > 0)
-{
-	if (ChunkStartIndex >= TotalChunksThisTick || ChunkStartIndex < 0)
+	// Faire Reihenfolge: ging das Budget mitten in einem Chunk aus, beginnt der naechste Durchlauf dort.
+	int32 TotalChunksThisTick = 0;
+	EntityQuery.ForEachEntityChunk(Context, [&TotalChunksThisTick](FMassExecutionContext&){ ++TotalChunksThisTick; });
+	static TMap<const UWorld*, int32> GChunkStartIndexByWorld;
+	int32& ChunkStartIndex = GChunkStartIndexByWorld.FindOrAdd(World);
+	if (ChunkStartIndex < 0 || ChunkStartIndex >= FMath::Max(1, TotalChunksThisTick))
 	{
-		ChunkStartIndex = ChunkStartIndex % FMath::Max(1, TotalChunksThisTick);
+		ChunkStartIndex = 0;
 	}
-}
+	int32 ChunkWhereBudgetRanOut = INDEX_NONE;
 
-int32 ChunksUsedThisTick = 0;
+	// Schwellen wie im MassUnitReplicatorBase
+	float LocThresh = 10.0f;
+	float AngleThresh = 5.0f;
+	float ScaleThresh = 0.02f;
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.ServerRep.LocThresholdCm"))) LocThresh = Var->GetFloat();
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.ServerRep.AngleThresholdDeg"))) AngleThresh = Var->GetFloat();
+	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.ServerRep.ScaleThreshold"))) ScaleThresh = Var->GetFloat();
 
-// Shared per-chunk processing lambda (handles slice selection and replication)
-auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &ProcessedThisTick, &EntityManager, &ChunksUsedThisTick](FMassExecutionContext& ChunkContext)
-{
-	// Use a fallback replicator instance since some entities may lack FMassReplicationSharedFragment
-	static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
-	UMassUnitReplicatorBase* Replicator = nullptr;
-	if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(World))
-	{
-		Replicator = Found->Get();
-	}
-	if (!Replicator)
-	{
-		Replicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
-		if (Replicator)
-		{
-			Replicator->AddToRoot(); // keep alive for world lifetime to avoid GC
-		}
-		GReplicatorPerWorld.Add(World, Replicator);
-	}
-	FMassReplicationContext RepCtx(*World, *LODSub, *RepSub);
+	// Ohne Aenderungspruefung alles senden (Startphase oder per CVar erzwungen); das Budget gilt trotzdem.
+	const bool bSendAll = (CVarRTS_ServerKick_ProcessCleanChunks.GetValueOnGameThread() != 0) || bInGrace;
+	const int32 KickLogLevel = CVarRTS_ServerKick_LogLevel.GetValueOnGameThread();
+	const float RefreshSeconds = CVarRTS_ServerKick_RefreshSeconds.GetValueOnGameThread();
+	const int32 RefreshMaxPerTick = CVarRTS_ServerKick_RefreshMaxPerTick.GetValueOnGameThread();
+	int32 RefreshedThisTick = 0;
 
-	// Build lightweight change signatures
 	auto QuantizeAngle = [](float AngleDeg)->uint16
 	{
 		const float Norm = FMath::Fmod(AngleDeg + 360.0f, 360.0f);
 		return static_cast<uint16>(FMath::RoundToInt((Norm / 360.0f) * 65535.0f));
 	};
 
-	const int32 Num = ChunkContext.GetNumEntities();
-	const TConstArrayView<FMassNetworkIDFragment> NetIDs = ChunkContext.GetFragmentView<FMassNetworkIDFragment>();
-	const TConstArrayView<FTransformFragment> Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
-
-	// If our budgets are low, process a slice of this chunk this tick and continue next tick.
-	if (ProcessedThisTick >= MaxPerTick)
+	auto ProcessChunk = [&](FMassExecutionContext& ChunkContext, int32 ChunkOrdinal)
 	{
-		return; // budget used up this tick; try again next tick
-	}
-	const int32 RemainingBudget = MaxPerTick - ProcessedThisTick;
-
-	// Decide slice size with optional enforcement of full slices
-	const bool bEnforceFullSlices = (CVarRTS_ServerKick_EnforceFullSlices.GetValueOnGameThread() != 0) && (MaxPerTick >= MaxPerChunk);
-	int32 SliceSize = 0;
-	const int32 DesiredSliceSize = FMath::Min(MaxPerChunk, Num);
-	if (bEnforceFullSlices && Num >= MaxPerChunk)
-	{
-		// Require enough global budget to produce a full slice for this chunk
-		if (RemainingBudget < MaxPerChunk)
+		const int32 Num = ChunkContext.GetNumEntities();
+		if (Num <= 0 || ProcessedThisTick >= MaxPerTick)
 		{
-			if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
-			{
-				UE_LOG(LogTemp, Log, TEXT("ServerKick: Deferring chunk (Num=%d) this tick to keep full slice size=%d (RemainingBudget=%d < MaxPerChunk=%d)"),
-					Num, MaxPerChunk, RemainingBudget, MaxPerChunk);
-			}
-			return; // try next chunk or next tick
+			return;
 		}
-		SliceSize = MaxPerChunk;
-	}
-	else
-	{
-		// Either chunk is smaller than MaxPerChunk or enforcement disabled; use remaining budget
-		SliceSize = FMath::Clamp(FMath::Min3(RemainingBudget, MaxPerChunk, Num), 0, Num);
-	}
 
-	// Build a more stable per-chunk key using a hash of NetIDs values and the replicator pointer
-	uint64 ChunkKey = static_cast<uint64>(reinterpret_cast<uintptr_t>(Replicator));
-	auto AccHash = [&ChunkKey](uint32 V)
-	{
-		// Mix function (similar to boost::hash_combine)
-		ChunkKey ^= static_cast<uint64>(V) + 0x9e3779b97f4a7c15ull + (ChunkKey << 6) + (ChunkKey >> 2);
-	};
-	if (Num > 0)
-	{
-		const int32 I0 = 0;
-		const int32 I1 = Num / 3;
-		const int32 I2 = (2 * Num) / 3;
-		const int32 I3 = Num - 1;
-		AccHash(NetIDs[I0].NetID.GetValue());
-		AccHash(NetIDs[I1].NetID.GetValue());
-		AccHash(NetIDs[I2].NetID.GetValue());
-		AccHash(NetIDs[I3].NetID.GetValue());
-	}
-	int32& StartOffset = GStartOffsetByChunk.FindOrAdd(ChunkKey);
-	if (StartOffset >= Num)
-	{
-		StartOffset = 0;
-	}
-	const int32 SliceStart = StartOffset;
-	// Advance start offset for next tick; wrap within this chunk size
-	StartOffset = (StartOffset + SliceSize) % FMath::Max(1, Num);
-
-	if (SliceSize <= 0)
-	{
-		return;
-	}
-
-	if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
-	{
-		UE_LOG(LogTemp, Log, TEXT("ServerKick: Processing slice Start=%d Count=%d (ChunkEntities=%d Remain=%d MaxPerTick=%d MaxPerChunk=%d)"),
-			SliceStart, SliceSize, Num, RemainingBudget, MaxPerTick, MaxPerChunk);
-	}
-
-	// Instruct replicator to only process the slice of this chunk
-	ReplicationSliceControl::SetSlice(SliceStart, SliceSize);
-
-	// Optionally log a small sample (verbose only)
-	if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
-	{
-		const int32 MaxLog = FMath::Min(20, SliceSize);
-		FString IdList;
-		for (int32 i = 0; i < MaxLog; ++i)
+		// Use a fallback replicator instance since some entities may lack FMassReplicationSharedFragment
+		static TMap<const UWorld*, TWeakObjectPtr<UMassUnitReplicatorBase>> GReplicatorPerWorld;
+		UMassUnitReplicatorBase* Replicator = nullptr;
+		if (TWeakObjectPtr<UMassUnitReplicatorBase>* Found = GReplicatorPerWorld.Find(World))
 		{
-			const int32 Idx = (SliceStart + i) % Num;
-			if (i > 0) { IdList += TEXT(", "); }
-			IdList += FString::Printf(TEXT("%u"), NetIDs[Idx].NetID.GetValue());
+			Replicator = Found->Get();
 		}
-		UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: %d entities. Slice NetIDs[%d] from %d: %s%s"),
-			Num, MaxLog, SliceStart, *IdList, (SliceSize > MaxLog ? TEXT(" ...") : TEXT("")));
-	}
-
-	// Detailed tag replication log per entity (verbose only)
-	if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
-	{
-		const int32 MaxLog = FMath::Min(20, SliceSize);
-		for (int32 i = 0; i < MaxLog; ++i)
+		if (!Replicator)
 		{
-			const int32 Idx = (SliceStart + i) % Num;
-			const uint32 ID = NetIDs[Idx].NetID.GetValue();
-			const FMassEntityHandle EH = ChunkContext.GetEntity(Idx);
-			const uint32 NewBits = BuildReplicatedTagBits(EntityManager, EH);
-			const FSig* Prev = GLastSigByID.Find(ID);
-			const uint32 OldBits = Prev ? Prev->TagBits : 0u;
-			const bool bChangedBits = (NewBits != OldBits);
-			const FString Names = StringifyUnitTagBits(NewBits);
-			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: NetID=%u TagBits=0x%08x %s Tags=[%s]"), ID, NewBits, bChangedBits ? TEXT("[CHANGED]") : TEXT(""), *Names);
+			Replicator = NewObject<UMassUnitReplicatorBase>((UObject*)GetTransientPackage(), UMassUnitReplicatorBase::StaticClass());
+			if (Replicator)
+			{
+				Replicator->AddToRoot(); // keep alive for world lifetime to avoid GC
+			}
+			GReplicatorPerWorld.Add(World, Replicator);
 		}
-		// Also log AI target fragment fields for visibility
-		for (int32 i = 0; i < MaxLog; ++i)
+		FMassReplicationContext RepCtx(*World, *LODSub, *RepSub);
+
+		const TConstArrayView<FMassNetworkIDFragment> NetIDs = ChunkContext.GetFragmentView<FMassNetworkIDFragment>();
+		const TConstArrayView<FTransformFragment> Transforms = ChunkContext.GetFragmentView<FTransformFragment>();
+		const TConstArrayView<FMassAIStateFragment> AIStates = ChunkContext.GetFragmentView<FMassAIStateFragment>();
+		const TConstArrayView<FMassAITargetFragment> AITargets = ChunkContext.GetFragmentView<FMassAITargetFragment>();
+		const TConstArrayView<FMassCombatStatsFragment> CombatStats = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
+		const TConstArrayView<FMassMoveTargetFragment> MoveTargets = ChunkContext.GetFragmentView<FMassMoveTargetFragment>();
+		const TConstArrayView<FMassAgentCharacteristicsFragment> Characteristics = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+		const TConstArrayView<FRunAnimationFragment> RunAnims = ChunkContext.GetFragmentView<FRunAnimationFragment>();
+		const TConstArrayView<FMassVisualEffectFragment> VisualEffects = ChunkContext.GetFragmentView<FMassVisualEffectFragment>();
+		const TConstArrayView<FEffectAreaImpactFragment> Impacts = ChunkContext.GetFragmentView<FEffectAreaImpactFragment>();
+
+		// Tags gelten je Archetyp, also fuer den ganzen Chunk gleich: einmal statt je Einheit.
+		const uint32 ChunkTagBits = BuildReplicatedTagBits(EntityManager, ChunkContext.GetEntity(0));
+
+		// Stabiler Schluessel je Chunk aus einigen NetIDs, fuer den Lesezeiger ueber Durchlaeufe hinweg.
+		uint64 ChunkKey = 0x51ED27u;
+		auto AccHash = [&ChunkKey](uint32 V)
 		{
-			const int32 Idx = (SliceStart + i) % Num;
-			const uint32 ID = NetIDs[Idx].NetID.GetValue();
-			const FMassEntityHandle EH = ChunkContext.GetEntity(Idx);
-			const FMassAITargetFragment* AIT = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH);
-			bool bHas = false; bool bFocused = false; FVector LKL = FVector::ZeroVector; FVector AbilityLoc = FVector::ZeroVector; bool bTargetSet = false; uint32 TargetNetID = 0u;
-			if (AIT)
-			{
-				bHas = AIT->bHasValidTarget; bFocused = AIT->IsFocusedOnTarget; LKL = AIT->LastKnownLocation; AbilityLoc = AIT->AbilityTargetLocation; bTargetSet = AIT->TargetEntity.IsSet();
-				if (const FMassNetworkIDFragment* TgtNet = TryGetFragmentDataPtr<FMassNetworkIDFragment>(EntityManager, AIT->TargetEntity))
-				{
-					TargetNetID = TgtNet->NetID.GetValue();
-				}
-			}
-			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: AITarget NetID=%u HasValid=%d Focused=%d LKL=%s AbilityLoc=%s TargetSet=%d TargetNetID=%u"),
-				ID, bHas?1:0, bFocused?1:0, *LKL.ToString(), *AbilityLoc.ToString(), bTargetSet?1:0, TargetNetID);
+			ChunkKey ^= static_cast<uint64>(V) + 0x9e3779b97f4a7c15ull + (ChunkKey << 6) + (ChunkKey >> 2);
+		};
+		AccHash(NetIDs[0].NetID.GetValue());
+		AccHash(NetIDs[Num / 3].NetID.GetValue());
+		AccHash(NetIDs[(2 * Num) / 3].NetID.GetValue());
+		AccHash(NetIDs[Num - 1].NetID.GetValue());
+		int32& Cursor = GStartOffsetByChunk.FindOrAdd(ChunkKey);
+		if (Cursor < 0 || Cursor >= Num)
+		{
+			Cursor = 0;
 		}
-		// Also log values of replicated fragments (CombatStats, AgentCharacteristics, AIState)
-		for (int32 i = 0; i < MaxLog; ++i)
+
+		TArray<int32> DirtyIndices;
+		TArray<FSig, TInlineAllocator<64>> DirtySigs;
+		int32 Scanned = 0;
+		for (; Scanned < Num && ProcessedThisTick + DirtyIndices.Num() < MaxPerTick; ++Scanned)
 		{
-			const int32 Idx = (SliceStart + i) % Num;
-			const uint32 ID = NetIDs[Idx].NetID.GetValue();
-			const FMassEntityHandle EH = ChunkContext.GetEntity(Idx);
-			float H = 0.f, MH = 0.f, Run = 0.f, FlyH = 0.f, StateT = 0.f; int32 Team = 0; bool Fly = false, Invis = false, CanAtk = true, CanMove = true, Hold = false;
-			if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
-			{
-				H = CS->Health; MH = CS->MaxHealth; Run = CS->RunSpeed; Team = CS->TeamId;
-			}
-			if (const FMassAgentCharacteristicsFragment* AC = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EH))
-			{
-				Fly = AC->bIsFlying; Invis = AC->bIsInvisible; FlyH = AC->FlyHeight;
-			}
-			if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EH))
-			{
-				StateT = AIS->StateTimer; CanAtk = AIS->CanAttack; CanMove = AIS->CanMove; Hold = AIS->HoldPosition;
-			}
-			UE_LOG(LogTemp, Log, TEXT("ServerRep Frags: Health=%.1f/%.1f Run=%.1f Team=%d Flying=%d Invis=%d FlyH=%.1f StateT=%.2f CanAtk=%d CanMove=%d Hold=%d"),
-				H, MH, Run, Team, Fly?1:0, Invis?1:0, FlyH, StateT, CanAtk?1:0, CanMove?1:0, Hold?1:0);
-		}
-	}
-
-	// Account budget usage for this slice
-	ProcessedThisTick += SliceSize;
-	++ChunksUsedThisTick;
-
-	// Optimization: check if any entity in the slice actually changed before calling replicator
-	bool bAnyChanged = (CVarRTS_ServerKick_ProcessCleanChunks.GetValueOnGameThread() != 0) || bInGrace;
-	
-	// Fetch thresholds (matching MassUnitReplicatorBase)
-	float LocThresh = 10.0f;
-	float AngleThresh = 5.0f;
-	float ScaleThresh = 0.02f;
-	
-	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.ServerRep.LocThresholdCm"))) LocThresh = Var->GetFloat();
-	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.ServerRep.AngleThresholdDeg"))) AngleThresh = Var->GetFloat();
-	if (IConsoleVariable* Var = IConsoleManager::Get().FindConsoleVariable(TEXT("net.RTS.ServerRep.ScaleThreshold"))) ScaleThresh = Var->GetFloat();
-
-	TArray<FSig, TInlineAllocator<64>> NewSigs;
-	NewSigs.Reserve(SliceSize);
-
-	if (!bAnyChanged)
-	{
-		for (int32 i = SliceStart; i < SliceStart + SliceSize && i < Num; ++i)
-		{
-			const uint32 ID = NetIDs[i].NetID.GetValue();
+			const int32 i = (Cursor + Scanned) % Num;
 			const FTransform& Xf = Transforms[i].GetTransform();
 			const FRotator Rot = Xf.Rotator();
-			const FMassEntityHandle EH = ChunkContext.GetEntity(i);
 
 			FSig S;
 			S.Loc = Xf.GetLocation();
@@ -834,128 +724,157 @@ auto ProcessChunk = [World, LODSub, RepSub, MaxPerChunk, MaxPerTick, bInGrace, &
 			S.Y = QuantizeAngle(Rot.Yaw);
 			S.R = QuantizeAngle(Rot.Roll);
 			S.Scale = Xf.GetScale3D();
-			S.TagBits = BuildReplicatedTagBits(EntityManager, EH);
-
-			if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EH))
+			S.TagBits = ChunkTagBits;
+			if (AIStates.Num() > 0)
 			{
-				S.FireCounter = AIS->ProjectileFireCounter;
-				S.TargetNetID = AIS->LastTargetNetID;
+				S.FireCounter = AIStates[i].ProjectileFireCounter;
+				S.TargetNetID = AIStates[i].LastTargetNetID;
 			}
-
-			if (const FMassAITargetFragment* ATF = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH))
+			if (AITargets.Num() > 0)
 			{
-				if (const FMassNetworkIDFragment* TargetNetIDFrag = TryGetFragmentDataPtr<FMassNetworkIDFragment>(EntityManager, ATF->TargetEntity))
+				if (const FMassNetworkIDFragment* TargetNetIDFrag = TryGetFragmentDataPtr<FMassNetworkIDFragment>(EntityManager, AITargets[i].TargetEntity))
 				{
 					S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
 				}
 			}
-
-			if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
+			if (CombatStats.Num() > 0)
 			{
-				S.Health = CS->Health;
-				S.Shield = CS->Shield;
+				S.Health = CombatStats[i].Health;
+				S.Shield = CombatStats[i].Shield;
+			}
+			if (MoveTargets.Num() > 0)
+			{
+				S.MoveCenter = MoveTargets[i].Center;
+				S.MoveSpeed = MoveTargets[i].DesiredSpeed.Get();
+				S.MoveActionID = MoveTargets[i].GetCurrentActionID();
 			}
 
-			NewSigs.Add(S);
-
-			const FSig* Prev = GLastSigByID.Find(ID);
-			if (!Prev || !S.IsNearlyEqual(*Prev, LocThresh, AngleThresh, ScaleThresh))
+			// Dieselben Quellen wie UpdateReplicationBits/PackedBits im Replikator, nur als Vergleichswert.
+			uint32 Bits = 0u;
+			int32 Bit = 0;
+			auto Push = [&Bits, &Bit](bool bValue) { if (bValue) { Bits |= (1u << Bit); } ++Bit; };
+			if (CombatStats.Num() > 0)
 			{
-				bAnyChanged = true;
-				// We don't break here because we need to build all NewSigs anyway for the update below
+				const FMassCombatStatsFragment& CS = CombatStats[i];
+				Push(CS.IsInitialized); Push(CS.bUseProjectile); Push(CS.bCanMoveWhileAttacking); Push(CS.bRotatesToMovementIfMoveWhileAttacking);
+			}
+			Bit = 4;
+			if (Characteristics.Num() > 0)
+			{
+				const FMassAgentCharacteristicsFragment& AC = Characteristics[i];
+				Push(AC.bIsFlying); Push(AC.bIsInvisible); Push(AC.bCanOnlyAttackFlying); Push(AC.bCanOnlyAttackGround);
+				Push(AC.bCanBeInvisible); Push(AC.bCanDetectInvisible); Push(AC.RotatesToMovement); Push(AC.RotatesToEnemy);
+			}
+			Bit = 12;
+			if (AIStates.Num() > 0)
+			{
+				const FMassAIStateFragment& AIS = AIStates[i];
+				Push(AIS.CanAttack); Push(AIS.CanMove); Push(AIS.HoldPosition); Push(AIS.HasAttacked);
+				Push(AIS.SwitchingState); Push(AIS.IsInitialized); Push(AIS.LastbFollowTarget);
+				Push(AIS.LastProjectileClass != nullptr);
+			}
+			Bit = 20;
+			if (AITargets.Num() > 0)
+			{
+				const FMassAITargetFragment& AIT = AITargets[i];
+				Push(AIT.bHasValidTarget); Push(AIT.IsFocusedOnTarget);
+				S.AbilityLoc = FVector(AIT.AbilityTargetLocation);
+			}
+			Bit = 22;
+			if (VisualEffects.Num() > 0)
+			{
+				const FMassVisualEffectFragment& VE = VisualEffects[i];
+				Push(VE.bPulsateEnabled); Push(VE.bRotationEnabled); Push(VE.bOscillationEnabled);
+			}
+			Bit = 25;
+			if (Impacts.Num() > 0)
+			{
+				const FEffectAreaImpactFragment& EA = Impacts[i];
+				Push(EA.bImpactVFXTriggered); Push(EA.bIsScalingAfterImpact); Push(EA.bImpactScaleTriggered); Push(EA.bPendingDestruction);
+			}
+			if (RunAnims.Num() > 0)
+			{
+				// Dauer quantisiert wie im Replikator, Animationszustand darueber
+				S.RunAnimData = static_cast<uint32>(FMath::Clamp(RunAnims[i].Duration * 100.f, 0.f, 65535.f))
+					| (static_cast<uint32>(RunAnims[i].AnimationState.GetValue()) << 16);
+			}
+			S.StateBits = Bits;
+
+			const FSig* Prev = GLastSigByID.Find(NetIDs[i].NetID.GetValue());
+			bool bDirty = bSendAll || !Prev || !S.IsNearlyEqual(*Prev, LocThresh, AngleThresh, ScaleThresh);
+			// Sicherheitsnetz: lange nicht gepruefte Einheit einmal durch den Replikator schicken.
+			if (!bDirty && RefreshSeconds > 0.f && RefreshedThisTick < RefreshMaxPerTick && (Now - Prev->SentTime) >= RefreshSeconds)
+			{
+				bDirty = true;
+				++RefreshedThisTick;
+			}
+			if (bDirty)
+			{
+				S.SentTime = Now;
+				DirtyIndices.Add(i);
+				DirtySigs.Add(S);
 			}
 		}
-	}
-	else
-	{
-		// Still need to build NewSigs for storage update
-		for (int32 i = SliceStart; i < SliceStart + SliceSize && i < Num; ++i)
+
+		// Naechster Durchlauf beginnt hinter der zuletzt geprueften Einheit: was diesmal nicht mehr ins
+		// Budget passte, kommt dann zuerst dran.
+		Cursor = (Cursor + Scanned) % Num;
+		if (Scanned < Num)
 		{
-			const FTransform& Xf = Transforms[i].GetTransform();
-			const FRotator Rot = Xf.Rotator();
-			const FMassEntityHandle EH = ChunkContext.GetEntity(i);
-			FSig S;
-			S.Loc = Xf.GetLocation();
-			S.P = QuantizeAngle(Rot.Pitch);
-			S.Y = QuantizeAngle(Rot.Yaw);
-			S.R = QuantizeAngle(Rot.Roll);
-			S.Scale = Xf.GetScale3D();
-			S.TagBits = BuildReplicatedTagBits(EntityManager, EH);
-
-			if (const FMassAIStateFragment* AIS = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(EH))
-			{
-				S.FireCounter = AIS->ProjectileFireCounter;
-				S.TargetNetID = AIS->LastTargetNetID;
-			}
-
-			if (const FMassAITargetFragment* ATF = EntityManager.GetFragmentDataPtr<FMassAITargetFragment>(EH))
-			{
-				if (const FMassNetworkIDFragment* TargetNetIDFrag = TryGetFragmentDataPtr<FMassNetworkIDFragment>(EntityManager, ATF->TargetEntity))
-				{
-					S.TargetNetID = TargetNetIDFrag->NetID.GetValue();
-				}
-			}
-
-			if (const FMassCombatStatsFragment* CS = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(EH))
-			{
-				S.Health = CS->Health;
-				S.Shield = CS->Shield;
-			}
-
-			NewSigs.Add(S);
+			ChunkWhereBudgetRanOut = ChunkOrdinal;
 		}
-	}
 
-	if (!bAnyChanged)
-	{
-		if (CVarRTS_ServerKick_LogLevel.GetValueOnGameThread() >= 2)
+		if (DirtyIndices.Num() == 0)
 		{
-			UE_LOG(LogTemp, Verbose, TEXT("ServerReplicationKick: Skipping clean slice Start=%d Count=%d"), SliceStart, SliceSize);
+			return;
 		}
+		ProcessedThisTick += DirtyIndices.Num();
+
+		if (KickLogLevel >= 2)
+		{
+			const int32 MaxLog = FMath::Min(20, DirtyIndices.Num());
+			FString IdList;
+			for (int32 k = 0; k < MaxLog; ++k)
+			{
+				if (k > 0) { IdList += TEXT(", "); }
+				IdList += FString::Printf(TEXT("%u"), NetIDs[DirtyIndices[k]].NetID.GetValue());
+			}
+			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: chunk %d entities, scanned %d, changed %d (budget used %d/%d). NetIDs: %s%s"),
+				Num, Scanned, DirtyIndices.Num(), ProcessedThisTick, MaxPerTick, *IdList, (DirtyIndices.Num() > MaxLog ? TEXT(" ...") : TEXT("")));
+			UE_LOG(LogTemp, Log, TEXT("ServerReplicationKick: chunk TagBits=0x%08x Tags=[%s]"), ChunkTagBits, *StringifyUnitTagBits(ChunkTagBits));
+		}
+
+		// Nur die geaenderten Einheiten an den Replikator geben.
+		ReplicationSliceControl::SetIndices(&DirtyIndices);
+		Replicator->ProcessClientReplication(ChunkContext, RepCtx);
 		ReplicationSliceControl::ClearSlice();
-		return;
-	}
 
-	// Invoke the same function the MassReplicationProcessor would call on the server.
-	Replicator->ProcessClientReplication(ChunkContext, RepCtx);
+		// Gesendeten Stand merken
+		for (int32 k = 0; k < DirtyIndices.Num(); ++k)
+		{
+			GLastSigByID.FindOrAdd(NetIDs[DirtyIndices[k]].NetID.GetValue()) = DirtySigs[k];
+		}
+	};
 
-	// Clear slice control so other paths process full ranges by default
-	ReplicationSliceControl::ClearSlice();
-
-	// Update stored signatures after replication to reflect the latest sent state for the slice
-	for (int32 i = 0; i < NewSigs.Num(); ++i)
+	// Ab ChunkStartIndex bis zum Ende, dann von vorn bis ChunkStartIndex.
+	int32 ChunkOrdinal = 0;
+	EntityQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
 	{
-		const int32 ChunkIdx = SliceStart + i;
-		const uint32 ID = NetIDs[ChunkIdx].NetID.GetValue();
-		GLastSigByID.FindOrAdd(ID) = NewSigs[i];
-	}
-};
-
-// First pass: process chunks starting from rotating start index
-int32 ChunkOrdinal = 0;
-EntityQuery.ForEachEntityChunk(Context, [&, ChunkStartIndex](FMassExecutionContext& ChunkContext)
-{
-	if (ProcessedThisTick >= MaxPerTick) { return; }
-	if (ChunkOrdinal++ < ChunkStartIndex) { return; }
-	ProcessChunk(ChunkContext);
-});
-
-// Second pass: wrap-around to the beginning if budget remains
-if (ProcessedThisTick < MaxPerTick && TotalChunksThisTick > 0 && ChunkStartIndex > 0)
-{
-	int32 ChunkOrdinal2 = 0;
-	EntityQuery.ForEachEntityChunk(Context, [&, ChunkStartIndex](FMassExecutionContext& ChunkContext)
-	{
-		if (ProcessedThisTick >= MaxPerTick) { return; }
-		if (ChunkOrdinal2++ >= ChunkStartIndex) { return; }
-		ProcessChunk(ChunkContext);
+		const int32 Ordinal = ChunkOrdinal++;
+		if (Ordinal >= ChunkStartIndex) { ProcessChunk(ChunkContext, Ordinal); }
 	});
-}
+	if (ChunkStartIndex > 0 && ProcessedThisTick < MaxPerTick)
+	{
+		int32 ChunkOrdinal2 = 0;
+		EntityQuery.ForEachEntityChunk(Context, [&](FMassExecutionContext& ChunkContext)
+		{
+			const int32 Ordinal = ChunkOrdinal2++;
+			if (Ordinal < ChunkStartIndex) { ProcessChunk(ChunkContext, Ordinal); }
+		});
+	}
 
-// Rotate start index for next tick so later chunks get priority next time
-if (TotalChunksThisTick > 0)
-{
-	ChunkStartIndex = (ChunkStartIndex + FMath::Max(1, ChunksUsedThisTick)) % TotalChunksThisTick;
-}
-}
+	if (ChunkWhereBudgetRanOut != INDEX_NONE)
+	{
+		ChunkStartIndex = ChunkWhereBudgetRanOut;
+	}
 }

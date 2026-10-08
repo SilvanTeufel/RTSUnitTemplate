@@ -38,12 +38,23 @@ static FTransform BuildTransformFromItem(const FUnitReplicationItem& Item)
 	return Xf;
 }
 
+void FUnitReplicationItem::StampClientArrival(const UWorld* World)
+{
+	const FVector NewLocation(Location);
+	if (World && (ClientArrivalTime < 0.0 || FVector::DistSquared2D(NewLocation, ClientArrivalLocation) > 1.f))
+	{
+		ClientArrivalTime = World->GetTimeSeconds();
+		ClientArrivalLocation = NewLocation;
+	}
+}
+
 void FUnitReplicationItem::PostReplicatedAdd(const FUnitReplicationArray& InArraySerializer)
 {
 	if (InArraySerializer.OwnerBubble && InArraySerializer.OwnerBubble->GetNetMode() == NM_Client)
 	{
 		const FTransform Xf = BuildTransformFromItem(*this);
 		UnitReplicationCache::SetLatest(NetID, Xf);
+		StampClientArrival(InArraySerializer.OwnerBubble->GetWorld());
 
 		// Synchronize fire counter to avoid spawning on join/initial replication
 		const uint8 CurrentFireCounter = (uint8)((AuxData >> 16) & 0xFF);
@@ -60,6 +71,7 @@ void FUnitReplicationItem::PostReplicatedChange(const FUnitReplicationArray& InA
 	if (InArraySerializer.OwnerBubble && InArraySerializer.OwnerBubble->GetNetMode() == NM_Client)
 	{
 		UnitReplicationCache::SetLatest(NetID, BuildTransformFromItem(*this));
+		StampClientArrival(InArraySerializer.OwnerBubble->GetWorld());
 
 		const uint8 CurrentFireCounter = (uint8)((AuxData >> 16) & 0xFF);
 

@@ -64,6 +64,28 @@ UUnitApplyMassMovementProcessor::UUnitApplyMassMovementProcessor(): EntityQuery(
 	bRequiresGameThreadExecution = true;
 }
 
+// Harte Navmesh-Sperre fuer den Bewegungsschritt (siehe ClampStepToNavMesh).
+static TAutoConsoleVariable<int32> CVarRTS_NavClamp(
+	TEXT("RTS.Move.NavClamp"),
+	1,
+	TEXT("1 = a movement step that would leave the navmesh is clamped to the mesh edge (units slide along it). ")
+	TEXT("Stops separation/avoidance/formation pushes from shoving units up cliffs. 0 = old behaviour (only soft avoidance afterwards)."),
+	ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarRTS_NavClampRepathSeconds(
+	TEXT("RTS.Move.NavClampRepathSeconds"),
+	0.3f,
+	TEXT("A unit clamped at a navmesh edge this long (while it wants to move) drops its path and plans a new one ")
+	TEXT("from where it stands. Its old waypoint lies behind the edge, sliding alone never gets there."),
+	ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarRTS_NavRecoverySearchRadius(
+	TEXT("RTS.Move.NavRecoverySearchRadius"),
+	1000.f,
+	TEXT("A ground unit standing off the navmesh (further than one step) walks back to the nearest navmesh point ")
+	TEXT("found within this horizontal radius. Without it, it gets no path and only gets pushed around."),
+	ECVF_Default);
+
 static TAutoConsoleVariable<int32> CVarRTS_MoveDiag(
 	TEXT("RTS.MoveDiag"),
 	0,
@@ -124,6 +146,8 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	
 	EntityQuery.AddConstSharedRequirement<FMassMovementParameters>(EMassFragmentPresence::All);
 	
+	// Neu planen, wenn die Navmesh-Sperre die Einheit an einer Kante festhaelt.
+	EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	EntityQuery.RegisterWithProcessor(*this);
 
 	ClientEntityQuery.Initialize(EntityManager);
@@ -169,6 +193,7 @@ void UUnitApplyMassMovementProcessor::ConfigureQueries(const TSharedRef<FMassEnt
 	ClientEntityQuery.AddTagRequirement<FMassStopWhileAimingTag>(EMassFragmentPresence::None);
 	ClientEntityQuery.AddTagRequirement<FRunAnimationTag>(EMassFragmentPresence::None);
 	
+	ClientEntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 	ClientEntityQuery.RegisterWithProcessor(*this);
 }
 
@@ -213,10 +238,23 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharacteristicsList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TArrayView<FUnitNavigationPathFragment> NavPathList = LocalContext.GetMutableFragmentView<FUnitNavigationPathFragment>();
+        const float NavClampRepathSeconds = CVarRTS_NavClampRepathSeconds.GetValueOnAnyThread();
+        const float NavRecoverySearchRadius = CVarRTS_NavRecoverySearchRadius.GetValueOnAnyThread();
         const TConstArrayView<FMassAIStateFragment> AIStateList = LocalContext.GetFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassActorFragment> ActorList = LocalContext.GetFragmentView<FMassActorFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
+        // Arbeiter duerfen weiter bis an Ressource/Baustelle/Basis heran - deren Umgebung ist oft aus dem
+        // Navmesh ausgeschnitten, die Sperre wuerde sie am Rand anhalten.
+        const bool bNavClampChunk = CVarRTS_NavClamp.GetValueOnAnyThread() != 0
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToResourceExtractionTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateResourceExtractionTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToBuildTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateBuildTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToBaseTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToRepairTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateRepairTag>();
         
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {
@@ -307,10 +345,82 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
                 FNavLocation ProjectedLocation;
                 // Use capsule-based extent to detect if we are on the mesh or inside a DirtyArea
                 bool bNeedsAvoidance = false;
-                if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) ||
-                    FVector::DistSquared2D(NewLocation, ProjectedLocation.Location) > FMath::Square(5.f))
+                // Der Schritt wurde an einer Navmesh-Kante gestoppt.
+                bool bClampedAtEdge = false;
+                const bool bProjected = NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent);
+                const float OffMesh2D = bProjected ? FVector::Dist2D(NewLocation, ProjectedLocation.Location) : 0.f;
+                if (!bProjected || OffMesh2D > 5.f)
                 {
                     bNeedsAvoidance = true;
+
+                    // HARTE SPERRE: der Schritt wuerde das Navmesh verlassen. Separation, Ausweichen und
+                    // Formationslenkung sind Kraefte in der Ebene - sie fragen nicht, wohin sie schieben. Ohne
+                    // Sperre landete die Einheit neben dem Netz, und die Bodenhoehe zog sie die Klippe hoch.
+                    // Der Schritt endet am naechsten Netzpunkt: die Einheit gleitet an der Kante entlang.
+                    // Nur fuer frisch uebertretene Kanten (Abstand <= Schrittweite bzw. Kapselradius) - wer
+                    // schon weit daneben steht, wird nicht teleportiert, sondern wie bisher zurueckgefuehrt.
+                    if (bProjected && bNavClampChunk
+                        && OffMesh2D <= FMath::Max(FVector::Dist2D(NewLocation, CurrentLocation) + 10.f, Characteristics.CapsuleRadius))
+                    {
+                        // Aussennormale der Kante: vom Netzpunkt zum verworfenen Schrittziel.
+                        FVector EdgeNormal(NewLocation.X - ProjectedLocation.Location.X, NewLocation.Y - ProjectedLocation.Location.Y, 0.f);
+                        EdgeNormal.Normalize();
+
+                        NewLocation.X = ProjectedLocation.Location.X;
+                        NewLocation.Y = ProjectedLocation.Location.Y;
+
+                        // Geschwindigkeit: nur den Anteil IN die Kante streichen, der Rest (entlang der Kante)
+                        // bleibt. Gemessen 07.10.: die erste Fassung setzte sie auf den Ruecksetzsprung
+                        // (Schritt/DeltaTime) - der zeigte jedes Bild woandershin, und die Drehung, die der
+                        // Geschwindigkeit folgt (RotateTowardsMovement), zitterte.
+                        const float IntoEdge = Velocity.Value.X * EdgeNormal.X + Velocity.Value.Y * EdgeNormal.Y;
+                        if (IntoEdge > 0.f)
+                        {
+                            Velocity.Value.X -= EdgeNormal.X * IntoEdge;
+                            Velocity.Value.Y -= EdgeNormal.Y * IntoEdge;
+                        }
+
+                        bClampedAtEdge = true;
+                    }
+                    else if (bNavClampChunk && !bFreezeXY)
+                    {
+                        // RUECKFUEHRUNG: die Einheit steht schon weiter neben dem Netz, als ein Schritt
+                        // erklaert (alter Schub, Spawn im Gebaeude, Sperre war fuer ihren Zustand aus).
+                        // Von dort kommt sie allein nicht zurueck: der UnitMovementProcessor findet fuer
+                        // einen Start neben dem Netz keinen Pfad ("bleiben stehen"), die Sollgeschwindigkeit
+                        // bleibt null, und nur noch Ausweich-/Separationskraefte schieben sie hin und her -
+                        // das war das Haengen mit Drehzittern (07./08.10.). Hier laeuft sie deshalb selbst
+                        // zum naechsten Netzpunkt zurueck, mit fester Richtung (ruhige Drehung). Danach
+                        // plant der UnitMovementProcessor wie gewohnt zum Ziel.
+                        // Nur wenn ihr Pfad sie NICHT ohnehin zum Netz fuehrt.
+                        FNavLocation RecoveryLocation = ProjectedLocation;
+                        bool bRecoveryFound = bProjected;
+                        if (!bRecoveryFound)
+                        {
+                            bRecoveryFound = NavSys->ProjectPointToNavigation(CurrentLocation, RecoveryLocation,
+                                FVector(NavRecoverySearchRadius, NavRecoverySearchRadius, SoftAvoidanceZExtent));
+                        }
+                        if (bRecoveryFound)
+                        {
+                            FVector ToMesh(RecoveryLocation.Location.X - CurrentLocation.X, RecoveryLocation.Location.Y - CurrentLocation.Y, 0.f);
+                            const float DistToMesh = ToMesh.Size();
+                            const bool bPathLeadsToMesh = DesiredHorizontalVelocity.SizeSquared() > 1.f
+                                && (DesiredHorizontalVelocity.GetSafeNormal2D() | ToMesh.GetSafeNormal2D()) > 0.f;
+                            if (DistToMesh > KINDA_SMALL_NUMBER && !bPathLeadsToMesh)
+                            {
+                                const FVector Dir = ToMesh / DistToMesh;
+                                const float RecoverySpeed = FMath::Max(MaxSpeed, 100.f);
+                                const float Step = FMath::Min(DistToMesh, RecoverySpeed * DeltaTime);
+                                NewLocation.X = CurrentLocation.X + Dir.X * Step;
+                                NewLocation.Y = CurrentLocation.Y + Dir.Y * Step;
+                                Velocity.Value.X = Dir.X * RecoverySpeed;
+                                Velocity.Value.Y = Dir.Y * RecoverySpeed;
+
+                                // Pfad NICHT verwerfen: jede Neusuche von neben dem Netz aus konnte auf einer
+                                // falschen Netzinsel starten (08.10.: mehr Haenger mit dieser Fassung).
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -329,6 +439,59 @@ void UUnitApplyMassMovementProcessor::ExecuteClient(FMassEntityManager& EntityMa
                 if (bNeedsAvoidance)
                 {
                     LocalContext.Defer().AddTag<FMassSoftAvoidanceTag>(LocalContext.GetEntity(EntityIndex));
+                }
+
+                // Haengt die Einheit an der Kante fest, zeigt ihr Pfad hinter die Kante: der naechste
+                // Wegpunkt wurde geplant, bevor sie seitlich abgedraengt wurde, und liegt jetzt jenseits
+                // der Klippe. Gleiten allein kommt dort nie an - die Richtung kippt jedes Bild zwischen
+                // Wegpunkt und Kante (Drehzittern). Also Pfad verwerfen; der UnitMovementProcessor plant
+                // im naechsten Takt neu, ab der aktuellen (auf das Netz projizierten) Position.
+                if (NavPathList.Num() > 0)
+                {
+                    FUnitNavigationPathFragment& NavPath = NavPathList[EntityIndex];
+                    // SICHTPRUEFUNG statt Richtungsregel (08.10., Log [RunStall]): die Pfadverfolgung schaltet
+                    // den Wegpunkt nach der Naehe zum Pfadsegment weiter (RTS_AdvancePathIndexByProjection).
+                    // Wird eine Einheit an einer Klippenecke seitlich vorbeigedrueckt, springt sie auf einen
+                    // Wegpunkt HINTER der Ecke - die Luftlinie dorthin fuehrt ueber die Klippe. Frueher fuhr sie
+                    // hoch, mit der Sperre drueckt sie gegen die Kante, kommt nicht naeher, und nach 6 s schaltet
+                    // der RunStall-Waechter sie auf Idle (Haengen bis zum naechsten Befehl).
+                    // Steht sie eine Weile an der Kante, wird deshalb geprueft, ob der Wegpunkt auf dem Netz
+                    // ueberhaupt sichtbar ist. Nur dann neu planen - Nachbarn, die sie beim Marsch an der Kante
+                    // entlang andruecken, loesen nichts aus (Wegpunkt sichtbar).
+                    // Zweiter Ausloeser (08.10., [RunStall] mit Navmesh-Daten): Einheiten am Fuss einer Rampe
+                    // standen AUF dem Netz, die Sperre griff nie (KantenSek=0), aber der Wegpunkt oben auf der
+                    // Rampe war nicht sichtbar (SichtBlockiert=1) - die Rampenseite hielt sie auf. Deshalb
+                    // auch pruefen, wenn die Einheit deutlich langsamer ist, als sie will. Im Gedraenge
+                    // kostet das nur einen Strahl je 0,3 s; ist der Wegpunkt sichtbar, passiert nichts.
+                    const float DesiredSpeed2D = DesiredHorizontalVelocity.Size();
+                    const bool bMuchTooSlow = DesiredSpeed2D > 100.f && DeltaTime > KINDA_SMALL_NUMBER
+                        && FVector::Dist2D(NewLocation, CurrentLocation) / DeltaTime < DesiredSpeed2D * 0.35f;
+                    if ((bClampedAtEdge || bMuchTooSlow) && DesiredSpeed2D > 1.f)
+                    {
+                        NavPath.NavClampSeconds += DeltaTime;
+                    }
+                    else
+                    {
+                        // Abklingen statt Nullsetzen: in einer Ecke wechselt die Sperre Bild fuer Bild.
+                        NavPath.NavClampSeconds = FMath::Max(0.f, NavPath.NavClampSeconds - DeltaTime * 0.5f);
+                    }
+                    if (NavPath.NavClampSeconds >= NavClampRepathSeconds)
+                    {
+                        NavPath.NavClampSeconds = 0.f;
+                        if (NavPath.HasValidPath() && !NavPath.bIsPathfindingInProgress && NavPath.CurrentPath->IsValid())
+                        {
+                            const TArray<FNavPathPoint>& Points = NavPath.CurrentPath->GetPathPoints();
+                            if (Points.IsValidIndex(NavPath.CurrentPathPointIndex))
+                            {
+                                FVector Hit;
+                                if (UNavigationSystemV1::NavigationRaycast(NavSys, NewLocation, Points[NavPath.CurrentPathPointIndex].Location, Hit))
+                                {
+                                    NavPath.ResetPath();
+                                    NavPath.bAutoRepath = true;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -434,10 +597,23 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
         const TArrayView<FMassForceFragment> ForceList = LocalContext.GetMutableFragmentView<FMassForceFragment>();
         const TArrayView<FMassVelocityFragment> VelocityList = LocalContext.GetMutableFragmentView<FMassVelocityFragment>();
         const TConstArrayView<FMassAgentCharacteristicsFragment> CharacteristicsList = LocalContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
+        const TArrayView<FUnitNavigationPathFragment> NavPathList = LocalContext.GetMutableFragmentView<FUnitNavigationPathFragment>();
+        const float NavClampRepathSeconds = CVarRTS_NavClampRepathSeconds.GetValueOnAnyThread();
+        const float NavRecoverySearchRadius = CVarRTS_NavRecoverySearchRadius.GetValueOnAnyThread();
         const TConstArrayView<FMassAIStateFragment> AIStateList = LocalContext.GetFragmentView<FMassAIStateFragment>();
         const TConstArrayView<FMassActorFragment> ActorList = LocalContext.GetFragmentView<FMassActorFragment>();
 
         const bool bFreezeXY = LocalContext.DoesArchetypeHaveTag<FMassStateStopXYMovementTag>();
+        // Arbeiter duerfen weiter bis an Ressource/Baustelle/Basis heran - deren Umgebung ist oft aus dem
+        // Navmesh ausgeschnitten, die Sperre wuerde sie am Rand anhalten.
+        const bool bNavClampChunk = CVarRTS_NavClamp.GetValueOnAnyThread() != 0
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToResourceExtractionTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateResourceExtractionTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToBuildTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateBuildTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToBaseTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateGoToRepairTag>()
+            && !LocalContext.DoesArchetypeHaveTag<FMassStateRepairTag>();
 
         for (int32 EntityIndex = 0; EntityIndex < NumEntities; ++EntityIndex)
         {
@@ -506,10 +682,82 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
                 FNavLocation ProjectedLocation;
                 // Use capsule-based extent to detect if we are on the mesh or inside a DirtyArea
                 bool bNeedsAvoidance = false;
-                if (!NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent) || 
-                    FVector::DistSquared2D(NewLocation, ProjectedLocation.Location) > FMath::Square(5.f))
+                // Der Schritt wurde an einer Navmesh-Kante gestoppt.
+                bool bClampedAtEdge = false;
+                const bool bProjected = NavSys->ProjectPointToNavigation(NewLocation, ProjectedLocation, ProjectionExtent);
+                const float OffMesh2D = bProjected ? FVector::Dist2D(NewLocation, ProjectedLocation.Location) : 0.f;
+                if (!bProjected || OffMesh2D > 5.f)
                 {
                     bNeedsAvoidance = true;
+
+                    // HARTE SPERRE: der Schritt wuerde das Navmesh verlassen. Separation, Ausweichen und
+                    // Formationslenkung sind Kraefte in der Ebene - sie fragen nicht, wohin sie schieben. Ohne
+                    // Sperre landete die Einheit neben dem Netz, und die Bodenhoehe zog sie die Klippe hoch.
+                    // Der Schritt endet am naechsten Netzpunkt: die Einheit gleitet an der Kante entlang.
+                    // Nur fuer frisch uebertretene Kanten (Abstand <= Schrittweite bzw. Kapselradius) - wer
+                    // schon weit daneben steht, wird nicht teleportiert, sondern wie bisher zurueckgefuehrt.
+                    if (bProjected && bNavClampChunk
+                        && OffMesh2D <= FMath::Max(FVector::Dist2D(NewLocation, CurrentLocation) + 10.f, Characteristics.CapsuleRadius))
+                    {
+                        // Aussennormale der Kante: vom Netzpunkt zum verworfenen Schrittziel.
+                        FVector EdgeNormal(NewLocation.X - ProjectedLocation.Location.X, NewLocation.Y - ProjectedLocation.Location.Y, 0.f);
+                        EdgeNormal.Normalize();
+
+                        NewLocation.X = ProjectedLocation.Location.X;
+                        NewLocation.Y = ProjectedLocation.Location.Y;
+
+                        // Geschwindigkeit: nur den Anteil IN die Kante streichen, der Rest (entlang der Kante)
+                        // bleibt. Gemessen 07.10.: die erste Fassung setzte sie auf den Ruecksetzsprung
+                        // (Schritt/DeltaTime) - der zeigte jedes Bild woandershin, und die Drehung, die der
+                        // Geschwindigkeit folgt (RotateTowardsMovement), zitterte.
+                        const float IntoEdge = Velocity.Value.X * EdgeNormal.X + Velocity.Value.Y * EdgeNormal.Y;
+                        if (IntoEdge > 0.f)
+                        {
+                            Velocity.Value.X -= EdgeNormal.X * IntoEdge;
+                            Velocity.Value.Y -= EdgeNormal.Y * IntoEdge;
+                        }
+
+                        bClampedAtEdge = true;
+                    }
+                    else if (bNavClampChunk && !bFreezeXY)
+                    {
+                        // RUECKFUEHRUNG: die Einheit steht schon weiter neben dem Netz, als ein Schritt
+                        // erklaert (alter Schub, Spawn im Gebaeude, Sperre war fuer ihren Zustand aus).
+                        // Von dort kommt sie allein nicht zurueck: der UnitMovementProcessor findet fuer
+                        // einen Start neben dem Netz keinen Pfad ("bleiben stehen"), die Sollgeschwindigkeit
+                        // bleibt null, und nur noch Ausweich-/Separationskraefte schieben sie hin und her -
+                        // das war das Haengen mit Drehzittern (07./08.10.). Hier laeuft sie deshalb selbst
+                        // zum naechsten Netzpunkt zurueck, mit fester Richtung (ruhige Drehung). Danach
+                        // plant der UnitMovementProcessor wie gewohnt zum Ziel.
+                        // Nur wenn ihr Pfad sie NICHT ohnehin zum Netz fuehrt.
+                        FNavLocation RecoveryLocation = ProjectedLocation;
+                        bool bRecoveryFound = bProjected;
+                        if (!bRecoveryFound)
+                        {
+                            bRecoveryFound = NavSys->ProjectPointToNavigation(CurrentLocation, RecoveryLocation,
+                                FVector(NavRecoverySearchRadius, NavRecoverySearchRadius, SoftAvoidanceZExtent));
+                        }
+                        if (bRecoveryFound)
+                        {
+                            FVector ToMesh(RecoveryLocation.Location.X - CurrentLocation.X, RecoveryLocation.Location.Y - CurrentLocation.Y, 0.f);
+                            const float DistToMesh = ToMesh.Size();
+                            const bool bPathLeadsToMesh = DesiredHorizontalVelocity.SizeSquared() > 1.f
+                                && (DesiredHorizontalVelocity.GetSafeNormal2D() | ToMesh.GetSafeNormal2D()) > 0.f;
+                            if (DistToMesh > KINDA_SMALL_NUMBER && !bPathLeadsToMesh)
+                            {
+                                const FVector Dir = ToMesh / DistToMesh;
+                                const float RecoverySpeed = FMath::Max(MaxSpeed, 100.f);
+                                const float Step = FMath::Min(DistToMesh, RecoverySpeed * DeltaTime);
+                                NewLocation.X = CurrentLocation.X + Dir.X * Step;
+                                NewLocation.Y = CurrentLocation.Y + Dir.Y * Step;
+                                Velocity.Value.X = Dir.X * RecoverySpeed;
+                                Velocity.Value.Y = Dir.Y * RecoverySpeed;
+
+                                // Pfad NICHT verwerfen: jede Neusuche von neben dem Netz aus konnte auf einer
+                                // falschen Netzinsel starten (08.10.: mehr Haenger mit dieser Fassung).
+                            }
+                        }
+                    }
                 }
                 else
                 {
@@ -528,6 +776,59 @@ void UUnitApplyMassMovementProcessor::ExecuteServer(FMassEntityManager& EntityMa
                 if (bNeedsAvoidance)
                 {
                     LocalContext.Defer().AddTag<FMassSoftAvoidanceTag>(LocalContext.GetEntity(EntityIndex));
+                }
+
+                // Haengt die Einheit an der Kante fest, zeigt ihr Pfad hinter die Kante: der naechste
+                // Wegpunkt wurde geplant, bevor sie seitlich abgedraengt wurde, und liegt jetzt jenseits
+                // der Klippe. Gleiten allein kommt dort nie an - die Richtung kippt jedes Bild zwischen
+                // Wegpunkt und Kante (Drehzittern). Also Pfad verwerfen; der UnitMovementProcessor plant
+                // im naechsten Takt neu, ab der aktuellen (auf das Netz projizierten) Position.
+                if (NavPathList.Num() > 0)
+                {
+                    FUnitNavigationPathFragment& NavPath = NavPathList[EntityIndex];
+                    // SICHTPRUEFUNG statt Richtungsregel (08.10., Log [RunStall]): die Pfadverfolgung schaltet
+                    // den Wegpunkt nach der Naehe zum Pfadsegment weiter (RTS_AdvancePathIndexByProjection).
+                    // Wird eine Einheit an einer Klippenecke seitlich vorbeigedrueckt, springt sie auf einen
+                    // Wegpunkt HINTER der Ecke - die Luftlinie dorthin fuehrt ueber die Klippe. Frueher fuhr sie
+                    // hoch, mit der Sperre drueckt sie gegen die Kante, kommt nicht naeher, und nach 6 s schaltet
+                    // der RunStall-Waechter sie auf Idle (Haengen bis zum naechsten Befehl).
+                    // Steht sie eine Weile an der Kante, wird deshalb geprueft, ob der Wegpunkt auf dem Netz
+                    // ueberhaupt sichtbar ist. Nur dann neu planen - Nachbarn, die sie beim Marsch an der Kante
+                    // entlang andruecken, loesen nichts aus (Wegpunkt sichtbar).
+                    // Zweiter Ausloeser (08.10., [RunStall] mit Navmesh-Daten): Einheiten am Fuss einer Rampe
+                    // standen AUF dem Netz, die Sperre griff nie (KantenSek=0), aber der Wegpunkt oben auf der
+                    // Rampe war nicht sichtbar (SichtBlockiert=1) - die Rampenseite hielt sie auf. Deshalb
+                    // auch pruefen, wenn die Einheit deutlich langsamer ist, als sie will. Im Gedraenge
+                    // kostet das nur einen Strahl je 0,3 s; ist der Wegpunkt sichtbar, passiert nichts.
+                    const float DesiredSpeed2D = DesiredHorizontalVelocity.Size();
+                    const bool bMuchTooSlow = DesiredSpeed2D > 100.f && DeltaTime > KINDA_SMALL_NUMBER
+                        && FVector::Dist2D(NewLocation, CurrentLocation) / DeltaTime < DesiredSpeed2D * 0.35f;
+                    if ((bClampedAtEdge || bMuchTooSlow) && DesiredSpeed2D > 1.f)
+                    {
+                        NavPath.NavClampSeconds += DeltaTime;
+                    }
+                    else
+                    {
+                        // Abklingen statt Nullsetzen: in einer Ecke wechselt die Sperre Bild fuer Bild.
+                        NavPath.NavClampSeconds = FMath::Max(0.f, NavPath.NavClampSeconds - DeltaTime * 0.5f);
+                    }
+                    if (NavPath.NavClampSeconds >= NavClampRepathSeconds)
+                    {
+                        NavPath.NavClampSeconds = 0.f;
+                        if (NavPath.HasValidPath() && !NavPath.bIsPathfindingInProgress && NavPath.CurrentPath->IsValid())
+                        {
+                            const TArray<FNavPathPoint>& Points = NavPath.CurrentPath->GetPathPoints();
+                            if (Points.IsValidIndex(NavPath.CurrentPathPointIndex))
+                            {
+                                FVector Hit;
+                                if (UNavigationSystemV1::NavigationRaycast(NavSys, NewLocation, Points[NavPath.CurrentPathPointIndex].Location, Hit))
+                                {
+                                    NavPath.ResetPath();
+                                    NavPath.bAutoRepath = true;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

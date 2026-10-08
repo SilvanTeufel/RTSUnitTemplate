@@ -33,7 +33,8 @@
 #include "UnrealClient.h"              // FViewport::HasFocus
 #include "Mass/Signals/MySignals.h"
 #include "Mass/UnitMassTag.h"
-#include "Actors/MinimapActor.h" 
+#include "Mass/Formation/UnitFormationSubsystem.h"
+#include "Actors/MinimapActor.h"
 #include "Actors/EffectArea.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "NavigationSystem.h"
@@ -566,6 +567,15 @@ void ACustomControllerBase::ExecuteBatchMove(UObject* WorldContextObject,
 	}
 
 	const int32 Count = FMath::Min(Einheiten.Num(), FMath::Min3(NewTargetLocations.Num(), DesiredSpeeds.Num(), AcceptanceRadii.Num()));
+
+	// Formation halten beim Marschieren: alle Einheiten, die hier ein neues Ziel bekommen, bilden
+	// eine Gruppe (siehe UUnitFormationSubsystem). Gesammelt wird das ENDGUELTIGE Ziel nach der
+	// Navmesh-Korrektur, damit der Formationsversatz zum tatsaechlich angesteuerten Punkt passt.
+	TArray<FMassEntityHandle> FormationEntities;
+	TArray<FVector> FormationTargets;
+	FormationEntities.Reserve(Count);
+	FormationTargets.Reserve(Count);
+
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		AUnitBase* Unit = Einheiten[Index];
@@ -762,8 +772,15 @@ void ACustomControllerBase::ExecuteBatchMove(UObject* WorldContextObject,
 
 		UpdateMoveTarget(*MoveTargetFragmentPtr, UseLocation, DesiredSpeed, World);
 
-		
+
 		MoveTargetFragmentPtr->SlackRadius = AcceptanceRadius;
+
+		// Wer im Laufen weiterkaempft, bleibt ausserhalb der Formation - er marschiert nicht.
+		if (!bIsMovingWhileAttacking)
+		{
+			FormationEntities.Add(MassEntityHandle);
+			FormationTargets.Add(UseLocation);
+		}
 
 		// Tags manipulation
 		if (!bIsMovingWhileAttacking) EntityManager.Defer().AddTag<FMassStateRunTag>(MassEntityHandle);
@@ -801,6 +818,46 @@ void ACustomControllerBase::ExecuteBatchMove(UObject* WorldContextObject,
 		EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 		EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
 
+	}
+
+	// Gruppe anlegen oder die Einheiten aus ihrer alten Gruppe loesen. Mit Shift haengen die Ziele
+	// als Wegpunkte hinten an - dort gibt es kein gemeinsames Formationsziel. Die Clients bilden
+	// dieselbe Gruppe in ihrer Vorhersage (Client_Predict_Batch / lokale Vorhersage).
+	// Ein Client, der hier landet (sollte nicht vorkommen), bildet keine Gruppe: seine Gruppe
+	// entsteht ausschliesslich in der Vorhersage, sonst gaebe es sie doppelt.
+	if (World->GetNetMode() != NM_Client)
+	{
+		ApplyFormationGroup(EntityManager, World, FormationEntities, FormationTargets, Count, /*bRespectShift=*/true);
+	}
+}
+
+void ACustomControllerBase::ApplyFormationGroup(FMassEntityManager& EntityManager, UWorld* World,
+	const TArray<FMassEntityHandle>& Entities, const TArray<FVector>& Targets,
+	int32 CommandCount, bool bRespectShift)
+{
+	UUnitFormationSubsystem* Formation = World ? World->GetSubsystem<UUnitFormationSubsystem>() : nullptr;
+	if (!Formation || Entities.IsEmpty())
+	{
+		return;
+	}
+
+	const bool bShiftBlocks = bRespectShift && IsShiftPressed;
+	const bool bFormGroup = !bShiftBlocks && UUnitFormationSubsystem::IsFormationEnabled()
+		&& Entities.Num() >= UUnitFormationSubsystem::GetMinGroupSize();
+	if (bFormGroup && Formation->RegisterGroup(Entities, Targets) != INDEX_NONE)
+	{
+		for (const FMassEntityHandle& Entity : Entities)
+		{
+			EntityManager.Defer().AddTag<FUnitFormationMemberTag>(Entity);
+		}
+		return;
+	}
+
+
+	Formation->UnregisterEntities(Entities);
+	for (const FMassEntityHandle& Entity : Entities)
+	{
+		EntityManager.Defer().RemoveTag<FUnitFormationMemberTag>(Entity);
 	}
 }
 
@@ -1012,6 +1069,16 @@ void ACustomControllerBase::RTSPerfTest(float StandSeconds, float MarchSeconds, 
 	RTSSelectAllOwn();
 	RTSPerfTestFixCamera();
 
+#if CSV_PROFILER
+	// Die Aufnahme gehoert zum Messfall: startet mit ihm und endet mit Phase_Done. Vorher lief sie per
+	// "csvprofile frames=N" - die Bildzahl haengt aber an der Bildrate, und ein Lauf ohne Bildratendeckel
+	// endete mitten in der Marschphase (gemessen 07.10.2026).
+	if (FCsvProfiler::Get() && !FCsvProfiler::Get()->IsCapturing())
+	{
+		FCsvProfiler::Get()->BeginCapture();
+		bRTSPerfTestOwnsCsvCapture = true;
+	}
+#endif
 	CSV_EVENT_GLOBAL(TEXT("Phase_Standing"));
 	UE_LOG(LogTemp, Warning,
 		TEXT("[PerfTest] Start | %.0f s stehen, dann %.0f s marschieren (%.0f uu, Nachbefehl alle %.0f s) | %d Einheiten"),
@@ -1045,6 +1112,13 @@ void ACustomControllerBase::RTSPerfTestTick()
 		if (Elapsed > RTSPerfTestStandSeconds + RTSPerfTestMoveSeconds + 15.0)
 		{
 			CSV_EVENT_GLOBAL(TEXT("Phase_Done"));
+#if CSV_PROFILER
+			if (bRTSPerfTestOwnsCsvCapture && FCsvProfiler::Get() && FCsvProfiler::Get()->IsCapturing())
+			{
+				FCsvProfiler::Get()->EndCapture();
+			}
+			bRTSPerfTestOwnsCsvCapture = false;
+#endif
 			UE_LOG(LogTemp, Warning, TEXT("[PerfTest] FERTIG."));
 			GetWorldTimerManager().ClearTimer(RTSPerfTestTimer);
 		}
@@ -1089,6 +1163,9 @@ void ACustomControllerBase::RTSPerfTestTick()
 
 	++RTSPerfTestOrderCount;
 	RTSPerfTestFixCamera();
+	// Marke je Befehl: die Kosten des Befehls selbst (Formation, Gruppe anlegen) zeigen sich als Spitze
+	// genau in diesem Bild und lassen sich so von der laufenden Marschlast trennen.
+	CSV_EVENT_GLOBAL(TEXT("Order"));
 
 	const int32 GroupCount = FMath::Max(1, CVarRTS_PerfTestGroups.GetValueOnGameThread());
 	if (GroupCount <= 1)
@@ -1308,7 +1385,7 @@ void ACustomControllerBase::Batch_KickUnits(const TArray<AUnitBase*>& Units)
 	EntityManager.FlushCommands();
 }
 
-void ACustomControllerBase::ApplyMovePredictionToUnit(
+FMassEntityHandle ACustomControllerBase::ApplyMovePredictionToUnit(
 	FMassEntityManager& EntityManager,
 	UWorld* World,
 	AUnitBase* Unit,
@@ -1321,19 +1398,19 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 {
 	if (!Unit || !World)
 	{
-		return;
+		return FMassEntityHandle();
 	}
 	if (!Unit->IsInitialized)
 	{
-		return;
+		return FMassEntityHandle();
 	}
 	if (!Unit->CanMove)
 	{
-		return;
+		return FMassEntityHandle();
 	}
 	if (Unit->UnitState == UnitData::Dead)
 	{
-		return;
+		return FMassEntityHandle();
 	}
 
 	if (bResetHoldPosition)
@@ -1370,7 +1447,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 
 	if (!EntityManager.IsEntityValid(MassEntityHandle))
 	{
-		return;
+		return FMassEntityHandle();
 	}
 
 	FMassCombatStatsFragment* CombatStatsPtr = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(MassEntityHandle);
@@ -1378,7 +1455,7 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 	FMassAIStateFragment* AiStatePtr = EntityManager.GetFragmentDataPtr<FMassAIStateFragment>(MassEntityHandle);
 	if (!AiStatePtr)
 	{
-		return;
+		return FMassEntityHandle();
 	}
 
 	// Crucial: reset switching state so the move command is processed immediately by client processors.
@@ -1414,6 +1491,12 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 		PredFrag->PredAcceptanceRadius = AcceptanceRadius;
 		PredFrag->bHasData = true;
 		PredFrag->PredSource = 6; // [PredDiag]
+		// Neuer Befehl: der "Server steht"-Halt der Abstandsbremse stammt vom STILLSTAND davor und
+		// darf den neuen Zug nicht festhalten. Gemessen 07.10.2026: Einheiten fuhren erst verzoegert
+		// oder gar nicht los, weil der Halt nach dem 0,6-s-Freilauf noch eingerastet war, bevor die
+		// erste Serverbewegung (5-Hz-Bubble) ankam.
+		PredFrag->AuthStillStreak = 0;
+		PredFrag->bAuthStillHalt = false;
 		// Stamp the command time so ApplyReplicatedTagBits can let this predicted Run beat the
 		// stale replicated worker bits for a bounded grace window (see bSuppressWorkerStomp).
 		PredFrag->CommandPredictTime = World->GetTimeSeconds();
@@ -1490,6 +1573,9 @@ void ACustomControllerBase::ApplyMovePredictionToUnit(
 	EntityManager.Defer().RemoveTag<FMassStateGoToRepairTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateGoToResourceExtractionTag>(MassEntityHandle);
 	EntityManager.Defer().RemoveTag<FMassStateResourceExtractionTag>(MassEntityHandle);
+
+	// Wer im Laufen weiterkaempft, marschiert nicht - keine Formationsgruppe.
+	return bIsMovingWhileAttacking ? FMassEntityHandle() : MassEntityHandle;
 }
 
 void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Implementation(
@@ -1558,6 +1644,11 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 	}
 
 	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Begin batch: Units=%d Targets=%d Speeds=%d Count=%d World=%s"), Units.Num(), NewTargetLocations.Num(), DesiredSpeeds.Num(), Count, *GetNameSafe(World));
+	// Formation: dieselbe Gruppe wie auf dem Server bilden - aus denselben (vom Server geprueften)
+	// Zielen. Damit rechnet der Client dieselbe Tempo-/Seitenregelung vor, statt gegen den Server
+	// zu laufen (das war das starke Ruckeln: Client volles Tempo, Server geregelt).
+	TArray<FMassEntityHandle> FormationEntities;
+	TArray<FVector> FormationTargets;
 	for (int32 Index = 0; Index < Count; ++Index)
 	{
 		const int32 UnitIndex = UnitIndices[Index];
@@ -1586,8 +1677,14 @@ void ACustomControllerBase::Client_Predict_Batch_CorrectSetUnitMoveTargets_Imple
 
 		// Apply the shared prediction logic for this resolved unit. Skips (not initialized / can't move /
 		// dead / invalid entity) are handled inside the helper. Flush happens once after the loop.
-		ApplyMovePredictionToUnit(EntityManager, World, Unit, NewTargetLocations[Index], DesiredSpeeds[Index], AcceptanceRadii[Index], AttackT, bResetHoldPosition, bResetFollowTarget);
+		const FMassEntityHandle Marching = ApplyMovePredictionToUnit(EntityManager, World, Unit, NewTargetLocations[Index], DesiredSpeeds[Index], AcceptanceRadii[Index], AttackT, bResetHoldPosition, bResetFollowTarget);
+		if (Marching.IsSet())
+		{
+			FormationEntities.Add(Marching);
+			FormationTargets.Add(NewTargetLocations[Index]);
+		}
 	}
+	ApplyFormationGroup(EntityManager, World, FormationEntities, FormationTargets, Count, /*bRespectShift=*/false);
 	// Ensure deferred commands (tags added/removed) are applied immediately so prediction is visible to processors
 	EntityManager.FlushCommands();
 	//UE_LOG(LogTemp, Warning, TEXT("[Client][Prediction] Flushed deferred Mass commands for batch (%d units)"), Count);
@@ -3924,10 +4021,18 @@ void ACustomControllerBase::RunUnitsAndSetWaypointsMass(FHitResult Hit)
 		// only remote clients predict locally here; refs are the locally-selected units (always valid).
 		if (!HasAuthority())
 		{
+			TArray<FMassEntityHandle> FormationEntities;
+			TArray<FVector> FormationTargets;
 			for (int32 i = 0; i < BatchUnits.Num(); ++i)
 			{
-				ApplyMovePredictionToUnit(EntityManager, GetWorld(), BatchUnits[i], BatchLocs[i], BatchSpeeds[i], BatchRadii[i], false, true, true);
+				const FMassEntityHandle Marching = ApplyMovePredictionToUnit(EntityManager, GetWorld(), BatchUnits[i], BatchLocs[i], BatchSpeeds[i], BatchRadii[i], false, true, true);
+				if (Marching.IsSet())
+				{
+					FormationEntities.Add(Marching);
+					FormationTargets.Add(BatchLocs[i]);
+				}
 			}
+			ApplyFormationGroup(EntityManager, GetWorld(), FormationEntities, FormationTargets, BatchUnits.Num(), /*bRespectShift=*/true);
 			EntityManager.FlushCommands();
 		}
     }
@@ -4838,7 +4943,7 @@ bool ACustomControllerBase::IsUnitEligibleForFormationLine(const AUnitBase* Unit
 
 bool ACustomControllerBase::IsFormationLineDragValid() const
 {
-	if (!bFormationLineDragActive || FormationLineDragUnits.Num() < 2)
+	if (!bFormationLineDragActive || !bFormationLineDragArmed || FormationLineDragUnits.Num() < 2)
 	{
 		return false;
 	}
@@ -4914,6 +5019,14 @@ void ACustomControllerBase::BeginFormationLineDrag(const FVector& StartWorld, bo
 	}
 
 	bFormationLineDragActive = true;
+	// Haltezeit + Bildschirmweg starten jetzt; erst wenn beide erreicht sind, darf eine Linie entstehen.
+	bFormationLineDragArmed = false;
+	FormationLineDragStartTime = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0;
+	{
+		float MouseX = 0.f, MouseY = 0.f;
+		GetMousePosition(MouseX, MouseY);
+		FormationLineDragStartScreen = FVector2D(MouseX, MouseY);
+	}
 	FormationLinePlaneZ = StartWorld.Z;
 	bFormationLineDragIsAttackMove = bAttackMove;
 	bFormationLineDragFromRightMouse = bFromRightMouse;
@@ -4930,6 +5043,17 @@ void ACustomControllerBase::UpdateFormationLineDrag(const FVector& CurrentWorld)
 	if (!bFormationLineDragActive || CurrentWorld.ContainsNaN())
 	{
 		return;
+	}
+
+	// Scharf erst nach Haltezeit UND Bildschirmweg. Einmal scharf, bleibt es so - zurueckziehen
+	// zum Startpunkt macht die Geste nicht wieder zum Klick (das regelt die Weltschwelle).
+	if (!bFormationLineDragArmed)
+	{
+		const double HeldSeconds = GetWorld() ? GetWorld()->GetRealTimeSeconds() - FormationLineDragStartTime : 0.0;
+		float MouseX = 0.f, MouseY = 0.f;
+		const bool bHasMouse = GetMousePosition(MouseX, MouseY);
+		const float PixelTravel = bHasMouse ? FVector2D::Distance(FVector2D(MouseX, MouseY), FormationLineDragStartScreen) : 0.f;
+		bFormationLineDragArmed = HeldSeconds >= FormationLineHoldTime && PixelTravel >= FormationLineDragThresholdPixels;
 	}
 
 	FormationLineEndWorld = CurrentWorld;
@@ -5281,10 +5405,18 @@ bool ACustomControllerBase::FinishFormationLineDrag(bool bFromRightMouse)
 		if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
 		{
 			FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
+			TArray<FMassEntityHandle> FormationEntities;
+			TArray<FVector> FormationTargets;
 			for (int32 i = 0; i < TargetUnits.Num(); ++i)
 			{
-				ApplyMovePredictionToUnit(EntityManager, GetWorld(), TargetUnits[i], TargetLocs[i], TargetSpeeds[i], TargetRadii[i], false, true, true);
+				const FMassEntityHandle Marching = ApplyMovePredictionToUnit(EntityManager, GetWorld(), TargetUnits[i], TargetLocs[i], TargetSpeeds[i], TargetRadii[i], false, true, true);
+				if (Marching.IsSet())
+				{
+					FormationEntities.Add(Marching);
+					FormationTargets.Add(TargetLocs[i]);
+				}
 			}
+			ApplyFormationGroup(EntityManager, GetWorld(), FormationEntities, FormationTargets, TargetUnits.Num(), /*bRespectShift=*/true);
 			EntityManager.FlushCommands();
 		}
 	}
