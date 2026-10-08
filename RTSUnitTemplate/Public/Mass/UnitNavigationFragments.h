@@ -41,6 +41,27 @@ struct FUnitNavigationPathFragment : public FMassFragment
 	UPROPERTY()
 	float NaechsteSucheFruehestens = 0.f;
 
+	/** Seconds the movement step has been clamped at a navmesh edge in a row (UUnitApplyMassMovementProcessor). */
+	float NavClampSeconds = 0.f;
+
+	/**
+	 * The current path was dropped automatically (navmesh edge clamp), not by a new order. The next search then
+	 * must not shorten the order's goal (MoveTarget.Center) to the end of a partial path.
+	 */
+	bool bAutoRepath = false;
+
+	/**
+	 * The current path came from such an automatic search: advance waypoints only when the current one is reached
+	 * or passed, never by skipping ahead to a nearer segment (that skip pointed the unit across the edge before).
+	 */
+	bool bStrictAdvance = false;
+
+	/** Fresh path searches the RunStall watchdog already tried before giving up to Idle (reset on progress). */
+	uint8 StallRepathCount = 0;
+
+	/** Client: seconds the unit has been far from the (extrapolated) server position while both move. */
+	float RouteMismatchSeconds = 0.f;
+
 	/** Reset path data */
 	void ResetPath()
 	{

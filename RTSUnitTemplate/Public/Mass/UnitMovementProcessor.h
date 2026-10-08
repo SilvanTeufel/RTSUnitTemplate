@@ -72,7 +72,7 @@ protected:
     // eine Kopie des Zeigers und haelt den Zaehler am Leben, ohne `this` einzufangen.
     TSharedPtr<FThreadSafeCounter, ESPMode::ThreadSafe> AusweichVerwurfZaehler;
 
-    void RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation);
+    void RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation, bool bAutoRepath = false);
     void ResetPathfindingFlagDeferred(FMassEntityHandle Entity);
 
 private:
@@ -106,5 +106,6 @@ private:
     
     void ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
     void ExecuteServer(FMassEntityManager& EntityManager, FMassExecutionContext& Context);
+
 };
 

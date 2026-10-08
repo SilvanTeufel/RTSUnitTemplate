@@ -35,6 +35,19 @@
  * 120 uu entsprechen rund vier Reconcile-Takten Rueckstand bei voller Laufgeschwindigkeit - weit
  * ueber normalem Netzversatz, weit unter den gemessenen 180.
  */
+// Pfad-Abgleich Client -> Server (siehe Verwendung im Clientzweig).
+static TAutoConsoleVariable<float> CVarRTS_ClientRouteMismatchDistance(
+	TEXT("RTS.ClientRouteMismatchDistance"),
+	300.f,
+	TEXT("Client: a moving unit this far from its (extrapolated) server position for RTS.ClientRouteMismatchSeconds ")
+	TEXT("re-plans its path starting at the server position, so it takes the server's route. 0 = off."),
+	ECVF_Default);
+static TAutoConsoleVariable<float> CVarRTS_ClientRouteMismatchSeconds(
+	TEXT("RTS.ClientRouteMismatchSeconds"),
+	1.0f,
+	TEXT("See RTS.ClientRouteMismatchDistance."),
+	ECVF_Default);
+
 static TAutoConsoleVariable<float> CVarRTS_ClientMaxVoraus(
     TEXT("RTS.ClientMaxVoraus"),
     120.f,
@@ -81,6 +94,59 @@ static TAutoConsoleVariable<int32> CVarRTS_ClientAuthStillTakte(
     TEXT("Client: soviele Reconcile-Takte ohne jede Serverbewegung, bevor der lokale Mover ganz haelt (0 = aus)."),
     ECVF_Default);
 
+/**
+ * Abstandsbremse nur, wenn der Client VOR der autoritativen Position liegt (in Laufrichtung).
+ *
+ * Gemessen 07.10.2026 (Formationstest, Listen Server + Client): die Bremse nahm den ungerichteten
+ * Abstand. Lag der Client HINTER dem Server, wurde er trotzdem auf 0 gebremst, fiel weiter zurueck
+ * und kam nur noch ueber die 10-Hz-Spruenge des Reconcilers voran: Client-Tempo 3-15 cm/s gegen
+ * 800-870 auf dem Server, in ueber 60 % der Bilder DesiredVelocity = 0, Abstand bis 1037 uu.
+ * Der Name der Bremse ("Voraus") meinte schon immer nur den Vorsprung.
+ * Der Halt bei stehendem Server (bAuthStillHalt) bleibt ungerichtet.
+ */
+static TAutoConsoleVariable<int32> CVarRTS_ClientLeadDirectional(
+    TEXT("RTS.ClientLeadDirectional"),
+    1,
+    TEXT("1 = Abstandsbremse nur bei Vorsprung des Clients in Laufrichtung (Vorgabe). 0 = ungerichtet wie frueher."),
+    ECVF_Default);
+
+/**
+ * Erlaubter Vorsprung durch die REPLIKATION, als Zeit: die Bremse beginnt erst bei
+ * RTS.ClientVorausWeich + Tempo * LeadTime und haelt erst bei RTS.ClientMaxVoraus + Tempo * LeadTime.
+ *
+ * Gemessen 07.10.2026: die Serverlage kommt mit net.RTS.Bubble.NetUpdateHz = 5 an, ist also bis zu
+ * 200 ms plus Latenz alt. Bei 800-850 cm/s liegt der Client deshalb NORMAL 150-250 uu "vorn" - die
+ * feste Kennlinie 45..120 uu bremste ihn praktisch dauernd auf 0 (Ahead=2403, Zeroed=1809 in 2 s):
+ * Stop-and-go, das sichtbare Ruckeln. 0,35 s = ein 5-Hz-Takt plus Reserve fuer Latenz.
+ */
+static TAutoConsoleVariable<float> CVarRTS_ClientLeadTime(
+    TEXT("RTS.ClientLeadTime"),
+    0.f,
+    TEXT("Client: Sekunden Vorsprung, die zusaetzlich als Replikationsrueckstand gelten. Vorgabe 0 - ersetzt durch ")
+    TEXT("die Hochrechnung der Serverlage (RTS.ClientExtrapolateMax). Nur noch als Notbehelf zum Vergleichen."),
+    ECVF_Default);
+
+/**
+ * Hochrechnung der replizierten Serverlage auf JETZT (Nutzerwunsch 07.10.2026: mit den auf dem Client
+ * vorhandenen Daten arbeiten statt Schwellen zu vergroessern). Das Servertempo schaetzt der Reconciler
+ * aus den letzten zwei frischen Updates (FUnitReplicatedTransformFragment::EstimatedVelocity).
+ * Der Wert ist das hoechste Alter (s), ueber das hochgerechnet wird - danach gilt der Server als stehend.
+ */
+static TAutoConsoleVariable<float> CVarRTS_ClientExtrapolateMax(
+    TEXT("RTS.ClientExtrapolateMax"),
+    // 1,0 statt 0,4: auf dem Dedicated Server kamen frische Lagen im Schnitt nur alle 0,3-0,6 s. Hochgerechnet
+    // wird ohnehin nur, solange der Server ein Tempo meldet (MoveTarget.DesiredSpeed > 10).
+    1.0f,
+    TEXT("Client: Serverlage bis zu so vielen Sekunden mit dem geschaetzten Servertempo hochrechnen (0 = aus, rohe Lage)."),
+    ECVF_Default);
+
+/** Freilauf nach einem eigenen Befehl: so lange bremst die Abstandsbremse den Client gar nicht. */
+static TAutoConsoleVariable<float> CVarRTS_ClientFreshCommandWindow(
+    TEXT("RTS.ClientFreshCommandWindow"),
+    1.0f,
+    TEXT("Client: Sekunden nach einem vorhergesagten Bewegungsbefehl, in denen die Abstandsbremse nicht greift (war fest 0,6)."),
+    ECVF_Default);
+
 /** Restabstand, ab dem der Halt bei stehendem Server ueberhaupt greift (uu, 2D). */
 static TAutoConsoleVariable<float> CVarRTS_ClientAuthStillToleranz(
     TEXT("RTS.ClientAuthStillToleranz"),
@@ -102,6 +168,8 @@ static TAutoConsoleVariable<float> CVarRTS_ClientAuthStillToleranz(
 #include "NavAreas/NavArea_Obstacle.h"
 #include "NavAreas/NavArea_EnergyWall.h"
 #include "Async/Async.h"
+#include "GameFramework/PlayerController.h"
+#include "GameFramework/PlayerState.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
 
@@ -113,11 +181,52 @@ static TAutoConsoleVariable<float> CVarRTS_ClientAuthStillToleranz(
 // moves, so re-pathfinding is constant and early waypoints land near/behind the unit). Instead we project the unit
 // onto the path polyline and steer toward the FORWARD end of the closest segment, clamped to never go backward
 // (monotonic). Bounded look-ahead keeps it cheap and avoids skipping across hairpins. 2D (flat navigation).
-static void RTS_AdvancePathIndexByProjection(FUnitNavigationPathFragment& PathFrag, const TArray<FNavPathPoint>& PathPoints, const FVector& CurrentLocation)
+static void RTS_AdvancePathIndexByProjection(FUnitNavigationPathFragment& PathFrag, const TArray<FNavPathPoint>& PathPoints, const FVector& CurrentLocation, UNavigationSystemV1* NavSys = nullptr)
 {
 	const int32 NumPts = PathPoints.Num();
 	if (NumPts < 2) return;
 	const int32 Cur = FMath::Clamp(PathFrag.CurrentPathPointIndex, 0, NumPts - 1);
+
+	// Pfad aus einer Kanten-Neusuche: nur weiterschalten, wenn der aktuelle Wegpunkt erreicht oder entlang
+	// seines eigenen Abschnitts passiert ist. Das Vorspringen auf einen naeheren spaeteren Abschnitt hatte die
+	// Einheit erst gegen die Kante gefuehrt (Rampenfuss, 08.10.) - es wuerde sie sofort wieder dorthin lenken.
+	if (PathFrag.bStrictAdvance)
+	{
+		int32 Idx = FMath::Max(Cur, 1);
+		while (Idx < NumPts - 1)
+		{
+			const FVector A = PathPoints[Idx - 1].Location;
+			const FVector B = PathPoints[Idx].Location;
+			FVector AB = B - A; AB.Z = 0.f;
+			const float ABLenSq = AB.SizeSquared();
+			FVector AP = CurrentLocation - A; AP.Z = 0.f;
+			const bool bReached = FVector::DistSquared2D(CurrentLocation, B) <= FMath::Square(75.f);
+			bool bPassed = !bReached && ABLenSq > KINDA_SMALL_NUMBER && FVector::DotProduct(AP, AB) / ABLenSq >= 0.99f;
+			// Auch "schon weiter als der Wegpunkt": naeher am naechsten Punkt als der Wegpunkt selbst. Sonst lief
+			// eine seitlich vorbeigedrueckte Einheit zum Wegpunkt ZURUECK (08.10., auf dem Client sichtbar).
+			if (!bReached && !bPassed)
+			{
+				bPassed = FVector::DistSquared2D(CurrentLocation, PathPoints[Idx + 1].Location)
+					< FVector::DistSquared2D(B, PathPoints[Idx + 1].Location);
+			}
+			// "Passiert" allein reicht nicht: seitlich weit neben dem Wegpunkt (Rampenfuss, 08.10.) liegt der
+			// naechste oft hinter der Kante. Nur weiterschalten, wenn er von hier auf dem Netz sichtbar ist.
+			if (bPassed && NavSys)
+			{
+				FNavLocation Here;
+				FVector Hit;
+				bPassed = NavSys->ProjectPointToNavigation(CurrentLocation, Here, FVector(100.f, 100.f, 300.f))
+					&& !UNavigationSystemV1::NavigationRaycast(NavSys, Here.Location, PathPoints[Idx + 1].Location, Hit);
+			}
+			if (!bReached && !bPassed)
+			{
+				break;
+			}
+			++Idx;
+		}
+		PathFrag.CurrentPathPointIndex = FMath::Max(Cur, Idx);
+		return;
+	}
 	const int32 StartSeg = FMath::Max(0, Cur - 1);                 // include the segment leading to the current target
 	const int32 EndSeg = FMath::Min(NumPts - 2, Cur + 4);          // bounded look-ahead (cheap; realistic overshoot)
 	int32 BestTargetIdx = Cur;
@@ -292,6 +401,19 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
 {
     UWorld* World = GetWorld();
     if (!World) return;
+
+    // Gemessener Ping (Hin + Rueck) des lokalen Spielers. Um Ping x Tempo liegt eine vorhergesagte
+    // Einheit NORMAL vor der Serverlage: der Client faehrt sofort los, der Server erst nach dem Hinweg
+    // des Befehls, und seine Lage kommt mit dem Rueckweg an. Das darf die Abstandsbremse nicht bremsen.
+    float RoundTripSeconds = 0.f;
+    if (const APlayerController* LocalPC = World->GetFirstPlayerController())
+    {
+        if (const APlayerState* LocalPS = LocalPC->PlayerState)
+        {
+            // Bis 1 s: im Internet sind 100-300 ms normal, die Rechnung soll dort genauso gelten.
+            RoundTripSeconds = FMath::Clamp(LocalPS->GetPingInMilliseconds() / 1000.f, 0.f, 1.f);
+        }
+    }
     UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetCurrent(World);
     const bool bHasNavSystem = (NavSystem != nullptr);
 
@@ -437,16 +559,100 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
             // neben ihrer echten Position her, weil Mover und Reconciler sich die Waage hielten.
             if (ReplXfList)
             {
-                const FVector AutoritativOrt = ReplXfList[i].Transform.GetLocation();
-                const float MaxVoraus = CVarRTS_ClientMaxVoraus.GetValueOnAnyThread();
-                if (MaxVoraus > 0.f && !AutoritativOrt.IsNearlyZero())
+                // Serverlage auf JETZT hochgerechnet (Tempo aus den letzten zwei Updates, Alter max.
+                // RTS.ClientExtrapolateMax). Ohne das lag der Client bei 5-Hz-Bubble und vollem Tempo
+                // staendig 150-250 uu "vorn" und wurde dauernd gebremst (Stop-and-go).
+                //
+                // Ob der Server faehrt, sagt sein REPLIZIERTES Tempo (MoveTarget.DesiredSpeed wird auf dem
+                // Client aus der Bubble gesetzt) eindeutig - anders als "wie lange kam keine neue Lage".
+                // Gemessen 07.10.2026 auf dem Dedicated Server: frische Lagen im Schnitt alle 0,3-0,6 s,
+                // einzeln bis 4,7 s - die Zeit allein hielt fahrende Server fuer stehend.
+                const bool bServerSaysMoving = MoveTarget.DesiredSpeed.Get() > 10.f;
+                //
+                // Alter der Serverlage = Zeit seit ANKUNFT + halber Ping (Weg Server -> Client). Deshalb wird
+                // mit "jetzt + halber Ping" hochgerechnet; die Obergrenze waechst um denselben Betrag mit.
+                const float OneWaySeconds = RoundTripSeconds * 0.5f;
+                FVector AutoritativOrt = ReplXfList[i].Transform.GetLocation();
+                if (bServerSaysMoving && CVarRTS_ClientExtrapolateMax.GetValueOnAnyThread() > 0.f)
                 {
-                    const float VorausAbstand = FVector::Dist2D(CurrentLocation, AutoritativOrt);
+                    const FVector Extrapolated = ReplXfList[i].GetExtrapolatedLocation(World->GetTimeSeconds() + OneWaySeconds,
+                        CVarRTS_ClientExtrapolateMax.GetValueOnAnyThread() + OneWaySeconds);
+                    // Nie ueber das Ziel hinaus hochrechnen: die Server-Einheit haelt dort an. Ohne diese Grenze lief
+                    // die hochgerechnete Lage beim Ankommen mit dem letzten Tempo am Ziel vorbei, der Client galt als
+                    // "vorgelaufen" und wurde kurz vor dem Ziel genullt - danach zog ihn der Reconciler ruckartig nach
+                    // (gemessen 07.10.2026: ZeroedLead 1900-3650 je 2 s genau am Ende jedes Befehls).
+                    const FVector RawLocation = AutoritativOrt;
+                    const float RawToTarget = FVector::Dist2D(RawLocation, FinalDestination);
+                    const FVector Step = Extrapolated - RawLocation;
+                    const float StepLength = Step.Size2D();
+                    AutoritativOrt = (StepLength > RawToTarget && StepLength > KINDA_SMALL_NUMBER)
+                        ? RawLocation + Step * (RawToTarget / StepLength)
+                        : Extrapolated;
+                }
+                const float MaxVoraus = CVarRTS_ClientMaxVoraus.GetValueOnAnyThread();
+
+                // Faehrt der Server laut Tempo, ist seine letzte Lage aber aelter als die Hochrechnung reicht,
+                // kennt der Client die Serverlage schlicht NICHT. Dann nicht bremsen - die Vorhersage faehrt
+                // weiter, bis wieder frische Daten kommen. Gemessen 07.10.2026 auf dem Dedicated Server:
+                // Luecken bis 3,3 s, die gesehene Serverlage lag 11-19 m zurueck, obwohl die Gruppenmitten
+                // von Client und Server gleich waren -> Client gestoppt, danach vom Reconciler versetzt.
+                const float ExtrapolateMax = CVarRTS_ClientExtrapolateMax.GetValueOnAnyThread();
+                const bool bServerDataStale = bServerSaysMoving && ReplXfList[i].LastFreshTime >= 0.0
+                    && (World->GetTimeSeconds() - ReplXfList[i].LastFreshTime) > FMath::Max(ExtrapolateMax, 0.2f);
+
+                // ---- Pfad-Abgleich -----------------------------------------------------------
+                // Client und Server suchen ihren Pfad jeder fuer sich. Beobachtet 08.10.: an einer Gabelung
+                // nahm eine von 100 Einheiten auf dem Client wiederholt einen ganz anderen Weg als der
+                // Server - der Reconciler zog sie zurueck, teils mit Snap. Laeuft die Einheit eine Weile weit
+                // neben der hochgerechneten Serverlage her, plant der Client deshalb ab der SERVERLAGE neu:
+                // derselbe Start wie beim Server liefert dieselbe Route.
+                {
+                    const float MismatchDistance = CVarRTS_ClientRouteMismatchDistance.GetValueOnAnyThread();
+                    const bool bFreshCommand = Pred.CommandPredictTime >= 0.f
+                        && (World->GetTimeSeconds() - Pred.CommandPredictTime) < CVarRTS_ClientFreshCommandWindow.GetValueOnAnyThread();
+                    const bool bMismatch = MismatchDistance > 0.f && bServerSaysMoving && !bServerDataStale && !bFreshCommand
+                        && bHasNavSystem && !AutoritativOrt.IsNearlyZero() && PathFrag.HasValidPath()
+                        && FVector::Dist2D(CurrentLocation, AutoritativOrt) > MismatchDistance;
+                    PathFrag.RouteMismatchSeconds = bMismatch ? PathFrag.RouteMismatchSeconds + Context.GetDeltaTimeSeconds() : 0.f;
+
+                    if (bMismatch && PathFrag.RouteMismatchSeconds >= CVarRTS_ClientRouteMismatchSeconds.GetValueOnAnyThread()
+                        && !PathFrag.bIsPathfindingInProgress)
+                    {
+                        PathFrag.RouteMismatchSeconds = 0.f;
+                        FNavLocation ServerStart;
+                        if (NavSystem->ProjectPointToNavigation(AutoritativOrt, ServerStart, NavMeshProjectionExtent))
+                        {
+                            PathFrag.ResetPath();
+                            PathFrag.bIsPathfindingInProgress = true;
+                            PathFrag.PathTargetLocation = FinalDestination;
+                            RequestPathfindingAsync(Entity, ServerStart.Location, FinalDestination);
+                        }
+                    }
+                }
+
+                if (MaxVoraus > 0.f && !AutoritativOrt.IsNearlyZero() && !bServerDataStale)
+                {
+                    const float UndirectedDistance = FVector::Dist2D(CurrentLocation, AutoritativOrt);
+                    // Gerichtet ueber den FORTSCHRITT: Vorsprung = um wie viel der Client naeher am Ziel ist
+                    // als der Server. Die erste Fassung nahm die Richtung "Server -> Ziel" - steht der Server
+                    // schon am Ziel, zeigt dieser Vektor irgendwohin, und Nachzuegler galten als vorgelaufen
+                    // (gemessen 07.10.2026: 14 Einheiten 8-12 m hinter dem Server, 1806 Bremsungen in 2 s).
+                    float VorausAbstand = UndirectedDistance;
+                    if (CVarRTS_ClientLeadDirectional.GetValueOnAnyThread() != 0)
+                    {
+                        VorausAbstand = FMath::Max(0.f,
+                            FVector::Dist2D(AutoritativOrt, FinalDestination) - FVector::Dist2D(CurrentLocation, FinalDestination));
+                    }
+                    // Normaler Vorsprung einer Vorhersage: der Client faehrt um den HINWEG des Befehls frueher los
+                    // -> Tempo x halber Ping (+ optional RTS.ClientLeadTime). Den Rueckweg deckt die Hochrechnung ab.
+                    const float ReplicationLead = DesiredSpeedUsed
+                        * (OneWaySeconds + FMath::Max(0.f, CVarRTS_ClientLeadTime.GetValueOnAnyThread()));
+
 
                     // Ein frisch client-kommandierter Zug DARF vorauslaufen - das ist die
                     // Sofortreaktion auf den eigenen Klick, bevor der Server ihn bestaetigt.
                     const bool bFrischBefohlen = Pred.CommandPredictTime >= 0.f
-                        && (World->GetTimeSeconds() - Pred.CommandPredictTime) < 0.6f;
+                        && (World->GetTimeSeconds() - Pred.CommandPredictTime) < CVarRTS_ClientFreshCommandWindow.GetValueOnAnyThread();
 
                     // (1) Der SERVER steht - dann hat der Client nichts vorzurechnen.
                     //     Loest auf einer anderen Groesse aus als der, die es beeinflusst, und
@@ -457,25 +663,47 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                     // Ausschalten haengt NUR daran, ob der Server sich wieder ruehrt. Siehe die
                     // Begruendung an FMassClientPredictionFragment::bAuthStillHalt: v2 hat genau
                     // hier noch den Abstand geprueft und deshalb um die Toleranz gependelt.
-                    if (Pred.AuthStillStreak == 0)
+                    const float StillTime = FUnitReplicatedTransformFragment::GetServerStillTime();
+                    bool bServerRuehrtSichNicht = false;
+                    if (StillTime > 0.f)
                     {
-                        Pred.bAuthStillHalt = false;
+                        // Zeitbasiert (siehe RTS.ClientServerStillTime) und GERICHTET: nur halten, wenn der
+                        // Client naeher am Ziel ist als der stehende Server - also vorgelaufen. Liegt er
+                        // dahinter, faehrt er weiter zum Ziel. Vorher hielt der Halt auch Nachzuegler an,
+                        // die dann vor dem Ziel stehen blieben (gemessen 07.10.2026, 6,6 m davor).
+                        const FVector RawServerLocation = ReplXfList[i].Transform.GetLocation();
+                        bServerRuehrtSichNicht = !bServerSaysMoving
+                            && ReplXfList[i].IsServerStill(World->GetTimeSeconds(), StillTime)
+                            && UndirectedDistance > CVarRTS_ClientAuthStillToleranz.GetValueOnAnyThread()
+                            && FVector::Dist2D(CurrentLocation, FinalDestination) + CVarRTS_ClientAuthStillToleranz.GetValueOnAnyThread()
+                               < FVector::Dist2D(RawServerLocation, FinalDestination);
+                        Pred.bAuthStillHalt = bServerRuehrtSichNicht;
                     }
-                    else if (StillTakte > 0
-                        && Pred.AuthStillStreak >= StillTakte
-                        && VorausAbstand > CVarRTS_ClientAuthStillToleranz.GetValueOnAnyThread())
+                    else
                     {
-                        Pred.bAuthStillHalt = true;
+                        // Alte Taktzaehlung (RTS.ClientServerStillTime 0).
+                        if (Pred.AuthStillStreak == 0)
+                        {
+                            Pred.bAuthStillHalt = false;
+                        }
+                        else if (StillTakte > 0
+                            && Pred.AuthStillStreak >= StillTakte
+                            && UndirectedDistance > CVarRTS_ClientAuthStillToleranz.GetValueOnAnyThread())
+                        {
+                            Pred.bAuthStillHalt = true;
+                        }
+                        bServerRuehrtSichNicht = Pred.bAuthStillHalt;
                     }
-                    const bool bServerRuehrtSichNicht = Pred.bAuthStillHalt;
 
                     // (2) Weiche Kennlinie statt Schaltschwelle. Zwischen Weich und MaxVoraus
                     //     faellt das Tempo linear auf 0 - es gibt keinen Punkt mehr, um den
                     //     etwas schwingen koennte.
+                    // Beide Grenzen um den Replikationsrueckstand verschoben (RTS.ClientLeadTime).
                     const float Weich = FMath::Min(CVarRTS_ClientVorausWeich.GetValueOnAnyThread(),
-                                                   MaxVoraus - 1.f);
+                                                   MaxVoraus - 1.f) + ReplicationLead;
+                    const float MaxLead = MaxVoraus + ReplicationLead;
                     const float Anteil = FMath::Clamp(
-                        1.f - (VorausAbstand - Weich) / FMath::Max(MaxVoraus - Weich, 1.f), 0.f, 1.f);
+                        1.f - (VorausAbstand - Weich) / FMath::Max(MaxLead - Weich, 1.f), 0.f, 1.f);
 
                     if (!bFrischBefohlen && (bServerRuehrtSichNicht || Anteil < 1.f))
                     {
@@ -488,6 +716,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
 
                         if (DesiredSpeedUsed <= KINDA_SMALL_NUMBER)
                         {
+
                             Steering.DesiredVelocity = FVector::ZeroVector;
                             continue;
                         }
@@ -606,7 +835,8 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
                         Steering.DesiredVelocity = FVector::ZeroVector; 
                         
                         // Wir übergeben FinalDestination direkt an den Pathfinder!
-                        RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination);
+                        RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination, PathFrag.bAutoRepath);
+                        PathFrag.bAutoRepath = false;
                     }
                     else
                     {
@@ -645,7 +875,7 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
 
                 // Monotonic projection-based advance (replaces proximity-only ++index that stalled on overshoot/
                 // pushed-past waypoints -> backward "waypoint error", worst on FOLLOW). See helper above.
-                RTS_AdvancePathIndexByProjection(PathFrag, PathPoints, CurrentLocation);
+                RTS_AdvancePathIndexByProjection(PathFrag, PathPoints, CurrentLocation, NavSystem);
 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {
@@ -818,7 +1048,8 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                     Steering.DesiredVelocity = FVector::ZeroVector; 
                     
                     // Wir übergeben FinalDestination direkt an den Pathfinder!
-                    RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination);
+                    RequestPathfindingAsync(Entity, ProjectedStartLocation.Location, FinalDestination, PathFrag.bAutoRepath);
+                    PathFrag.bAutoRepath = false;
                 }
                 else
                 {
@@ -847,7 +1078,7 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
                 // Monotonic projection-based advance (same logic as client; keeps server/client path-following
                 // identical so their trajectories don't diverge extra — important since FOLLOW positions already
                 // differ slightly between server and client).
-                RTS_AdvancePathIndexByProjection(PathFrag, PathPoints, CurrentLocation);
+                RTS_AdvancePathIndexByProjection(PathFrag, PathPoints, CurrentLocation, NavSystem);
 
                 if (PathPoints.IsValidIndex(PathFrag.CurrentPathPointIndex))
                 {
@@ -869,7 +1100,7 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
 }
 
 
-void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation)
+void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation, bool bAutoRepath)
 {
     UWorld* World = GetWorld();
     if (!World) return;
@@ -904,7 +1135,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
     }
 
     AsyncTask(ENamedThreads::AnyBackgroundThreadNormalTask,
-        [NavSystem, NavData, Entity, StartLocation, EndLocation, World, bClientWorld, StrictFilter = CachedStrictFilter, Zaehler = AusweichVerwurfZaehler] () mutable
+        [NavSystem, NavData, Entity, StartLocation, EndLocation, World, bClientWorld, bAutoRepath, StrictFilter = CachedStrictFilter, Zaehler = AusweichVerwurfZaehler] () mutable
     {
         // --- 1. STRICT MODE: Exklusion hartcodieren ---
         // Wir nutzen den gecachten Filter
@@ -1032,7 +1263,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         }
         
         AsyncTask(ENamedThreads::GameThread,
-            [Entity, PathResult, World, EndLocation, bClientWorld, Zaehler, ZielProjOk, ZielVersatz]() mutable
+            [Entity, PathResult, World, EndLocation, bClientWorld, bAutoRepath, Zaehler, ZielProjOk, ZielVersatz]() mutable
         {
             if (!World) return;
 
@@ -1044,7 +1275,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
             if (!EntityManager.IsEntityValid(Entity)) return;
 
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
-                [Entity, PathResult, EndLocation, bClientWorld, World, Zaehler, ZielProjOk, ZielVersatz](FMassEntityManager& System)
+                [Entity, PathResult, EndLocation, bClientWorld, bAutoRepath, World, Zaehler, ZielProjOk, ZielVersatz](FMassEntityManager& System)
                 {
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
                     {
@@ -1165,9 +1396,19 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                         {
                             PathFrag->CurrentPath = PathResult.Path;
                             PathFrag->CurrentPathPointIndex = 1;
+                            PathFrag->bStrictAdvance = bAutoRepath;
 
                             const FVector PathEndLoc = PathResult.Path->GetEndLocation();
-                            if (FVector::DistSquared(PathEndLoc, EndLocation) > FMath::Square(10.0f))
+                            if (bAutoRepath && FVector::DistSquared(PathEndLoc, EndLocation) > FMath::Square(10.0f))
+                            {
+                                // Automatische Neusuche (Navmesh-Kante): das Ziel des Befehls bleibt, wie es ist.
+                                // Vorher wurde auch hier MoveTarget.Center auf das Ende eines Teilpfads gekuerzt -
+                                // startete die Suche auf einer falschen Netzinsel (Einheit an der Klippe), lag das
+                                // Ende neben ihr: sie "kam an" und blieb stehen, bis ein neuer Befehl kam (08.10.).
+                                // Den Teilpfad trotzdem abfahren; endet er, plant der Prozessor regulaer neu.
+                                PathFrag->PathTargetLocation = EndLocation;
+                            }
+                            else if (FVector::DistSquared(PathEndLoc, EndLocation) > FMath::Square(10.0f))
                             {
                                 PathFrag->PathTargetLocation = PathEndLoc;
                                 // CLIENT: MoveTarget.Center NICHT mit dem LOKALEN Pfad-Ende ueberschreiben.

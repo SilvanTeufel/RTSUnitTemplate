@@ -52,7 +52,7 @@ void URunStateProcessor::ConfigureQueries(const TSharedRef<FMassEntityManager>& 
 	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly);
 	EntityQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite);
     // Nur fuer die Stall-Diagnose: existiert ueberhaupt ein Navigationspfad?
-    EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    EntityQuery.AddRequirement<FUnitNavigationPathFragment>(EMassFragmentAccess::ReadWrite, EMassFragmentPresence::Optional);
 
     EntityQuery.AddTagRequirement<FMassStateGoToBuildTag>(EMassFragmentPresence::None);
     EntityQuery.AddTagRequirement<FMassStateBuildTag>(EMassFragmentPresence::None);
@@ -209,9 +209,13 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                     StateFrag.LastProgressLocation = CurrentLocation;
                     StateFrag.NoProgressTimer = 0.f;
                 }
-                else if (DistZumZiel < StateFrag.BestTargetDistance - RunStallProgressDistance)
+                // Netto-Verschiebung zaehlt auch als Fortschritt - wie im Serverzweig (08.10.). Gemessen: 36
+                // Client-Ausloesungen mit Versatz 1200-4800, also Einheiten auf einem Umweg. Der Waechter
+                // loeschte ihre Vorhersage und setzte sie auf Idle - danach zog der Server sie zurecht (Snaps).
+                else if (DistZumZiel < StateFrag.BestTargetDistance - RunStallProgressDistance
+                    || FVector::Dist2D(CurrentLocation, StateFrag.LastProgressLocation) > 400.f)
                 {
-                    StateFrag.BestTargetDistance = DistZumZiel;
+                    StateFrag.BestTargetDistance = FMath::Min(StateFrag.BestTargetDistance, DistZumZiel);
                     StateFrag.LastProgressLocation = CurrentLocation;
                     StateFrag.NoProgressTimer = 0.f;
                 }
@@ -320,7 +324,8 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
         const auto TransformList = ChunkContext.GetFragmentView<FTransformFragment>();
         auto MoveTargetList = ChunkContext.GetMutableFragmentView<FMassMoveTargetFragment>(); // Mutable for Update/Stop
         auto VelocityList = ChunkContext.GetMutableFragmentView<FMassVelocityFragment>();
-        const auto NavPathList = ChunkContext.GetFragmentView<FUnitNavigationPathFragment>(); // nur Diagnose
+        // Diagnose + Neusuche statt Idle beim Stillstand (RunStall)
+        const auto NavPathList = ChunkContext.GetMutableFragmentView<FUnitNavigationPathFragment>();
         const bool bHasNavPathFrag = NavPathList.Num() > 0;
         const auto TargetList = ChunkContext.GetFragmentView<FMassAITargetFragment>();
         const auto StatsList = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
@@ -409,12 +414,18 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                     StateFrag.BestTargetDistance = DistToDest;
                     StateFrag.LastProgressLocation = CurrentLocation;
                     StateFrag.NoProgressTimer = 0.f;
+                    if (bHasNavPathFrag) { NavPathList[i].StallRepathCount = 0; }
                 }
-                else if (DistToDest < StateFrag.BestTargetDistance - RunStallProgressDistance)
+                // Zweite Fortschrittsart (08.10.): ein Umweg entfernt sich in Luftlinie eine Weile vom Ziel.
+                // Gemessen: Einheit mit Vel 788, 19 Pfadpunkten und 1199 zurueckgelegt wurde als Stillstand
+                // auf Idle gesetzt. Wer sich netto so weit verschiebt, zappelt nicht - Zappeln bleibt weit darunter.
+                else if (DistToDest < StateFrag.BestTargetDistance - RunStallProgressDistance
+                    || FVector::Dist2D(CurrentLocation, StateFrag.LastProgressLocation) > 400.f)
                 {
-                    StateFrag.BestTargetDistance = DistToDest;
+                    StateFrag.BestTargetDistance = FMath::Min(StateFrag.BestTargetDistance, DistToDest);
                     StateFrag.LastProgressLocation = CurrentLocation;
                     StateFrag.NoProgressTimer = 0.f;
+                    if (bHasNavPathFrag) { NavPathList[i].StallRepathCount = 0; }
                 }
                 else
                 {
@@ -449,16 +460,37 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                             FVector::Dist2D(CurrentLocation, StateFrag.LastProgressLocation),
                             PfadPunkte, PfadIndex, NaechsterWP, SuchtGerade);
 
-                        StateFrag.NoProgressTimer = 0.f;
-                        StateFrag.BestTargetDistance = TNumericLimits<float>::Max();
-                        StateFrag.LastProgressLocation = CurrentLocation;
-                        StateFrag.StoredLocation = CurrentLocation;
-                        VelocityList[i].Value = FVector::ZeroVector;
-                        StopMovement(MoveTargetList[i], World);
-                        // Idle setzt den Detect-Tag wieder, die Einheit kann also sofort neu
-                        // erfassen und neue Befehle annehmen, statt blockiert zu bleiben.
-                        SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
-                        continue;
+                        // Erst neu planen, dann aufgeben (08.10.): ein erreichbares Ziel mit einem Pfad, der an
+                        // einer Kante haengt, endete hier im Idle - die Einheit stand bis zum naechsten Befehl.
+                        // Zwei frische Suchen ab der jetzigen Position (mit sicherer Weiterschaltung); erst wer
+                        // danach immer noch nicht vorankommt, gilt als unerreichbar.
+                        if (bHasNavPathFrag && NavPathList[i].StallRepathCount < 2)
+                        {
+                            FUnitNavigationPathFragment& Nav = NavPathList[i];
+                            ++Nav.StallRepathCount;
+                            if (!Nav.bIsPathfindingInProgress)
+                            {
+                                Nav.ResetPath();
+                                Nav.bAutoRepath = true;
+                            }
+                            StateFrag.NoProgressTimer = 0.f;
+                            StateFrag.BestTargetDistance = DistToDest;
+                            StateFrag.LastProgressLocation = CurrentLocation;
+                        }
+                        else
+                        {
+                            if (bHasNavPathFrag) { NavPathList[i].StallRepathCount = 0; }
+                            StateFrag.NoProgressTimer = 0.f;
+                            StateFrag.BestTargetDistance = TNumericLimits<float>::Max();
+                            StateFrag.LastProgressLocation = CurrentLocation;
+                            StateFrag.StoredLocation = CurrentLocation;
+                            VelocityList[i].Value = FVector::ZeroVector;
+                            StopMovement(MoveTargetList[i], World);
+                            // Idle setzt den Detect-Tag wieder, die Einheit kann also sofort neu
+                            // erfassen und neue Befehle annehmen, statt blockiert zu bleiben.
+                            SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                            continue;
+                        }
                     }
                 }
             }
