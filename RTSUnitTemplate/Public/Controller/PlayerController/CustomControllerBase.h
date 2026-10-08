@@ -331,6 +331,8 @@ protected:
 	double RTSPerfTestStart = 0.0;
 	int32 RTSPerfTestPhase = 0;
 	int32 RTSPerfTestOrderCount = 0;
+	/** True when RTSPerfTest started the CSV capture itself and therefore also ends it. */
+	bool bRTSPerfTestOwnsCsvCapture = false;
 
 public:
 	/** Schickt die Vorhersage eines Befehls an alle Clients. Siehe ClientPredictMaxPerRPC. */
@@ -393,7 +395,10 @@ public:
 	// Shared by the Client_Predict RPC handler (other clients, resolved via cache) and by the commanding
 	// client's immediate local prediction (valid local refs, no server round-trip). The caller is
 	// responsible for flushing deferred Mass commands afterwards (so a batch flushes once).
-	void ApplyMovePredictionToUnit(
+	//
+	// Returns the unit's entity when it now MARCHES to the target (so the caller can form a
+	// formation group from it), an invalid handle when the unit was skipped or keeps fighting.
+	FMassEntityHandle ApplyMovePredictionToUnit(
 		FMassEntityManager& EntityManager,
 		UWorld* World,
 		AUnitBase* Unit,
@@ -403,6 +408,18 @@ public:
 		bool AttackT,
 		bool bResetHoldPosition,
 		bool bResetFollowTarget);
+
+	/**
+	 * Forms a formation group (UUnitFormationSubsystem) from the units of one move order, or
+	 * releases them from their old group when the order is too small / queued with Shift.
+	 * Used on the server (ExecuteBatchMove) AND on clients (move prediction), so both sides run
+	 * the same formation simulation and the reconciler only has to absorb small differences.
+	 * @param bRespectShift  false for orders received from the server: the local Shift key says
+	 *                       nothing about how ANOTHER player issued the order.
+	 */
+	void ApplyFormationGroup(FMassEntityManager& EntityManager, UWorld* World,
+		const TArray<FMassEntityHandle>& Entities, const TArray<FVector>& Targets,
+		int32 CommandCount, bool bRespectShift);
 
 	// Batch initialization of units without formation logic, projecting each to its own position on NavMesh.
 	void Batch_KickUnits(const TArray<AUnitBase*>& Units);
@@ -654,6 +671,25 @@ public:
 	/** Drag length in world units below which the gesture is treated as a plain click, not a line. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "1.0"))
 	float FormationLineDragThreshold = 150.f;
+
+	/**
+	 * Minimum time (seconds) the button must be held before the gesture can become a line.
+	 * The world threshold above alone was far too sensitive: 150 uu are only a few pixels at RTS
+	 * camera height, so a slightly shaky click already armed a line - and with
+	 * bFormationLineEnforceMinSpacing that tiny line was widened up to FormationLineMaxLength
+	 * (measured 07.10.2026: 200 m wide lines from plain clicks with 92 units).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "0.0"))
+	float FormationLineHoldTime = 0.25f;
+
+	/** Minimum cursor travel ON SCREEN (pixels) before the gesture can become a line. Independent of camera height. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Formation Settings", meta = (ClampMin = "0.0"))
+	float FormationLineDragThresholdPixels = 30.f;
+
+	/** Latched once hold time AND pixel travel were both reached; a line can only be issued after that. */
+	bool bFormationLineDragArmed = false;
+	double FormationLineDragStartTime = 0.0;
+	FVector2D FormationLineDragStartScreen = FVector2D::ZeroVector;
 
 	/**
 	 * When the drawn line is too short to hold the selection without the units interpenetrating,
