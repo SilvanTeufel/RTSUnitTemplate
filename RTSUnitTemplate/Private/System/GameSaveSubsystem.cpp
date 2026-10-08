@@ -125,6 +125,33 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
         Data.Location = Unit->GetMassActorLocation();
         Data.Rotation = Unit->GetMassActorRotation();
 
+        // Logistics: a store's stock and a hauler's load would otherwise simply vanish on load.
+        if (const ABuildingBase* Building = Cast<ABuildingBase>(Unit))
+        {
+            if (Building->StoresLocally())
+            {
+                Data.StoredResources = Building->StoredResources;
+            }
+        }
+        if (Unit->IsLogisticsUnit())
+        {
+            Data.LogisticsCargo = Unit->LogisticsCargo;
+        }
+
+        // Summoner -> summons. Dead entries are left out; they no longer count against any limit.
+        for (const FUnitSpawnData& Summoned : Unit->SummonedUnitsDataSet)
+        {
+            if (!IsValid(Summoned.UnitBase) || Summoned.UnitBase->GetUnitState() == UnitData::Dead)
+            {
+                continue;
+            }
+            FSummonedUnitSaveData& Entry = Data.SummonedUnits.AddDefaulted_GetRef();
+            Entry.Id = Summoned.Id;
+            Entry.UnitIndex = Summoned.UnitBase->UnitIndex;
+            Entry.ActorName = Summoned.UnitBase->GetName();
+            Entry.SpawnParameter = Summoned.SpawnParameter;
+        }
+
         // Wenn ALevelUnit: UnitIndex, Level- und Attributsdaten direkt mitspeichern
         if (ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit))
         {
@@ -491,6 +518,10 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
     TMap<int32, AUnitBase*> UnitsByIndex;
     TMap<FString, AUnitBase*> UnitsByName;
     TSet<AUnitBase*>          MatchedUnits;
+    // Saved actor name -> unit it was restored into. Respawned units get a NEW name, so UnitsByName
+    // cannot resolve references written at save time; this map can.
+    TMap<FString, AUnitBase*> UnitsBySavedName;
+    TArray<TPair<AUnitBase*, const FUnitSaveData*>> Summoners;
 
     for (TActorIterator<AUnitBase> It(LoadedWorld); It; ++It)
     {
@@ -635,6 +666,22 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         Unit->UnitStatePlaceholder = SavedUnit.UnitStatePlaceholder;
         Unit->SetUnitState(SavedUnit.UnitState);
 
+        // Logistics stock and cargo. The hauler's job is not saved: the dispatcher sees an idle unit
+        // with cargo and delivers it to the nearest storing base first.
+        if (ABuildingBase* Building = Cast<ABuildingBase>(Unit))
+        {
+            if (SavedUnit.StoredResources.Num() > 0)
+            {
+                Building->StoredResources = SavedUnit.StoredResources;
+                Building->StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+            }
+        }
+        if (SavedUnit.LogisticsCargo.Num() > 0)
+        {
+            Unit->LogisticsCargo = SavedUnit.LogisticsCargo;
+            Unit->LogisticsCargo.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+        }
+
         // Level-Daten anwenden (Attribute folgen danach)
         if (ALevelUnit* LevelUnit = Cast<ALevelUnit>(Unit))
         {
@@ -774,6 +821,46 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         }
 
         MatchedUnits.Add(Unit);
+        UnitsBySavedName.Add(SavedUnit.ActorName, Unit);
+        if (SavedUnit.SummonedUnits.Num() > 0)
+        {
+            Summoners.Emplace(Unit, &SavedUnit);
+        }
+    }
+
+    // Summoner -> summons, once every unit exists (a summon may come later in the list than its
+    // summoner). Replaces whatever the summoner already holds: a summoner that cast during the
+    // load produced units that are not in the save and are removed just below.
+    for (const TPair<AUnitBase*, const FUnitSaveData*>& Pair : Summoners)
+    {
+        AUnitBase* Summoner = Pair.Key;
+        Summoner->SummonedUnitsDataSet.Reset();
+        for (const FSummonedUnitSaveData& Saved : Pair.Value->SummonedUnits)
+        {
+            AUnitBase* Summoned = nullptr;
+            if (Saved.UnitIndex != INDEX_NONE)
+            {
+                if (AUnitBase** Found = UnitsByIndex.Find(Saved.UnitIndex))
+                {
+                    Summoned = *Found;
+                }
+            }
+            if (!Summoned)
+            {
+                if (AUnitBase** Found = UnitsBySavedName.Find(Saved.ActorName))
+                {
+                    Summoned = *Found;
+                }
+            }
+            if (!IsValid(Summoned) || !MatchedUnits.Contains(Summoned))
+            {
+                continue;
+            }
+            FUnitSpawnData& Entry = Summoner->SummonedUnitsDataSet.AddDefaulted_GetRef();
+            Entry.Id = Saved.Id;
+            Entry.UnitBase = Summoned;
+            Entry.SpawnParameter = Saved.SpawnParameter;
+        }
     }
 
     // Überzählige Einheiten entfernen (nicht im Save vorhanden)
@@ -946,6 +1033,37 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
         if (WA && !MatchedAreas.Contains(WA))
         {
             WA->Destroy();
+        }
+    }
+
+    // Resource places occupied by a building or a planned build site. The links are not saved; they
+    // are re-derived from positions: both stand exactly on their place. Resource places may have just
+    // been respawned, so every old link is dropped first.
+    for (TActorIterator<AWorkArea> ItWA(LoadedWorld); ItWA; ++ItWA)
+    {
+        if (AWorkArea* WA = *ItWA)
+        {
+            WA->SetTargetResourcePlace(nullptr);
+            WA->OccupyingBuildArea = nullptr;
+            WA->OccupyingBuilding = nullptr;
+        }
+    }
+    for (TActorIterator<ABuildingBase> ItB(LoadedWorld); ItB; ++ItB)
+    {
+        ABuildingBase* Building = *ItB;
+        if (IsValid(Building) && Building->ExtractsByItself() && Building->GetUnitState() != UnitData::Dead)
+        {
+            Building->ExtractionResourcePlace = nullptr;
+            Building->LinkResourcePlaceUnderneath();
+        }
+    }
+    for (TActorIterator<AWorkArea> ItWA(LoadedWorld); ItWA; ++ItWA)
+    {
+        AWorkArea* WA = *ItWA;
+        if (IsValid(WA) && WA->Type == WorkAreaData::BuildArea && WA->bPlaceOnResource)
+        {
+            WA->SetTargetResourcePlace(AWorkArea::FindFreeResourcePlace(LoadedWorld, WA->GetActorLocation(),
+                WA->RequiredResourceType, /*MaxDistance=*/300.f, WA));
         }
     }
 
