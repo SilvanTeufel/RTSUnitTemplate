@@ -2615,6 +2615,25 @@ void AHUDBase::DrawLogisticsAmounts()
 		Canvas->DrawItem(TextItem);
 	};
 
+	auto TypeColor = [this](EResourceType Type) -> FColor
+	{
+		const FColor* Found = LogisticsCargoResourceColors.Find(Type);
+		return Found ? *Found : LogisticsCargoColor;
+	};
+	auto TypeName = [](EResourceType Type) -> const TCHAR*
+	{
+		switch (Type)
+		{
+		case EResourceType::Primary:   return TEXT("Primary");
+		case EResourceType::Secondary: return TEXT("Secondary");
+		case EResourceType::Tertiary:  return TEXT("Tertiary");
+		case EResourceType::Rare:      return TEXT("Rare");
+		case EResourceType::Epic:      return TEXT("Epic");
+		case EResourceType::Legendary: return TEXT("Legendary");
+		default:                       return TEXT("?");
+		}
+	};
+
 	if (bShowLogisticsStorage)
 	{
 		for (TActorIterator<ABuildingBase> It(World); It; ++It)
@@ -2622,6 +2641,34 @@ void AHUDBase::DrawLogisticsAmounts()
 			const ABuildingBase* Base = *It;
 			if (!IsValid(Base) || !Base->StoresLocally() || Base->TeamId != LocalTeam) continue;
 			if (Base->GetUnitState() == UnitData::Dead) continue;
+
+			const FVector Anchor = Base->TimerWidgetComp
+				? Base->TimerWidgetComp->GetComponentLocation()
+				: Base->GetActorLocation() + FVector(0.f, 0.f, LogisticsStorageHeightOffset);
+			const float AnchorOffset = Base->TimerWidgetComp ? LogisticsStorageTimerPixelOffset * FontScale : 0.f;
+
+			// Converter: input on the upper line, output below, each in its resource colour.
+			if (Base->IsConverter())
+			{
+				const float Spacing = LogisticsConverterLineSpacing * FontScale;
+				if (!Base->bHasConversion)
+				{
+					DrawText(Anchor, TEXT("No conversion"), LogisticsStorageColor, AnchorOffset - Spacing);
+				}
+				else
+				{
+					DrawText(Anchor, FString::Printf(TEXT("%s %d/%d"), TypeName(Base->ConversionInput),
+						FMath::FloorToInt(Base->ConversionInputStock), FMath::FloorToInt(Base->ConversionInputCapacity)),
+						TypeColor(Base->ConversionInput), AnchorOffset - Spacing);
+				}
+				const int32 Out = FMath::FloorToInt(Base->GetStoredResourceTotal());
+				const FString OutText = Base->StorageCapacity > 0.f
+					? FString::Printf(TEXT("-> %s %d/%d"), Base->bHasConversion ? TypeName(Base->ConversionOutput) : TEXT(""), Out, FMath::FloorToInt(Base->StorageCapacity))
+					: FString::Printf(TEXT("-> %s %d"), Base->bHasConversion ? TypeName(Base->ConversionOutput) : TEXT(""), Out);
+				DrawText(Anchor, OutText, Base->IsStorageFull() ? LogisticsStorageFullColor
+					: (Base->bHasConversion ? TypeColor(Base->ConversionOutput) : LogisticsStorageColor), AnchorOffset);
+				continue;
+			}
 
 			const int32 Stored = FMath::FloorToInt(Base->GetStoredResourceTotal());
 			const FString Text = Base->StorageCapacity > 0.f
@@ -2660,13 +2707,15 @@ void AHUDBase::DrawLogisticsAmounts()
 					MainType = TypeIndex;
 				}
 			}
-			const FColor* TypeColor = MainType != INDEX_NONE
+			const FColor* MainTypeColor = MainType != INDEX_NONE
 				? LogisticsCargoResourceColors.Find(static_cast<EResourceType>(MainType))
 				: nullptr;
 
+			// "<-" while carrying supply back that a Converter no longer wants.
+			const bool bReturning = Unit->LogisticsJobState == ELogisticsJobState::Returning;
 			DrawText(Unit->GetMassActorLocation() + FVector(0.f, 0.f, LogisticsCargoHeightOffset),
-				FString::Printf(TEXT("%d/%d"), Cargo, FMath::FloorToInt(Unit->LogisticsCapacity)),
-				TypeColor ? *TypeColor : LogisticsCargoColor);
+				FString::Printf(TEXT("%s%d/%d"), bReturning ? TEXT("<- ") : TEXT(""), Cargo, FMath::FloorToInt(Unit->LogisticsCapacity)),
+				MainTypeColor ? *MainTypeColor : LogisticsCargoColor);
 		}
 	}
 
