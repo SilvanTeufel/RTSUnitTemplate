@@ -200,6 +200,65 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> OscillationTargetISM;
 
+    // Cast oscillation: while the unit is casting, the target ISM swings up and down between
+    // CastOscLowZ and CastOscTopZ (relative to its rest position). Outside casting it glides back
+    // to the rest position and stays there.
+    UPROPERTY()
+    bool bCastOscillationEnabled = false;
+
+    UPROPERTY()
+    float CastOscTopZ = 0.f;
+
+    UPROPERTY()
+    float CastOscLowZ = 0.f;
+
+    UPROPERTY()
+    float CastOscCyclesPerSecond = 0.25f;
+
+    /** How fast the ISM follows the swing and returns to rest (FInterpTo speed). */
+    UPROPERTY()
+    float CastOscFollowSpeed = 3.f;
+
+    UPROPERTY()
+    float CastOscPhase = 0.f;
+
+    UPROPERTY()
+    float CastOscCurrentZ = 0.f;
+
+    UPROPERTY()
+    bool bCastOscWasCasting = false;
+
+    /** Spin around the actor's up axis while working (degrees per second), on top of the ISM's own rotation. */
+    UPROPERTY()
+    float CastOscYawRate = 0.f;
+
+    UPROPERTY()
+    float CastOscYaw = 0.f;
+
+    /** Swing direction in actor space (normalised); Top/Low are offsets along it. */
+    UPROPERTY()
+    FVector CastOscAxis = FVector::UpVector;
+
+    /** Rocking around CastOscAxis: total range in degrees (0 = off) and cycles per second. */
+    UPROPERTY()
+    float CastOscSwingDegrees = 0.f;
+
+    UPROPERTY()
+    float CastOscSwingCycles = 0.2f;
+
+    UPROPERTY()
+    float CastOscSwingPhase = 0.f;
+
+    UPROPERTY()
+    float CastOscSwingAngle = 0.f;
+
+    /** Last value written to custom data 14 (emissive blink while working). */
+    UPROPERTY()
+    float CastBlinkValue = 0.f;
+
+    UPROPERTY()
+    TWeakObjectPtr<UInstancedStaticMeshComponent> CastOscTargetISM;
+
     // Dish (Random) Rotation
     UPROPERTY()
     bool bDishRotationEnabled = false;

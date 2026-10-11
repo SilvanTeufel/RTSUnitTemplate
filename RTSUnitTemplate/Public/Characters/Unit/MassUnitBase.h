@@ -20,7 +20,58 @@ class UNiagaraComponent;
 class AUnitBase;
 
 /**
- * 
+ * Up-and-down movement of one ISM while the unit works: casting, or (buildings) extracting resources.
+ * Set it on the Blueprint defaults; it is applied in BeginPlay, no graph code needed.
+ * Same effect as MulticastCastOscillateISM.
+ */
+USTRUCT(BlueprintType)
+struct RTSUNITTEMPLATE_API FCastOscillationSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation")
+	bool bEnabled = false;
+
+	/** Name of the ISM component to move (e.g. an additional ISM "Dynamic"). It is registered as additional ISM automatically. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled"))
+	FName ISMComponentName = TEXT("Dynamic");
+
+	/** Upper turning point, relative to the rest position. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled"))
+	float TopOffsetZ = 500.f;
+
+	/** Lower turning point, relative to the rest position (above 0 so it does not go all the way down). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled"))
+	float LowOffsetZ = 100.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled", ClampMin = "0.01"))
+	float CyclesPerSecond = 0.2f;
+
+	/** How quickly it follows the swing and returns to rest. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled", ClampMin = "0.01"))
+	float FollowSpeed = 3.f;
+
+	/** Spin around the unit's up axis while working (degrees per second; 0 = no spin). Keeps the ISM's own rotation. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled"))
+	float YawDegreesPerSecond = 30.f;
+
+	/** Direction of the swing in actor space: (0,0,1) = up and down, (1,0,0) = along the building's length.
+	 *  TopOffsetZ / LowOffsetZ are the two turning points along this axis. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled"))
+	FVector MoveAxis = FVector::UpVector;
+
+	/** Rock back and forth around MoveAxis while working: total range in degrees (180 = half a turn one way,
+	 *  then back; 0 = off). An arch stays above the ground this way. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled", ClampMin = "0", ClampMax = "360"))
+	float SwingDegrees = 0.f;
+
+	/** Rocking speed (full back-and-forth cycles per second). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Cast Oscillation", meta = (EditCondition = "bEnabled", ClampMin = "0.01"))
+	float SwingCyclesPerSecond = 0.2f;
+};
+
+/**
+ *
  */
 UCLASS()
 class RTSUNITTEMPLATE_API AMassUnitBase : public AAbilityUnit
@@ -232,9 +283,62 @@ public:
 	UPROPERTY(Replicated)
 	float Rep_VE_DishDurationMax = 0.f;
 
+	// Target ISMs of the effects above, so late-joining clients (and a call made before the Mass
+	// visuals were registered) apply them to the right component instead of always ISMComponent.
+	// Null rotation target = whole unit (MulticastContinuousUnitRotation).
+	UPROPERTY(Replicated)
+	TObjectPtr<UInstancedStaticMeshComponent> Rep_VE_RotationTargetISM = nullptr;
+
+	UPROPERTY(Replicated)
+	TObjectPtr<UInstancedStaticMeshComponent> Rep_VE_PulsateTargetISM = nullptr;
+
+	UPROPERTY(Replicated)
+	TObjectPtr<UInstancedStaticMeshComponent> Rep_VE_DishTargetISM = nullptr;
+
+	// Cast oscillation (bit 4 of Rep_VE_ActiveEffects)
+	UPROPERTY(Replicated)
+	TObjectPtr<UInstancedStaticMeshComponent> Rep_VE_CastOscTargetISM = nullptr;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_CastOscTopZ = 0.f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_CastOscLowZ = 0.f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_CastOscCyclesPerSecond = 0.25f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_CastOscFollowSpeed = 3.f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_CastOscYawRate = 0.f;
+
+	UPROPERTY(Replicated)
+	FVector_NetQuantizeNormal Rep_VE_CastOscAxis = FVector::UpVector;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_CastOscSwingDegrees = 0.f;
+
+	UPROPERTY(Replicated)
+	float Rep_VE_CastOscSwingCycles = 0.2f;
+
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AddEffectTargetFragement = false;
+
+	/** Let the main mesh's emissive blink while the unit works (casting / extracting). Sets per-instance custom
+	 *  data 14 to 1; the material (e.g. Material_Master_B: CastBlinkRate, CastBlinkMin) turns it into the blink. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bBlinkEmissiveWhileWorking = false;
+
+	/** Let the main mesh's emissive blink for Duration seconds (e.g. after an ability fired), on server and clients.
+	 *  Same blink as bBlinkEmissiveWhileWorking, independent of the working state. */
+	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void MulticastBlinkEmissive(float Duration = 4.f);
+
+	/** World time until which the emissive blinks (set by MulticastBlinkEmissive). */
+	float BlinkEmissiveUntil = 0.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AddGameplayEffectFragement = false;
@@ -506,6 +610,21 @@ public:
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastEndlessISMYawRotation(UInstancedStaticMeshComponent* InISMComponent, float YawRate, bool bEnable);
+
+	/**
+	 * While the unit is casting (buildings: or extracting), swing an ISM up and down between LowOffsetZ and
+	 * TopOffsetZ (relative to its rest position, in actor space). Each cast starts by rising to the top; when
+	 * it ends the ISM glides back to the rest position and stays there. Runs on server and clients, survives
+	 * late join. Call it once; bEnable=false switches it off. CastOscillation does the same without graph code.
+	 * @param CyclesPerSecond  full top-low-top swings per second
+	 * @param FollowSpeed      how quickly the ISM follows the swing / returns to rest (interp speed)
+	 */
+	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
+	void MulticastCastOscillateISM(UInstancedStaticMeshComponent* InISMComponent, float TopOffsetZ, float LowOffsetZ, float CyclesPerSecond = 0.25f, float FollowSpeed = 3.f, bool bEnable = true, float YawDegreesPerSecond = 0.f);
+
+	/** Moves an ISM up and down while the unit casts or (buildings) extracts. Applied in BeginPlay. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visual")
+	FCastOscillationSettings CastOscillation;
 
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastDishISMYawRotation(UInstancedStaticMeshComponent* InISMComponent, float MinSpeed, float MaxSpeed, float MinDur, float MaxDur, bool bEnable);
