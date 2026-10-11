@@ -47,6 +47,7 @@ void ALogisticsRoad::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
 	DOREPLIFETIME(ALogisticsRoad, GroundPoints);
 	DOREPLIFETIME(ALogisticsRoad, bHasGroundLane);
 	DOREPLIFETIME(ALogisticsRoad, AirHeight);
+	DOREPLIFETIME(ALogisticsRoad, bIsSupplyRoad);
 }
 
 void ALogisticsRoad::BeginPlay()
@@ -243,7 +244,7 @@ void ALogisticsRoad::RebuildVisuals()
 			}
 		}
 		AddDashedPolyline(Dense, GroundDashLength, bDashedGroundLane ? GroundGapLength : 0.f,
-			GroundLaneMesh, GroundLaneMaterial, GroundLaneScale);
+			GroundLaneMesh, (bIsSupplyRoad && SupplyGroundLaneMaterial) ? SupplyGroundLaneMaterial.Get() : GroundLaneMaterial.Get(), GroundLaneScale);
 	}
 
 	if (bShowAirLane)
@@ -254,7 +255,7 @@ void ALogisticsRoad::RebuildVisuals()
 
 		// Dashed like a flight route - and clearly not a second ground road.
 		AddDashedPolyline({ FVector(Start.X, Start.Y, Z), FVector(End.X, End.Y, Z) }, AirDashLength, AirGapLength,
-			AirLaneMesh, AirLaneMaterial, AirLaneScale);
+			AirLaneMesh, (bIsSupplyRoad && SupplyAirLaneMaterial) ? SupplyAirLaneMaterial.Get() : AirLaneMaterial.Get(), AirLaneScale);
 	}
 
 	UpdateTeamVisibility();

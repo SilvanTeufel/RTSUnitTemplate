@@ -154,7 +154,8 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	// custom-data floats (indices 1..12) and the corpse-dissolve adds index 13, so 14 total; clamp up so
 	// a misconfigured template can't undersize the pooled ISM and force a destructive runtime resize later
 	// (which would zero all instances).
-	ISM->SetNumCustomDataFloats(FMath::Max(14, TemplateISM->NumCustomDataFloats));
+	// +1: index 14 = emissive blink while working (AMassUnitBase::bBlinkEmissiveWhileWorking).
+	ISM->SetNumCustomDataFloats(FMath::Max(15, TemplateISM->NumCustomDataFloats));
 
 	// Map ISM instance to MassUnitBase
 	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(ISM);
@@ -500,9 +501,9 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
     NewISM->SetStaticMesh(Mesh);
     // Pre-size custom data ONCE, before any instance is added (so nothing is wiped). The animation
     // processor writes custom-data indices 1..12 (13 floats) and the corpse-dissolve writes index 13,
-    // so 14 total. Doing this here means it never has to resize a live, shared ISM at runtime (which
-    // would zero EVERY instance's data).
-    NewISM->SetNumCustomDataFloats(14);
+    // so 14 total, +1 for the emissive blink (index 14). Doing this here means it never has to resize a
+    // live, shared ISM at runtime (which would zero EVERY instance's data).
+    NewISM->SetNumCustomDataFloats(15);
     if (Material) {
         NewISM->SetMaterial(0, Material);
     }

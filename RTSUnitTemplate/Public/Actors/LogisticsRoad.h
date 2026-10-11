@@ -57,6 +57,10 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_RoadGeometry, VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
 	float AirHeight = 600.f;
 
+	/** A supply road: from a collecting base (Source) to a Converter (Sink). Drawn with the Supply* materials. */
+	UPROPERTY(ReplicatedUsing = OnRep_RoadGeometry, VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
+	bool bIsSupplyRoad = false;
+
 	/** Length of the ground lane (or the straight distance without one). Server only. */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
 	float RoadLength = 0.f;
@@ -103,6 +107,14 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual")
 	FVector2D AirLaneScale = FVector2D(0.06f, 0.06f);
+
+	/** Ground lane material of a supply road (to a Converter). Empty = GroundLaneMaterial. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual")
+	TObjectPtr<UMaterialInterface> SupplyGroundLaneMaterial;
+
+	/** Air lane material of a supply road. Empty = AirLaneMaterial. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual")
+	TObjectPtr<UMaterialInterface> SupplyAirLaneMaterial;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual", meta = (ClampMin = "10"))
 	float AirDashLength = 250.f;

@@ -40,6 +40,7 @@ namespace
 		case ELogisticsJobState::ToDropoff: return TEXT("ToDropoff");
 		case ELogisticsJobState::Unloading: return TEXT("Unloading");
 		case ELogisticsJobState::Paused:    return TEXT("Paused");
+		case ELogisticsJobState::Returning: return TEXT("Returning");
 		}
 		return TEXT("?");
 	}
@@ -51,6 +52,18 @@ namespace
 
 	/** No progress towards the target for this long counts as stuck - re-issue the move. */
 	constexpr double StuckSeconds = 12.0;
+
+	float GetEndMargin(const UWorld* World)
+	{
+		const AResourceGameMode* GameMode = World ? Cast<AResourceGameMode>(World->GetAuthGameMode()) : nullptr;
+		return GameMode ? GameMode->LogisticsEndMargin : 250.f;
+	}
+
+	float GetCargoOf(const AUnitBase* Unit, EResourceType Type)
+	{
+		const int32 Index = static_cast<int32>(Type);
+		return Unit && Unit->LogisticsCargo.IsValidIndex(Index) ? Unit->LogisticsCargo[Index] : 0.f;
+	}
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -67,6 +80,7 @@ void ULogisticsSubsystem::Deinitialize()
 {
 	Jobs.Reset();
 	RoadsBySource.Reset();
+	SupplyRoadsByConverter.Reset();
 	RouteCache.Reset();
 	Super::Deinitialize();
 }
@@ -210,6 +224,95 @@ float ULogisticsSubsystem::GetReservedAt(const ABuildingBase* Source) const
 	return Reserved;
 }
 
+float ULogisticsSubsystem::GetSupplyAvailable(const ABuildingBase* Source, EResourceType Type, const AResourceGameMode* GameMode) const
+{
+	if (!IsBaseAlive(Source) || !Source->SuppliesConverters() || Type == EResourceType::MAX)
+	{
+		return 0.f;
+	}
+
+	if (Source->StoresLocally())
+	{
+		// Every claim on this store counts, hauls included - they may well take this type.
+		return FMath::Max(0.f, FMath::Min(Source->GetStoredResourceAmount(Type), Source->GetStoredResourceTotal() - GetReservedAt(Source)));
+	}
+
+	// CollectAndStore gives from the team account. That account is shared by every such base of the
+	// team, so the claims on all of them count. A supply-like resource counts what is USED, not what
+	// is there - it cannot be handed out.
+	if (!GameMode || GameMode->IsSupplyLikeResource(Type))
+	{
+		return 0.f;
+	}
+	float Claimed = 0.f;
+	for (const FLogisticsJob& Job : Jobs)
+	{
+		const ABuildingBase* Base = Job.TargetBase.Get();
+		if (Job.Kind == ELogisticsJobKind::Supply && Job.ReservedAmount > 0.f && Job.CargoType == Type
+			&& Base && Base->BaseType == EBaseType::CollectAndStore && Base->TeamId == Source->TeamId)
+		{
+			Claimed += Job.ReservedAmount;
+		}
+	}
+	return FMath::Max(0.f, GameMode->GetResource(Source->TeamId, Type) - Claimed);
+}
+
+float ULogisticsSubsystem::GetInboundSupply(const ABuildingBase* Converter, const FLogisticsJob* Exclude) const
+{
+	float Inbound = 0.f;
+	for (const FLogisticsJob& Job : Jobs)
+	{
+		if (&Job == Exclude || Job.Kind != ELogisticsJobKind::Supply || Job.Converter.Get() != Converter)
+		{
+			continue;
+		}
+		// Claimed while on the way to load, carried once loaded - never both at once.
+		Inbound += Job.ReservedAmount + GetCargoOf(Job.Unit.Get(), Job.CargoType);
+	}
+	return Inbound;
+}
+
+bool ULogisticsSubsystem::IsSupplyStillWanted(const FLogisticsJob& Job)
+{
+	const ABuildingBase* Converter = Job.Converter.Get();
+	return IsBaseAlive(Converter) && Converter->IsConverter() && Converter->bHasConversion
+		&& Converter->ConversionInput == Job.CargoType;
+}
+
+bool ULogisticsSubsystem::CanTakeReturn(const ABuildingBase* Base)
+{
+	return IsBaseAlive(Base) && Base->SuppliesConverters();
+}
+
+ABuildingBase* ULogisticsSubsystem::FindNearestReturnBase(int32 TeamId, const FVector& From) const
+{
+	ABuildingBase* Best = nullptr;
+	float BestDistSq = TNumericLimits<float>::Max();
+	for (TActorIterator<ABuildingBase> It(GetWorld()); It; ++It)
+	{
+		ABuildingBase* Base = *It;
+		if (!CanTakeReturn(Base) || Base->TeamId != TeamId)
+		{
+			continue;
+		}
+		const float DistSq = FVector::DistSquared2D(Base->GetActorLocation(), From);
+		if (DistSq < BestDistSq)
+		{
+			BestDistSq = DistSq;
+			Best = Base;
+		}
+	}
+	return Best;
+}
+
+void ULogisticsSubsystem::ResetJobKind(FLogisticsJob& Job)
+{
+	Job.Kind = ELogisticsJobKind::Haul;
+	Job.CargoType = EResourceType::MAX;
+	Job.PickupBase = nullptr;
+	Job.Converter = nullptr;
+}
+
 ELogisticsJobState ULogisticsSubsystem::GetJobState(const AUnitBase* Unit) const
 {
 	for (const FLogisticsJob& Job : Jobs)
@@ -226,6 +329,22 @@ TArray<ALogisticsRoad*> ULogisticsSubsystem::GetRoadsOfTeam(int32 TeamId) const
 {
 	TArray<ALogisticsRoad*> Result;
 	for (const auto& Pair : RoadsBySource)
+	{
+		if (ALogisticsRoad* Road = Pair.Value.Get())
+		{
+			if (Road->TeamId == TeamId)
+			{
+				Result.Add(Road);
+			}
+		}
+	}
+	return Result;
+}
+
+TArray<ALogisticsRoad*> ULogisticsSubsystem::GetSupplyRoadsOfTeam(int32 TeamId) const
+{
+	TArray<ALogisticsRoad*> Result;
+	for (const auto& Pair : SupplyRoadsByConverter)
 	{
 		if (ALogisticsRoad* Road = Pair.Value.Get())
 		{
@@ -305,6 +424,84 @@ const FLogisticsRouteCache& ULogisticsSubsystem::GetOrComputeRoute(ABuildingBase
 	return RouteCache.Add(Key, MoveTemp(Route));
 }
 
+ABuildingBase* ULogisticsSubsystem::PickBestRouteEnd(ABuildingBase* From, TArray<ABuildingBase*> Candidates, bool bFromIsSource,
+	AResourceGameMode* GameMode, FLogisticsRouteCache& OutRoute)
+{
+	if (Candidates.Num() == 0)
+	{
+		return nullptr;
+	}
+
+	// The three nearest by straight line; of those the shortest real route wins, with a ground lane
+	// preferred - a road ground units cannot drive is the last resort.
+	const FVector FromLocation = From->GetActorLocation();
+	Candidates.Sort([&FromLocation](const ABuildingBase& A, const ABuildingBase& B)
+	{
+		return FVector::DistSquared2D(A.GetActorLocation(), FromLocation) < FVector::DistSquared2D(B.GetActorLocation(), FromLocation);
+	});
+	Candidates.SetNum(FMath::Min(Candidates.Num(), 3));
+
+	// By value: GetOrComputeRoute adds to RouteCache, which may move the entries a pointer from an
+	// earlier iteration would point into.
+	ABuildingBase* Best = nullptr;
+	for (ABuildingBase* Other : Candidates)
+	{
+		const FLogisticsRouteCache& Route = bFromIsSource ? GetOrComputeRoute(From, Other, GameMode) : GetOrComputeRoute(Other, From, GameMode);
+		const bool bBetter = !Best
+			|| (Route.bHasGroundLane && !OutRoute.bHasGroundLane)
+			|| (Route.bHasGroundLane == OutRoute.bHasGroundLane && Route.Length < OutRoute.Length);
+		if (bBetter)
+		{
+			Best = Other;
+			OutRoute = Route;
+		}
+	}
+	return (Best && OutRoute.Points.Num() >= 2) ? Best : nullptr;
+}
+
+ALogisticsRoad* ULogisticsSubsystem::UpdateRoad(TMap<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ALogisticsRoad>>& Map, ABuildingBase* Key,
+	ABuildingBase* Source, ABuildingBase* Sink, const FLogisticsRouteCache& Route, bool bSupplyRoad, AResourceGameMode* GameMode)
+{
+	ALogisticsRoad* Existing = Map.FindRef(Key).Get();
+	const bool bUnchanged = IsValid(Existing)
+		&& Existing->SourceBase == Source
+		&& Existing->SinkBase == Sink
+		&& Existing->TeamId == Source->TeamId
+		&& Existing->bHasGroundLane == Route.bHasGroundLane
+		&& Existing->GroundPoints == Route.Points;
+	if (bUnchanged)
+	{
+		return Existing;
+	}
+
+	if (IsValid(Existing))
+	{
+		Existing->Destroy();
+	}
+	Map.Remove(Key);
+
+	UClass* RoadClass = GameMode->LogisticsRoadClass ? GameMode->LogisticsRoadClass.Get() : ALogisticsRoad::StaticClass();
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	ALogisticsRoad* Road = GetWorld()->SpawnActor<ALogisticsRoad>(RoadClass, FTransform(Route.Points[0]), Params);
+	if (!Road)
+	{
+		return nullptr;
+	}
+	// Before InitializeRoad, which builds the visuals.
+	Road->bIsSupplyRoad = bSupplyRoad;
+	Road->InitializeRoad(Source, Sink, Source->TeamId, Route.Points, Route.bHasGroundLane, GameMode->LogisticsAirLaneHeight);
+	Map.Add(Key, Road);
+
+	if (CVarLogisticsLog.GetValueOnGameThread() > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Logistics] %s road team %d: %s -> %s, %s lane, %.0f uu, %d points"),
+			bSupplyRoad ? TEXT("Supply") : TEXT("Haul"), Source->TeamId, *GetNameSafe(Source), *GetNameSafe(Sink),
+			Route.bHasGroundLane ? TEXT("ground+air") : TEXT("air only"), Route.Length, Route.Points.Num());
+	}
+	return Road;
+}
+
 void ULogisticsSubsystem::RefreshRoads(AResourceGameMode* GameMode)
 {
 	UWorld* World = GetWorld();
@@ -333,8 +530,6 @@ void ULogisticsSubsystem::RefreshRoads(AResourceGameMode* GameMode)
 
 	for (ABuildingBase* Source : Sources)
 	{
-		// The three nearest sinks by straight line; of those the shortest real route wins, with a
-		// ground lane preferred - a road ground units cannot drive is the last resort.
 		TArray<ABuildingBase*> Candidates;
 		for (ABuildingBase* Sink : Sinks)
 		{
@@ -344,74 +539,12 @@ void ULogisticsSubsystem::RefreshRoads(AResourceGameMode* GameMode)
 				Candidates.Add(Sink);
 			}
 		}
-		if (Candidates.Num() == 0)
-		{
-			continue;
-		}
 
-		const FVector SourceLocation = Source->GetActorLocation();
-		Candidates.Sort([&SourceLocation](const ABuildingBase& A, const ABuildingBase& B)
+		FLogisticsRouteCache Route;
+		ABuildingBase* Sink = PickBestRouteEnd(Source, MoveTemp(Candidates), /*bFromIsSource=*/true, GameMode, Route);
+		if (Sink && UpdateRoad(RoadsBySource, Source, Source, Sink, Route, /*bSupplyRoad=*/false, GameMode))
 		{
-			return FVector::DistSquared2D(A.GetActorLocation(), SourceLocation) < FVector::DistSquared2D(B.GetActorLocation(), SourceLocation);
-		});
-		Candidates.SetNum(FMath::Min(Candidates.Num(), 3));
-
-		// By value: GetOrComputeRoute adds to RouteCache, which may move the entries a pointer
-		// from an earlier iteration would point into.
-		ABuildingBase* BestSink = nullptr;
-		FLogisticsRouteCache BestRouteValue;
-		for (ABuildingBase* Sink : Candidates)
-		{
-			const FLogisticsRouteCache& Route = GetOrComputeRoute(Source, Sink, GameMode);
-			const bool bBetter = !BestSink
-				|| (Route.bHasGroundLane && !BestRouteValue.bHasGroundLane)
-				|| (Route.bHasGroundLane == BestRouteValue.bHasGroundLane && Route.Length < BestRouteValue.Length);
-			if (bBetter)
-			{
-				BestSink = Sink;
-				BestRouteValue = Route;
-			}
-		}
-		if (!BestSink || BestRouteValue.Points.Num() < 2)
-		{
-			continue;
-		}
-		const FLogisticsRouteCache* BestRoute = &BestRouteValue;
-
-		SourcesWithRoad.Add(Source);
-
-		ALogisticsRoad* Existing = RoadsBySource.FindRef(Source).Get();
-		const bool bUnchanged = IsValid(Existing)
-			&& Existing->SinkBase == BestSink
-			&& Existing->TeamId == Source->TeamId
-			&& Existing->bHasGroundLane == BestRoute->bHasGroundLane
-			&& Existing->GroundPoints == BestRoute->Points;
-		if (bUnchanged)
-		{
-			continue;
-		}
-
-		if (IsValid(Existing))
-		{
-			Existing->Destroy();
-		}
-
-		UClass* RoadClass = GameMode->LogisticsRoadClass ? GameMode->LogisticsRoadClass.Get() : ALogisticsRoad::StaticClass();
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		ALogisticsRoad* Road = World->SpawnActor<ALogisticsRoad>(RoadClass, FTransform(BestRoute->Points[0]), Params);
-		if (!Road)
-		{
-			continue;
-		}
-		Road->InitializeRoad(Source, BestSink, Source->TeamId, BestRoute->Points, BestRoute->bHasGroundLane, GameMode->LogisticsAirLaneHeight);
-		RoadsBySource.Add(Source, Road);
-
-		if (CVarLogisticsLog.GetValueOnGameThread() > 0)
-		{
-			UE_LOG(LogTemp, Log, TEXT("[Logistics] Road team %d: %s -> %s, %s lane, %.0f uu, %d points"),
-				Source->TeamId, *GetNameSafe(Source), *GetNameSafe(BestSink),
-				BestRoute->bHasGroundLane ? TEXT("ground+air") : TEXT("air only"), BestRoute->Length, BestRoute->Points.Num());
+			SourcesWithRoad.Add(Source);
 		}
 	}
 
@@ -429,6 +562,8 @@ void ULogisticsSubsystem::RefreshRoads(AResourceGameMode* GameMode)
 		}
 	}
 
+	RefreshSupplyRoads(GameMode);
+
 	// Cached routes of bases that no longer exist.
 	for (auto It = RouteCache.CreateIterator(); It; ++It)
 	{
@@ -437,6 +572,167 @@ void ULogisticsSubsystem::RefreshRoads(AResourceGameMode* GameMode)
 			It.RemoveCurrent();
 		}
 	}
+}
+
+void ULogisticsSubsystem::RefreshSupplyRoads(AResourceGameMode* GameMode)
+{
+	UWorld* World = GetWorld();
+
+	TArray<ABuildingBase*> Converters;
+	TArray<ABuildingBase*> Suppliers;
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		ABuildingBase* Base = *It;
+		if (!IsBaseAlive(Base))
+		{
+			continue;
+		}
+		if (Base->IsConverter())
+		{
+			if (Base->bHasConversion)
+			{
+				Converters.Add(Base);
+			}
+		}
+		else if (Base->SuppliesConverters())
+		{
+			Suppliers.Add(Base);
+		}
+	}
+
+	TSet<ABuildingBase*> ConvertersWithRoad;
+	const float MaxLengthSq = GameMode->LogisticsMaxRoadLength > 0.f ? FMath::Square(GameMode->LogisticsMaxRoadLength) : TNumericLimits<float>::Max();
+
+	const float MinSupply = FMath::Max(GameMode->LogisticsMinPickupAmount, 1.f);
+	for (ABuildingBase* Converter : Converters)
+	{
+		const EResourceType Input = Converter->ConversionInput;
+		TArray<ABuildingBase*> Candidates;
+		TArray<ABuildingBase*> Stocked;
+		for (ABuildingBase* Supplier : Suppliers)
+		{
+			if (Supplier->TeamId == Converter->TeamId && Supplier->CanProvideResource(Input) &&
+				FVector::DistSquared2D(Supplier->GetActorLocation(), Converter->GetActorLocation()) <= MaxLengthSq)
+			{
+				Candidates.Add(Supplier);
+				if (GetSupplyAvailable(Supplier, Input, GameMode) >= MinSupply)
+				{
+					Stocked.Add(Supplier);
+				}
+			}
+		}
+
+		// The nearest supplier that actually has the input type - a CollectOnly next door whose workers
+		// mine something else would otherwise starve the Converter while the team account is full.
+		ALogisticsRoad* CurrentRoad = SupplyRoadsByConverter.FindRef(Converter).Get();
+		ABuildingBase* Current = CurrentRoad ? CurrentRoad->SourceBase.Get() : nullptr;
+
+		// What is on the shelf, ignoring claims - those come and go every few seconds.
+		auto OnShelf = [&](const ABuildingBase* Supplier)
+		{
+			return Supplier->StoresLocally() ? Supplier->GetStoredResourceAmount(Input) : GetSupplyAvailable(Supplier, Input, GameMode);
+		};
+
+		// The nearest of: the current supplier while it still has some, and every supplier with a good
+		// stock (two pick-ups). A store hovering around one pick-up therefore does not flip the road.
+		TArray<ABuildingBase*> Pick;
+		for (ABuildingBase* Supplier : Stocked)
+		{
+			if (OnShelf(Supplier) >= 2.f * MinSupply)
+			{
+				Pick.Add(Supplier);
+			}
+		}
+		if (Current && Candidates.Contains(Current) && OnShelf(Current) >= 1.f)
+		{
+			Pick.AddUnique(Current);
+		}
+
+		// Nobody with a good stock: any stocked one, then the current one, then the nearest that could deliver.
+		if (Pick.Num() == 0)
+		{
+			if (Stocked.Num() > 0)
+			{
+				Pick = MoveTemp(Stocked);
+			}
+			else if (Current && Candidates.Contains(Current))
+			{
+				Pick = { Current };
+			}
+			else
+			{
+				Pick = MoveTemp(Candidates);
+			}
+		}
+
+		FLogisticsRouteCache Route;
+		ABuildingBase* Supplier = PickBestRouteEnd(Converter, MoveTemp(Pick), /*bFromIsSource=*/false, GameMode, Route);
+		if (Supplier && UpdateRoad(SupplyRoadsByConverter, Converter, Supplier, Converter, Route, /*bSupplyRoad=*/true, GameMode))
+		{
+			ConvertersWithRoad.Add(Converter);
+		}
+	}
+
+	// Supply roads of Converters that are gone, dead, without a conversion or without a supplier.
+	for (auto It = SupplyRoadsByConverter.CreateIterator(); It; ++It)
+	{
+		ABuildingBase* Converter = It.Key().Get();
+		if (!Converter || !ConvertersWithRoad.Contains(Converter))
+		{
+			if (ALogisticsRoad* Road = It.Value().Get())
+			{
+				Road->Destroy();
+			}
+			It.RemoveCurrent();
+		}
+	}
+}
+
+void ULogisticsSubsystem::OnConversionChanged(ABuildingBase* Converter)
+{
+	UWorld* World = GetWorld();
+	if (!World || !Converter)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	const float Margin = GetEndMargin(World);
+
+	for (FLogisticsJob& Job : Jobs)
+	{
+		// Supply of the type the Converter still takes (only its output changed) carries on.
+		if (Job.Kind != ELogisticsJobKind::Supply || Job.Converter.Get() != Converter || !IsUnitAlive(Job.Unit.Get())
+			|| IsSupplyStillWanted(Job))
+		{
+			continue;
+		}
+		switch (Job.State)
+		{
+		case ELogisticsJobState::ToPickup:
+		case ELogisticsJobState::Loading:
+			// Nothing loaded yet: just drop the run, the unit picks its next job at once.
+			ReleaseReservation(Job);
+			ResetJobKind(Job);
+			Job.NextAssignTime = Now;
+			SetJobState(Job, ELogisticsJobState::Idle, Now);
+			break;
+
+		case ELogisticsJobState::ToDropoff:
+		case ELogisticsJobState::Unloading:
+			if (!StartReturn(Job, Now, Margin))
+			{
+				ResetJobKind(Job);
+				SetJobState(Job, ELogisticsJobState::Idle, Now);
+			}
+			break;
+
+		default:
+			// Idle or Paused: the Idle branch sees the unwanted cargo and returns it.
+			break;
+		}
+	}
+
+	MarkRoadsDirty();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -495,6 +791,7 @@ void ULogisticsSubsystem::ResumeLogistics(AUnitBase* Unit)
 	{
 	case ELogisticsJobState::ToPickup:
 	case ELogisticsJobState::ToDropoff:
+	case ELogisticsJobState::Returning:
 		// Mid-trip: just carry on to where it was going.
 		if (Job->bHasIssuedTarget)
 		{
@@ -798,10 +1095,209 @@ bool ULogisticsSubsystem::StartDelivery(FLogisticsJob& Job, double Now, float Ma
 	{
 		return false;
 	}
+	ResetJobKind(Job);
 	Job.TargetBase = Sink;
 	Job.Road = nullptr;
 	SetJobState(Job, ELogisticsJobState::ToDropoff, Now);
 	return IssueMove(Job, GetBaseEdgePoint(Sink, Unit->GetMassActorLocation(), Margin));
+}
+
+bool ULogisticsSubsystem::StartReturn(FLogisticsJob& Job, double Now, float Margin)
+{
+	AUnitBase* Unit = Job.Unit.Get();
+	if (!Unit)
+	{
+		return false;
+	}
+	ReleaseReservation(Job);
+
+	ABuildingBase* Back = Job.PickupBase.Get();
+	if (!CanTakeReturn(Back))
+	{
+		Back = FindNearestReturnBase(Unit->TeamId, Unit->GetMassActorLocation());
+	}
+	if (!Back)
+	{
+		// No collecting base left at all: deliver it like an ordinary load.
+		return StartDelivery(Job, Now, Margin);
+	}
+
+	Job.Kind = ELogisticsJobKind::Return;
+	Job.PickupBase = Back;
+	Job.TargetBase = Back;
+	ALogisticsRoad* Road = Job.Road.Get();
+	const bool bOnRoad = Road && Road->SourceBase == Back;
+	SetJobState(Job, ELogisticsJobState::Returning, Now);
+
+	if (CVarLogisticsLog.GetValueOnGameThread() > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Logistics] %s returns %.0f to %s (not wanted by %s any more)"),
+			*GetNameSafe(Unit), Unit->GetLogisticsCargoTotal(), *GetNameSafe(Back), *GetNameSafe(Job.Converter.Get()));
+	}
+	return IssueMove(Job, bOnRoad ? Road->GetSourceEnd() : GetBaseEdgePoint(Back, Unit->GetMassActorLocation(), Margin));
+}
+
+bool ULogisticsSubsystem::StartSupplyDelivery(FLogisticsJob& Job, double Now, float Margin)
+{
+	AUnitBase* Unit = Job.Unit.Get();
+	ABuildingBase* Converter = Job.Converter.Get();
+	if (!Unit || !IsSupplyStillWanted(Job))
+	{
+		return false;
+	}
+	Job.TargetBase = Converter;
+	ALogisticsRoad* Road = Job.Road.Get();
+	const bool bOnRoad = Road && Road->SinkBase == Converter;
+	SetJobState(Job, ELogisticsJobState::ToDropoff, Now);
+	return IssueMove(Job, bOnRoad ? Road->GetSinkEnd() : GetBaseEdgePoint(Converter, Unit->GetMassActorLocation(), Margin));
+}
+
+void ULogisticsSubsystem::DoLoadSupply(FLogisticsJob& Job, double Now)
+{
+	AUnitBase* Unit = Job.Unit.Get();
+	ABuildingBase* Source = Job.TargetBase.Get();
+	ABuildingBase* Converter = Job.Converter.Get();
+	ReleaseReservation(Job);
+	if (!Unit || !IsBaseAlive(Source) || !IsSupplyStillWanted(Job))
+	{
+		ResetJobKind(Job);
+		SetJobState(Job, ELogisticsJobState::Idle, Now);
+		return;
+	}
+
+	if (Unit->LogisticsCargo.Num() < NumResourceTypes)
+	{
+		Unit->LogisticsCargo.SetNumZeroed(NumResourceTypes);
+	}
+
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode());
+	const EResourceType Type = Job.CargoType;
+
+	// Only what the Converter still has room for - other units may already be bringing some.
+	float Amount = FMath::Max(0.f, Unit->LogisticsCapacity - Unit->GetLogisticsCargoTotal());
+	Amount = FMath::Min(Amount, GetSupplyAvailable(Source, Type, GameMode));
+	Amount = FMath::Min(Amount, Converter->GetConversionInputSpace() - GetInboundSupply(Converter, &Job));
+
+	float Taken = 0.f;
+	if (Amount > 0.f)
+	{
+		if (Source->StoresLocally())
+		{
+			Taken = Source->TakeStoredResource(Type, Amount);
+		}
+		else if (GameMode)
+		{
+			// CollectAndStore: straight from the team account.
+			Taken = FMath::Min(Amount, GameMode->GetResource(Unit->TeamId, Type));
+			if (Taken > 0.f)
+			{
+				GameMode->ModifyResource(Type, Unit->TeamId, -Taken);
+			}
+		}
+	}
+	Unit->LogisticsCargo[static_cast<int32>(Type)] += FMath::Max(0.f, Taken);
+
+	if (Unit->GetLogisticsCargoTotal() <= 0.f)
+	{
+		// Someone else was faster, or the Converter filled up. Try again shortly.
+		ResetJobKind(Job);
+		Job.NextAssignTime = Now + 1.0;
+		SetJobState(Job, ELogisticsJobState::Idle, Now);
+		return;
+	}
+
+	if (CVarLogisticsLog.GetValueOnGameThread() > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Logistics] %s loaded %.0f supply (type %d) at %s for %s"),
+			*GetNameSafe(Unit), Taken, static_cast<int32>(Type), *GetNameSafe(Source), *GetNameSafe(Converter));
+	}
+
+	if (!StartSupplyDelivery(Job, Now, GetEndMargin(GetWorld())))
+	{
+		// Idle with cargo sorts it out (deliver, or return).
+		SetJobState(Job, ELogisticsJobState::Idle, Now);
+	}
+}
+
+void ULogisticsSubsystem::DoUnloadSupply(FLogisticsJob& Job, double Now)
+{
+	AUnitBase* Unit = Job.Unit.Get();
+	ABuildingBase* Converter = Job.Converter.Get();
+	if (!Unit)
+	{
+		SetJobState(Job, ELogisticsJobState::Idle, Now);
+		return;
+	}
+
+	if (IsSupplyStillWanted(Job) && Job.TargetBase.Get() == Converter)
+	{
+		const int32 Index = static_cast<int32>(Job.CargoType);
+		if (Unit->LogisticsCargo.IsValidIndex(Index))
+		{
+			const float Accepted = Converter->ReceiveConversionInput(Job.CargoType, Unit->LogisticsCargo[Index]);
+			Unit->LogisticsCargo[Index] -= Accepted;
+			if (CVarLogisticsLog.GetValueOnGameThread() > 0)
+			{
+				UE_LOG(LogTemp, Log, TEXT("[Logistics] %s supplied %.0f to %s (input %.0f/%.0f)"), *GetNameSafe(Unit), Accepted,
+					*GetNameSafe(Converter), Converter->ConversionInputStock, Converter->ConversionInputCapacity);
+			}
+		}
+	}
+
+	// Switched, died or full in the meantime: what is left goes back.
+	if (Unit->GetLogisticsCargoTotal() > 0.f)
+	{
+		if (!StartReturn(Job, Now, GetEndMargin(GetWorld())))
+		{
+			SetJobState(Job, ELogisticsJobState::Idle, Now);
+		}
+		return;
+	}
+
+	ResetJobKind(Job);
+	Job.NextAssignTime = Now;
+	SetJobState(Job, ELogisticsJobState::Idle, Now);
+}
+
+void ULogisticsSubsystem::DoUnloadReturn(FLogisticsJob& Job, double Now)
+{
+	AUnitBase* Unit = Job.Unit.Get();
+	ABuildingBase* Base = Job.TargetBase.Get();
+	if (!Unit)
+	{
+		SetJobState(Job, ELogisticsJobState::Idle, Now);
+		return;
+	}
+	if (!CanTakeReturn(Base))
+	{
+		// Died while we were unloading - try the next one.
+		Job.PickupBase = nullptr;
+		if (!StartReturn(Job, Now, GetEndMargin(GetWorld())))
+		{
+			SetJobState(Job, ELogisticsJobState::Idle, Now);
+		}
+		return;
+	}
+
+	// Back where it came from, past a full store on purpose: it was taken from here.
+	float Returned = 0.f;
+	for (int32 i = 0; i < Unit->LogisticsCargo.Num(); ++i)
+	{
+		if (Unit->LogisticsCargo[i] > 0.f)
+		{
+			Returned += Base->ReceiveResource(static_cast<EResourceType>(i), Unit->LogisticsCargo[i], Unit->TeamId, /*bForce=*/true);
+			Unit->LogisticsCargo[i] = 0.f;
+		}
+	}
+
+	if (CVarLogisticsLog.GetValueOnGameThread() > 0)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[Logistics] %s returned %.0f to %s"), *GetNameSafe(Unit), Returned, *GetNameSafe(Base));
+	}
+
+	ResetJobKind(Job);
+	Job.NextAssignTime = Now;
+	SetJobState(Job, ELogisticsJobState::Idle, Now);
 }
 
 void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
@@ -862,13 +1358,44 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 
 		case ELogisticsJobState::ToPickup:
 		case ELogisticsJobState::ToDropoff:
+		case ELogisticsJobState::Returning:
 		{
 			const bool bPickup = Job.State == ELogisticsJobState::ToPickup;
 			ABuildingBase* Target = Job.TargetBase.Get();
-			const bool bTargetValid = IsBaseAlive(Target) && (bPickup ? Target->StoresLocally() : Target->CreditsOnReceive());
+			bool bTargetValid = false;
+			if (Job.State == ELogisticsJobState::Returning)
+			{
+				bTargetValid = CanTakeReturn(Target);
+			}
+			else if (Job.Kind == ELogisticsJobKind::Supply)
+			{
+				bTargetValid = IsSupplyStillWanted(Job) && IsBaseAlive(Target)
+					&& (bPickup ? Target->SuppliesConverters() : Target == Job.Converter.Get());
+			}
+			else
+			{
+				bTargetValid = IsBaseAlive(Target) && (bPickup ? Target->StoresLocally() : Target->CreditsOnReceive());
+			}
 			if (!bTargetValid)
 			{
 				ReleaseReservation(Job);
+				if (Job.Kind != ELogisticsJobKind::Haul && Unit->GetLogisticsCargoTotal() > 0.f)
+				{
+					// Supply nobody wants any more, or the base to return to died: take it back (elsewhere).
+					if (Job.State == ELogisticsJobState::Returning)
+					{
+						Job.PickupBase = nullptr;
+					}
+					if (!StartReturn(Job, Now, Margin))
+					{
+						SetJobState(Job, ELogisticsJobState::Idle, Now);
+					}
+					break;
+				}
+				if (Unit->GetLogisticsCargoTotal() <= 0.f)
+				{
+					ResetJobKind(Job);
+				}
 				SetJobState(Job, ELogisticsJobState::Idle, Now);
 				break;
 			}
@@ -932,7 +1459,22 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 			}
 			if (Job.State == ELogisticsJobState::Loading)
 			{
-				DoLoad(Job, Now);
+				if (Job.Kind == ELogisticsJobKind::Supply)
+				{
+					DoLoadSupply(Job, Now);
+				}
+				else
+				{
+					DoLoad(Job, Now);
+				}
+			}
+			else if (Job.Kind == ELogisticsJobKind::Supply)
+			{
+				DoUnloadSupply(Job, Now);
+			}
+			else if (Job.Kind == ELogisticsJobKind::Return)
+			{
+				DoUnloadReturn(Job, Now);
 			}
 			else
 			{
@@ -957,11 +1499,24 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 				break;
 			}
 
-			// Still carrying something (interrupted trip, sink died): deliver that first.
+			// Still carrying something (interrupted trip, sink died, conversion switched): finish that first.
 			if (Unit->GetLogisticsCargoTotal() > 0.f)
 			{
 				Job.bResumeRequested = false;
-				if (!StartDelivery(Job, Now, Margin))
+				bool bStarted = false;
+				if (Job.Kind == ELogisticsJobKind::Supply && IsSupplyStillWanted(Job))
+				{
+					bStarted = StartSupplyDelivery(Job, Now, Margin);
+				}
+				else if (Job.Kind != ELogisticsJobKind::Haul)
+				{
+					bStarted = StartReturn(Job, Now, Margin);
+				}
+				else
+				{
+					bStarted = StartDelivery(Job, Now, Margin);
+				}
+				if (!bStarted)
 				{
 					Job.NextAssignTime = Now + 2.0;
 				}
@@ -1005,12 +1560,73 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 				}
 			}
 
+			// Converter supply: the same score, weighted, for what the Converter still has room for.
+			ALogisticsRoad* BestSupplyRoad = nullptr;
+			float BestSupplyScore = 0.f;
+			float BestSupplyAmount = 0.f;
+			const float SupplyWeight = FMath::Max(0.f, GameMode->LogisticsConverterSupplyPriority);
+			const float MinSupply = FMath::Max(FMath::Min(GameMode->LogisticsMinPickupAmount, Unit->LogisticsCapacity), 1.f);
+			for (const auto& Pair : SupplyRoadsByConverter)
+			{
+				ABuildingBase* Converter = Pair.Key.Get();
+				ALogisticsRoad* Road = Pair.Value.Get();
+				ABuildingBase* Source = Road ? Road->SourceBase.Get() : nullptr;
+				if (!Road || !IsBaseAlive(Converter) || !Converter->bHasConversion || !IsBaseAlive(Source) || Road->TeamId != Unit->TeamId)
+				{
+					continue;
+				}
+				if (!Road->bHasGroundLane && !bCanFly)
+				{
+					continue;
+				}
+
+				const float Needed = Converter->GetConversionInputSpace() - GetInboundSupply(Converter);
+				const float Available = GetSupplyAvailable(Source, Converter->ConversionInput, GameMode);
+				const float Amount = FMath::Min3(Needed, Available, Unit->LogisticsCapacity);
+				if (Amount < MinSupply)
+				{
+					continue;
+				}
+
+				const float Score = SupplyWeight * Amount / (1.f + FVector::Dist2D(Location, Road->GetSourceEnd()) / 5000.f);
+				if (Score > BestSupplyScore)
+				{
+					BestSupplyScore = Score;
+					BestSupplyRoad = Road;
+					BestSupplyAmount = Amount;
+				}
+			}
+
+			if (BestSupplyRoad && BestSupplyScore > BestScore)
+			{
+				ABuildingBase* Converter = BestSupplyRoad->SinkBase.Get();
+				ResetJobKind(Job);
+				Job.bResumeRequested = false;
+				Job.Kind = ELogisticsJobKind::Supply;
+				Job.CargoType = Converter->ConversionInput;
+				Job.Converter = Converter;
+				Job.PickupBase = BestSupplyRoad->SourceBase.Get();
+				Job.Road = BestSupplyRoad;
+				Job.TargetBase = BestSupplyRoad->SourceBase.Get();
+				Job.ReservedAmount = BestSupplyAmount;
+				SetJobState(Job, ELogisticsJobState::ToPickup, Now);
+				if (!IssueMove(Job, BestSupplyRoad->GetSourceEnd()))
+				{
+					ReleaseReservation(Job);
+					ResetJobKind(Job);
+					Job.NextAssignTime = Now + 2.0;
+					SetJobState(Job, ELogisticsJobState::Idle, Now);
+				}
+				break;
+			}
+
 			if (!BestRoad)
 			{
 				Job.NextAssignTime = Now + 1.0;
 				break;
 			}
 
+			ResetJobKind(Job);
 			Job.bResumeRequested = false;
 			Job.Road = BestRoad;
 			Job.TargetBase = BestRoad->SourceBase;
@@ -1055,6 +1671,25 @@ void ULogisticsSubsystem::DrawDebug(AResourceGameMode* GameMode) const
 			nullptr, FColor::Yellow, 0.f, true, 1.4f);
 	}
 
+	for (const auto& Pair : SupplyRoadsByConverter)
+	{
+		const ALogisticsRoad* Road = Pair.Value.Get();
+		const ABuildingBase* Converter = Pair.Key.Get();
+		if (!Road || !Converter)
+		{
+			continue;
+		}
+		for (int32 i = 1; i < Road->GroundPoints.Num(); ++i)
+		{
+			DrawDebugLine(World, Road->GroundPoints[i - 1] + FVector(0, 0, 60), Road->GroundPoints[i] + FVector(0, 0, 60),
+				FColor::Magenta, false, -1.f, 0, 6.f);
+		}
+		DrawDebugString(World, Converter->GetActorLocation() + FVector(0, 0, 650),
+			FString::Printf(TEXT("Input %.0f/%.0f (inbound %.0f) state %d"), Converter->ConversionInputStock,
+				Converter->ConversionInputCapacity, GetInboundSupply(Converter), static_cast<int32>(Converter->ConversionState)),
+			nullptr, FColor::Magenta, 0.f, true, 1.4f);
+	}
+
 	for (const FLogisticsJob& Job : Jobs)
 	{
 		const AUnitBase* Unit = Job.Unit.Get();
@@ -1074,11 +1709,13 @@ void ULogisticsSubsystem::DrawDebug(AResourceGameMode* GameMode) const
 
 void ULogisticsSubsystem::LogSummary() const
 {
-	int32 Counts[6] = {};
+	int32 Counts[7] = {};
+	int32 SupplyJobs = 0;
 	float Cargo = 0.f;
 	for (const FLogisticsJob& Job : Jobs)
 	{
-		Counts[FMath::Clamp(static_cast<int32>(Job.State), 0, 5)]++;
+		Counts[FMath::Clamp(static_cast<int32>(Job.State), 0, 6)]++;
+		SupplyJobs += Job.Kind == ELogisticsJobKind::Supply ? 1 : 0;
 		if (Job.Unit.IsValid())
 		{
 			Cargo += Job.Unit->GetLogisticsCargoTotal();
@@ -1094,6 +1731,7 @@ void ULogisticsSubsystem::LogSummary() const
 		}
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("[Logistics] Summary: roads=%d units=%d (Idle %d, ToPickup %d, Loading %d, ToDropoff %d, Unloading %d, Paused %d) cargo=%.0f stored=%.0f"),
-		RoadsBySource.Num(), Jobs.Num(), Counts[0], Counts[1], Counts[2], Counts[3], Counts[4], Counts[5], Cargo, Stored);
+	UE_LOG(LogTemp, Log, TEXT("[Logistics] Summary: roads=%d supplyRoads=%d units=%d (Idle %d, ToPickup %d, Loading %d, ToDropoff %d, Unloading %d, Paused %d, Returning %d; supply jobs %d) cargo=%.0f stored=%.0f"),
+		RoadsBySource.Num(), SupplyRoadsByConverter.Num(), Jobs.Num(), Counts[0], Counts[1], Counts[2], Counts[3], Counts[4], Counts[5], Counts[6],
+		SupplyJobs, Cargo, Stored);
 }

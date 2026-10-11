@@ -149,6 +149,19 @@ struct FUnitSaveData
     UPROPERTY()
     TArray<float> LogisticsCargo;
 
+    // Converter: the picked conversion and the input not converted yet (its output is in StoredResources).
+    UPROPERTY()
+    bool bHasConversion = false;
+
+    UPROPERTY()
+    uint8 ConversionInput = 0;
+
+    UPROPERTY()
+    uint8 ConversionOutput = 0;
+
+    UPROPERTY()
+    float ConversionInputStock = 0.f;
+
     // The living units this unit has summoned (its SummonedUnitsDataSet). Without it every summon
     // limit counted from zero after a load and summoners produced their units a second time.
     UPROPERTY()

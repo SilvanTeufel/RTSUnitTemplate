@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "Core/LogisticsData.h"
+#include "Core/WorkerData.h"
 #include "LogisticsSubsystem.generated.h"
 
 class AAbilityUnit;
@@ -25,6 +26,17 @@ struct FLogisticsRouteCache
 	double ComputedAt = 0.0;
 };
 
+/** What a logistics unit is carrying out. */
+enum class ELogisticsJobKind : uint8
+{
+	/** Stock of a CollectOnly base (or the output of a Converter) to a storing base. */
+	Haul,
+	/** The input type of a Converter, from a collecting base to the Converter. */
+	Supply,
+	/** Supply the Converter no longer wants, back to the base it was loaded at. */
+	Return,
+};
+
 /** Server-side bookkeeping for one logistics unit. */
 struct FLogisticsJob
 {
@@ -40,6 +52,17 @@ struct FLogisticsJob
 
 	/** What this unit has claimed at its pick-up base, so two shuttles do not drive for the same load. */
 	float ReservedAmount = 0.f;
+
+	ELogisticsJobKind Kind = ELogisticsJobKind::Haul;
+
+	/** Supply / Return: the one type this unit loads and carries. */
+	EResourceType CargoType = EResourceType::MAX;
+
+	/** Supply / Return: the base the cargo was (or will be) loaded at - where a return goes. */
+	TWeakObjectPtr<ABuildingBase> PickupBase;
+
+	/** Supply: the Converter the cargo is for. */
+	TWeakObjectPtr<ABuildingBase> Converter;
 
 	double StateStartTime = 0.0;
 	double IdleSince = -1.0;
@@ -65,6 +88,11 @@ struct FLogisticsJob
  * (CollectAndStore / StoreOnly) - a star network, nothing to place by hand. Rebuilt when bases
  * appear, die or move (flying buildings), and checked every LogisticsRoadRefreshInterval.
  *
+ * Converters: every Converter with a conversion gets a supply road from the nearest collecting base
+ * (CollectAndStore, CollectOnly, CollectOnlyWithoutWorker) that can give its input type. Supply runs
+ * compete with the ordinary hauls (weighted by LogisticsConverterSupplyPriority) until the Converter's
+ * input is full. Switching the conversion sends supply that is on its way back where it came from.
+ *
  * Dispatcher: idle logistics units take the road whose source holds the most unclaimed resources,
  * drive there, load, drive to the storing end, unload (credits the team), repeat. Moves go through
  * the same batch-move path the AI uses, so Mass, prediction and replication see an ordinary order.
@@ -88,6 +116,12 @@ public:
 	/** A base appeared, died or changed type: rebuild the road network on the next tick. */
 	void MarkRoadsDirty() { bRoadsDirty = true; }
 
+	/**
+	 * A Converter switched its conversion. Supply runs for it that have not loaded yet are dropped,
+	 * loaded ones turn back to the base they were loaded at. Rebuilds its supply road.
+	 */
+	void OnConversionChanged(ABuildingBase* Converter);
+
 	/** Registers the unit if it is a logistics unit, otherwise forgets it. */
 	void RefreshLogisticsUnit(AAbilityUnit* Unit);
 
@@ -104,8 +138,21 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
 	ELogisticsJobState GetJobState(const AUnitBase* Unit) const;
 
+	/** Supply roads of a team (collecting base -> Converter). */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	TArray<ALogisticsRoad*> GetSupplyRoadsOfTeam(int32 TeamId) const;
+
 private:
 	void RefreshRoads(AResourceGameMode* GameMode);
+	void RefreshSupplyRoads(AResourceGameMode* GameMode);
+
+	/** Picks the best of up to three nearest candidates by route (ground lane first, then length). */
+	ABuildingBase* PickBestRouteEnd(ABuildingBase* From, TArray<ABuildingBase*> Candidates, bool bFromIsSource,
+		AResourceGameMode* GameMode, FLogisticsRouteCache& OutRoute);
+
+	/** Spawns (or keeps) the road Source -> Sink in Map[Key]. Returns the road. */
+	ALogisticsRoad* UpdateRoad(TMap<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ALogisticsRoad>>& Map, ABuildingBase* Key,
+		ABuildingBase* Source, ABuildingBase* Sink, const FLogisticsRouteCache& Route, bool bSupplyRoad, AResourceGameMode* GameMode);
 	void TickDispatcher(AResourceGameMode* GameMode);
 	void DiscoverLogisticsUnits();
 	void DrawDebug(AResourceGameMode* GameMode) const;
@@ -122,6 +169,20 @@ private:
 	ABuildingBase* FindNearestSink(int32 TeamId, const FVector& From) const;
 	float GetReservedAt(const ABuildingBase* Source) const;
 
+	/** What Source can still hand out of Type as Converter supply, after the claims of other units. */
+	float GetSupplyAvailable(const ABuildingBase* Source, EResourceType Type, const AResourceGameMode* GameMode) const;
+
+	/** Supply claimed for or carried to Converter by every unit except Exclude. */
+	float GetInboundSupply(const ABuildingBase* Converter, const FLogisticsJob* Exclude = nullptr) const;
+
+	/** The Converter of a supply job still wants its cargo type. */
+	static bool IsSupplyStillWanted(const FLogisticsJob& Job);
+
+	/** A base a returning unit may unload its cargo at. */
+	static bool CanTakeReturn(const ABuildingBase* Base);
+
+	ABuildingBase* FindNearestReturnBase(int32 TeamId, const FVector& From) const;
+
 	void SetJobState(FLogisticsJob& Job, ELogisticsJobState NewState, double Now);
 	void ReleaseReservation(FLogisticsJob& Job);
 	bool IssueMove(FLogisticsJob& Job, const FVector& Target);
@@ -133,10 +194,26 @@ private:
 	void DoUnload(FLogisticsJob& Job, double Now);
 	bool StartDelivery(FLogisticsJob& Job, double Now, float Margin);
 
+	/** Sends a supply unit with cargo back to where it loaded (or the nearest collecting base). */
+	bool StartReturn(FLogisticsJob& Job, double Now, float Margin);
+
+	/** Supply unit with cargo: drive (on) to the Converter. */
+	bool StartSupplyDelivery(FLogisticsJob& Job, double Now, float Margin);
+
+	void DoLoadSupply(FLogisticsJob& Job, double Now);
+	void DoUnloadSupply(FLogisticsJob& Job, double Now);
+	void DoUnloadReturn(FLogisticsJob& Job, double Now);
+
+	/** Back to an ordinary hauler with nothing special to remember. */
+	static void ResetJobKind(FLogisticsJob& Job);
+
 	TArray<FLogisticsJob> Jobs;
 
 	/** Road per CollectOnly base. */
 	TMap<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ALogisticsRoad>> RoadsBySource;
+
+	/** Supply road per Converter (its source is the collecting base that supplies it). */
+	TMap<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ALogisticsRoad>> SupplyRoadsByConverter;
 
 	/** Ground routes per (source, sink), so a periodic refresh does not path-find again. */
 	TMap<TPair<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ABuildingBase>>, FLogisticsRouteCache> RouteCache;

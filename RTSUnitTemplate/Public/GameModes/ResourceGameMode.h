@@ -126,6 +126,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
 	float LogisticsEndMargin = 250.f;
 
+	/**
+	 * Weight of a Converter supply run against an ordinary haul when an idle logistics unit picks its
+	 * next job (both are scored by amount and distance). 1 = equal, higher = Converters are supplied first.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	float LogisticsConverterSupplyPriority = 1.5f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	float ResourceDistanceMultiplier = 2.0f;
 

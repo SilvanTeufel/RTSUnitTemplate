@@ -23,6 +23,7 @@
 #include "UObject/Package.h"
 #include "Actors/WorkArea.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "System/LogisticsSubsystem.h"
 #include "AIController.h"
 #include "Actors/WorkResource.h"
 #include "AbilitySystemInterface.h"
@@ -131,6 +132,13 @@ void UGameSaveSubsystem::SaveCurrentGame(const FString& SlotName)
             if (Building->StoresLocally())
             {
                 Data.StoredResources = Building->StoredResources;
+            }
+            if (Building->IsConverter())
+            {
+                Data.bHasConversion = Building->bHasConversion;
+                Data.ConversionInput = static_cast<uint8>(Building->ConversionInput);
+                Data.ConversionOutput = static_cast<uint8>(Building->ConversionOutput);
+                Data.ConversionInputStock = Building->ConversionInputStock;
             }
         }
         if (Unit->IsLogisticsUnit())
@@ -674,6 +682,21 @@ void UGameSaveSubsystem::ApplyLoadedData(UWorld* LoadedWorld, URTSSaveGame* Save
             {
                 Building->StoredResources = SavedUnit.StoredResources;
                 Building->StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+            }
+            // Set directly, not through SetConversion: that would move the stock away and treat the
+            // load like a switch.
+            const uint8 MaxType = static_cast<uint8>(EResourceType::MAX);
+            if (Building->IsConverter() && SavedUnit.ConversionInput < MaxType && SavedUnit.ConversionOutput < MaxType)
+            {
+                Building->bHasConversion = SavedUnit.bHasConversion;
+                Building->ConversionInput = static_cast<EResourceType>(SavedUnit.ConversionInput);
+                Building->ConversionOutput = static_cast<EResourceType>(SavedUnit.ConversionOutput);
+                Building->ConversionInputStock = SavedUnit.ConversionInputStock;
+                Building->ConversionState = Building->bHasConversion ? EConversionState::WaitingForInput : EConversionState::NoRecipe;
+                if (ULogisticsSubsystem* Logistics = Building->GetWorld()->GetSubsystem<ULogisticsSubsystem>())
+                {
+                    Logistics->MarkRoadsDirty();
+                }
             }
         }
         if (SavedUnit.LogisticsCargo.Num() > 0)

@@ -6,10 +6,19 @@
 #include "Mass/UnitMassTag.h"
 #include "MassActorSubsystem.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "Characters/Unit/UnitBase.h"
+#include "Characters/Unit/BuildingBase.h"
 #include "Actors/WorkArea.h"
 #include "MassNavigationFragments.h"
 #include <type_traits>
 #include "ProfilingDebugging/CsvProfiler.h"
+#include "HAL/IConsoleManager.h"
+
+// Preview aid: run every cast oscillation as if its unit were working (casting / extracting).
+static TAutoConsoleVariable<int32> CVarCastOscForceWorking(
+    TEXT("RTS.CastOscForceWorking"), 0,
+    TEXT("1 = cast oscillations (e.g. the 'Dynamic' rings) always move as if the unit were working. Preview only."),
+    ECVF_Cheat);
 
 UMassUnitVisualTweenProcessor::UMassUnitVisualTweenProcessor() {
     ExecutionFlags = (int32)EProcessorExecutionFlags::All;
@@ -138,6 +147,78 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                 if (bShouldLog && LoggedThisFrame < 10 && Effect.OscillationTargetISM.IsValid()) {
                     LoggedThisFrame++;
                 }
+            }
+
+            // Cast oscillation: swing between Low and Top while casting, glide back to rest otherwise.
+            // Casting is read from the Mass state tag (server and clients: the client tag sync keeps it)
+            // with the actor's unit state as a fallback.
+            auto IsWorking = [&]() {
+                bool bWorking = Context.DoesArchetypeHaveTag<FMassStateCastingTag>();
+                if (!bWorking) {
+                    if (const AUnitBase* CastUnit = Cast<AUnitBase>(ActorList[i].Get())) {
+                        bWorking = CastUnit->GetUnitState() == UnitData::Casting;
+                    }
+                }
+                // Buildings that extract by themselves count as "working" while they extract.
+                if (!bWorking) {
+                    if (const ABuildingBase* Building = Cast<ABuildingBase>(ActorList[i].Get())) {
+                        bWorking = Building->bIsExtracting;
+                    }
+                }
+                return bWorking || CVarCastOscForceWorking.GetValueOnAnyThread() > 0;
+            };
+
+            // Emissive blink while working: per-instance custom data 14 on the unit's main mesh
+            // (Material_Master_B multiplies its emissive with a pulse while it is 1). Written only on change.
+            // Also for a timed blink (MulticastBlinkEmissive, e.g. after the nuke launched).
+            if (const AMassUnitBase* BlinkUnit = Cast<AMassUnitBase>(ActorList[i].Get());
+                BlinkUnit && (BlinkUnit->bBlinkEmissiveWhileWorking || BlinkUnit->BlinkEmissiveUntil > 0.f)) {
+                const bool bTimedBlink = BlinkUnit->BlinkEmissiveUntil > BlinkUnit->GetWorld()->GetTimeSeconds();
+                const float BlinkValue = (bTimedBlink || (BlinkUnit->bBlinkEmissiveWhileWorking && IsWorking())) ? 1.f : 0.f;
+                if (BlinkValue != Effect.CastBlinkValue) {
+                    Effect.CastBlinkValue = BlinkValue;
+                    for (const FMassUnitVisualInstance& BlinkInstance : Visual.VisualInstances) {
+                        UInstancedStaticMeshComponent* BlinkISM = BlinkInstance.TargetISM.Get();
+                        if (BlinkISM && BlinkInstance.InstanceIndex != INDEX_NONE && BlinkInstance.TemplateISM == BlinkUnit->ISMComponent
+                            && BlinkISM->NumCustomDataFloats > 14) {
+                            BlinkISM->SetCustomDataValue(BlinkInstance.InstanceIndex, 14, BlinkValue, true);
+                        }
+                    }
+                }
+            }
+
+            bool bCastOscMoving = false;
+            if (Effect.bCastOscillationEnabled) {
+                const bool bCasting = IsWorking();
+                if (bCasting && !Effect.bCastOscWasCasting) {
+                    Effect.CastOscPhase = 0.f; // every cast starts by rising to the top
+                }
+                Effect.bCastOscWasCasting = bCasting;
+
+                float TargetZ = 0.f;
+                if (bCasting) {
+                    Effect.CastOscYaw = FMath::Fmod(Effect.CastOscYaw + Effect.CastOscYawRate * DeltaTime, 360.f);
+                    Effect.CastOscPhase += DeltaTime * Effect.CastOscCyclesPerSecond;
+                    // Phase 0 = top, then down to Low and back up: a smooth cosine swing.
+                    const float Swing = 0.5f * (1.f + FMath::Cos(2.f * PI * Effect.CastOscPhase));
+                    TargetZ = FMath::Lerp(Effect.CastOscLowZ, Effect.CastOscTopZ, Swing);
+                }
+                Effect.CastOscCurrentZ = FMath::FInterpTo(Effect.CastOscCurrentZ, TargetZ, DeltaTime, FMath::Max(Effect.CastOscFollowSpeed, 0.01f));
+                if (!bCasting && FMath::Abs(Effect.CastOscCurrentZ) < 0.05f) {
+                    Effect.CastOscCurrentZ = 0.f; // resting: stop re-dirtying the transform
+                }
+                // Rocking around the swing axis: half of the range to each side, smooth sine, back to 0 at rest.
+                float TargetSwing = 0.f;
+                if (bCasting && Effect.CastOscSwingDegrees > 0.f) {
+                    Effect.CastOscSwingPhase = FMath::Fmod(Effect.CastOscSwingPhase + DeltaTime * Effect.CastOscSwingCycles, 1.f);
+                    TargetSwing = 0.5f * Effect.CastOscSwingDegrees * FMath::Sin(2.f * PI * Effect.CastOscSwingPhase);
+                }
+                Effect.CastOscSwingAngle = FMath::FInterpTo(Effect.CastOscSwingAngle, TargetSwing, DeltaTime, FMath::Max(Effect.CastOscFollowSpeed, 0.01f));
+                if (!bCasting && FMath::Abs(Effect.CastOscSwingAngle) < 0.05f) {
+                    Effect.CastOscSwingAngle = 0.f;
+                    Effect.CastOscSwingPhase = 0.f;
+                }
+                bCastOscMoving = bCasting || Effect.CastOscCurrentZ != 0.f || Effect.CastOscSwingAngle != 0.f;
             }
 
             // Dish Rotation
@@ -426,6 +507,23 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                     }
                 }
 
+                // Cast oscillation: height above the rest position + spin around the actor's up axis
+                // (applied before the ISM's own rotation, so its authored orientation is kept)
+                if (Effect.bCastOscillationEnabled) {
+                    bool bShouldApply = (!Effect.CastOscTargetISM.IsValid() || Effect.CastOscTargetISM == InstanceTemplate);
+                    if (bShouldApply) {
+                        if (Effect.CastOscCurrentZ != 0.f) {
+                            NewTransform.AddToTranslation(Effect.CastOscAxis * Effect.CastOscCurrentZ);
+                        }
+                        if (Effect.CastOscSwingAngle != 0.f) {
+                            NewTransform.SetRotation(FQuat(Effect.CastOscAxis, FMath::DegreesToRadians(Effect.CastOscSwingAngle)) * NewTransform.GetRotation());
+                        }
+                        if (Effect.CastOscYaw != 0.f) {
+                            NewTransform.SetRotation(FQuat(FVector::UpVector, FMath::DegreesToRadians(Effect.CastOscYaw)) * NewTransform.GetRotation());
+                        }
+                    }
+                }
+
                 // Dish Rotation
                 if (Effect.bDishRotationEnabled) {
                     bool bShouldApply = (!Effect.DishTargetISM.IsValid() || Effect.DishTargetISM == InstanceTemplate);
@@ -517,7 +615,8 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
             const bool bHasActiveTweenOrEffect =
                 Tween.RotationTween.bActive || Tween.LocationTween.bActive || Tween.ScaleTween.bActive ||
                 Effect.bPulsateEnabled || Effect.bRotationEnabled || Effect.bOscillationEnabled ||
-                Effect.bDishRotationEnabled || (Effect.bYawChaseEnabled && bHasYawChaseTarget) || Effect.bDroneEnabled;
+                Effect.bDishRotationEnabled || (Effect.bYawChaseEnabled && bHasYawChaseTarget) || Effect.bDroneEnabled ||
+                bCastOscMoving;
 
             if (bHasActiveTweenOrEffect)
             {

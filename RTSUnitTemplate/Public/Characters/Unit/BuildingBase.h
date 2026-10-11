@@ -105,18 +105,103 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
 	bool CreditsOnReceive() const { return BaseType == EBaseType::CollectAndStore || BaseType == EBaseType::StoreOnly; }
 
-	/** Delivered resources are kept here until logistics units collect them (CollectOnly) - a road starts here. */
+	/**
+	 * Resources are kept here until logistics units collect them - a road starts here. CollectOnly and
+	 * CollectOnlyWithoutWorker keep what they collect, a Converter keeps what it produces.
+	 */
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
-	bool StoresLocally() const { return BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker; }
+	bool StoresLocally() const { return BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker || BaseType == EBaseType::Converter; }
 
 	/** Extracts the resource place it stands on by itself (CollectOnlyWithoutWorker). */
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
 	bool ExtractsByItself() const { return BaseType == EBaseType::CollectOnlyWithoutWorker; }
 
-	/** Total amount a CollectOnly base can hold, all types together. 0 = unlimited. */
+	/** Converts one resource type into another (Converter). */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool IsConverter() const { return BaseType == EBaseType::Converter; }
+
+	/** Logistics units may load Converter supply here: the collecting bases (CollectAndStore, CollectOnly, CollectOnlyWithoutWorker). */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool SuppliesConverters() const { return BaseType == EBaseType::CollectAndStore || BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker; }
+
+	/**
+	 * True if this base can hand out ResourceType as Converter supply. A CollectAndStore base gives from
+	 * the team account, so it always can; a CollectOnly base can if it takes that type from workers; a
+	 * CollectOnlyWithoutWorker if its resource place is of that type.
+	 */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
+	bool CanProvideResource(EResourceType ResourceType) const;
+
+	/** Total amount a CollectOnly base (or the output store of a Converter) can hold, all types together. 0 = unlimited. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
-	          meta = (EditCondition = "BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker", ClampMin = "0"))
+	          meta = (EditCondition = "BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker || BaseType == EBaseType::Converter", ClampMin = "0"))
 	float StorageCapacity = 0.f;
+
+	// --- Converter --------------------------------------------------------------------------------
+	// The input is kept apart from StoredResources (the output), so the logistics units that empty the
+	// output store never carry supply away again.
+
+	/** A conversion is picked. Set in the Blueprint for a converter that starts working at once. */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics|Converter",
+	          meta = (EditCondition = "BaseType == EBaseType::Converter"))
+	bool bHasConversion = false;
+
+	/** The type this converter is supplied with. */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics|Converter",
+	          meta = (EditCondition = "BaseType == EBaseType::Converter"))
+	EResourceType ConversionInput = EResourceType::Primary;
+
+	/** The type it produces. */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics|Converter",
+	          meta = (EditCondition = "BaseType == EBaseType::Converter"))
+	EResourceType ConversionOutput = EResourceType::Secondary;
+
+	/** Input used per conversion cycle. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics|Converter",
+	          meta = (EditCondition = "BaseType == EBaseType::Converter", ClampMin = "0.01"))
+	float ConversionInputAmount = 5.f;
+
+	/** Output produced per conversion cycle. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics|Converter",
+	          meta = (EditCondition = "BaseType == EBaseType::Converter", ClampMin = "0"))
+	float ConversionOutputAmount = 5.f;
+
+	/** Seconds between two conversion cycles. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics|Converter",
+	          meta = (EditCondition = "BaseType == EBaseType::Converter", ClampMin = "0.1"))
+	float ConversionInterval = 2.f;
+
+	/** How much input the converter holds. Logistics units stop supplying once it is full. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics|Converter",
+	          meta = (EditCondition = "BaseType == EBaseType::Converter", ClampMin = "1"))
+	float ConversionInputCapacity = 100.f;
+
+	/** Input delivered and not converted yet (of type ConversionInput). Server-owned. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics|Converter")
+	float ConversionInputStock = 0.f;
+
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics|Converter")
+	EConversionState ConversionState = EConversionState::NoRecipe;
+
+	/**
+	 * Picks the conversion (server). Input still waiting for the old conversion is moved into the output
+	 * store as what it is, so the logistics units take it to a storing base - nothing is lost. Supply on
+	 * its way for the old conversion is carried back to where it was loaded.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics|Converter")
+	void SetConversion(EResourceType Input, EResourceType Output);
+
+	/** True if Input -> Output is the conversion running now. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics|Converter")
+	bool IsConversionActive(EResourceType Input, EResourceType Output) const { return bHasConversion && ConversionInput == Input && ConversionOutput == Output; }
+
+	/** Room left for input. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics|Converter")
+	float GetConversionInputSpace() const { return FMath::Max(0.f, ConversionInputCapacity - ConversionInputStock); }
+
+	/** A logistics unit unloads supply (server). Only the current input type, up to the capacity. Returns the amount accepted. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics|Converter")
+	float ReceiveConversionInput(EResourceType ResourceType, float Amount);
 
 	/** CollectOnlyWithoutWorker: amount taken from the resource place per extraction cycle. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
@@ -135,6 +220,11 @@ public:
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
 	AWorkArea* ExtractionResourcePlace = nullptr;
 
+	/** True while the last extraction cycle actually moved resources (false when the store is full,
+	 *  the place is gone or the building is dead). Replicated; drives e.g. CastOscillation. */
+	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	bool bIsExtracting = false;
+
 	/** Links this building and Place both ways (nullptr releases the current place). Server only. */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics")
 	void SetExtractionResourcePlace(AWorkArea* Place);
@@ -147,6 +237,11 @@ private:
 
 	/** One extraction cycle: moves ExtractionAmount from the resource place into StoredResources. */
 	void ExtractionTick();
+
+	FTimerHandle ConversionTimerHandle;
+
+	/** One conversion cycle: ConversionInputAmount of the input stock becomes ConversionOutputAmount in StoredResources. */
+	void ConversionTick();
 
 public:
 

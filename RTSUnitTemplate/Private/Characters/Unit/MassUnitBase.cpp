@@ -1,4 +1,4 @@
-﻿// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// Copyright 2025 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "Characters/Unit/MassUnitBase.h"
@@ -122,6 +122,18 @@ void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishSpeedMax);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishDurationMin);
 	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishDurationMax);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_RotationTargetISM);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_PulsateTargetISM);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_DishTargetISM);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscTargetISM);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscTopZ);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscLowZ);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscCyclesPerSecond);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscFollowSpeed);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscYawRate);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscAxis);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscSwingDegrees);
+	DOREPLIFETIME(AMassUnitBase, Rep_VE_CastOscSwingCycles);
 }
 
 
@@ -1520,6 +1532,30 @@ bool AMassUnitBase::HealthbarWidgetNachHudSchalten()
 
 void AMassUnitBase::BeginPlay()
 {
+	// Before Super: the Blueprint BeginPlay (inside Super) registers the unit with Mass, and the additional
+	// ISM must be known by then. The server writes the replicated settings, which RegisterVisualsToMass
+	// applies on server and clients.
+	if (CastOscillation.bEnabled)
+	{
+		TInlineComponentArray<UInstancedStaticMeshComponent*> ISMs(this);
+		for (UInstancedStaticMeshComponent* Candidate : ISMs)
+		{
+			if (Candidate && Candidate != ISMComponent && Candidate->GetFName() == CastOscillation.ISMComponentName)
+			{
+				InitializeAdditionalISM(Candidate);
+				if (HasAuthority())
+				{
+					Rep_VE_CastOscAxis = CastOscillation.MoveAxis.GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+					Rep_VE_CastOscSwingDegrees = CastOscillation.SwingDegrees;
+					Rep_VE_CastOscSwingCycles = CastOscillation.SwingCyclesPerSecond;
+					MulticastCastOscillateISM_Implementation(Candidate, CastOscillation.TopOffsetZ, CastOscillation.LowOffsetZ,
+						CastOscillation.CyclesPerSecond, CastOscillation.FollowSpeed, true, CastOscillation.YawDegreesPerSecond);
+				}
+				break;
+			}
+		}
+	}
+
 	Super::BeginPlay();
 
 	HealthbarWidgetNachHudSchalten();
@@ -1730,10 +1766,24 @@ bool AMassUnitBase::RegisterVisualsToMass()
 							EffectFrag->DishDurationMin = Rep_VE_DishDurationMin;
 							EffectFrag->DishDurationMax = Rep_VE_DishDurationMax;
 
-							EffectFrag->PulsateTargetISM = ISMComponent;
-							EffectFrag->RotationTargetISM = ISMComponent;
+							// Restore the replicated target ISMs. Before they were replicated this always fell
+							// back to ISMComponent, so an effect meant for an additional ISM ("Dynamic") turned
+							// the main mesh instead whenever it was started before registration or on late join.
+							EffectFrag->PulsateTargetISM = Rep_VE_PulsateTargetISM ? Rep_VE_PulsateTargetISM.Get() : ISMComponent;
+							EffectFrag->RotationTargetISM = Rep_VE_RotationTargetISM; // null = whole unit
 							EffectFrag->OscillationTargetISM = ISMComponent;
-							EffectFrag->DishTargetISM = ISMComponent;
+							EffectFrag->DishTargetISM = Rep_VE_DishTargetISM ? Rep_VE_DishTargetISM.Get() : ISMComponent;
+
+							EffectFrag->bCastOscillationEnabled = (Rep_VE_ActiveEffects & (1 << 4)) != 0;
+							EffectFrag->CastOscTopZ = Rep_VE_CastOscTopZ;
+							EffectFrag->CastOscLowZ = Rep_VE_CastOscLowZ;
+							EffectFrag->CastOscCyclesPerSecond = Rep_VE_CastOscCyclesPerSecond;
+							EffectFrag->CastOscFollowSpeed = Rep_VE_CastOscFollowSpeed;
+							EffectFrag->CastOscYawRate = Rep_VE_CastOscYawRate;
+							EffectFrag->CastOscAxis = FVector(Rep_VE_CastOscAxis).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+							EffectFrag->CastOscSwingDegrees = Rep_VE_CastOscSwingDegrees;
+							EffectFrag->CastOscSwingCycles = Rep_VE_CastOscSwingCycles;
+							EffectFrag->CastOscTargetISM = Rep_VE_CastOscTargetISM ? Rep_VE_CastOscTargetISM.Get() : ISMComponent;
 						}
 
 						return true;
@@ -2863,6 +2913,7 @@ void AMassUnitBase::MulticastContinuousUnitRotation_Implementation(float YawRate
 		else Rep_VE_ActiveEffects &= ~(1 << 1);
 		Rep_VE_RotationDegreesPerSecond = YawRate;
 		Rep_VE_RotationAxis = FVector::UpVector;
+		Rep_VE_RotationTargetISM = nullptr; // whole unit
 	}
 
 	bContinuousUnitRotationEnabled = bEnable;
@@ -3008,6 +3059,7 @@ void AMassUnitBase::MulticastContinuousISMRotation_Implementation(float YawRate,
 		else Rep_VE_ActiveEffects &= ~(1 << 1);
 		Rep_VE_RotationDegreesPerSecond = YawRate;
 		Rep_VE_RotationAxis = FVector::UpVector;
+		Rep_VE_RotationTargetISM = InISMComponent ? InISMComponent : ISMComponent;
 	}
 
 	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
@@ -3029,6 +3081,51 @@ void AMassUnitBase::MulticastEndlessISMYawRotation_Implementation(UInstancedStat
 	MulticastContinuousISMRotation(YawRate, bEnable, -1.f, InISMComponent);
 }
 
+void AMassUnitBase::MulticastCastOscillateISM_Implementation(UInstancedStaticMeshComponent* InISMComponent, float TopOffsetZ, float LowOffsetZ, float CyclesPerSecond, float FollowSpeed, bool bEnable, float YawDegreesPerSecond)
+{
+	UInstancedStaticMeshComponent* Target = InISMComponent ? InISMComponent : ISMComponent;
+	if (HasAuthority())
+	{
+		if (bEnable) Rep_VE_ActiveEffects |= (1 << 4);
+		else Rep_VE_ActiveEffects &= ~(1 << 4);
+		Rep_VE_CastOscTargetISM = Target;
+		Rep_VE_CastOscTopZ = TopOffsetZ;
+		Rep_VE_CastOscLowZ = LowOffsetZ;
+		Rep_VE_CastOscCyclesPerSecond = CyclesPerSecond;
+		Rep_VE_CastOscFollowSpeed = FollowSpeed;
+		Rep_VE_CastOscYawRate = YawDegreesPerSecond;
+	}
+
+	// Before the Mass visuals are registered there is no fragment yet; RegisterVisualsToMass then picks
+	// the settings up from the replicated values above.
+	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
+	{
+		EffectFrag->bCastOscillationEnabled = bEnable;
+		EffectFrag->CastOscTopZ = TopOffsetZ;
+		EffectFrag->CastOscLowZ = LowOffsetZ;
+		EffectFrag->CastOscCyclesPerSecond = CyclesPerSecond;
+		EffectFrag->CastOscFollowSpeed = FollowSpeed;
+		EffectFrag->CastOscYawRate = YawDegreesPerSecond;
+		EffectFrag->CastOscAxis = FVector(Rep_VE_CastOscAxis).GetSafeNormal(UE_SMALL_NUMBER, FVector::UpVector);
+		EffectFrag->CastOscSwingDegrees = Rep_VE_CastOscSwingDegrees;
+		EffectFrag->CastOscSwingCycles = Rep_VE_CastOscSwingCycles;
+		EffectFrag->CastOscTargetISM = Target;
+		if (!bEnable)
+		{
+			EffectFrag->CastOscCurrentZ = 0.f;
+			EffectFrag->bCastOscWasCasting = false;
+		}
+	}
+}
+
+void AMassUnitBase::MulticastBlinkEmissive_Implementation(float Duration)
+{
+	if (const UWorld* World = GetWorld())
+	{
+		BlinkEmissiveUntil = FMath::Max(BlinkEmissiveUntil, World->GetTimeSeconds() + FMath::Max(Duration, 0.f));
+	}
+}
+
 void AMassUnitBase::MulticastDishISMYawRotation_Implementation(UInstancedStaticMeshComponent* InISMComponent, float MinSpeed, float MaxSpeed, float MinDur, float MaxDur, bool bEnable)
 {
 	if (HasAuthority())
@@ -3040,6 +3137,7 @@ void AMassUnitBase::MulticastDishISMYawRotation_Implementation(UInstancedStaticM
 		Rep_VE_DishSpeedMax = MaxSpeed;
 		Rep_VE_DishDurationMin = MinDur;
 		Rep_VE_DishDurationMax = MaxDur;
+		Rep_VE_DishTargetISM = InISMComponent ? InISMComponent : ISMComponent;
 	}
 
 	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())
@@ -3436,6 +3534,7 @@ void AMassUnitBase::MulticastPulsateISMScale_Implementation(const FVector& InMin
 		Rep_VE_PulsateMinScale = InMinScale;
 		Rep_VE_PulsateMaxScale = InMaxScale;
 		Rep_VE_PulsateHalfPeriod = TimeMinToMax;
+		Rep_VE_PulsateTargetISM = InISMComponent ? InISMComponent : ISMComponent;
 	}
 
 	if (FMassVisualEffectFragment* EffectFrag = GetMutableEffectFragment())

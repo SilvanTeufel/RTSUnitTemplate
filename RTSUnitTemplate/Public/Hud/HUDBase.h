@@ -440,6 +440,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
 	float LogisticsStorageTimerPixelOffset = -22.f;
 
+	// Line spacing of the two Converter lines (input above, output below), in pixels at text scale 1.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	float LogisticsConverterLineSpacing = 16.f;
+
 	// Draws store and cargo amounts (called from DrawHUD).
 	void DrawLogisticsAmounts();
 
