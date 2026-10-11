@@ -36,6 +36,27 @@ enum class EBaseType : uint8
 	 * through a BuildArea that only snaps onto a free resource place of its resource type.
 	 */
 	CollectOnlyWithoutWorker UMETA(DisplayName = "Collect Only (Without Worker)"),
+
+	/**
+	 * Converts one resource type into another. Logistics units supply it with the input type from the
+	 * collecting bases (CollectAndStore, CollectOnly, CollectOnlyWithoutWorker) over a supply road; what
+	 * it produces is kept here and hauled to the nearest storing base like the stock of a CollectOnly.
+	 * Workers never deliver here. Which conversion runs is picked with a UConversionSelectAbility.
+	 */
+	Converter UMETA(DisplayName = "Converter"),
+};
+
+/** What a Converter is doing right now - for the HUD and diagnostics. */
+UENUM(BlueprintType)
+enum class EConversionState : uint8
+{
+	/** No conversion picked yet. */
+	NoRecipe,
+	/** Not enough input for the next cycle. */
+	WaitingForInput,
+	Converting,
+	/** The output store is full - the logistics units have to empty it first. */
+	OutputFull,
 };
 
 /**
@@ -67,4 +88,9 @@ enum class ELogisticsJobState : uint8
 	Unloading,
 	/** The player (or combat) took over; the dispatcher waits until the unit has stood idle for a while. */
 	Paused,
+	/**
+	 * Carries supply for a Converter that no longer wants it (its conversion was switched, or it died)
+	 * back to the base it was loaded at.
+	 */
+	Returning,
 };

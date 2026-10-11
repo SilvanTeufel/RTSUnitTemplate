@@ -41,6 +41,112 @@ void ABuildingBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(ABuildingBase, RallyPointLocation);
 	DOREPLIFETIME(ABuildingBase, StoredResources);
 	DOREPLIFETIME(ABuildingBase, ExtractionResourcePlace);
+	DOREPLIFETIME(ABuildingBase, bIsExtracting);
+	DOREPLIFETIME(ABuildingBase, bHasConversion);
+	DOREPLIFETIME(ABuildingBase, ConversionInput);
+	DOREPLIFETIME(ABuildingBase, ConversionOutput);
+	DOREPLIFETIME(ABuildingBase, ConversionInputStock);
+	DOREPLIFETIME(ABuildingBase, ConversionState);
+}
+
+bool ABuildingBase::CanProvideResource(EResourceType ResourceType) const
+{
+	if (ResourceType == EResourceType::MAX)
+	{
+		return false;
+	}
+	switch (BaseType)
+	{
+	case EBaseType::CollectAndStore:
+		return true;
+	case EBaseType::CollectOnly:
+		return AcceptsResourceType(ResourceType) || GetStoredResourceAmount(ResourceType) > 0.f;
+	case EBaseType::CollectOnlyWithoutWorker:
+		return IsValid(ExtractionResourcePlace)
+			? ConvertToResourceType(ExtractionResourcePlace->Type) == ResourceType
+			: GetStoredResourceAmount(ResourceType) > 0.f;
+	default:
+		return false;
+	}
+}
+
+void ABuildingBase::SetConversion(EResourceType Input, EResourceType Output)
+{
+	if (!HasAuthority() || !IsConverter() || Input == EResourceType::MAX || Output == EResourceType::MAX
+		|| IsConversionActive(Input, Output))
+	{
+		return;
+	}
+
+	// Only the output changes: the input waiting here and the supply on its way stay wanted.
+	const bool bInputChanged = !bHasConversion || ConversionInput != Input;
+
+	// Input of the old conversion goes into the output store as what it is - the logistics units take
+	// it to a storing base. Past the capacity on purpose: it must not simply vanish.
+	if (bInputChanged && bHasConversion && ConversionInputStock > 0.f)
+	{
+		if (StoredResources.Num() < static_cast<int32>(EResourceType::MAX))
+		{
+			StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+		}
+		StoredResources[static_cast<int32>(ConversionInput)] += ConversionInputStock;
+		ConversionInputStock = 0.f;
+	}
+
+	bHasConversion = true;
+	ConversionInput = Input;
+	ConversionOutput = Output;
+	ConversionState = EConversionState::WaitingForInput;
+
+	if (ULogisticsSubsystem* Logistics = GetWorld() ? GetWorld()->GetSubsystem<ULogisticsSubsystem>() : nullptr)
+	{
+		Logistics->OnConversionChanged(this);
+	}
+}
+
+float ABuildingBase::ReceiveConversionInput(EResourceType ResourceType, float Amount)
+{
+	if (!HasAuthority() || !IsConverter() || !bHasConversion || ResourceType != ConversionInput || Amount <= 0.f
+		|| GetUnitState() == UnitData::Dead)
+	{
+		return 0.f;
+	}
+	const float Accepted = FMath::Min(Amount, GetConversionInputSpace());
+	ConversionInputStock += Accepted;
+	return Accepted;
+}
+
+void ABuildingBase::ConversionTick()
+{
+	if (GetUnitState() == UnitData::Dead)
+	{
+		GetWorldTimerManager().ClearTimer(ConversionTimerHandle);
+		return;
+	}
+
+	if (!bHasConversion)
+	{
+		ConversionState = EConversionState::NoRecipe;
+		return;
+	}
+	if (ConversionInputStock + KINDA_SMALL_NUMBER < ConversionInputAmount)
+	{
+		ConversionState = EConversionState::WaitingForInput;
+		return;
+	}
+	if (StorageCapacity > 0.f && GetStoredResourceTotal() + ConversionOutputAmount > StorageCapacity + KINDA_SMALL_NUMBER)
+	{
+		ConversionState = EConversionState::OutputFull;
+		return;
+	}
+
+	if (StoredResources.Num() < static_cast<int32>(EResourceType::MAX))
+	{
+		StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+	}
+	ConversionInputStock = FMath::Max(0.f, ConversionInputStock - ConversionInputAmount);
+	StoredResources[static_cast<int32>(ConversionOutput)] += ConversionOutputAmount;
+	ConversionState = EConversionState::Converting;
 }
 
 void ABuildingBase::SetExtractionResourcePlace(AWorkArea* Place)
@@ -96,6 +202,9 @@ void ABuildingBase::LinkResourcePlaceUnderneath()
 
 void ABuildingBase::ExtractionTick()
 {
+	// Stays false unless this cycle really moves resources (drives the "working" visuals).
+	bIsExtracting = false;
+
 	if (GetUnitState() == UnitData::Dead)
 	{
 		// A ruin extracts nothing and frees its place for a new building.
@@ -127,6 +236,7 @@ void ABuildingBase::ExtractionTick()
 		StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
 	}
 	StoredResources[static_cast<int32>(ResourceType)] += Amount;
+	bIsExtracting = true;
 
 	Place->AvailableResourceAmount = FMath::Max(0.f, Place->AvailableResourceAmount - Amount);
 	if (Place->AvailableResourceAmount <= KINDA_SMALL_NUMBER)
@@ -441,6 +551,13 @@ void ABuildingBase::BeginPlay()
 		LinkResourcePlaceUnderneath();
 		GetWorldTimerManager().SetTimer(ExtractionTimerHandle, this, &ABuildingBase::ExtractionTick,
 			FMath::Max(0.1f, ExtractionInterval), true);
+	}
+
+	if (HasAuthority() && IsConverter())
+	{
+		ConversionState = bHasConversion ? EConversionState::WaitingForInput : EConversionState::NoRecipe;
+		GetWorldTimerManager().SetTimer(ConversionTimerHandle, this, &ABuildingBase::ConversionTick,
+			FMath::Max(0.1f, ConversionInterval), true);
 	}
 
 	// Grant this building's supply capacity. Deferred a moment because TeamId is assigned after spawn - the
