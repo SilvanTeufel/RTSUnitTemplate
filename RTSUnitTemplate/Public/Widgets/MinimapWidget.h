@@ -37,6 +37,9 @@ protected:
 
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	/** Keeps the game's cursor (e.g. the crosshair) over the minimap instead of the system arrow. */
+	virtual FCursorReply NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent) override;
+
 	/** The Image component from the UMG Designer that will display the minimap.
 	 * The name "MinimapImage" MUST match the name of the Image widget in your UMG Blueprint.
 	 */
@@ -45,11 +48,18 @@ protected:
 
 private:
 	/**
-	 * Converts a click position on the widget to a world location and moves the camera.
-	 * @param LocalMousePosition The mouse position in the widget's local coordinate space.
-	 * @param WidgetGeometry The geometry of the widget at the time of the click.
+	 * Converts a click position on the map image to a world location and moves the camera.
+	 * @param LocalMousePosition The mouse position on the map image, unrotated (see GetMapLocalPosition).
+	 * @param MapSize The map image's size in the same space.
 	 */
-	void MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FGeometry& WidgetGeometry);
+	void MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FVector2D& MapSize);
+
+	/**
+	 * The mouse position on MinimapImage itself, before its rotation, and the image's size. The image need not
+	 * fill the widget (a frame around it, e.g. BP_MinimapWidget_Xeno_AH: a SizeBox in a GridPanel). Without
+	 * MinimapImage: the whole widget.
+	 */
+	void GetMapLocalPosition(const FGeometry& InGeometry, const FVector2D& ScreenPosition, FVector2D& OutLocal, FVector2D& OutSize) const;
 
 	void RetryInitialize();
 	

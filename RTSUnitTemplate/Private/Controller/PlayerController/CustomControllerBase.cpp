@@ -720,8 +720,10 @@ void ACustomControllerBase::ExecuteBatchMove(UObject* WorldContextObject,
 			AiStatePtr->PlaceholderSignal = UnitSignals::Run;
 		}
 		
-		// Final check: if UseLocation is still invalid, do a last-resort snap
-		if (NavSys)
+		// Final check: if UseLocation is still invalid, do a last-resort snap.
+		// Not for flyers: they steer straight at the target without the navmesh, so a point off the
+		// navmesh (e.g. right at a building's edge) is perfectly reachable for them.
+		if (NavSys && !Unit->IsFlying)
 		{
 			FNavLocation NavLoc;
 			const bool bOnNav = NavSys->ProjectPointToNavigation(UseLocation, NavLoc, NavMeshProjectionExtent);

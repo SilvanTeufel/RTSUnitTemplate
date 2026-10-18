@@ -1829,6 +1829,10 @@ FVector ACameraControllerBase::GetCameraPanDirection() {
 		return FVector::ZeroVector;
 	}
 
+	// Fenstergroesse jedes Mal neu holen: wurde das Fenster nach dem Start vergroessert (z.B.
+	// klein gestartet, dann Vollbild), lagen rechter und unterer Rand sonst mitten im Bild.
+	GetViewPortScreenSizes(CameraBase->GetViewPortScreenSizesState);
+
 	// Wie in ACameraBase::MoveInDirection: die Blickrichtung ist Pawn-Drehung PLUS
 	// SpringArm-Drehung. Mit nur dem relativen Anteil scrollt der Bildschirmrand bei
 	// gedrehtem Start (Xeno-PlayerStarts stehen auf Yaw 180) in die falsche Richtung.

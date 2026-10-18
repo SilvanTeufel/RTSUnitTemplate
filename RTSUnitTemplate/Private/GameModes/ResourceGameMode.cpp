@@ -7,11 +7,16 @@
 #include "EngineUtils.h" // For TActorIterator
 #include "Actors/WorkArea.h"
 #include "Actors/WinLoseConfigActor.h"
+#include "Actors/LogisticsRoad.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/UnrealNetwork.h"
 #include "Core/RTSSupplyMessung.h"
+#include "GameFramework/PlayerStart.h"
+#include "NavigationSystem.h"
+#include "NavigationData.h"
+#include "Math/RandomStream.h"
 
 
 #include "System/MapSwitchSubsystem.h"
@@ -61,6 +66,432 @@ void AResourceGameMode::BeginPlay()
 		RGState->SetTeamResources(TeamResources); 
 	}
 	//AssignWorkAreasToWorkers();
+}
+
+void AResourceGameMode::StartPlay()
+{
+	if (ProceduralSettings.Procedural && HasAuthority())
+	{
+		SpawnProceduralResources();
+	}
+	Super::StartPlay();
+}
+
+void AResourceGameMode::SpawnProceduralResources()
+{
+	UWorld* World = GetWorld();
+	UNavigationSystemV1* NavSys = World ? FNavigationSystem::GetCurrent<UNavigationSystemV1>(World) : nullptr;
+	const ANavigationData* NavData = NavSys ? NavSys->GetDefaultNavDataInstance(FNavigationSystem::DontCreate) : nullptr;
+	if (!NavData)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnProceduralResources: no navmesh - the map's resources stay."));
+		return;
+	}
+	const FProceduralSettings& S = ProceduralSettings;
+
+	// 1) Remove the map's resource places; remember their classes (and scale) as the defaults per type.
+	TArray<UClass*> MapClasses[3];
+	TMap<UClass*, FVector> MapScale;
+	TArray<AWorkArea*> ToRemove;
+	TArray<FVector> Blocked;   // player starts, buildings, other areas
+	for (TActorIterator<AWorkArea> It(World); It; ++It)
+	{
+		AWorkArea* Area = *It;
+		if (!IsValid(Area)) continue;
+		if (Area->Type.GetValue() <= WorkAreaData::Legendary)
+		{
+			if (Area->Type.GetValue() <= WorkAreaData::Tertiary)
+			{
+				MapClasses[Area->Type.GetValue()].AddUnique(Area->GetClass());
+				MapScale.FindOrAdd(Area->GetClass(), Area->GetActorScale3D());
+			}
+			ToRemove.Add(Area);
+		}
+		else
+		{
+			Blocked.Add(Area->GetActorLocation());
+		}
+	}
+	for (AWorkArea* Area : ToRemove)
+	{
+		Area->Destroy();
+	}
+	// Start positions for the start clusters: the main base (CollectAndStore) nearest to each player start,
+	// without one in MainBaseReach the player start itself. Positions close together (several slots of one
+	// team at its main building) count once.
+	TArray<FVector> PlayerStarts;
+	for (TActorIterator<APlayerStart> It(World); It; ++It)
+	{
+		PlayerStarts.Add(It->GetActorLocation());
+		Blocked.Add(It->GetActorLocation());
+	}
+	TArray<FVector> MainBases;
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		Blocked.Add(It->GetActorLocation());
+		if (It->BaseType == EBaseType::CollectAndStore)
+		{
+			MainBases.Add(It->GetActorLocation());
+		}
+	}
+	TArray<FVector> Starts;
+	for (const FVector& PlayerStart : PlayerStarts)
+	{
+		FVector Location = PlayerStart;
+		float BestDistSq = FMath::Square(S.MainBaseReach);
+		for (const FVector& Base : MainBases)
+		{
+			const float DistSq = FVector::DistSquared2D(Base, PlayerStart);
+			if (DistSq < BestDistSq)
+			{
+				BestDistSq = DistSq;
+				Location = Base;
+			}
+		}
+		bool bNear = false;
+		for (const FVector& Other : Starts)
+		{
+			bNear |= FVector::DistSquared2D(Other, Location) < FMath::Square(2.f * S.StartClusterMinDistance);
+		}
+		if (!bNear)
+		{
+			Starts.Add(Location);
+		}
+	}
+
+	const TArray<TSubclassOf<AWorkArea>>* Overrides[3] = { &S.PrimaryClasses, &S.SecondaryClasses, &S.TertiaryClasses };
+	TArray<UClass*> Classes[3];
+	for (int32 T = 0; T < 3; ++T)
+	{
+		for (const TSubclassOf<AWorkArea>& C : *Overrides[T])
+		{
+			if (*C) Classes[T].AddUnique(*C);
+		}
+		if (Classes[T].Num() == 0) Classes[T] = MapClasses[T];
+	}
+	const float Weights[3] = {
+		Classes[0].Num() ? S.PrimaryFrequency : 0.f,
+		Classes[1].Num() ? S.SecondaryFrequency : 0.f,
+		Classes[2].Num() ? S.TertiaryFrequency : 0.f };
+	const float WeightSum = Weights[0] + Weights[1] + Weights[2];
+	if (WeightSum <= 0.f)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("SpawnProceduralResources: no resource class (map had none, no override) - nothing spawned."));
+		return;
+	}
+
+	// 2) How many clusters: density per 100 m x 100 m of the navmesh's bounds.
+	const FBox Bounds = NavData->GetBounds();
+	const FVector Size = Bounds.GetSize();
+	const float Area100m = Bounds.IsValid ? float(Size.X * Size.Y) / (10000.f * 10000.f) : 0.f;
+	const int32 Wanted = FMath::Min(S.MaxClusters, FMath::RoundToInt(Area100m * S.ClusterDensity));
+
+	// Seed 0: a new layout every start - clock and CPU cycles, so two starts never share it. Everything
+	// random below comes from this stream (also the candidate spots), so a fixed Seed repeats the layout.
+	const int32 UsedSeed = S.Seed != 0 ? S.Seed
+		: int32(uint32(FPlatformTime::Cycles64()) ^ uint32(FDateTime::Now().GetTicks()) ^ uint32(FDateTime::Now().GetTicks() >> 32));
+	FRandomStream Random(UsedSeed);
+	const FVector Extent(60.f, 60.f, 300.f);
+	// Formation (see ClusterSize): up to 6 places on a ring with ClusterSpacing between neighbours, more: one in
+	// the centre and the rest on a ring of radius ClusterSpacing.
+	const int32 PlacesPerCluster = FMath::Max(1, S.ClusterSize);
+	const bool bCentrePlace = PlacesPerCluster == 1 || PlacesPerCluster > 6;
+	const int32 RingCount = bCentrePlace ? PlacesPerCluster - 1 : PlacesPerCluster;
+	const float ClusterRadius = RingCount <= 0 ? 0.f
+		: bCentrePlace ? S.ClusterSpacing
+		: S.ClusterSpacing / (2.f * FMath::Sin(PI / float(RingCount)));
+	const float TestRadius = S.OpenRadius + ClusterRadius;
+
+	// Open, flat ground around P: the navmesh reaches TestRadius in 8 directions, no wall in between
+	// (a passage or a narrow spot fails) and no more than MaxHeightDifference up or down (a ramp fails).
+	auto IsOpenGround = [&](const FVector& P) -> bool
+	{
+		for (int32 i = 0; i < 8; ++i)
+		{
+			const FVector Dir = FVector(1.f, 0.f, 0.f).RotateAngleAxis(45.f * i, FVector::UpVector);
+			const FVector Q = P + Dir * TestRadius;
+			FNavLocation OnNav;
+			if (!NavSys->ProjectPointToNavigation(Q, OnNav, Extent)
+				|| FVector::Dist2D(OnNav.Location, Q) > 40.f
+				|| FMath::Abs(OnNav.Location.Z - P.Z) > S.MaxHeightDifference)
+			{
+				return false;
+			}
+			FVector Hit;
+			if (UNavigationSystemV1::NavigationRaycast(World, P, OnNav.Location, Hit))
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	auto GroundBelow = [&](const FVector& P) -> FVector
+	{
+		FHitResult Hit;
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(ProceduralResourceGround), false);
+		FCollisionObjectQueryParams Objects(ECC_WorldStatic);
+		if (World->LineTraceSingleByObjectType(Hit, P + FVector(0.f, 0.f, 200.f), P - FVector(0.f, 0.f, 600.f), Objects, Params))
+		{
+			return Hit.Location;
+		}
+		return P;
+	};
+
+	TArray<FVector> Centres;
+	int32 Spawned = 0;
+
+	// EdgeDistance to the navmesh's edge in 8 directions: the navmesh is there and no wall in between.
+	auto HasEdgeClearance = [&](const FVector& P, float EdgeDistance) -> bool
+	{
+		if (EdgeDistance <= 0.f)
+		{
+			return true;
+		}
+		for (int32 i = 0; i < 8; ++i)
+		{
+			const FVector Q = P + FVector(1.f, 0.f, 0.f).RotateAngleAxis(45.f * i, FVector::UpVector) * EdgeDistance;
+			FNavLocation OnNav;
+			FVector Hit;
+			if (!NavSys->ProjectPointToNavigation(Q, OnNav, Extent) || FVector::Dist2D(OnNav.Location, Q) > 40.f
+				|| UNavigationSystemV1::NavigationRaycast(World, P, OnNav.Location, Hit))
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	// The places of one cluster around C (the formation above), turned until every place is clear of the
+	// navmesh's edge (EdgeDistance) and - MinToBlocked > 0 - that far from player starts and buildings, and
+	// - Anchor set - StartClusterMinDistance from the main base. false: none fits.
+	// Type by the frequencies.
+	auto PickType = [&]() -> int32
+	{
+		float Pick = Random.FRand() * WeightSum;
+		int32 Type = 0;
+		while (Type < 2 && Pick >= Weights[Type]) { Pick -= Weights[Type]; ++Type; }
+		return Weights[Type] > 0.f ? Type : 0;
+	};
+
+	// Cluster mixes (see PrimaryOnlyClusterWeight ...): the types of each, without those that have no class.
+	// All weights 0: one type per cluster by the frequencies.
+	constexpr int32 MixCount = 4;
+	const TArray<int32> MixDefs[MixCount] = { { 0 }, { 0, 1 }, { 0, 2 }, { 1, 2 } };
+	const float MixWeightsIn[MixCount] = { S.PrimaryOnlyClusterWeight, S.PrimarySecondaryClusterWeight,
+		S.PrimaryTertiaryClusterWeight, S.SecondaryTertiaryClusterWeight };
+	TArray<int32> Mixes[MixCount];
+	float MixWeights[MixCount];
+	float MixWeightSum = 0.f;
+	for (int32 m = 0; m < MixCount; ++m)
+	{
+		for (int32 T : MixDefs[m])
+		{
+			if (Classes[T].Num() > 0) Mixes[m].Add(T);
+		}
+		MixWeights[m] = Mixes[m].Num() > 0 ? MixWeightsIn[m] : 0.f;
+		MixWeightSum += MixWeights[m];
+	}
+	int32 MixClusters[MixCount + 1] = { 0, 0, 0, 0, 0 }; // the last: by the frequencies
+
+	// A mix by the weights; INDEX_NONE: all weights 0.
+	auto PickMix = [&]() -> int32
+	{
+		if (MixWeightSum <= 0.f)
+		{
+			return INDEX_NONE;
+		}
+		float Pick = Random.FRand() * MixWeightSum;
+		int32 Found = INDEX_NONE;
+		for (int32 m = 0; m < MixCount; ++m)
+		{
+			if (MixWeights[m] <= 0.f) continue;
+			Found = m;
+			if (Pick < MixWeights[m]) break;
+			Pick -= MixWeights[m];
+		}
+		return Found;
+	};
+
+	// Type of every place of a cluster of mix Mix: every type of the mix at least once, the rest at random,
+	// shuffled. INDEX_NONE: one type by the frequencies. Placed clusters are counted in SpawnCluster.
+	auto MakePlaceTypes = [&](int32 Mix) -> TArray<int32>
+	{
+		const TArray<int32> Chosen = Mix != INDEX_NONE ? Mixes[Mix] : TArray<int32>{ PickType() };
+		TArray<int32> Types;
+		Types.SetNum(PlacesPerCluster);
+		for (int32 n = 0; n < PlacesPerCluster; ++n)
+		{
+			Types[n] = n < Chosen.Num() ? Chosen[n] : Chosen[Random.RandHelper(Chosen.Num())];
+		}
+		for (int32 n = PlacesPerCluster - 1; n > 0; --n)
+		{
+			Types.Swap(n, Random.RandHelper(n + 1));
+		}
+		return Types;
+	};
+
+	auto SpawnCluster = [&](const FVector& C, int32 Mix, const TArray<int32>& PlaceTypes, float MinToBlocked, const FVector* Anchor, float EdgeDistance) -> bool
+	{
+		TArray<FVector> Places;
+		const float Turn0 = Random.FRand() * 360.f;
+		const float TurnStep = 360.f / float(FMath::Max(1, RingCount)) / 8.f;
+		for (int32 Turn = 0; Turn < 8 && Places.Num() == 0; ++Turn)
+		{
+			bool bFits = true;
+			for (int32 n = 0; n < PlacesPerCluster && bFits; ++n)
+			{
+				FVector P = C;
+				const int32 RingIndex = bCentrePlace ? n - 1 : n;
+				if (RingIndex >= 0 && ClusterRadius > 0.f)
+				{
+					const float Angle = Turn0 + Turn * TurnStep + 360.f * float(RingIndex) / float(RingCount) + Random.FRandRange(-8.f, 8.f);
+					P += FVector(1.f, 0.f, 0.f).RotateAngleAxis(Angle, FVector::UpVector) * ClusterRadius * Random.FRandRange(0.92f, 1.08f);
+					FNavLocation OnNav;
+					bFits = NavSys->ProjectPointToNavigation(P, OnNav, Extent) && FVector::Dist2D(OnNav.Location, P) <= 60.f;
+					P = OnNav.Location;
+				}
+				for (int32 i = 0; bFits && MinToBlocked > 0.f && i < Blocked.Num(); ++i)
+				{
+					bFits = FVector::DistSquared2D(Blocked[i], P) >= FMath::Square(MinToBlocked);
+				}
+				bFits = bFits && (!Anchor || FVector::DistSquared2D(*Anchor, P) >= FMath::Square(S.StartClusterMinDistance));
+				bFits = bFits && HasEdgeClearance(P, EdgeDistance);
+				Places.Add(P);
+			}
+			if (!bFits)
+			{
+				Places.Reset();
+			}
+		}
+		for (int32 n = 0; n < Places.Num(); ++n)
+		{
+			const FVector& P = Places[n];
+			const int32 Type = PlaceTypes.IsValidIndex(n) ? PlaceTypes[n] : PlaceTypes[0];
+			UClass* Class = Classes[Type][Random.RandHelper(Classes[Type].Num())];
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			const FTransform Transform(FRotator(0.f, Random.FRand() * 360.f, 0.f), GroundBelow(P),
+				MapScale.Contains(Class) ? MapScale[Class] : FVector::OneVector);
+			if (World->SpawnActor<AWorkArea>(Class, Transform, Params))
+			{
+				++Spawned;
+			}
+		}
+		if (Places.Num() > 0)
+		{
+			++MixClusters[Mix != INDEX_NONE ? Mix : MixCount];
+		}
+		return Places.Num() > 0;
+	};
+
+	// 3) Start clusters: every main base gets the same ones, just outside the main building's distance
+	//    to resources. Open ground first; where there is none, any navmesh at that distance with half the
+	//    edge distance.
+	TArray<int32> StartTypes;
+	for (int32 T = 0; T < 3; ++T)
+	{
+		if (Weights[T] > 0.f) StartTypes.Add(T);
+	}
+	// The same mixes for every base (fair start): the first one only Primary (bFirstStartClusterPrimaryOnly,
+	// if it has a class), the others by the weights.
+	TArray<int32> StartMixes;
+	TArray<TArray<int32>> StartPlaceTypes;
+	for (int32 k = 0; k < S.StartClusters && StartTypes.Num() > 0; ++k)
+	{
+		StartMixes.Add(k == 0 && S.bFirstStartClusterPrimaryOnly && Classes[0].Num() > 0 ? 0 : PickMix());
+		StartPlaceTypes.Add(StartMixes[k] != INDEX_NONE ? MakePlaceTypes(StartMixes[k]) : TArray<int32>{});
+		if (StartMixes[k] == INDEX_NONE)
+		{
+			// No mix weights: as before, the first start cluster Primary, the next the next type.
+			StartPlaceTypes[k].Init(StartTypes[k % StartTypes.Num()], PlacesPerCluster);
+		}
+	}
+	int32 StartCentres = 0;
+	const float StartReach = S.StartClusterMinDistance + ClusterRadius * 1.15f + 50.f;
+	const FVector StartExtent(250.f, 250.f, 500.f);
+	for (int32 s = 0; s < Starts.Num() && StartTypes.Num() > 0; ++s)
+	{
+		const FVector& Start = Starts[s];
+		const float BaseAngle = Random.FRand() * 360.f;
+		for (int32 k = 0; k < S.StartClusters; ++k)
+		{
+			bool bPlaced = false;
+			for (int32 Pass = 0; Pass < 2 && !bPlaced; ++Pass)
+			{
+				for (int32 Try = 0; Try < 48 && !bPlaced; ++Try)
+				{
+					// Spread evenly around the start, each try a little further round - and from the second
+					// round on a little further out.
+					const float Angle = BaseAngle + 360.f * float(k) / float(S.StartClusters) + float(((Try % 18) + 1) / 2) * 20.f * ((Try & 1) ? 1.f : -1.f);
+					const float Dist = StartReach + Random.FRand() * S.StartClusterSpread * (1.f + float(Try / 18));
+					FNavLocation OnNav;
+					if (!NavSys->ProjectPointToNavigation(Start + FVector(1.f, 0.f, 0.f).RotateAngleAxis(Angle, FVector::UpVector) * Dist, OnNav, StartExtent))
+					{
+						continue;
+					}
+					const FVector C = OnNav.Location;
+					bool bFree = FMath::Abs(C.Z - Start.Z) < 600.f
+						&& FVector::DistSquared2D(Start, C) >= FMath::Square(StartReach - 60.f);
+					for (int32 i = 0; bFree && i < Blocked.Num(); ++i)
+					{
+						bFree = FVector::DistSquared2D(Blocked[i], C) >= FMath::Square(S.StartClusterClearance + ClusterRadius);
+					}
+					for (int32 i = 0; bFree && i < Centres.Num(); ++i)
+					{
+						bFree = FVector::DistSquared2D(Centres[i], C) >= FMath::Square(2.f * ClusterRadius + 600.f);
+					}
+					if (!bFree || (Pass == 0 && !IsOpenGround(C))
+						|| !SpawnCluster(C, StartMixes[k], StartPlaceTypes[k], S.StartClusterClearance, &Start,
+							Pass == 0 ? S.MinEdgeDistance : 0.5f * S.MinEdgeDistance))
+					{
+						continue;
+					}
+					Centres.Add(C);
+					++StartCentres;
+					bPlaced = true;
+				}
+			}
+		}
+	}
+
+	// 4) The rest, anywhere on open ground away from the bases.
+	// Candidates: random spots in the navmesh's bounds from the stream, put onto the navmesh (misses are
+	// skipped - hence more tries).
+	const int32 MaxTries = FMath::Max(1, Wanted) * 150;
+	const FVector ProbeExtent(150.f, 150.f, FMath::Max(500.f, float(Size.Z) + 500.f));
+	for (int32 Try = 0; Try < MaxTries && Centres.Num() - StartCentres < Wanted && Bounds.IsValid; ++Try)
+	{
+		FNavLocation Candidate;
+		const FVector Probe(Random.FRandRange(Bounds.Min.X, Bounds.Max.X), Random.FRandRange(Bounds.Min.Y, Bounds.Max.Y), Bounds.GetCenter().Z);
+		if (!NavSys->ProjectPointToNavigation(Probe, Candidate, ProbeExtent))
+		{
+			continue;
+		}
+		const FVector C = Candidate.Location;
+		bool bFree = true;
+		for (const FVector& O : Centres)
+		{
+			if (FVector::DistSquared2D(O, C) < FMath::Square(S.MinClusterDistance)) { bFree = false; break; }
+		}
+		for (int32 i = 0; bFree && i < Blocked.Num(); ++i)
+		{
+			if (FVector::DistSquared2D(Blocked[i], C) < FMath::Square(S.MinDistanceToBases)) bFree = false;
+		}
+		if (!bFree || !IsOpenGround(C))
+		{
+			continue;
+		}
+
+		const int32 Mix = PickMix();
+		if (SpawnCluster(C, Mix, MakePlaceTypes(Mix), 0.f, nullptr, S.MinEdgeDistance))
+		{
+			Centres.Add(C);
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("SpawnProceduralResources: seed %d, removed %d, spawned %d in %d start clusters (%d starts) + %d of %d clusters (navmesh %.1f x 100m^2), mixes P/PS/PT/ST/single %d/%d/%d/%d/%d, first %s."),
+		UsedSeed, ToRemove.Num(), Spawned, StartCentres, Starts.Num(), Centres.Num() - StartCentres, Wanted, Area100m, MixClusters[0], MixClusters[1], MixClusters[2], MixClusters[3], MixClusters[4],
+		Centres.IsValidIndex(StartCentres) ? *Centres[StartCentres].ToCompactString() : TEXT("-"));
 }
 
 void AResourceGameMode::CheckWinLoseConditionTimer()
@@ -634,38 +1065,35 @@ ABuildingBase* AResourceGameMode::GetClosestBaseToLocation(AWorkingUnitBase* Wor
         return nullptr;
     }
 
-    ABuildingBase* ClosestBase = nullptr;
-    float MinDistanceSquared = FLT_MAX;
-
     // Only bases that accept what this worker carries (or is about to fetch) are eligible, so a
     // restricted worker never walks to a drop-off that would reject its load.
     const EResourceType RoutingType = GetWorkerRoutingResourceType(Worker);
 
-    // The 'Bases' array is iterated over.
+    // The nearest base that takes the load - a Collector or the main base, whichever is closer. A full
+    // Collector is skipped, so the worker goes on to the next one that still has room.
+    ABuildingBase* ClosestBase = nullptr;
+    float MinDistanceSquared = FLT_MAX;
     for (ABuildingBase* Base : Bases)
     {
-       if (IsValid(Base) && !Base->AcceptsResourceType(RoutingType))
+       if (!IsValid(Base) || Worker->TeamId != Base->TeamId || Base->GetUnitState() == UnitData::Dead)
        {
           continue;
        }
-
-       // A CollectOnly base whose store is full: send the worker to one that still has room.
-       if (IsValid(Base) && RoutingType != EResourceType::MAX && Base->IsStorageFull())
+       if (!Base->AcceptsResourceType(RoutingType))
        {
           continue;
        }
-
-       if (IsValid(Base) && Worker->TeamId == Base->TeamId && Base->GetUnitState() != UnitData::Dead)
+       if (RoutingType != EResourceType::MAX && Base->IsStorageFull())
        {
-			const float DistanceSquared = (Base->GetActorLocation() - Location).SizeSquared();
-			if (DistanceSquared < MinDistanceSquared)
-			{
-				MinDistanceSquared = DistanceSquared;
-				ClosestBase = Base;
-			}
+          continue;
+       }
+       const float DistanceSquared = (Base->GetActorLocation() - Location).SizeSquared();
+       if (DistanceSquared < MinDistanceSquared)
+       {
+          MinDistanceSquared = DistanceSquared;
+          ClosestBase = Base;
        }
     }
-
     return ClosestBase;
 }
 
@@ -1253,4 +1681,16 @@ bool AResourceGameMode::IsWorkerDistributionSet(int TeamId) const
 		}
 	}
 	return false;
+}
+
+UClass* AResourceGameMode::GetLogisticsRoadClass(int32 TeamId) const
+{
+	for (const FTeamLogisticsSettings& Settings : TeamLogisticsSettings)
+	{
+		if (Settings.TeamId == TeamId && Settings.RoadClass)
+		{
+			return Settings.RoadClass.Get();
+		}
+	}
+	return LogisticsRoadClass ? LogisticsRoadClass.Get() : ALogisticsRoad::StaticClass();
 }

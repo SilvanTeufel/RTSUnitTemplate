@@ -3,9 +3,13 @@
 #include "System/LogisticsSubsystem.h"
 
 #include "Actors/LogisticsRoad.h"
+#include "Actors/LogisticsPipeline.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/InstancedStaticMeshComponent.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/StaticMesh.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
@@ -57,6 +61,69 @@ namespace
 	{
 		const AResourceGameMode* GameMode = World ? Cast<AResourceGameMode>(World->GetAuthGameMode()) : nullptr;
 		return GameMode ? GameMode->LogisticsEndMargin : 250.f;
+	}
+
+	/** Shows the cargo like a worker's resource: CarryingResourceType = the type it carries most of (MAX = empty).
+	 *  Clients follow through OnRep; on a listen server / standalone the visual is updated here directly. */
+	void SyncCargoVisual(AUnitBase* Unit, EResourceType Preview = EResourceType::MAX)
+	{
+		EResourceType Carried = EResourceType::MAX;
+		float Most = 0.f;
+		for (int32 i = 0; i < Unit->LogisticsCargo.Num(); ++i)
+		{
+			if (Unit->LogisticsCargo[i] > Most)
+			{
+				Most = Unit->LogisticsCargo[i];
+				Carried = static_cast<EResourceType>(i);
+			}
+		}
+		// Nothing on board yet, but the unit is loading: show the container already, so it does not pop up
+		// only when the unit drives / flies off.
+		if (Carried == EResourceType::MAX)
+		{
+			Carried = Preview;
+		}
+		if (Unit->CarryingResourceType != Carried)
+		{
+			Unit->CarryingResourceType = Carried;
+			Unit->OnRep_CarryingResourceType();
+			Unit->ForceNetUpdate();
+		}
+	}
+
+	/** The type that is about to be loaded, while the unit stands at the pickup. MAX = show nothing.
+	 *  Ground units show it on arrival; flyers once they have (nearly) touched down. */
+	EResourceType GetLoadingPreview(const FLogisticsJob& Job, const AUnitBase* Unit, double Now)
+	{
+		if (Job.State != ELogisticsJobState::Loading || !Unit)
+		{
+			return EResourceType::MAX;
+		}
+		if (Job.bLanded && Now - Job.StateStartTime < Unit->LogisticsLandingTime * 0.7f)
+		{
+			return EResourceType::MAX;
+		}
+		if (Job.Kind == ELogisticsJobKind::Supply)
+		{
+			return Job.CargoType;
+		}
+		const ABuildingBase* Source = Job.TargetBase.Get();
+		if (!Source)
+		{
+			return EResourceType::MAX;
+		}
+		EResourceType Best = EResourceType::MAX;
+		float Most = 0.f;
+		for (int32 i = 0; i < static_cast<int32>(EResourceType::MAX); ++i)
+		{
+			const float Stored = Source->GetStoredResourceAmount(static_cast<EResourceType>(i));
+			if (Stored > Most)
+			{
+				Most = Stored;
+				Best = static_cast<EResourceType>(i);
+			}
+		}
+		return Best;
 	}
 
 	float GetCargoOf(const AUnitBase* Unit, EResourceType Type)
@@ -124,6 +191,7 @@ void ULogisticsSubsystem::Tick(float DeltaTime)
 	if (Now - LastDispatch >= GameMode->LogisticsTickInterval)
 	{
 		LastDispatch = Now;
+		TickPipelines(GameMode);
 		TickDispatcher(GameMode);
 	}
 
@@ -188,6 +256,131 @@ FVector ULogisticsSubsystem::GetBaseEdgePoint(const ABuildingBase* Base, const F
 		Dir = FVector::ForwardVector;
 	}
 	return Center + Dir * (GetBaseRadius(Base) + Margin);
+}
+
+float ULogisticsSubsystem::GetDockDistance(const ABuildingBase* Base, const AUnitBase* Unit) const
+{
+	float UnitRadius = 50.f;
+	if (Unit && Unit->GetCapsuleComponent())
+	{
+		UnitRadius = Unit->GetCapsuleComponent()->GetScaledCapsuleRadius();
+	}
+	const AResourceGameMode* GameMode = GetWorld() ? Cast<AResourceGameMode>(GetWorld()->GetAuthGameMode()) : nullptr;
+	const float Gap = GameMode ? GameMode->LogisticsDockGap : 0.f;
+	return FMath::Max(GetBaseRadius(Base) + UnitRadius + Gap, 0.f);
+}
+
+FVector ULogisticsSubsystem::GetDockPoint(const ABuildingBase* Base, const AUnitBase* Unit, const FVector& Toward) const
+{
+	if (LandsOnRoof(Unit))
+	{
+		return GetRoofDockPoint(Base, Toward);
+	}
+	return GetBaseEdgePoint(Base, Toward, GetDockDistance(Base, Unit) - GetBaseRadius(Base));
+}
+
+bool ULogisticsSubsystem::LandsOnRoof(const AUnitBase* Unit)
+{
+	return Unit && Unit->LogisticsBehavior == ELogisticsBehavior::LandOnRoof && Unit->IsFlying;
+}
+
+FVector ULogisticsSubsystem::GetRoofDockPoint(const ABuildingBase* Base, const FVector& Toward) const
+{
+	// Close to the centre, where the top of the mesh is - a little towards the approach, so units coming
+	// from different sides do not all stack on the same spot.
+	return GetBaseEdgePoint(Base, Toward, -GetBaseRadius(Base) * 0.8f);
+}
+
+float ULogisticsSubsystem::GetRoofZ(const ABuildingBase* Base, const FVector& Location) const
+{
+	float BottomZ = Base->GetActorLocation().Z;
+	float CapsuleTopZ = BottomZ;
+	if (const UCapsuleComponent* Capsule = Base->GetCapsuleComponent())
+	{
+		BottomZ -= Capsule->GetScaledCapsuleHalfHeight();
+		CapsuleTopZ += Capsule->GetScaledCapsuleHalfHeight();
+	}
+	if (Base->RoofLandingHeight > 0.f)
+	{
+		return BottomZ + Base->RoofLandingHeight;
+	}
+
+	// What is drawn, not the capsule (a gameplay shape, often taller or flatter than the building). In a
+	// game world the building's ISM components are hidden and empty - the UnitVisualManager draws their
+	// mesh at the component's transform - so the top comes from the mesh asset, placed by the component.
+	float MeshTopZ = -UE_BIG_NUMBER;
+	auto AddISM = [&MeshTopZ](const UInstancedStaticMeshComponent* ISM)
+	{
+		if (ISM && ISM->GetStaticMesh())
+		{
+			MeshTopZ = FMath::Max(MeshTopZ, ISM->GetStaticMesh()->GetBoundingBox().TransformBy(ISM->GetComponentTransform()).Max.Z);
+		}
+	};
+	if (!Base->bUseSkeletalMovement)
+	{
+		AddISM(Base->ISMComponent);
+	}
+	for (const UInstancedStaticMeshComponent* ISM : Base->AdditionalISMComponents)
+	{
+		AddISM(ISM);
+	}
+	if (Base->bUseSkeletalMovement && Base->GetMesh() && Base->GetMesh()->GetSkeletalMeshAsset())
+	{
+		MeshTopZ = FMath::Max(MeshTopZ, Base->GetMesh()->Bounds.GetBox().Max.Z);
+	}
+	return MeshTopZ > BottomZ ? MeshTopZ : CapsuleTopZ;
+}
+
+void ULogisticsSubsystem::LandUnit(FLogisticsJob& Job, AUnitBase* Unit)
+{
+	const ABuildingBase* Base = Job.TargetBase.Get();
+	if (!LandsOnRoof(Unit) || !Base)
+	{
+		Unit->IsFlying = false;
+		Job.bLanded = true;
+		return;
+	}
+
+	// Stays a flyer; only the height above the ground below is lowered so that it sits on the roof.
+	// The ground below is measured the way the Mass height update measures it (WorldStatic, ignoring
+	// the unit) - if that trace hits the building itself, the roof simply counts as the ground.
+	const FVector Location = Unit->GetMassActorLocation();
+	const float RoofZ = GetRoofZ(Base, Location);
+	float GroundZ = Base->GetActorLocation().Z;
+	if (const UCapsuleComponent* Capsule = Base->GetCapsuleComponent())
+	{
+		GroundZ -= Capsule->GetScaledCapsuleHalfHeight();
+	}
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(LogisticsRoofGround));
+	Params.AddIgnoredActor(Unit);
+	FHitResult Hit;
+	if (GetWorld()->LineTraceSingleByObjectType(Hit, FVector(Location.X, Location.Y, RoofZ + 10.f),
+		FVector(Location.X, Location.Y, RoofZ - 10000.f), FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		GroundZ = Hit.ImpactPoint.Z;
+	}
+	const float HalfHeight = Unit->GetCapsuleComponent() ? Unit->GetCapsuleComponent()->GetScaledCapsuleHalfHeight() : 50.f;
+
+	Job.SavedFlyHeight = Unit->FlyHeight;
+	Unit->FlyHeight = FMath::Max(RoofZ - GroundZ, 0.f) + HalfHeight;
+	Unit->ForceNetUpdate();
+	Job.bOnRoof = true;
+	Job.bLanded = true;
+}
+
+void ULogisticsSubsystem::TakeOffUnit(FLogisticsJob& Job, AUnitBase* Unit)
+{
+	if (Unit && Job.bOnRoof)
+	{
+		Unit->FlyHeight = Job.SavedFlyHeight;
+		Unit->ForceNetUpdate();
+	}
+	else if (Unit && Job.bLanded)
+	{
+		Unit->IsFlying = true;
+	}
+	Job.bOnRoof = false;
+	Job.bLanded = false;
 }
 
 ABuildingBase* ULogisticsSubsystem::FindNearestSink(int32 TeamId, const FVector& From) const
@@ -268,6 +461,10 @@ float ULogisticsSubsystem::GetInboundSupply(const ABuildingBase* Converter, cons
 		}
 		// Claimed while on the way to load, carried once loaded - never both at once.
 		Inbound += Job.ReservedAmount + GetCargoOf(Job.Unit.Get(), Job.CargoType);
+	}
+	if (const ALogisticsPipeline* Pipeline = Cast<ALogisticsPipeline>(SupplyRoadsByConverter.FindRef(Converter).Get()))
+	{
+		Inbound += Pipeline->GetInFlightAmount();
 	}
 	return Inbound;
 }
@@ -463,7 +660,9 @@ ALogisticsRoad* ULogisticsSubsystem::UpdateRoad(TMap<TWeakObjectPtr<ABuildingBas
 	ABuildingBase* Source, ABuildingBase* Sink, const FLogisticsRouteCache& Route, bool bSupplyRoad, AResourceGameMode* GameMode)
 {
 	ALogisticsRoad* Existing = Map.FindRef(Key).Get();
+	UClass* RoadClass = GameMode->GetLogisticsRoadClass(Source->TeamId);
 	const bool bUnchanged = IsValid(Existing)
+		&& Existing->GetClass() == RoadClass
 		&& Existing->SourceBase == Source
 		&& Existing->SinkBase == Sink
 		&& Existing->TeamId == Source->TeamId
@@ -476,11 +675,10 @@ ALogisticsRoad* ULogisticsSubsystem::UpdateRoad(TMap<TWeakObjectPtr<ABuildingBas
 
 	if (IsValid(Existing))
 	{
-		Existing->Destroy();
+		Existing->Retire();
 	}
 	Map.Remove(Key);
 
-	UClass* RoadClass = GameMode->LogisticsRoadClass ? GameMode->LogisticsRoadClass.Get() : ALogisticsRoad::StaticClass();
 	FActorSpawnParameters Params;
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 	ALogisticsRoad* Road = GetWorld()->SpawnActor<ALogisticsRoad>(RoadClass, FTransform(Route.Points[0]), Params);
@@ -556,7 +754,7 @@ void ULogisticsSubsystem::RefreshRoads(AResourceGameMode* GameMode)
 		{
 			if (ALogisticsRoad* Road = It.Value().Get())
 			{
-				Road->Destroy();
+				Road->Retire();
 			}
 			It.RemoveCurrent();
 		}
@@ -681,7 +879,7 @@ void ULogisticsSubsystem::RefreshSupplyRoads(AResourceGameMode* GameMode)
 		{
 			if (ALogisticsRoad* Road = It.Value().Get())
 			{
-				Road->Destroy();
+				Road->Retire();
 			}
 			It.RemoveCurrent();
 		}
@@ -766,7 +964,7 @@ void ULogisticsSubsystem::RefreshLogisticsUnit(AAbilityUnit* InUnit)
 	{
 		if (Jobs[Index].bLanded)
 		{
-			Unit->IsFlying = true;   // no longer a hauler - do not leave it parked on the ground
+			TakeOffUnit(Jobs[Index], Unit);   // no longer a hauler - do not leave it parked on the ground / roof
 		}
 		Jobs.RemoveAtSwap(Index);
 	}
@@ -859,13 +1057,11 @@ void ULogisticsSubsystem::SetJobState(FLogisticsJob& Job, ELogisticsJobState New
 		// which lowers / raises the unit by itself.
 		if (bWillStand && !bWasStanding && Job.bIsFlyer && Unit->LogisticsLandingTime > 0.f && Unit->IsFlying)
 		{
-			Unit->IsFlying = false;
-			Job.bLanded = true;
+			LandUnit(Job, Unit);
 		}
 		else if (!bWillStand && Job.bLanded)
 		{
-			Unit->IsFlying = true;
-			Job.bLanded = false;
+			TakeOffUnit(Job, Unit);
 		}
 	}
 
@@ -915,7 +1111,9 @@ bool ULogisticsSubsystem::IssueMove(FLogisticsJob& Job, const FVector& Target)
 	}
 
 	const TArray<AUnitBase*> Units = { Unit };
-	const TArray<FVector> Validated = Controller->AdjustBatchTargetsForNav(Units, { Target });
+	// Flyers steer straight at their target and never use the navmesh. The dock point lies in the
+	// navmesh hole a building cuts, so snapping it onto the navmesh only pushed flyers away from the base.
+	const TArray<FVector> Validated = Unit->IsFlying ? TArray<FVector>{ Target } : Controller->AdjustBatchTargetsForNav(Units, { Target });
 	const float Speed = Unit->Attributes ? Unit->Attributes->GetRunSpeed() : 300.f;
 
 	// A held Shift on that controller would append our order as a waypoint instead of replacing the
@@ -948,15 +1146,19 @@ bool ULogisticsSubsystem::IssueMove(FLogisticsJob& Job, const FVector& Target)
 	return true;
 }
 
-bool ULogisticsSubsystem::HasArrived(const FLogisticsJob& Job, const FVector& UnitLocation, float Margin) const
+bool ULogisticsSubsystem::HasArrived(const FLogisticsJob& Job, const FVector& UnitLocation) const
 {
+	// Units drive up to the base and touch it (GetDockPoint); only a small tolerance on top.
+	constexpr float Tolerance = 60.f;
 	const ABuildingBase* Base = Job.TargetBase.Get();
 	if (Job.bHasIssuedTarget &&
-		FVector::Dist2D(UnitLocation, Job.IssuedTarget) <= FMath::Max(250.f, Job.Unit.IsValid() ? Job.Unit->MovementAcceptanceRadius * 2.f : 0.f))
+		FVector::Dist2D(UnitLocation, Job.IssuedTarget) <= FMath::Max(Tolerance, Job.Unit.IsValid() ? Job.Unit->MovementAcceptanceRadius : 0.f))
 	{
 		return true;
 	}
-	return Base && FVector::Dist2D(UnitLocation, Base->GetActorLocation()) <= GetBaseRadius(Base) + Margin + 150.f;
+	// Roof landers fly over the edge on their way in - touching it is not arriving.
+	return Base && !LandsOnRoof(Job.Unit.Get())
+		&& FVector::Dist2D(UnitLocation, Base->GetActorLocation()) <= GetDockDistance(Base, Job.Unit.Get()) + Tolerance;
 }
 
 bool ULogisticsSubsystem::WasOverridden(const FLogisticsJob& Job) const
@@ -1052,7 +1254,7 @@ void ULogisticsSubsystem::DoLoad(FLogisticsJob& Job, double Now)
 
 	Job.TargetBase = Sink;
 	SetJobState(Job, ELogisticsJobState::ToDropoff, Now);
-	const FVector DropOff = (Road && Road->SinkBase == Sink) ? Road->GetSinkEnd() : GetBaseEdgePoint(Sink, Unit->GetMassActorLocation(), 250.f);
+	const FVector DropOff = GetDockPoint(Sink, Unit, (Road && Road->SinkBase == Sink) ? Road->GetSinkEnd() : Unit->GetMassActorLocation());
 	IssueMove(Job, DropOff);
 }
 
@@ -1099,7 +1301,7 @@ bool ULogisticsSubsystem::StartDelivery(FLogisticsJob& Job, double Now, float Ma
 	Job.TargetBase = Sink;
 	Job.Road = nullptr;
 	SetJobState(Job, ELogisticsJobState::ToDropoff, Now);
-	return IssueMove(Job, GetBaseEdgePoint(Sink, Unit->GetMassActorLocation(), Margin));
+	return IssueMove(Job, GetDockPoint(Sink, Unit, Unit->GetMassActorLocation()));
 }
 
 bool ULogisticsSubsystem::StartReturn(FLogisticsJob& Job, double Now, float Margin)
@@ -1134,7 +1336,7 @@ bool ULogisticsSubsystem::StartReturn(FLogisticsJob& Job, double Now, float Marg
 		UE_LOG(LogTemp, Log, TEXT("[Logistics] %s returns %.0f to %s (not wanted by %s any more)"),
 			*GetNameSafe(Unit), Unit->GetLogisticsCargoTotal(), *GetNameSafe(Back), *GetNameSafe(Job.Converter.Get()));
 	}
-	return IssueMove(Job, bOnRoad ? Road->GetSourceEnd() : GetBaseEdgePoint(Back, Unit->GetMassActorLocation(), Margin));
+	return IssueMove(Job, GetDockPoint(Back, Unit, bOnRoad ? Road->GetSourceEnd() : Unit->GetMassActorLocation()));
 }
 
 bool ULogisticsSubsystem::StartSupplyDelivery(FLogisticsJob& Job, double Now, float Margin)
@@ -1149,7 +1351,7 @@ bool ULogisticsSubsystem::StartSupplyDelivery(FLogisticsJob& Job, double Now, fl
 	ALogisticsRoad* Road = Job.Road.Get();
 	const bool bOnRoad = Road && Road->SinkBase == Converter;
 	SetJobState(Job, ELogisticsJobState::ToDropoff, Now);
-	return IssueMove(Job, bOnRoad ? Road->GetSinkEnd() : GetBaseEdgePoint(Converter, Unit->GetMassActorLocation(), Margin));
+	return IssueMove(Job, GetDockPoint(Converter, Unit, bOnRoad ? Road->GetSinkEnd() : Unit->GetMassActorLocation()));
 }
 
 void ULogisticsSubsystem::DoLoadSupply(FLogisticsJob& Job, double Now)
@@ -1192,6 +1394,7 @@ void ULogisticsSubsystem::DoLoadSupply(FLogisticsJob& Job, double Now)
 			if (Taken > 0.f)
 			{
 				GameMode->ModifyResource(Type, Unit->TeamId, -Taken);
+				Source->PulseResourceArrival();
 			}
 		}
 	}
@@ -1300,6 +1503,124 @@ void ULogisticsSubsystem::DoUnloadReturn(FLogisticsJob& Job, double Now)
 	SetJobState(Job, ELogisticsJobState::Idle, Now);
 }
 
+void ULogisticsSubsystem::TickPipelines(AResourceGameMode* GameMode)
+{
+	TArray<FPipelinePacket> Arrived;
+
+	// Hauls: the store's stock on to the team.
+	for (const auto& Pair : RoadsBySource)
+	{
+		ALogisticsPipeline* Pipeline = Cast<ALogisticsPipeline>(Pair.Value.Get());
+		ABuildingBase* Source = Pair.Key.Get();
+		if (!Pipeline)
+		{
+			continue;
+		}
+
+		Arrived.Reset();
+		Pipeline->TakeArrivedPackets(Arrived);
+		ABuildingBase* Sink = Pipeline->SinkBase.Get();
+		for (const FPipelinePacket& Packet : Arrived)
+		{
+			float Left = Packet.Amount;
+			if (IsBaseAlive(Sink) && Sink->CreditsOnReceive())
+			{
+				Left -= Sink->ReceiveResource(Packet.Type, Left, Pipeline->TeamId);
+			}
+			if (Left > 0.f && IsBaseAlive(Source))
+			{
+				Source->ReceiveResource(Packet.Type, Left, Pipeline->TeamId, /*bForce=*/true);
+			}
+		}
+
+		if (!IsBaseAlive(Source) || !IsBaseAlive(Sink) || !Pipeline->CanLaunchPacket())
+		{
+			continue;
+		}
+		// Same rule as for a unit: wait for MinPickupAmount, unless the store is full.
+		const float Available = Source->GetStoredResourceTotal() - GetReservedAt(Source);
+		const float Needed = Source->IsStorageFull() ? 1.f : FMath::Min(GameMode->LogisticsMinPickupAmount, Pipeline->PacketAmount);
+		if (Available < FMath::Max(Needed, 1.f))
+		{
+			continue;
+		}
+		// One type per packet: the largest stack.
+		EResourceType Type = EResourceType::MAX;
+		float Largest = 0.f;
+		for (int32 i = 0; i < NumResourceTypes; ++i)
+		{
+			const float Stored = Source->GetStoredResourceAmount(static_cast<EResourceType>(i));
+			if (Stored > Largest)
+			{
+				Largest = Stored;
+				Type = static_cast<EResourceType>(i);
+			}
+		}
+		if (Type != EResourceType::MAX)
+		{
+			Pipeline->LaunchPacket(Type, Source->TakeStoredResource(Type, FMath::Min(Pipeline->PacketAmount, Available)));
+		}
+	}
+
+	// Supply: a Converter's input.
+	for (const auto& Pair : SupplyRoadsByConverter)
+	{
+		ALogisticsPipeline* Pipeline = Cast<ALogisticsPipeline>(Pair.Value.Get());
+		ABuildingBase* Converter = Pair.Key.Get();
+		if (!Pipeline)
+		{
+			continue;
+		}
+		ABuildingBase* Source = Pipeline->SourceBase.Get();
+
+		Arrived.Reset();
+		Pipeline->TakeArrivedPackets(Arrived);
+		for (const FPipelinePacket& Packet : Arrived)
+		{
+			float Left = Packet.Amount;
+			if (IsBaseAlive(Converter) && Converter->IsConverter() && Converter->bHasConversion && Converter->ConversionInput == Packet.Type)
+			{
+				Left -= Converter->ReceiveConversionInput(Packet.Type, Left);
+			}
+			// Switched or full in the meantime: back to the source (a CollectAndStore source credits its team).
+			if (Left > 0.f && IsBaseAlive(Source))
+			{
+				Source->ReceiveResource(Packet.Type, Left, Pipeline->TeamId, /*bForce=*/true);
+			}
+		}
+
+		if (!IsBaseAlive(Source) || !IsBaseAlive(Converter) || !Converter->bHasConversion || !Pipeline->CanLaunchPacket())
+		{
+			continue;
+		}
+		const EResourceType Type = Converter->ConversionInput;
+		const float MinSupply = FMath::Max(FMath::Min(GameMode->LogisticsMinPickupAmount, Pipeline->PacketAmount), 1.f);
+		const float Amount = FMath::Min3(Converter->GetConversionInputSpace() - GetInboundSupply(Converter),
+			GetSupplyAvailable(Source, Type, GameMode), Pipeline->PacketAmount);
+		if (Amount < MinSupply)
+		{
+			continue;
+		}
+
+		float Taken = 0.f;
+		if (Source->StoresLocally())
+		{
+			Taken = Source->TakeStoredResource(Type, Amount);
+		}
+		else
+		{
+			// CollectAndStore: straight from the team account.
+			Taken = FMath::Min(Amount, GameMode->GetResource(Pipeline->TeamId, Type));
+			if (Taken > 0.f)
+			{
+				GameMode->ModifyResource(Type, Pipeline->TeamId, -Taken);
+				Source->PulseResourceArrival();
+			}
+		}
+		Pipeline->LaunchPacket(Type, Taken);
+	}
+}
+
 void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 {
 	UWorld* World = GetWorld();
@@ -1312,7 +1633,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 		AUnitBase* Unit = Job.Unit.Get();
 		if (Job.bLanded && IsUnitAlive(Unit) && !Unit->IsLogisticsUnit())
 		{
-			Unit->IsFlying = true;
+			TakeOffUnit(Job, Unit);
 		}
 	}
 	Jobs.RemoveAllSwap([](const FLogisticsJob& Job)
@@ -1324,6 +1645,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 	for (FLogisticsJob& Job : Jobs)
 	{
 		AUnitBase* Unit = Job.Unit.Get();
+		SyncCargoVisual(Unit, GetLoadingPreview(Job, Unit, Now));
 		if (Unit->IsInsideTransport)
 		{
 			continue;
@@ -1407,7 +1729,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 				break;
 			}
 
-			if (HasArrived(Job, Location, Margin))
+			if (HasArrived(Job, Location))
 			{
 				SetJobState(Job, bPickup ? ELogisticsJobState::Loading : ELogisticsJobState::Unloading, Now);
 				// Stand still while loading - an arrival a little short of the point would otherwise
@@ -1425,6 +1747,13 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 			// Stopped short, or no progress for a while: send it again, give up after a few tries.
 			const bool bStoppedShort = bUnitIdle && Now - Job.StateStartTime > 1.0;
 			const bool bStuck = Now - Job.LastProgressTime > StuckSeconds;
+			if (bStoppedShort && Target && !LandsOnRoof(Unit)
+				&& FVector::Dist2D(Location, Target->GetActorLocation()) <= GetDockDistance(Target, Unit) + 250.f)
+			{
+				// Blocked right next to the base (by the building itself or another shuttle): close enough.
+				SetJobState(Job, bPickup ? ELogisticsJobState::Loading : ELogisticsJobState::Unloading, Now);
+				break;
+			}
 			if (bStoppedShort || bStuck)
 			{
 				if (++Job.Retries > MaxMoveRetries)
@@ -1531,7 +1860,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 			{
 				ALogisticsRoad* Road = Pair.Value.Get();
 				ABuildingBase* Source = Pair.Key.Get();
-				if (!Road || !IsBaseAlive(Source) || Road->TeamId != Unit->TeamId)
+				if (!Road || !Road->UsesCarriers() || !IsBaseAlive(Source) || Road->TeamId != Unit->TeamId)
 				{
 					continue;
 				}
@@ -1571,7 +1900,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 				ABuildingBase* Converter = Pair.Key.Get();
 				ALogisticsRoad* Road = Pair.Value.Get();
 				ABuildingBase* Source = Road ? Road->SourceBase.Get() : nullptr;
-				if (!Road || !IsBaseAlive(Converter) || !Converter->bHasConversion || !IsBaseAlive(Source) || Road->TeamId != Unit->TeamId)
+				if (!Road || !Road->UsesCarriers() || !IsBaseAlive(Converter) || !Converter->bHasConversion || !IsBaseAlive(Source) || Road->TeamId != Unit->TeamId)
 				{
 					continue;
 				}
@@ -1610,7 +1939,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 				Job.TargetBase = BestSupplyRoad->SourceBase.Get();
 				Job.ReservedAmount = BestSupplyAmount;
 				SetJobState(Job, ELogisticsJobState::ToPickup, Now);
-				if (!IssueMove(Job, BestSupplyRoad->GetSourceEnd()))
+				if (!IssueMove(Job, GetDockPoint(BestSupplyRoad->SourceBase.Get(), Unit, BestSupplyRoad->GetSourceEnd())))
 				{
 					ReleaseReservation(Job);
 					ResetJobKind(Job);
@@ -1632,7 +1961,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 			Job.TargetBase = BestRoad->SourceBase;
 			Job.ReservedAmount = FMath::Min(BestAvailable, Unit->LogisticsCapacity);
 			SetJobState(Job, ELogisticsJobState::ToPickup, Now);
-			if (!IssueMove(Job, BestRoad->GetSourceEnd()))
+			if (!IssueMove(Job, GetDockPoint(BestRoad->SourceBase.Get(), Unit, BestRoad->GetSourceEnd())))
 			{
 				ReleaseReservation(Job);
 				Job.NextAssignTime = Now + 2.0;

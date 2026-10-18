@@ -119,6 +119,17 @@ void AWorkArea::BeginPlay()
 	OriginalActorScale = GetActorScale3D();
 	SetReplicateMovement(false);
 
+	// Im Level platzierte Flaechen tragen ihren eigenen Wert und bekommen keinen vom Platzieren durch den
+	// Spieler (SpawnWorkAreaReplicated) - ein leerer ConstructionUnitClass nimmt deshalb den des Blueprints,
+	// sonst scheitert die Uebergabe (bConstructionUnitBuildsAlone) und der Arbeiter baut selbst weiter.
+	if (HasAuthority() && !ConstructionUnitClass)
+	{
+		if (const AWorkArea* Vorgabe = GetClass()->GetDefaultObject<AWorkArea>())
+		{
+			ConstructionUnitClass = Vorgabe->ConstructionUnitClass;
+		}
+	}
+
 	// Spawn hidden and let the FIRST TICK decide - deliberately not here.
 	//
 	// Build areas are created with a plain SpawnActor, so BeginPlay runs INSIDE the spawn call and
@@ -455,6 +466,13 @@ void AWorkArea::Tick(float DeltaTime)
 		ControlTimer = 0.f;
 	}
 
+	// Versteckt gehalten, solange gebaut wird: setzt etwas auf dem Client das Mesh wieder sichtbar
+	// (Ablegen, Fog, Bau-Einheit), holt es hier sofort zurueck. Nur ein Vergleich je Tick.
+	if (bMeshHiddenByBuildStart && Mesh && Mesh->IsVisible())
+	{
+		Mesh->SetVisibility(false, /*bPropagateToChildren=*/false);
+	}
+
 	if (bMIDEnabled && WorkAreaMID)
 	{
 		float Value = (BuildTime > 0.f) ? FMath::Pow(FMath::Clamp(CurrentBuildTime / BuildTime, 0.0f, 1.0f), MaterializePower) : 0.0f;
@@ -704,11 +722,10 @@ void AWorkArea::ApplyStartedBuildingVisuals()
 	{
 		if (StartedBuilding)
 		{
-			if (Mesh->IsVisible())
-			{
-				Mesh->SetVisibility(false, /*bPropagateToChildren=*/false);
-				bMeshHiddenByBuildStart = true;
-			}
+			// Immer verstecken und merken - nicht nur, wenn das Mesh gerade sichtbar ist. War es in dem
+			// Moment aus anderem Grund aus, blieb der Merker sonst leer und nichts hielt es spaeter versteckt.
+			Mesh->SetVisibility(false, /*bPropagateToChildren=*/false);
+			bMeshHiddenByBuildStart = true;
 		}
 		else if (bMeshHiddenByBuildStart)
 		{
@@ -1161,6 +1178,10 @@ void AWorkArea::HandleBuildArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase, A
 		}else if(this == Worker->BuildArea &&  Worker->GetUnitState() != UnitData::Build)
 		{
 			UnitBase->SetUEPathfinding = true;
+			// This worker cannot build here (unaffordable / someone else already builds). Drop the area, otherwise
+			// the worker processors send it straight back to GoToBuild and it shuttles between here and the base.
+			RemoveWorkerFromArray(Worker);
+			Worker->BuildArea = nullptr;
 			if(Worker->WorkResource)
 			{
 				Worker->SetUnitState(UnitData::GoToBase);
@@ -1287,6 +1308,15 @@ void AWorkArea::OnRep_MIDEnabled()
 
 void AWorkArea::SetupMID()
 {
+	// Das Bau-Material kommt beim Baustart (EnableMID) - auf jedem Client zuverlaessig ueber
+	// OnRep_MIDEnabled. Flaechen, die beim Baustart verschwinden sollen (Xeno), verstecken sich
+	// deshalb auch hier und nicht nur ueber StartedBuilding (Dedicated Server, 16.10.2026).
+	if (bHideMeshOnBuildStart && Mesh)
+	{
+		Mesh->SetVisibility(false, /*bPropagateToChildren=*/false);
+		bMeshHiddenByBuildStart = true;
+	}
+
 	if (Mesh && !WorkAreaMID)
 	{
 		UMaterialInterface* SourceMaterial = BuildMaterial ? BuildMaterial : Mesh->GetMaterial(0);
@@ -1768,6 +1798,13 @@ bool AWorkArea::UebergebeAnConstructionUnit(AWorkingUnitBase* Worker)
 	if (ConstructionUnit)
 	{
 		ConstructionUnit->SetActorRotation(GewollteDrehung);
+		// Server_SpawnExtensionConstructionUnit hat auch die Mesh-Drehung auf die Arbeiter-Richtung gesetzt
+		// (nur auf dem Server sichtbar) - zurueck auf die der Klasse, wie bei den Clients.
+		if (const AUnitBase* KlassenVorgabe = ConstructionUnit->GetClass()->GetDefaultObject<AUnitBase>())
+		{
+			ConstructionUnit->ServerMeshRotation = KlassenVorgabe->ServerMeshRotation;
+			ConstructionUnit->SetMeshRotationServer();
+		}
 	}
 
 	if (!ConstructionUnit)

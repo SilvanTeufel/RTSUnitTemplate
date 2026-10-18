@@ -946,6 +946,27 @@ AWaypoint* AUnitBase::GetNextWaypoint() const
 	return IsValid(NextWaypoint) ? NextWaypoint : nullptr;
 }
 
+void AUnitBase::ApplySpawnHealthFraction(float HealthFraction, float ShieldFraction)
+{
+	if (!Attributes)
+	{
+		return;
+	}
+	if (HealthFraction >= 0.f)
+	{
+		// At least 1: the construction site was alive when it finished.
+		SetHealth_Implementation(FMath::Max(1.f, Attributes->GetMaxHealth() * FMath::Min(HealthFraction, 1.f)));
+	}
+	if (ShieldFraction >= 0.f)
+	{
+		SetShield_Implementation(Attributes->GetMaxShield() * FMath::Min(ShieldFraction, 1.f));
+	}
+	// Not linked to Mass yet: its setup resets the attributes, so apply it once more there.
+	const bool bLinked = MassActorBindingComponent && MassActorBindingComponent->GetMassEntityHandle().IsValid();
+	PendingSpawnHealthFraction = bLinked ? -1.f : HealthFraction;
+	PendingSpawnShieldFraction = bLinked ? -1.f : ShieldFraction;
+}
+
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
 	float OldHealth = Attributes->GetHealth();

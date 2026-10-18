@@ -116,14 +116,15 @@ FReply UMinimapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, cons
 {
     const FKey Button = InMouseEvent.GetEffectingButton();
 
-    // Compute local mouse position once
-    const FVector2D LocalMousePosition = InGeometry.AbsoluteToLocal(InMouseEvent.GetScreenSpacePosition());
+    // Mouse position on the map image itself (it may sit inside a frame), computed once.
+    FVector2D LocalMousePosition;
+    FVector2D WidgetSize;
+    GetMapLocalPosition(InGeometry, InMouseEvent.GetScreenSpacePosition(), LocalMousePosition, WidgetSize);
 
     // Helper to compute world XY from minimap click with rotation correction
     auto ComputeWorldXY = [&](FVector2D& OutWorldXY)
     {
         if (!MinimapActorRef) return false;
-        const FVector2D WidgetSize = InGeometry.GetLocalSize();
         if (WidgetSize.X <= 0 || WidgetSize.Y <= 0) return false;
 
         // Rotation compensation identical to MoveCameraToMinimapLocation
@@ -220,7 +221,7 @@ FReply UMinimapWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, cons
         }
 
         // Default behavior: move camera to minimap location
-        MoveCameraToMinimapLocation(LocalMousePosition, InGeometry);
+        MoveCameraToMinimapLocation(LocalMousePosition, WidgetSize);
         return FReply::Handled();
     }
 
@@ -263,7 +264,41 @@ void UMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     }
 }
 
-void UMinimapWidget::MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FGeometry& WidgetGeometry)
+void UMinimapWidget::GetMapLocalPosition(const FGeometry& InGeometry, const FVector2D& ScreenPosition, FVector2D& OutLocal, FVector2D& OutSize) const
+{
+    OutLocal = InGeometry.AbsoluteToLocal(ScreenPosition);
+    OutSize = InGeometry.GetLocalSize();
+    if (!MinimapImage)
+    {
+        return;
+    }
+    // The image is rotated around its centre (render transform), so its centre stays put whatever its
+    // geometry includes. From there with the layout scale only: the position before the rotation, which
+    // the callers undo themselves (CurrentMapAngle).
+    const FGeometry& ImageGeometry = MinimapImage->GetCachedGeometry();
+    const FVector2D ImageSize = ImageGeometry.GetLocalSize();
+    const float Scale = ImageGeometry.GetAccumulatedLayoutTransform().GetScale();
+    if (ImageSize.X <= 0.f || ImageSize.Y <= 0.f || Scale <= KINDA_SMALL_NUMBER)
+    {
+        return;
+    }
+    const FVector2D CentreAbsolute = ImageGeometry.LocalToAbsolute(ImageSize * 0.5f);
+    OutLocal = (ScreenPosition - CentreAbsolute) / Scale + ImageSize * 0.5f;
+    OutSize = ImageSize;
+}
+
+FCursorReply UMinimapWidget::NativeOnCursorQuery(const FGeometry& InGeometry, const FPointerEvent& InCursorEvent)
+{
+    // The UMG default would be the system arrow; the game's cursor (a software cursor widget registered for
+    // this cursor type, see AControllerBase::ApplyCustomMouseCursor) belongs to the controller.
+    if (const APlayerController* PC = GetOwningPlayer())
+    {
+        return FCursorReply::Cursor(PC->CurrentMouseCursor);
+    }
+    return Super::NativeOnCursorQuery(InGeometry, InCursorEvent);
+}
+
+void UMinimapWidget::MoveCameraToMinimapLocation(const FVector2D& LocalMousePosition, const FVector2D& MapSize)
 {
     if (!MinimapActorRef) return;
     APawn* PlayerPawn = GetOwningPlayerPawn();
@@ -273,7 +308,7 @@ void UMinimapWidget::MoveCameraToMinimapLocation(const FVector2D& LocalMousePosi
 
     if (!CameraPC) return;
     
-    const FVector2D WidgetSize = WidgetGeometry.GetLocalSize();
+    const FVector2D WidgetSize = MapSize;
     if (WidgetSize.X <= 0 || WidgetSize.Y <= 0) return;
 
     // --- DYNAMISCHE ROTATIONS-LOGIK ---

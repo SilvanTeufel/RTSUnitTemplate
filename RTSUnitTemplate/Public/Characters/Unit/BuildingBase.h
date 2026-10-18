@@ -137,6 +137,14 @@ public:
 	          meta = (EditCondition = "BaseType == EBaseType::CollectOnly || BaseType == EBaseType::CollectOnlyWithoutWorker || BaseType == EBaseType::Converter", ClampMin = "0"))
 	float StorageCapacity = 0.f;
 
+	/**
+	 * Height of the roof above the bottom of the building's capsule, where flying logistics units with
+	 * LogisticsBehavior = LandOnRoof touch down. 0 = automatic (top of the building's ISM mesh, or of its
+	 * skeletal mesh when bUseSkeletalMovement).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	float RoofLandingHeight = 0.f;
+
 	// --- Converter --------------------------------------------------------------------------------
 	// The input is kept apart from StoredResources (the output), so the logistics units that empty the
 	// output store never carry supply away again.
@@ -190,6 +198,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics|Converter")
 	void SetConversion(EResourceType Input, EResourceType Output);
+
+	/**
+	 * Switches the converter off (server): no conversion until one is picked again. Input still waiting is
+	 * moved into the output store as what it is; supply on its way goes back to where it was loaded.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics|Converter")
+	void ClearConversion();
 
 	/** True if Input -> Output is the conversion running now. */
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics|Converter")
@@ -268,6 +283,32 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics")
 	float ReceiveResource(EResourceType ResourceType, float Amount, int32 FromTeamId, bool bForce = false);
+
+	/**
+	 * Let the building's material wobble when resources arrive or leave (workers, logistics units, pipelines -
+	 * anything through ReceiveResource / ReceiveConversionInput / TakeStoredResource, and a CollectAndStore base
+	 * supplying from its team's account): per-instance custom data 20 = world time of the last one, on every client. The material turns it into a short jiggle that dies down by itself (e.g.
+	 * MF_ResourceArrivalWobble). Needs a pooled visual (21 custom data floats).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	bool bPulseOnResourceArrival = true;
+
+	/** At most one pulse per this many seconds (each one is an unreliable multicast). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	float ResourcePulseMinInterval = 0.3f;
+
+	UFUNCTION(NetMulticast, Unreliable)
+	void MulticastResourcePulse();
+
+	/** Server: a delivery arrived or left - sends the pulse (see bPulseOnResourceArrival). */
+	void PulseResourceArrival();
+
+	/** Server world time of the last pulse. */
+	double LastResourcePulseTime = -1.0e9;
+
+	/** Pulses sent (server) / received and written into the visual (clients). For checking in the editor. */
+	UPROPERTY(Transient, VisibleInstanceOnly, Category = "RTSUnitTemplate|Logistics")
+	int32 ResourcePulseCount = 0;
 
 	/** Removes up to MaxAmount of one type from storage (server). Returns what was taken. */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics")

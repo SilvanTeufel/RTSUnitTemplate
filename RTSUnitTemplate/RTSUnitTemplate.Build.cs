@@ -55,7 +55,10 @@ public class RTSUnitTemplate : ModuleRules
 
             // Misc
             "Json", "JsonUtilities", "RenderCore", "Landscape",
-            "NNE"
+            "NNE",
+
+            // Runtime-built meshes (ALogisticsPipeline)
+            "MeshDescription", "StaticMeshDescription"
         });
         
     }

@@ -22,6 +22,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/StaticMesh.h"
+#include "Components/DecalComponent.h"
 
 AEnergyWall::AEnergyWall()
 {
@@ -56,6 +57,13 @@ AEnergyWall::AEnergyWall()
 	NavObstacleBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	NavObstacleBox->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
 	NavObstacleBox->SetCanEverAffectNavigation(true);
+
+	FoundationDecal = CreateDefaultSubobject<UDecalComponent>(TEXT("FoundationDecal"));
+	FoundationDecal->SetupAttachment(WallRoot);
+	// Projects straight down; local Y runs along the wall, local Z across it.
+	FoundationDecal->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+	FoundationDecal->DecalSize = FVector(200.f, 100.f, FoundationHalfWidth);
+	FoundationDecal->SetVisibility(false);
 
 	// KEIN Overlap-Ereignis mehr. Einheiten haben keine Kollision (Nutzervorgabe, steht in den
 	// Blueprints), deshalb hat OnComponentBeginOverlap hier nie gefeuert - der Effekt beim
@@ -423,6 +431,14 @@ void AEnergyWall::UpdateWallTransformAndDimensions()
 	TargetScaleY = Spannweite / NativeLength;
 	TargetDistance2D = Distance2D;
 	TargetWallHeight = NativeHeight;
+
+	// Foundation: a strip under the whole wall line (the actor sits at the middle between the tower bases).
+	if (FoundationDecal)
+	{
+		const float Drop = FMath::Abs(LocB.Z - LocA.Z);
+		FoundationDecal->DecalSize = FVector(200.f + Drop, Distance2D * 0.5f + FoundationEndPadding, FoundationHalfWidth);
+		FoundationDecal->MarkRenderStateDirty();
+	}
 }
 
 void AEnergyWall::InitializeWallInternal()
@@ -496,6 +512,11 @@ void AEnergyWall::UpdateVisibility()
 		// Ausserhalb von Auf- und Abbau bestimmt der Nebel das Schild. Waehrend beider Phasen
 		// steuert der Tick das Flackern und darf hier nicht ueberschrieben werden.
 		bSchildZuletztSichtbar = bIsVisibleByFoW && !bIsDeactivated;
+	}
+
+	if (FoundationDecal)
+	{
+		FoundationDecal->SetVisibility(bIsVisibleByFoW && !bIsDeactivated);
 	}
 
 	SchreibeBatchTransformationen();

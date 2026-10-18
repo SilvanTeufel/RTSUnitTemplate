@@ -332,6 +332,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bBlinkEmissiveWhileWorking = false;
 
+	/**
+	 * Pass the cast to the main mesh's material, on server and clients: per-instance custom data 18 = world time
+	 * the cast started, 19 = its CastTime, negative once it ended (0 = never cast). Written only when a cast starts or ends -
+	 * the material animates from that by itself (e.g. M_XenoCocoon_AH: wobbles harder while casting and swells
+	 * up towards the end). Needs a pooled visual (20 custom data floats).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bCastProgressToMaterial = false;
+
 	/** Let the main mesh's emissive blink for Duration seconds (e.g. after an ability fired), on server and clients.
 	 *  Same blink as bBlinkEmissiveWhileWorking, independent of the working state. */
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
@@ -339,6 +348,14 @@ public:
 
 	/** World time until which the emissive blinks (set by MulticastBlinkEmissive). */
 	float BlinkEmissiveUntil = 0.f;
+
+	/**
+	 * Let the emissive blink while the unit attacks and this many seconds after (0 = off), e.g. a tesla coil
+	 * that fired. Read from the Mass attack state on every machine (UMassUnitVisualTweenProcessor) - no
+	 * network message of its own.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0"))
+	float BlinkEmissiveOnAttack = 0.f;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool AddGameplayEffectFragement = false;

@@ -90,9 +90,23 @@ bool ULogisticsSummonAbility::HasRoomForAnother(const AUnitBase* Owner, bool bTh
 	}
 	// The cast in question - about to start, or running and not spawned yet - is never in the data
 	// set, so it always adds one.
-	if (MaxSummonsPerOwner > 0 && CountOwnerSummons(Owner) + 1 > MaxSummonsPerOwner)
+	if (MaxSummonsPerOwner > 0)
 	{
-		return false;
+		// Count by class, not by logistics role: the ability may also summon a worker (e.g. a Collector
+		// that keeps one builder), which IsLogisticsUnit() would never count - it would summon forever.
+		int32 OwnSummons = 0;
+		for (const FUnitSpawnData& Data : Owner->SummonedUnitsDataSet)
+		{
+			if (IsValid(Data.UnitBase) && Data.UnitBase->GetUnitState() != UnitData::Dead
+				&& LogisticsUnitClass && Data.UnitBase->IsA(LogisticsUnitClass))
+			{
+				++OwnSummons;
+			}
+		}
+		if (OwnSummons + 1 > MaxSummonsPerOwner)
+		{
+			return false;
+		}
 	}
 	// The team count already includes running summon casts - this one too while it is pending.
 	if (MaxLogisticsUnits > 0 && CountLogisticsUnits(Owner, Owner->TeamId) + (bThisCastPending ? 0 : 1) > MaxLogisticsUnits)
@@ -288,7 +302,9 @@ void ULogisticsSummonAbility::TryAutoCast()
 		}
 	}
 
+	bBypassKeyGate = true;
 	const bool bStarted = ASC->TryActivateAbility(AutoCastSpecHandle);
+	bBypassKeyGate = false;
 	if (bLog)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[LogisticsSummon] %s auto-cast %s (own %d/%d)"), *Owner->GetName(),

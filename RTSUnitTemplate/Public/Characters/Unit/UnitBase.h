@@ -341,6 +341,16 @@ public:
 	
 	virtual void SetHealth_Implementation(float NewHealth) override;
 
+	/**
+	 * Health / shield as a fraction of the max (0..1, < 0 = keep) - e.g. a building takes over its construction
+	 * site's share. Kept as pending until the Mass entity has initialised the attributes (that resets them to
+	 * full, and a building spawned during Mass processing gets its entity only later), then applied again.
+	 */
+	void ApplySpawnHealthFraction(float HealthFraction, float ShieldFraction);
+
+	float PendingSpawnHealthFraction = -1.f;
+	float PendingSpawnShieldFraction = -1.f;
+
 	// Fires when health crosses 25% or 50% thresholds either upwards or downwards.
 	// DidIncrease: true if health rose above the threshold, false if it dropped below it.
 	// LowThreshold: true if 25% threshold is concerned.

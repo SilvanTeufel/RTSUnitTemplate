@@ -171,10 +171,44 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
             // Emissive blink while working: per-instance custom data 14 on the unit's main mesh
             // (Material_Master_B multiplies its emissive with a pulse while it is 1). Written only on change.
             // Also for a timed blink (MulticastBlinkEmissive, e.g. after the nuke launched).
+            // A Converter with a picked conversion blinks for as long as the conversion is set, and passes
+            // its input / output resource (custom data 15 / 16: EResourceType + 1, 0 = none) so the material
+            // can tint the lower / upper emissive parts in the resource colours.
+            const ABuildingBase* ConverterBuilding = Cast<ABuildingBase>(ActorList[i].Get());
+            if (ConverterBuilding && !ConverterBuilding->IsConverter()) { ConverterBuilding = nullptr; }
+            if (ConverterBuilding) {
+                const float InCode = ConverterBuilding->bHasConversion ? float(static_cast<int32>(ConverterBuilding->ConversionInput) + 1) : 0.f;
+                const float OutCode = ConverterBuilding->bHasConversion ? float(static_cast<int32>(ConverterBuilding->ConversionOutput) + 1) : 0.f;
+                // Instance origin height (custom data 17): ObjectPositionWS is the ISM component's origin, not the
+                // instance's, so the material needs the instance height to split the mesh into lower / upper part.
+                const float BaseZ = static_cast<float>(ConverterBuilding->GetActorLocation().Z + ConverterBuilding->ISMComponent->GetRelativeLocation().Z);
+                if (InCode != Effect.ConverterInCode || OutCode != Effect.ConverterOutCode || !FMath::IsNearlyEqual(BaseZ, Effect.ConverterBaseZ, 1.f)) {
+                    Effect.ConverterInCode = InCode;
+                    Effect.ConverterOutCode = OutCode;
+                    Effect.ConverterBaseZ = BaseZ;
+                    for (const FMassUnitVisualInstance& ConvInstance : Visual.VisualInstances) {
+                        UInstancedStaticMeshComponent* ConvISM = ConvInstance.TargetISM.Get();
+                        if (ConvISM && ConvInstance.InstanceIndex != INDEX_NONE && ConvInstance.TemplateISM == ConverterBuilding->ISMComponent
+                            && ConvISM->NumCustomDataFloats > 17) {
+                            ConvISM->SetCustomDataValue(ConvInstance.InstanceIndex, 15, InCode, false);
+                            ConvISM->SetCustomDataValue(ConvInstance.InstanceIndex, 16, OutCode, false);
+                            ConvISM->SetCustomDataValue(ConvInstance.InstanceIndex, 17, BaseZ, true);
+                        }
+                    }
+                }
+            }
+            // Blink after an attack (AMassUnitBase::BlinkEmissiveOnAttack): from the Mass attack state, on server
+            // and clients alike (the client tag sync keeps it) - no network message of its own.
+            if (const AMassUnitBase* AttackBlinkUnit = Cast<AMassUnitBase>(ActorList[i].Get());
+                AttackBlinkUnit && AttackBlinkUnit->BlinkEmissiveOnAttack > 0.f && Context.DoesArchetypeHaveTag<FMassStateAttackTag>()) {
+                Effect.AttackBlinkUntil = AttackBlinkUnit->GetWorld()->GetTimeSeconds() + AttackBlinkUnit->BlinkEmissiveOnAttack;
+            }
             if (const AMassUnitBase* BlinkUnit = Cast<AMassUnitBase>(ActorList[i].Get());
-                BlinkUnit && (BlinkUnit->bBlinkEmissiveWhileWorking || BlinkUnit->BlinkEmissiveUntil > 0.f)) {
-                const bool bTimedBlink = BlinkUnit->BlinkEmissiveUntil > BlinkUnit->GetWorld()->GetTimeSeconds();
-                const float BlinkValue = (bTimedBlink || (BlinkUnit->bBlinkEmissiveWhileWorking && IsWorking())) ? 1.f : 0.f;
+                BlinkUnit && (BlinkUnit->bBlinkEmissiveWhileWorking || BlinkUnit->BlinkEmissiveUntil > 0.f || Effect.AttackBlinkUntil > 0.f || ConverterBuilding)) {
+                const float BlinkNow = BlinkUnit->GetWorld()->GetTimeSeconds();
+                const bool bTimedBlink = BlinkUnit->BlinkEmissiveUntil > BlinkNow || Effect.AttackBlinkUntil > BlinkNow;
+                const bool bConverterBlink = ConverterBuilding && ConverterBuilding->bHasConversion;
+                const float BlinkValue = (bTimedBlink || bConverterBlink || (BlinkUnit->bBlinkEmissiveWhileWorking && IsWorking())) ? 1.f : 0.f;
                 if (BlinkValue != Effect.CastBlinkValue) {
                     Effect.CastBlinkValue = BlinkValue;
                     for (const FMassUnitVisualInstance& BlinkInstance : Visual.VisualInstances) {
@@ -183,6 +217,39 @@ void UMassUnitVisualTweenProcessor::Execute(FMassEntityManager& EntityManager, F
                             && BlinkISM->NumCustomDataFloats > 14) {
                             BlinkISM->SetCustomDataValue(BlinkInstance.InstanceIndex, 14, BlinkValue, true);
                         }
+                    }
+                }
+            }
+
+            // Cast for the material (AMassUnitBase::bCastProgressToMaterial): custom data 18 = cast start in world
+            // time, 19 = cast time (0 = never cast). When the cast ends 18 stays and 19 turns negative, so the
+            // material can ease out instead of snapping back (a cocoon hatches a moment after its cast ended).
+            // Written only when a cast starts or ends; latched only once an instance took it (the visual may not
+            // be pooled yet in the first frames).
+            if (const AMassUnitBase* CastMatUnit = Cast<AMassUnitBase>(ActorList[i].Get());
+                CastMatUnit && CastMatUnit->bCastProgressToMaterial) {
+                const bool bCasting = Context.DoesArchetypeHaveTag<FMassStateCastingTag>()
+                    || CastMatUnit->GetUnitState() == UnitData::Casting;
+                if (bCasting != Effect.bMaterialCastWritten) {
+                    const AUnitBase* CastTimeUnit = Cast<AUnitBase>(CastMatUnit);
+                    if (bCasting) {
+                        Effect.MaterialCastStart = CastMatUnit->GetWorld()->GetTimeSeconds();
+                        Effect.MaterialCastDuration = FMath::Max(0.1f, CastTimeUnit ? CastTimeUnit->CastTime : 1.f);
+                    }
+                    const float CastStart = Effect.MaterialCastStart;
+                    const float CastDuration = bCasting ? Effect.MaterialCastDuration : -Effect.MaterialCastDuration;
+                    bool bWritten = false;
+                    for (const FMassUnitVisualInstance& CastInstance : Visual.VisualInstances) {
+                        UInstancedStaticMeshComponent* CastISM = CastInstance.TargetISM.Get();
+                        if (CastISM && CastInstance.InstanceIndex != INDEX_NONE && CastInstance.TemplateISM == CastMatUnit->ISMComponent
+                            && CastISM->NumCustomDataFloats > 19) {
+                            CastISM->SetCustomDataValue(CastInstance.InstanceIndex, 18, CastStart, false);
+                            CastISM->SetCustomDataValue(CastInstance.InstanceIndex, 19, CastDuration, true);
+                            bWritten = true;
+                        }
+                    }
+                    if (bWritten) {
+                        Effect.bMaterialCastWritten = bCasting;
                     }
                 }
             }

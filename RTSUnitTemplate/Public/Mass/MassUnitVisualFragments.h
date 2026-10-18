@@ -256,6 +256,32 @@ struct RTSUNITTEMPLATE_API FMassVisualEffectFragment : public FMassFragment
     UPROPERTY()
     float CastBlinkValue = 0.f;
 
+    /** World time until which the emissive blinks after an attack (AMassUnitBase::BlinkEmissiveOnAttack). */
+    UPROPERTY()
+    float AttackBlinkUntil = 0.f;
+
+    /** Casting when custom data 18 / 19 (AMassUnitBase::bCastProgressToMaterial) were last written. */
+    UPROPERTY()
+    bool bMaterialCastWritten = false;
+
+    /** The cast last written (start in world time, cast time) - kept for the end, see bCastProgressToMaterial. */
+    UPROPERTY()
+    float MaterialCastStart = 0.f;
+
+    UPROPERTY()
+    float MaterialCastDuration = 0.f;
+
+    /** Last values written to custom data 15 / 16 (Converter input / output resource colour code, -1 = never written). */
+    UPROPERTY()
+    float ConverterInCode = -1.f;
+
+    UPROPERTY()
+    float ConverterOutCode = -1.f;
+
+    /** Last instance origin height written to custom data 17. */
+    UPROPERTY()
+    float ConverterBaseZ = -1.e9f;
+
     UPROPERTY()
     TWeakObjectPtr<UInstancedStaticMeshComponent> CastOscTargetISM;
 

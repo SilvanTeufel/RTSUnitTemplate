@@ -79,6 +79,12 @@ struct FLogisticsJob
 
 	/** Landed for loading / unloading; takes off again when it leaves that state. */
 	bool bLanded = false;
+
+	/** Landed on the roof (LogisticsBehavior = LandOnRoof): still flying, only FlyHeight was lowered. */
+	bool bOnRoof = false;
+
+	/** FlyHeight before the roof landing, restored on take-off. */
+	float SavedFlyHeight = 0.f;
 };
 
 /**
@@ -142,6 +148,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
 	TArray<ALogisticsRoad*> GetSupplyRoadsOfTeam(int32 TeamId) const;
 
+	/** Footprint radius of a base (capsule or colliding bounds, whichever is larger). */
+	static float GetBaseRadius(const ABuildingBase* Base);
+
 private:
 	void RefreshRoads(AResourceGameMode* GameMode);
 	void RefreshSupplyRoads(AResourceGameMode* GameMode);
@@ -154,6 +163,9 @@ private:
 	ALogisticsRoad* UpdateRoad(TMap<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ALogisticsRoad>>& Map, ABuildingBase* Key,
 		ABuildingBase* Source, ABuildingBase* Sink, const FLogisticsRouteCache& Route, bool bSupplyRoad, AResourceGameMode* GameMode);
 	void TickDispatcher(AResourceGameMode* GameMode);
+
+	/** Links that move the resources themselves (ALogisticsPipeline): deliver what arrived, launch the next packet. */
+	void TickPipelines(AResourceGameMode* GameMode);
 	void DiscoverLogisticsUnits();
 	void DrawDebug(AResourceGameMode* GameMode) const;
 	void LogSummary() const;
@@ -162,7 +174,22 @@ private:
 
 	/** Pick-up / drop-off point on the edge of a base, facing Toward. */
 	FVector GetBaseEdgePoint(const ABuildingBase* Base, const FVector& Toward, float Margin) const;
-	static float GetBaseRadius(const ABuildingBase* Base);
+
+	/** Where Unit stands while it loads / unloads at Base: on the edge facing Toward, plus its own radius and LogisticsDockGap. */
+	FVector GetDockPoint(const ABuildingBase* Base, const AUnitBase* Unit, const FVector& Toward) const;
+	/** Distance from Base's centre at which Unit touches it (base radius + unit radius + LogisticsDockGap). */
+	float GetDockDistance(const ABuildingBase* Base, const AUnitBase* Unit) const;
+
+	/** A flyer with LogisticsBehavior = LandOnRoof: docks on the roof instead of at the edge. */
+	static bool LandsOnRoof(const AUnitBase* Unit);
+	/** Roof point a LandsOnRoof unit docks at: a fifth of the base radius from the centre, facing Toward. */
+	FVector GetRoofDockPoint(const ABuildingBase* Base, const FVector& Toward) const;
+	/** World Z of the roof of Base (RoofLandingHeight, else the top of its ISM / skeletal mesh, else its capsule). */
+	float GetRoofZ(const ABuildingBase* Base, const FVector& Location) const;
+	/** Lowers a LandsOnRoof unit onto the roof of Base (or lands it on the ground beside the base). */
+	void LandUnit(FLogisticsJob& Job, AUnitBase* Unit);
+	/** Undoes LandUnit. */
+	static void TakeOffUnit(FLogisticsJob& Job, AUnitBase* Unit);
 	static bool IsBaseAlive(const ABuildingBase* Base);
 	static bool IsUnitAlive(const AUnitBase* Unit);
 
@@ -186,7 +213,7 @@ private:
 	void SetJobState(FLogisticsJob& Job, ELogisticsJobState NewState, double Now);
 	void ReleaseReservation(FLogisticsJob& Job);
 	bool IssueMove(FLogisticsJob& Job, const FVector& Target);
-	bool HasArrived(const FLogisticsJob& Job, const FVector& UnitLocation, float Margin) const;
+	bool HasArrived(const FLogisticsJob& Job, const FVector& UnitLocation) const;
 	bool WasOverridden(const FLogisticsJob& Job) const;
 	ACustomControllerBase* GetCommandController(int32 TeamId);
 

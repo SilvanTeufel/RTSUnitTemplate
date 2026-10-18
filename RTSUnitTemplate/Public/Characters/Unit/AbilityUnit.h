@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "Core/UnitData.h"
 #include "Core/LogisticsData.h"
+#include "Core/WorkerData.h"
 #include "LevelUnit.h"
 #include "TimerManager.h"
 #include "AbilityUnit.generated.h"
@@ -92,6 +93,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics, meta = (ClampMin = "0"))
 	float LogisticsLandingTime = 3.f;
 
+	/** How this logistics unit behaves on its round trip (e.g. flyers landing on the roof). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics)
+	ELogisticsBehavior LogisticsBehavior = ELogisticsBehavior::Default;
+
 	/**
 	 * After the player gives this logistics unit an order of their own, it goes back to work once it
 	 * has stood idle for this long. Right-clicking one of the team's bases sends it back at once.
@@ -110,6 +115,21 @@ public:
 	/** Current step of the round trip. Replicated for HUD only, the server's dispatcher owns it. */
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
 	ELogisticsJobState LogisticsJobState = ELogisticsJobState::Idle;
+
+	/**
+	 * The resource type this unit shows as carried (MAX = nothing). Workers set it while they carry a
+	 * resource, logistics units set it to the type they carry most of. OnRep spawns / removes the ISM
+	 * instance (UResourceVisualManager), which UMassResourcePlacementProcessor then moves with the unit.
+	 */
+	UPROPERTY(ReplicatedUsing = OnRep_CarryingResourceType, EditAnywhere, BlueprintReadWrite, Category = Worker)
+	EResourceType CarryingResourceType = EResourceType::MAX;
+
+	UFUNCTION()
+	void OnRep_CarryingResourceType();
+
+	/** Mesh / material / scale / offset / rotation of the carried resource, indexed by EResourceType. Same for workers and logistics units. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
+	TArray<FWorkResourceVisuals> WorkResourceVisuals;
 
 	virtual void PostLoad() override;
 #if WITH_EDITOR

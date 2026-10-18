@@ -2,7 +2,8 @@
 #include "Mass/MassResourcePlacementProcessor.h"
 #include "MassActorSubsystem.h"
 #include "Mass/UnitMassTag.h"
-#include "Characters/Unit/WorkingUnitBase.h"
+#include "Characters/Unit/MassUnitBase.h"
+#include "Components/SkeletalMeshComponent.h"
 #include "MassExecutionContext.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "MassCommonTypes.h"
@@ -58,7 +59,7 @@ void UMassResourcePlacementProcessor::Execute(FMassEntityManager& EntityManager,
             if (ResourceFrag.bIsCarrying && ResourceFrag.TargetISM.IsValid()) {
                 UInstancedStaticMeshComponent* ISM = ResourceFrag.TargetISM.Get();
                 AActor* Actor = ActorFrag.GetMutable();
-                AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Actor);
+                AMassUnitBase* Worker = Cast<AMassUnitBase>(Actor);
                 if (Worker && !Worker->IsHidden() && bUnitVisible) {
                     FTransform ResourceTransform;
 

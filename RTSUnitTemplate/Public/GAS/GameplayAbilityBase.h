@@ -71,6 +71,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bDisabled = false;
 
+	// Set only by the owner's own automation (e.g. the Logistics auto-cast) around its TryActivateAbility call:
+	// such an ability is flagged bDisabled so the player cannot trigger it, but the unit itself still may.
+	UPROPERTY(Transient)
+	bool bBypassKeyGate = false;
+
 	// New: Keep units selected after executing this ability
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bKeepSelectionAfterAbility = false;
