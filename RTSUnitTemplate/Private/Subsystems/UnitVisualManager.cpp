@@ -139,6 +139,18 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	{
 		ISM->SetCustomDataValue(NewIndex, GDissolveCustomDataIndex, 0.0f, true);
 	}
+	// Same for the cast of the previous owner (18 / 19, AMassUnitBase::bCastProgressToMaterial): a stale one
+	// would let the material swell the new unit as if it were about to hatch.
+	if (ISM->NumCustomDataFloats > 19)
+	{
+		ISM->SetCustomDataValue(NewIndex, 18, 0.0f, false);
+		ISM->SetCustomDataValue(NewIndex, 19, 0.0f, true);
+	}
+	// And the last resource arrival (20, ABuildingBase::bPulseOnResourceArrival).
+	if (ISM->NumCustomDataFloats > 20)
+	{
+		ISM->SetCustomDataValue(NewIndex, 20, 0.0f, true);
+	}
 
 	// Copy collision settings from template to the pooled ISM
 	// Note: Since ISMs are pooled by mesh/material, the last one assigned will dictate collision for all instances.
@@ -155,7 +167,9 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	// a misconfigured template can't undersize the pooled ISM and force a destructive runtime resize later
 	// (which would zero all instances).
 	// +1: index 14 = emissive blink while working (AMassUnitBase::bBlinkEmissiveWhileWorking).
-	ISM->SetNumCustomDataFloats(FMath::Max(15, TemplateISM->NumCustomDataFloats));
+	// 15..17 = Converter colours, 18 / 19 = cast start / cast time (AMassUnitBase::bCastProgressToMaterial),
+	// 20 = last resource arrival (ABuildingBase::bPulseOnResourceArrival).
+	ISM->SetNumCustomDataFloats(FMath::Max(21, TemplateISM->NumCustomDataFloats));
 
 	// Map ISM instance to MassUnitBase
 	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(ISM);
@@ -503,7 +517,8 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
     // processor writes custom-data indices 1..12 (13 floats) and the corpse-dissolve writes index 13,
     // so 14 total, +1 for the emissive blink (index 14). Doing this here means it never has to resize a
     // live, shared ISM at runtime (which would zero EVERY instance's data).
-    NewISM->SetNumCustomDataFloats(15);
+    // 15..19: Converter colours and cast, 20: last resource arrival - see AssignUnitVisual.
+    NewISM->SetNumCustomDataFloats(21);
     if (Material) {
         NewISM->SetMaterial(0, Material);
     }

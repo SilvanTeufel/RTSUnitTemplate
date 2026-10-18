@@ -10,6 +10,153 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "ResourceGameMode.generated.h"
 
+/** Per-team logistics: lets one faction use a different road class, e.g. ALogisticsPipeline instead of carriers. */
+USTRUCT(BlueprintType)
+struct FTeamLogisticsSettings
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics)
+	int32 TeamId = 0;
+
+	/** Road actor of this team's links. Empty = LogisticsRoadClass. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Logistics)
+	TSubclassOf<class ALogisticsRoad> RoadClass;
+};
+
+/**
+ * Procedural resources: at game start every resource place of the map is removed and new ones are spawned
+ * in clusters on the navmesh (server only; the spawned areas replicate).
+ */
+USTRUCT(BlueprintType)
+struct FProceduralSettings
+{
+	GENERATED_BODY()
+
+	/** On: remove the map's resource places at game start and spawn new ones. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural)
+	bool Procedural = false;
+
+	/**
+	 * Resource places per cluster (all of one type). Up to 6 lie on a ring, ClusterSpacing apart (3 = a triangle);
+	 * more: one in the centre, the rest on a ring around it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "1", ClampMax = "20"))
+	int32 ClusterSize = 3;
+
+	/** Distance between two resource places of a cluster (uu). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "50"))
+	float ClusterSpacing = 400.f;
+
+	/** How often a cluster is of this type (relative weights; 0 = never) - only when all ...ClusterWeight below are 0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float PrimaryFrequency = 0.6f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float SecondaryFrequency = 0.4f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float TertiaryFrequency = 0.2f;
+
+	/**
+	 * Cluster mix: how often a cluster holds these resources (relative weights; 0 = never). Every resource of
+	 * the mix gets at least one place, the other places are shared out at random. A resource without a class
+	 * drops out of the mix. Start clusters get the same mixes at every base, the first one only Primary
+	 * (bFirstStartClusterPrimaryOnly), the others by these weights.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float PrimaryOnlyClusterWeight = 0.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float PrimarySecondaryClusterWeight = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float PrimaryTertiaryClusterWeight = 0.15f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float SecondaryTertiaryClusterWeight = 0.1f;
+
+	/** Resource density: clusters per 10000 x 10000 uu (100 m x 100 m) of the navmesh's bounds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float ClusterDensity = 4.f;
+
+	/** Upper limit of clusters, whatever the density says. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	int32 MaxClusters = 60;
+
+	/** Minimum distance between two cluster centres (uu). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float MinClusterDistance = 1600.f;
+
+	/** Minimum distance of a cluster centre to player starts and placed buildings (uu). Not for the start clusters. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float MinDistanceToBases = 2000.f;
+
+	/**
+	 * Clusters at every main base (the CollectAndStore building next to a player start; without one the player
+	 * start itself), the same for everyone: the first only Primary (bFirstStartClusterPrimaryOnly), the others a
+	 * mix by the ...ClusterWeight (all 0: the next type with a class and a frequency above 0). Spawned before the
+	 * others.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0", ClampMax = "6"))
+	int32 StartClusters = 2;
+
+	/** The first start cluster holds only Primary; off: it gets a mix by the ...ClusterWeight like the others. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural)
+	bool bFirstStartClusterPrimaryOnly = true;
+
+	/**
+	 * Least distance of a start cluster's places to the main base (uu) - keep it above the main building's
+	 * WorkArea ResourcePlacementDistance, or it cannot be placed at the start.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float StartClusterMinDistance = 1100.f;
+
+	/** The start clusters lie up to this much farther out (uu). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float StartClusterSpread = 400.f;
+
+	/** Least distance of a start cluster's places to the other buildings and the player starts (uu). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float StartClusterClearance = 600.f;
+
+	/** A main base belongs to a player start up to this distance (uu); farther, the start clusters go round the player start. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float MainBaseReach = 4000.f;
+
+	/**
+	 * Open-ground test around a cluster centre: the navmesh must reach this far in every direction without
+	 * a wall in between - no clusters in passages or narrow spots (uu, added to the cluster's own size).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float OpenRadius = 550.f;
+
+	/**
+	 * Every resource place keeps this distance to the edge of the navmesh (cliffs, rocks, holes) in 8 directions
+	 * (uu). The cluster is turned until all its places fit; if none does, the spot is not used.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float MinEdgeDistance = 400.f;
+
+	/** Most height difference of the navmesh within the open-ground test - no clusters on ramps or slopes (uu). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "1"))
+	float MaxHeightDifference = 80.f;
+
+	/** Classes to spawn per type. Empty = the classes of the removed resource places of that type. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural)
+	TArray<TSubclassOf<AWorkArea>> PrimaryClasses;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural)
+	TArray<TSubclassOf<AWorkArea>> SecondaryClasses;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural)
+	TArray<TSubclassOf<AWorkArea>> TertiaryClasses;
+
+	/** Random seed (0 = a new layout every game). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural)
+	int32 Seed = 0;
+};
+
 /**
  * GameMode class that manages resources for teams in a more generic way.
  */
@@ -64,6 +211,9 @@ public:
 	
 protected:
 	virtual void BeginPlay() override; // Override BeginPlay
+
+	/** Before any actor's BeginPlay: the procedural resources replace the map's ones before workers pick them. */
+	virtual void StartPlay() override;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	int MaxResourceAreasToSet = 5;
@@ -86,6 +236,13 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void GatherBases();
+
+	/** Procedural resources (see FProceduralSettings). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Procedural")
+	FProceduralSettings ProceduralSettings;
+
+	/** Server, game start: removes the map's resource places and spawns the clusters. */
+	void SpawnProceduralResources();
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorkers();
@@ -101,6 +258,13 @@ public:
 	/** Road actor spawned per CollectOnly base. Subclass ALogisticsRoad in Blueprint for meshes / materials. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
 	TSubclassOf<class ALogisticsRoad> LogisticsRoadClass;
+
+	/** Overrides LogisticsRoadClass per team, e.g. organic pipelines for the Xeno. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	TArray<FTeamLogisticsSettings> TeamLogisticsSettings;
+
+	/** The road class of TeamId's links: its TeamLogisticsSettings entry, else LogisticsRoadClass. Never null. */
+	UClass* GetLogisticsRoadClass(int32 TeamId) const;
 
 	/** How often the dispatcher looks at the logistics units (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0.05"))
@@ -125,6 +289,11 @@ public:
 	/** Distance from a base's edge at which roads end and units load / unload. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
 	float LogisticsEndMargin = 250.f;
+
+	/** Gap between a logistics unit and the base's edge while it loads / unloads (0 = touching; negative pulls it in
+	 *  when the base's footprint is drawn larger than it looks). Units drive past the road end up to this point. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "-500"))
+	float LogisticsDockGap = 0.f;
 
 	/**
 	 * Weight of a Converter supply run against an ordinary haul when an idle logistics unit picks its

@@ -14,6 +14,9 @@
  * Switching hands the input still waiting to the output store (it is hauled away as what it is) and
  * sends supply that is on its way back to where it was loaded - see ABuildingBase::SetConversion.
  * The rates (amount in / out, interval) are set on the building, not here.
+ *
+ * With bSwitchOff the ability turns the converter off instead (e.g. GA_Convert_Off) - a Converter
+ * starts switched off until one of its conversions is picked.
  */
 UCLASS(Blueprintable)
 class RTSUNITTEMPLATE_API UConversionSelectAbility : public UGameplayAbilityBase
@@ -28,6 +31,10 @@ public:
 	/** The type it produces. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
 	EResourceType OutputType = EResourceType::Secondary;
+
+	/** Switches the conversion off instead of picking InputType -> OutputType. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	bool bSwitchOff = false;
 
 	virtual bool CanActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo,
 		const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const override;

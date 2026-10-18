@@ -16,6 +16,7 @@
 #include "Actors/Waypoint.h"
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "System/LogisticsSubsystem.h"
+#include "Components/InstancedStaticMeshComponent.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -104,6 +105,30 @@ void ABuildingBase::SetConversion(EResourceType Input, EResourceType Output)
 	}
 }
 
+void ABuildingBase::ClearConversion()
+{
+	if (!HasAuthority() || !IsConverter() || !bHasConversion)
+	{
+		return;
+	}
+	if (ConversionInputStock > 0.f)
+	{
+		if (StoredResources.Num() < static_cast<int32>(EResourceType::MAX))
+		{
+			StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
+		}
+		StoredResources[static_cast<int32>(ConversionInput)] += ConversionInputStock;
+		ConversionInputStock = 0.f;
+	}
+	bHasConversion = false;
+	ConversionState = EConversionState::NoRecipe;
+
+	if (ULogisticsSubsystem* Logistics = GetWorld() ? GetWorld()->GetSubsystem<ULogisticsSubsystem>() : nullptr)
+	{
+		Logistics->OnConversionChanged(this);
+	}
+}
+
 float ABuildingBase::ReceiveConversionInput(EResourceType ResourceType, float Amount)
 {
 	if (!HasAuthority() || !IsConverter() || !bHasConversion || ResourceType != ConversionInput || Amount <= 0.f
@@ -113,6 +138,10 @@ float ABuildingBase::ReceiveConversionInput(EResourceType ResourceType, float Am
 	}
 	const float Accepted = FMath::Min(Amount, GetConversionInputSpace());
 	ConversionInputStock += Accepted;
+	if (Accepted > 0.f)
+	{
+		PulseResourceArrival();
+	}
 	return Accepted;
 }
 
@@ -322,6 +351,7 @@ float ABuildingBase::ReceiveResource(EResourceType ResourceType, float Amount, i
 			StoredResources.SetNumZeroed(static_cast<int32>(EResourceType::MAX));
 		}
 		StoredResources[Index] += Accepted;
+		PulseResourceArrival();
 		return Accepted;
 	}
 
@@ -330,9 +360,57 @@ float ABuildingBase::ReceiveResource(EResourceType ResourceType, float Amount, i
 	if (AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr))
 	{
 		ResourceGameMode->ModifyResource(ResourceType, FromTeamId, Amount);
+		PulseResourceArrival();
 		return Amount;
 	}
 	return 0.f;
+}
+
+void ABuildingBase::PulseResourceArrival()
+{
+	const UWorld* World = GetWorld();
+	if (!bPulseOnResourceArrival || !HasAuthority() || !World || GetUnitState() == UnitData::Dead)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	if (Now - LastResourcePulseTime < ResourcePulseMinInterval)
+	{
+		return;
+	}
+	LastResourcePulseTime = Now;
+	++ResourcePulseCount;
+	MulticastResourcePulse();
+}
+
+void ABuildingBase::MulticastResourcePulse_Implementation()
+{
+	const UWorld* World = GetWorld();
+	if (!World || GetNetMode() == NM_DedicatedServer)
+	{
+		return;
+	}
+	// Local world time - the material's Time. Pooled visual first; a building drawn by its own ISM otherwise.
+	const float Now = World->GetTimeSeconds();
+	bool bWritten = false;
+	for (const FCachedPooledVisual& Visual : CachedPooledVisuals)
+	{
+		UInstancedStaticMeshComponent* ISM = Visual.TargetISM.Get();
+		if (ISM && Visual.InstanceIndex != INDEX_NONE && ISM->NumCustomDataFloats > 20 && ISM->IsValidInstance(Visual.InstanceIndex))
+		{
+			ISM->SetCustomDataValue(Visual.InstanceIndex, 20, Now, true);
+			bWritten = true;
+		}
+	}
+	if (!bWritten && ISMComponent && ISMComponent->NumCustomDataFloats > 20 && ISMComponent->IsValidInstance(0))
+	{
+		ISMComponent->SetCustomDataValue(0, 20, Now, true);
+		bWritten = true;
+	}
+	if (bWritten && GetNetMode() == NM_Client)
+	{
+		++ResourcePulseCount;
+	}
 }
 
 float ABuildingBase::TakeStoredResource(EResourceType ResourceType, float MaxAmount)
@@ -345,6 +423,10 @@ float ABuildingBase::TakeStoredResource(EResourceType ResourceType, float MaxAmo
 
 	const float Taken = FMath::Min(StoredResources[Index], MaxAmount);
 	StoredResources[Index] -= Taken;
+	if (Taken > 0.f)
+	{
+		PulseResourceArrival();
+	}
 	return Taken;
 }
 
@@ -1211,12 +1293,26 @@ bool ABuildingBase::SwitchBuildArea(AUnitBase* UnitBase, AResourceGameMode* Reso
 	
 		UnitBase->BuildArea->PlannedBuilding = true;
 		UnitBase->BuildArea->ControlTimer = 0.f;
+
+		// Register the builder on the site. Without this the site had Workers.Num()==0, so AWorkArea::Tick
+		// treated the claim as stale after ResetStartBuildTime and cleared PlannedBuilding/StartedBuilding
+		// while the worker was still walking or building - every other worker then claimed the same site and
+		// shuttled between base and build area.
+		if (AWorkingUnitBase* Builder = Cast<AWorkingUnitBase>(UnitBase))
+		{
+			Builder->ReleaseResourcePlace();
+			UnitBase->BuildArea->AddWorkerToArray(Builder);
+		}
 		UnitBase->SetUEPathfinding = true;
 		UnitBase->SetUnitState(UnitData::GoToBuild);
 		UnitBase->SwitchEntityTagByState(UnitData::GoToBuild, UnitBase->UnitStatePlaceholder);
 		return true;
 	}
-	
+
+	// Not claimed: forget the candidate. The GoToBase / GoToResourceExtraction processors send every worker
+	// with a non-null BuildArea to GoToBuild, so a leftover pointer made all workers walk to a site they could
+	// not take (too expensive / already planned) and straight back to base - forever.
+	UnitBase->BuildArea = nullptr;
 	return false;
 
 }

@@ -416,9 +416,9 @@ public:
 	// Cargo text colour per resource type; a mixed load takes the colour of its largest part.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
 	TMap<EResourceType, FColor> LogisticsCargoResourceColors = {
-		{ EResourceType::Primary,   FColor(255, 215,  70, 255) },
-		{ EResourceType::Secondary, FColor( 90, 225,  95, 255) },
-		{ EResourceType::Tertiary,  FColor( 80, 170, 255, 255) },
+		{ EResourceType::Primary,   FColor( 90, 225,  95, 255) },
+		{ EResourceType::Secondary, FColor( 80, 170, 255, 255) },
+		{ EResourceType::Tertiary,  FColor(255,  80,  80, 255) },
 		{ EResourceType::Rare,      FColor(185, 110, 255, 255) },
 		{ EResourceType::Epic,      FColor(255,  90, 200, 255) },
 		{ EResourceType::Legendary, FColor(255, 140,  40, 255) },

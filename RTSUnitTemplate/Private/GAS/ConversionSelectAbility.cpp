@@ -8,6 +8,14 @@ bool UConversionSelectAbility::CanActivateAbility(const FGameplayAbilitySpecHand
 	const FGameplayTagContainer* SourceTags, const FGameplayTagContainer* TargetTags, FGameplayTagContainer* OptionalRelevantTags) const
 {
 	const ABuildingBase* Converter = ActorInfo ? Cast<ABuildingBase>(ActorInfo->OwnerActor.Get()) : nullptr;
+	if (bSwitchOff)
+	{
+		if (!Converter || !Converter->IsConverter() || Converter->GetUnitState() == UnitData::Dead || !Converter->bHasConversion)
+		{
+			return false;
+		}
+		return Super::CanActivateAbility(Handle, ActorInfo, SourceTags, TargetTags, OptionalRelevantTags);
+	}
 	if (!Converter || !Converter->IsConverter() || Converter->GetUnitState() == UnitData::Dead
 		|| InputType == EResourceType::MAX || OutputType == EResourceType::MAX || InputType == OutputType
 		|| Converter->IsConversionActive(InputType, OutputType))
@@ -26,7 +34,14 @@ void UConversionSelectAbility::ActivateAbility(const FGameplayAbilitySpecHandle 
 	{
 		if (ABuildingBase* Converter = Cast<ABuildingBase>(ActorInfo->OwnerActor.Get()))
 		{
-			Converter->SetConversion(InputType, OutputType);
+			if (bSwitchOff)
+			{
+				Converter->ClearConversion();
+			}
+			else
+			{
+				Converter->SetConversion(InputType, OutputType);
+			}
 		}
 	}
 	EndAbility(Handle, ActorInfo, ActivationInfo, /*bReplicateEndAbility=*/true, /*bWasCancelled=*/false);

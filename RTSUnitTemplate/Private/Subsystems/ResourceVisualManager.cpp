@@ -4,7 +4,8 @@
 #include "MassEntityManager.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
-#include "Characters/Unit/WorkingUnitBase.h"
+#include "Characters/Unit/AbilityUnit.h"
+#include "Actors/WorkResource.h"
 #include "UObject/UObjectIterator.h"
 #include "Engine/StaticMesh.h"
 
@@ -51,7 +52,8 @@ void UResourceVisualManager::AssignResource(FMassEntityHandle Entity, EResourceT
         return;
     }
 
-    AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(RawActor);
+    // Workers and logistics units both carry resources; the visuals live in AAbilityUnit.
+    AAbilityUnit* Worker = Cast<AAbilityUnit>(RawActor);
     if (!Worker) {
         return;
     }

@@ -23,6 +23,9 @@
 #include "TimerManager.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "System/LogisticsSubsystem.h"
+#include "Subsystems/ResourceVisualManager.h"
+#include "MassActorSubsystem.h"
+#include "Actors/WorkArea.h"
 
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -33,6 +36,39 @@ void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AAbilityUnit, UnitRole);
 	DOREPLIFETIME(AAbilityUnit, LogisticsCargo);
 	DOREPLIFETIME(AAbilityUnit, LogisticsJobState);
+	DOREPLIFETIME(AAbilityUnit, CarryingResourceType);
+}
+
+void AAbilityUnit::OnRep_CarryingResourceType()
+{
+	if (GetNetMode() == NM_DedicatedServer) return;
+
+	UResourceVisualManager* VisualManager = GetWorld()->GetSubsystem<UResourceVisualManager>();
+	if (!VisualManager) return;
+
+	UMassActorSubsystem* MassActorSubsystem = GetWorld()->GetSubsystem<UMassActorSubsystem>();
+	if (!MassActorSubsystem) return;
+
+	FMassEntityHandle EntityHandle = MassActorSubsystem->GetEntityHandleFromActor(this);
+	if (!EntityHandle.IsValid()) return;
+
+	if (CarryingResourceType != EResourceType::MAX)
+	{
+		// Only workers know their resource place; a logistics unit takes its visuals from WorkResourceVisuals.
+		TSubclassOf<AWorkResource> ResourceClass = nullptr;
+		if (const AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(this))
+		{
+			if (Worker->ResourcePlace)
+			{
+				ResourceClass = Worker->ResourcePlace->WorkResourceClass;
+			}
+		}
+		VisualManager->AssignResource(EntityHandle, CarryingResourceType, ResourceClass);
+	}
+	else
+	{
+		VisualManager->RemoveResource(EntityHandle);
+	}
 }
 
 void AAbilityUnit::SyncUnitRoleMirror()

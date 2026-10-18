@@ -128,7 +128,6 @@ void AWorkingUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
 	DOREPLIFETIME(AWorkingUnitBase, ResourcePlace);
 	DOREPLIFETIME(AWorkingUnitBase, Base);
 	DOREPLIFETIME(AWorkingUnitBase, BuildArea);
-	DOREPLIFETIME(AWorkingUnitBase, CarryingResourceType);
 }
 
 bool AWorkingUnitBase::CanMineResourceType(EResourceType ResourceType) const
@@ -268,34 +267,6 @@ FVector AWorkingUnitBase::GetBuildAreaEffectScale(float BaseScale, float Referen
 	const float Footprint = FMath::Max(Size.X, Size.Y);
 	const float Scale = FMath::Clamp((Footprint / ReferenceSize) * BaseScale, MinScale, MaxScale);
 	return FVector(Scale, Scale, Scale);
-}
-
-void AWorkingUnitBase::OnRep_CarryingResourceType()
-{
-	if (GetNetMode() == NM_DedicatedServer) return;
-
-	UResourceVisualManager* VisualManager = GetWorld()->GetSubsystem<UResourceVisualManager>();
-	if (!VisualManager) return;
-
-	UMassActorSubsystem* MassActorSubsystem = GetWorld()->GetSubsystem<UMassActorSubsystem>();
-	if (!MassActorSubsystem) return;
-
-	FMassEntityHandle EntityHandle = MassActorSubsystem->GetEntityHandleFromActor(this);
-	if (!EntityHandle.IsValid()) return;
-
-	if (CarryingResourceType != EResourceType::MAX)
-	{
-		TSubclassOf<AWorkResource> ResourceClass = nullptr;
-		if (ResourcePlace)
-		{
-			ResourceClass = ResourcePlace->WorkResourceClass;
-		}
-		VisualManager->AssignResource(EntityHandle, CarryingResourceType, ResourceClass);
-	}
-	else
-	{
-		VisualManager->RemoveResource(EntityHandle);
-	}
 }
 
 void AWorkingUnitBase::OnRep_CurrentDraggedWorkArea()

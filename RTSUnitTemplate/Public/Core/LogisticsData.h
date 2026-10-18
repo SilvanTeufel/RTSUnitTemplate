@@ -77,6 +77,20 @@ enum class EUnitRole : uint8
 	Logistics UMETA(DisplayName = "Logistics"),
 };
 
+/** How a logistics unit behaves on its round trip. Only read for UnitRole = Logistics. */
+UENUM(BlueprintType)
+enum class ELogisticsBehavior : uint8
+{
+	/** Loads and unloads at the edge of the base; flyers land on the ground beside it. */
+	Default    UMETA(DisplayName = "Default"),
+
+	/**
+	 * Flyers land on the roof of the base instead of beside it (ABuildingBase::RoofLandingHeight,
+	 * or the top of its mesh). Ground units behave as Default.
+	 */
+	LandOnRoof UMETA(DisplayName = "Land On Roof"),
+};
+
 /** Where a logistics unit is in its round trip. Only meaningful on the server. */
 UENUM(BlueprintType)
 enum class ELogisticsJobState : uint8

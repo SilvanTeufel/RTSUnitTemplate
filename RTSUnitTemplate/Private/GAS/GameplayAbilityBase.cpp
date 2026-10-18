@@ -833,7 +833,7 @@ bool UGameplayAbilityBase::CanActivateAbility(const FGameplayAbilitySpecHandle H
 
 	const UAbilitySystemComponent* OwnerASC = (ActorInfo && ActorInfo->AbilitySystemComponent.IsValid()) ? ActorInfo->AbilitySystemComponent.Get() : nullptr;
 
-	if (!IsAbilityKeyGateOpen(this, TeamId, OwnerASC))
+	if (!bBypassKeyGate && !IsAbilityKeyGateOpen(this, TeamId, OwnerASC))
 	{
 		return false;
 	}

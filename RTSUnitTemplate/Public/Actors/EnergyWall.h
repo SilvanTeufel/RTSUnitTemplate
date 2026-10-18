@@ -9,6 +9,7 @@
 
 class UInstancedStaticMeshComponent;
 class UBoxComponent;
+class UDecalComponent;
 class UNavModifierComponent;
 class ABuildingBase;
 
@@ -48,6 +49,18 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
 	UBoxComponent* NavObstacleBox;
+
+	/** Foundation decal under the wall line; the Blueprint sets its material (same as the tower foundation). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Components")
+	UDecalComponent* FoundationDecal;
+
+	/** Half width of the foundation across the wall (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Visual")
+	float FoundationHalfWidth = 90.f;
+
+	/** The foundation reaches this far past each tower along the wall (cm). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "EnergyWall|Visual")
+	float FoundationEndPadding = 40.f;
 
 	/**
 	 * Steht die Wand und ist ihre Sperrflaeche vermessen?

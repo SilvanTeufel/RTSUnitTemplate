@@ -2620,18 +2620,97 @@ void AHUDBase::DrawLogisticsAmounts()
 		const FColor* Found = LogisticsCargoResourceColors.Find(Type);
 		return Found ? *Found : LogisticsCargoColor;
 	};
-	auto TypeName = [](EResourceType Type) -> const TCHAR*
+
+	// Simplified resource icons drawn with canvas triangles (no texture assets):
+	// Primary = green disc, Secondary = blue crystal, Tertiary = red gas cloud.
+	auto DrawDisc = [this](const FVector2D& Center, float Radius, const FLinearColor& Color)
 	{
+		constexpr int32 Segments = 14;
+		for (int32 Seg = 0; Seg < Segments; ++Seg)
+		{
+			const float A0 = 2.f * PI * Seg / Segments;
+			const float A1 = 2.f * PI * (Seg + 1) / Segments;
+			FCanvasTriangleItem Tri(Center, Center + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * Radius,
+				Center + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * Radius, GWhiteTexture);
+			Tri.SetColor(Color);
+			Tri.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Tri);
+		}
+	};
+	auto DrawTri = [this](const FVector2D& A, const FVector2D& B, const FVector2D& C, const FLinearColor& Color)
+	{
+		FCanvasTriangleItem Tri(A, B, C, GWhiteTexture);
+		Tri.SetColor(Color);
+		Tri.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(Tri);
+	};
+	auto DrawResourceIcon = [&](const FVector2D& C, float R, EResourceType Type)
+	{
+		const FLinearColor Col(TypeColor(Type));
+		const FLinearColor Dark(0.f, 0.f, 0.f, 1.f);
 		switch (Type)
 		{
-		case EResourceType::Primary:   return TEXT("Primary");
-		case EResourceType::Secondary: return TEXT("Secondary");
-		case EResourceType::Tertiary:  return TEXT("Tertiary");
-		case EResourceType::Rare:      return TEXT("Rare");
-		case EResourceType::Epic:      return TEXT("Epic");
-		case EResourceType::Legendary: return TEXT("Legendary");
-		default:                       return TEXT("?");
+		case EResourceType::Primary:
+			DrawDisc(C, R * 1.25f, Dark);
+			DrawDisc(C, R, Col);
+			break;
+		case EResourceType::Secondary:
+		{
+			const FVector2D Top = C + FVector2D(0.f, -R * 1.3f), Right = C + FVector2D(R * 0.85f, 0.f),
+				Bottom = C + FVector2D(0.f, R * 1.3f), Left = C + FVector2D(-R * 0.85f, 0.f);
+			const float O = 1.25f;
+			DrawTri(C + (Top - C) * O, C + (Right - C) * O, C + (Left - C) * O, Dark);
+			DrawTri(C + (Bottom - C) * O, C + (Right - C) * O, C + (Left - C) * O, Dark);
+			DrawTri(Top, Right, Left, Col * 1.35f);
+			DrawTri(Bottom, Right, Left, Col * 0.7f);
+			break;
 		}
+		case EResourceType::Tertiary:
+		{
+			const FVector2D P0 = C + FVector2D(-R * 0.55f, R * 0.3f), P1 = C + FVector2D(R * 0.55f, R * 0.3f), P2 = C + FVector2D(0.f, -R * 0.35f);
+			DrawDisc(P0, R * 0.75f, Dark); DrawDisc(P1, R * 0.75f, Dark); DrawDisc(P2, R * 0.85f, Dark);
+			DrawDisc(P0, R * 0.6f, Col); DrawDisc(P1, R * 0.6f, Col); DrawDisc(P2, R * 0.7f, Col * 1.25f);
+			break;
+		}
+		default:
+			DrawDisc(C, R * 1.25f, Dark);
+			DrawDisc(C, R, Col);
+			break;
+		}
+	};
+	// "<Prefix> [icon] <Text>" centred on the projected anchor, one line (same 8 px / char estimate as DrawText).
+	auto DrawIconText = [&](const FVector& WorldPos, EResourceType Type, const FString& Text, const FColor& Color, float PixelOffsetY, const FString& Prefix)
+	{
+		FVector2D ScreenPos;
+		if (!PC->ProjectWorldLocationToScreen(WorldPos, ScreenPos)) return;
+		ScreenPos.Y += PixelOffsetY;
+
+		const float CharW = 8.f * FontScale;
+		const float Radius = 6.f * FontScale;
+		const float Gap = 4.f * FontScale;
+		const float PrefixW = Prefix.IsEmpty() ? 0.f : CharW * Prefix.Len() + Gap;
+		const float Total = PrefixW + 2.f * Radius + Gap + CharW * Text.Len();
+		float X = ScreenPos.X - Total * 0.5f;
+		const float LineMidY = ScreenPos.Y + 7.f * FontScale;
+
+		if (!Prefix.IsEmpty())
+		{
+			FCanvasTextItem PrefixItem(FVector2D(X, ScreenPos.Y), FText::FromString(Prefix), LevelFont, FLinearColor(Color));
+			PrefixItem.Scale = FVector2D(FontScale, FontScale);
+			PrefixItem.bOutlined = true;
+			PrefixItem.OutlineColor = FLinearColor::Black;
+			PrefixItem.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(PrefixItem);
+			X += PrefixW;
+		}
+		DrawResourceIcon(FVector2D(X + Radius, LineMidY), Radius, Type);
+		X += 2.f * Radius + Gap;
+		FCanvasTextItem TextItem(FVector2D(X, ScreenPos.Y), FText::FromString(Text), LevelFont, FLinearColor(Color));
+		TextItem.Scale = FVector2D(FontScale, FontScale);
+		TextItem.bOutlined = true;
+		TextItem.OutlineColor = FLinearColor::Black;
+		TextItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(TextItem);
 	};
 
 	if (bShowLogisticsStorage)
@@ -2657,16 +2736,25 @@ void AHUDBase::DrawLogisticsAmounts()
 				}
 				else
 				{
-					DrawText(Anchor, FString::Printf(TEXT("%s %d/%d"), TypeName(Base->ConversionInput),
+					DrawIconText(Anchor, Base->ConversionInput, FString::Printf(TEXT("%d/%d"),
 						FMath::FloorToInt(Base->ConversionInputStock), FMath::FloorToInt(Base->ConversionInputCapacity)),
-						TypeColor(Base->ConversionInput), AnchorOffset - Spacing);
+						TypeColor(Base->ConversionInput), AnchorOffset - Spacing, FString());
 				}
 				const int32 Out = FMath::FloorToInt(Base->GetStoredResourceTotal());
-				const FString OutText = Base->StorageCapacity > 0.f
-					? FString::Printf(TEXT("-> %s %d/%d"), Base->bHasConversion ? TypeName(Base->ConversionOutput) : TEXT(""), Out, FMath::FloorToInt(Base->StorageCapacity))
-					: FString::Printf(TEXT("-> %s %d"), Base->bHasConversion ? TypeName(Base->ConversionOutput) : TEXT(""), Out);
-				DrawText(Anchor, OutText, Base->IsStorageFull() ? LogisticsStorageFullColor
-					: (Base->bHasConversion ? TypeColor(Base->ConversionOutput) : LogisticsStorageColor), AnchorOffset);
+				const FColor OutColor = Base->IsStorageFull() ? LogisticsStorageFullColor
+					: (Base->bHasConversion ? TypeColor(Base->ConversionOutput) : LogisticsStorageColor);
+				if (Base->bHasConversion)
+				{
+					DrawIconText(Anchor, Base->ConversionOutput, Base->StorageCapacity > 0.f
+						? FString::Printf(TEXT("%d/%d"), Out, FMath::FloorToInt(Base->StorageCapacity))
+						: FString::Printf(TEXT("%d"), Out), OutColor, AnchorOffset, TEXT("->"));
+				}
+				else
+				{
+					DrawText(Anchor, Base->StorageCapacity > 0.f
+						? FString::Printf(TEXT("-> %d/%d"), Out, FMath::FloorToInt(Base->StorageCapacity))
+						: FString::Printf(TEXT("-> %d"), Out), OutColor, AnchorOffset);
+				}
 				continue;
 			}
 

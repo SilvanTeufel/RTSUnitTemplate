@@ -79,14 +79,8 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	class AWorkArea* BuildArea;
 	
-	UPROPERTY(ReplicatedUsing=OnRep_CarryingResourceType, EditAnywhere, BlueprintReadWrite, Category = Worker)
-	EResourceType CarryingResourceType = EResourceType::MAX;
-
-	UFUNCTION()
-	void OnRep_CarryingResourceType();
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Worker)
-	TArray<FWorkResourceVisuals> WorkResourceVisuals;
+	// CarryingResourceType, OnRep_CarryingResourceType and WorkResourceVisuals live in AAbilityUnit
+	// so that logistics units show their cargo the same way.
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Worker)
 	AWorkResource* WorkResource;

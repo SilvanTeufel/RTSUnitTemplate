@@ -601,6 +601,10 @@ bool UMassActorBindingComponent::BuildArchetypeAndSharedValues(FMassArchetypeHan
 	if (UnitBase->IsWorker)
 	{
 		FragmentsAndTags.Add(FMassWorkerStatsFragment::StaticStruct());
+	}
+	// Workers and logistics units show what they carry (WorkResourceVisuals, MassResourcePlacementProcessor).
+	if (UnitBase->IsWorker || UnitBase->IsLogisticsUnit())
+	{
 		FragmentsAndTags.Add(FMassCarriedResourceFragment::StaticStruct());
 	}
 	
@@ -1105,6 +1109,25 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     {
     	UnitOwner->AbilitySystemComponent->InitAbilityActorInfo(UnitOwner, UnitOwner);
     	UnitOwner->InitializeAttributes();
+    	// Health taken over at spawn (AUnitBase::ApplySpawnHealthFraction) - InitializeAttributes just reset it.
+    	if (UnitOwner->PendingSpawnHealthFraction >= 0.f || UnitOwner->PendingSpawnShieldFraction >= 0.f)
+    	{
+    		const float HealthFraction = UnitOwner->PendingSpawnHealthFraction;
+    		const float ShieldFraction = UnitOwner->PendingSpawnShieldFraction;
+    		UnitOwner->PendingSpawnHealthFraction = -1.f;
+    		UnitOwner->PendingSpawnShieldFraction = -1.f;
+    		if (UnitOwner->Attributes)
+    		{
+    			if (HealthFraction >= 0.f)
+    			{
+    				UnitOwner->Attributes->SetAttributeHealth(FMath::Max(1.f, UnitOwner->Attributes->GetMaxHealth() * FMath::Min(HealthFraction, 1.f)));
+    			}
+    			if (ShieldFraction >= 0.f)
+    			{
+    				UnitOwner->Attributes->SetAttributeShield(UnitOwner->Attributes->GetMaxShield() * FMath::Min(ShieldFraction, 1.f));
+    			}
+    		}
+    	}
     	UnitOwner->GiveAbilities();
     	UnitOwner->SetupAbilitySystemDelegates();
     	UnitOwner->GetAbilitiesArrays();
@@ -1124,7 +1147,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         {
             // <<< REPLACE Getters with your actual function names >>>
             CombatStatsFrag->MaxHealth = UnitAttributes->GetMaxHealth();
-            CombatStatsFrag->Health = CombatStatsFrag->MaxHealth; // Start full
+            CombatStatsFrag->Health = FMath::Min(UnitAttributes->GetHealth(), CombatStatsFrag->MaxHealth); // Start as the attributes (full, or taken over at spawn)
             CombatStatsFrag->AttackRange = UnitAttributes->GetRange();
             CombatStatsFrag->AttackDamage = UnitAttributes->GetAttackDamage();
             //CombatStatsFrag->AttackSpeed = UnitAttributes->GetAttackSpeed();
@@ -1134,7 +1157,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CombatStatsFrag->Armor = UnitAttributes->GetArmor();
             CombatStatsFrag->MagicResistance = UnitAttributes->GetMagicResistance();
             CombatStatsFrag->MaxShield = UnitAttributes->GetMaxShield();
-            CombatStatsFrag->Shield = CombatStatsFrag->MaxShield; // Start full
+            CombatStatsFrag->Shield = FMath::Min(UnitAttributes->GetShield(), CombatStatsFrag->MaxShield); // Start as the attributes
             //CombatStatsFrag->AgentRadius = UnitAttributes->GetAgentRadius(); // Get radius from stats
             //CombatStatsFrag->AcceptanceRadius = UnitAttributes->GetAcceptanceRadius();
             CombatStatsFrag->SightRadius = SightRadius;// We need to add this to Attributes i guess;
@@ -1665,7 +1688,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 		}
 	}
 
-	if (UnitOwner && UnitOwner->IsWorker)
+	if (UnitOwner && (UnitOwner->IsWorker || UnitOwner->IsLogisticsUnit()))
 	{
 		if (FMassCarriedResourceFragment* CarriedFrag = EntityManager.GetFragmentDataPtr<FMassCarriedResourceFragment>(EntityHandle))
 		{

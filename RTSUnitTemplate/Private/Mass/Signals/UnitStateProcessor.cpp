@@ -2669,16 +2669,20 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
 									UnitBase->BuildArea->GetActorLocation().X,
 									UnitBase->BuildArea->GetActorLocation().Y);
    			   							// If a construction site exists, remove it now
-   								float SavedHealth = 0.f;
-   								float SavedShield = 0.f;
+   								// The building takes over the construction site's share of health / shield (damage
+   								// taken while building stays), see AUnitBase::ApplySpawnHealthFraction.
+   								float SavedHealth = -1.f;
+   								float SavedShield = -1.f;
    								bool bHasSavedStats = false;
 								bool bBaustelleWarAusgewaehlt = false;
 								if (AConstructionUnit* CU = Cast<AConstructionUnit>(UnitBase->BuildArea->ConstructionUnit))
 								{
 									if (CU->Attributes)
 									{
-										SavedHealth = CU->Attributes->GetHealth();
-										SavedShield = CU->Attributes->GetShield();
+										const float CUMaxHealth = CU->Attributes->GetMaxHealth();
+										const float CUMaxShield = CU->Attributes->GetMaxShield();
+										SavedHealth = CUMaxHealth > 0.f ? CU->Attributes->GetHealth() / CUMaxHealth : -1.f;
+										SavedShield = CUMaxShield > 0.f ? CU->Attributes->GetShield() / CUMaxShield : -1.f;
 										bHasSavedStats = true;
 									}
 
@@ -2788,11 +2792,7 @@ void UUnitStateProcessor::HandleSpawnBuildingRequest(FName SignalName, TArray<FM
    									
 								if (bHasSavedStats && NewUnit && SpawnedBuilding)
 								{
-									if (SpawnedBuilding->Attributes)
-									{
-										SpawnedBuilding->SetHealth_Implementation(SavedHealth);
-										SpawnedBuilding->SetShield_Implementation(SavedShield);
-									}
+									SpawnedBuilding->ApplySpawnHealthFraction(SavedHealth, SavedShield);
 								}
 
 								if (NewUnit && ControllerBase)
@@ -3034,7 +3034,11 @@ AUnitBase* UUnitStateProcessor::SpawnSingleUnit(
 
     // Rows only dictate the mesh rotation when they say so; otherwise the unit's own
     // class default stands, exactly as it does for hand-placed units.
-    if (SpawnParameter.bOverrideServerMeshRotation)
+    // A building from a construction site: the site's rotation already turned the ACTOR (step 1) - the mesh
+    // keeps the building's own designed rotation. Setting it here too turned it twice, and only on the server
+    // (SetMeshRotationServer), while clients kept the class default: e.g. ThresherRoot (mesh -90) stood 90
+    // degrees off on the server.
+    if (SpawnParameter.bOverrideServerMeshRotation && !BuildArea)
     {
     	UnitBase->ServerMeshRotation = SpawnParameter.ServerMeshRotation;
     }
