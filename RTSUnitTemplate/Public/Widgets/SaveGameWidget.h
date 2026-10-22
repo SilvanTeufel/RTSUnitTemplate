@@ -126,6 +126,9 @@ protected:
 
     void PopulateSavesList();
 
+    /** Schliesst das Fenster - ueber den Aktor, falls es einen gibt, sonst selbst. */
+    void CloseSelf();
+
 public:
     // Wird vom Listeneintrag-Widget aufgerufen
     void HandleSlotItemClicked(const FString& InSlotName)

@@ -299,6 +299,12 @@ public:
 	FTimerHandle WinConditionDisplayTimerHandle;
 	FTimerHandle InitialWinConditionDelayTimerHandle;
 
+	/** Win condition narration (URTSUnitTemplateSettings::bNarrateWinConditions) - local player only. */
+	FTimerHandle WinConditionNarrationTimerHandle;
+	bool bWinConditionStartNarrated = false;
+	void NarrateWinCondition(bool bGameStart);
+	void ScheduleWinConditionNarration(float Delay, bool bGameStart);
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ShowWinConditionWidget(float Duration);
 

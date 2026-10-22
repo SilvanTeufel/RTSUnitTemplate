@@ -546,6 +546,37 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Mass)
 	void InitializeAdditionalISM(UInstancedStaticMeshComponent* InISMComponent);
 
+	/**
+	 * ISM components (by component name) drawn as additional Mass visuals, e.g. a turret on its socket.
+	 * Same as calling InitializeAdditionalISM from the construction script - without any Blueprint.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ISM")
+	TArray<FName> AdditionalISMNames;
+
+	/** ISM component (by name, usually one of AdditionalISMNames) that turns its yaw towards the chased unit once Mass is set up. None = off. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ISM")
+	FName YawChaseISMName;
+
+	/** YawChaseISMName: seconds for one turn, ease exponent and yaw added to the facing direction. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ISM", meta = (ClampMin = "0"))
+	float YawChaseDuration = 0.5f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ISM", meta = (ClampMin = "0.1"))
+	float YawChaseEaseExponent = 1.f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "ISM")
+	float YawChaseOffsetDegrees = 0.f;
+
+	/** Called by the Mass binding once the entity exists: native setup (YawChaseISMName), then the Blueprint event OnMassRegistrationFinished. */
+	void NotifyMassRegistrationFinished();
+
+private:
+	/** InitializeAdditionalISM for every component named in AdditionalISMNames. */
+	void InitializeNamedAdditionalISMs();
+	UInstancedStaticMeshComponent* FindISMByName(FName ComponentName) const;
+
+public:
+
 	/** Register a single additional ISM as a Mass visual instance immediately, even after the one-time
 	 *  Mass registration pass has completed. RegisterAdditionalVisualsToMass early-outs once
 	 *  bMassVisualsRegistered is set, so an ISM added later would otherwise never receive a pooled

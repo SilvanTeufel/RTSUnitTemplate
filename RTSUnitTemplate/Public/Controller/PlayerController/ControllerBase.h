@@ -83,6 +83,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bIsAi = false;
 
+	/** Vom GameMode gesetzt, sobald Team, Kamera, HUD, Fog und Minimap eingerichtet sind (auch fuer spaet Joinende). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bRTSPlayerInitialized = false;
+
 	UPROPERTY(BlueprintAssignable, Category = "RTSUnitTemplate|Team")
 	FOnTeamIdChanged OnTeamIdChanged;
 

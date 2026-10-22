@@ -222,6 +222,13 @@ protected:
         float    FensterWunschSumme = 0.f;
         float    FensterWunschTempo = 0.f;
         bool     bFensterStill = false;
+
+        // ANLAUF: Zustand und Befehlszeit des letzten Bildes. Wechselt die Einheit aus einem
+        // Stillstandszustand in einen Bewegungszustand oder kommt ein neuer Laufbefehl, beginnt
+        // die Messung neu. Sonst hing das eingerastete bFensterStill vom Stehen davor nach, und
+        // die Einheit lief 0,5 bis 1,2 s in der Idle-Pose los (gemeldet 19.10.2026).
+        uint8    LetzterZustand = 0xFF;
+        float    LetzteBefehlszeit = -1000.f;
     };
     TMap<FMassEntityHandle, FAnimStandWatch> AnimStandWatches;
 

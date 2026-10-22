@@ -124,6 +124,7 @@ void ATransportUnit::LoadUnit(AUnitBase* UnitToLoad)
 
 		GetWorld()->GetTimerManager().ClearTimer(UnloadTimerHandle);
 		LoadedUnit(LoadedUnits.Num());
+		OnLoadedUnitsChanged();
 		
 		if (UUnitTimerWidget* TimerWidget = Cast<UUnitTimerWidget>(TimerWidgetComp->GetUserWidgetObject())) // Assuming you have a UUnitBaseTimer class for the timer widget
 		{
@@ -192,6 +193,7 @@ void ATransportUnit::UnloadNextUnit()
 		
 		LoadedUnits.RemoveAt(0);
 		UnloadedUnit(LoadedUnits.Num());
+		OnLoadedUnitsChanged();
 		
 		GetWorld()->GetTimerManager().SetTimer(UnloadTimerHandle, this, &ATransportUnit::UnloadNextUnit, UnloadInterval, false);
 	}

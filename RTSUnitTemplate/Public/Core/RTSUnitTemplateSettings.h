@@ -4,7 +4,51 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DeveloperSettings.h"
+#include "GameplayTagContainer.h"
 #include "RTSUnitTemplateSettings.generated.h"
+
+/** How the narrator words the win conditions (see URTSUnitTemplateSettings::NarrationStyle). */
+UENUM(BlueprintType)
+enum class EWinConditionNarrationStyle : uint8
+{
+	/** Plain, direct orders. */
+	Plain       UMETA(DisplayName = "Plain"),
+	/** The Singularian collective: "we", analytical, a little cold. */
+	Singularian UMETA(DisplayName = "Singularian"),
+	/** The Xeno hive mind: "we" as the brood, hungry, organic. */
+	Xeno        UMETA(DisplayName = "Xeno"),
+};
+
+/**
+ * A narrator for the players of one faction (URTSUnitTemplateSettings::FactionNarrators). Empty fields use
+ * the default narrator's values.
+ */
+USTRUCT(BlueprintType)
+struct FFactionNarrator
+{
+	GENERATED_BODY()
+
+	/** Used when the local player's own units or buildings carry one of these tags (parents match, e.g.
+	 *  "Units.Xeno" matches "Units.Xeno.BroodMite"). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
+	FGameplayTagContainer FactionTags;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
+	FText Name;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
+	EWinConditionNarrationStyle Style = EWinConditionNarrationStyle::Plain;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration", meta = (AllowedClasses = "/Script/RTSUnitTemplate.StoryWidgetBase"))
+	TSoftClassPtr<class UStoryWidgetBase> WidgetClass;
+
+	/** Portrait as material; wins over Image. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
+	TSoftObjectPtr<class UMaterialInterface> Material;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
+	TSoftObjectPtr<class UTexture2D> Image;
+};
 
 /**
  * Project Settings -> Plugins -> RTS Unit Template.
@@ -128,6 +172,57 @@ public:
 	/** If a unit's move target deviates more than this (cm) from its formation target, it got another order and leaves the group. */
 	UPROPERTY(config, EditAnywhere, Category = "Formation|Range", meta = (ClampMin = "0.0", Units = "cm"))
 	float FormationTargetTolerance = 600.f;
+
+	// ------------------------------------------------------------------------------------------
+	// Win condition narration: a narrator explains the current win condition(s) in whole sentences
+	// through the story queue (UStoryTriggerQueueSubsystem) - NarrationDelay seconds after the game
+	// start and every time the win condition changes. Works in every level with a AWinLoseConfigActor.
+	// ------------------------------------------------------------------------------------------
+
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (DisplayName = "Narrate Win Conditions"))
+	bool bNarrateWinConditions = false;
+
+	/** Seconds after the game start (after the loading screen) for the first explanation. */
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (ClampMin = "0"))
+	float NarrationDelay = 15.f;
+
+	/** Seconds after a win condition changed (the goal widget shows first). */
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (ClampMin = "0"))
+	float NarrationChangeDelay = 2.f;
+
+	/** Name above the text, e.g. "Commander Vael". Empty = none. */
+	UPROPERTY(config, EditAnywhere, Category = "Narration")
+	FText NarratorName;
+
+	UPROPERTY(config, EditAnywhere, Category = "Narration")
+	EWinConditionNarrationStyle NarrationStyle = EWinConditionNarrationStyle::Plain;
+
+	/** Story widget for the messages. Empty = the camera's story widget. */
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (AllowedClasses = "/Script/RTSUnitTemplate.StoryWidgetBase"))
+	TSoftClassPtr<class UStoryWidgetBase> NarratorWidgetClass;
+
+	/** Portrait of the narrator (material, e.g. a talking avatar); wins over NarratorImage. */
+	UPROPERTY(config, EditAnywhere, Category = "Narration")
+	TSoftObjectPtr<class UMaterialInterface> NarratorMaterial;
+
+	UPROPERTY(config, EditAnywhere, Category = "Narration")
+	TSoftObjectPtr<class UTexture2D> NarratorImage;
+
+	/** Other narrators per faction (first match wins); a player of no listed faction hears the one above. */
+	UPROPERTY(config, EditAnywhere, Category = "Narration")
+	TArray<FFactionNarrator> FactionNarrators;
+
+	/** A message stays this long per word ... */
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (ClampMin = "0"))
+	float NarrationSecondsPerWord = 0.4f;
+
+	/** ... but at least this long (seconds). */
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (ClampMin = "1"))
+	float NarrationMinSeconds = 6.f;
+
+	/** Sentences are put together into messages of at most this many characters. */
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (ClampMin = "40"))
+	int32 NarrationMaxCharsPerMessage = 190;
 
 	/** Convenience accessor; never returns null (UDeveloperSettings are CDO-backed). */
 	static const URTSUnitTemplateSettings* Get();

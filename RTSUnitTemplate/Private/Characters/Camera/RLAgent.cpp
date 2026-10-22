@@ -1153,6 +1153,24 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
     static const FGameplayTag TagCtrlE = FGameplayTag::RequestGameplayTag(FName("KeyTag.CtrlE"));
     static const FGameplayTag TagCtrlR = FGameplayTag::RequestGameplayTag(FName("KeyTag.CtrlR"));
 
+    // Eco buildings, order fixed by FGameStateData::EcoClassCounts. Not every project defines all of them.
+    static const TArray<FGameplayTag> EcoTags = []()
+    {
+        static const TCHAR* Names[EcoStateSlots] = {
+            TEXT("Buildings.Singularian.Collector"), TEXT("Buildings.Singularian.Stock"),
+            TEXT("Buildings.Singularian.ExtractorPrimary"), TEXT("Buildings.Singularian.ExtractorSecondary"),
+            TEXT("Buildings.Singularian.ExtractorTertiary"), TEXT("Buildings.Singularian.Converter"),
+            TEXT("Buildings.Xeno.GatheringMaw"), TEXT("Buildings.Xeno.ReserveBladder"),
+            TEXT("Buildings.Xeno.DeepRoot"), TEXT("Buildings.Xeno.DigestionChamber") };
+        TArray<FGameplayTag> Out;
+        for (const TCHAR* N : Names)
+        {
+            Out.Add(FGameplayTag::RequestGameplayTag(FName(N), false));
+        }
+        return Out;
+    }();
+    GameState.EcoClassCounts.Init(0, EcoStateSlots);
+
     for (AActor* Unit : GameMode->AllUnits)
     {
         AUnitBase* MyUnit = Cast<AUnitBase>(Unit);
@@ -1207,6 +1225,17 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
                 CountTag(TagCtrlW, GameState.CtrlWTagFriendlyUnitCount, GameState.CtrlWTagEnemyUnitCount);
                 CountTag(TagCtrlE, GameState.CtrlETagFriendlyUnitCount, GameState.CtrlETagEnemyUnitCount);
                 CountTag(TagCtrlR, GameState.CtrlRTagFriendlyUnitCount, GameState.CtrlRTagEnemyUnitCount);
+
+                if (bFriendly)
+                {
+                    for (int32 EcoIdx = 0; EcoIdx < EcoTags.Num(); ++EcoIdx)
+                    {
+                        if (EcoTags[EcoIdx].IsValid() && MyUnit->UnitTags.HasTagExact(EcoTags[EcoIdx]))
+                        {
+                            ++GameState.EcoClassCounts[EcoIdx];
+                        }
+                    }
+                }
             }
         }
     }
@@ -1255,6 +1284,11 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
             ZaehlePending(TagCtrlW, BuildingCDO, GameState.CtrlWTagPendingBuildCount);
             ZaehlePending(TagCtrlE, BuildingCDO, GameState.CtrlETagPendingBuildCount);
             ZaehlePending(TagCtrlR, BuildingCDO, GameState.CtrlRTagPendingBuildCount);
+
+            for (int32 EcoIdx = 0; EcoIdx < EcoTags.Num(); ++EcoIdx)
+            {
+                ZaehlePending(EcoTags[EcoIdx], BuildingCDO, GameState.EcoClassCounts[EcoIdx]);
+            }
         }
     }
 

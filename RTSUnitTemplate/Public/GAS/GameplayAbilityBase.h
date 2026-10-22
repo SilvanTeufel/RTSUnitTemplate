@@ -71,6 +71,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bDisabled = false;
 
+	/**
+	 * Fallback unlock, checked live: the ability is unlocked (like a team force-enable of its key) as soon as a
+	 * building of the OWNER's class in the owner's team carries an Extension of this class - e.g. the
+	 * MatterForge's "Build Resonance Cannon" once an Ascension Module sits on a MatterForge.
+	 * The regular unlock is a one-time event when the extension is finished (an activate-ability on the host);
+	 * if that activation is dropped (host busy, on cooldown, queue full) nothing re-checks it. None = off.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class ABuildingBase> UnlockedByExtensionClass;
+
 	// Set only by the owner's own automation (e.g. the Logistics auto-cast) around its TryActivateAbility call:
 	// such an ability is flagged bDisabled so the player cannot trigger it, but the unit itself still may.
 	UPROPERTY(Transient)

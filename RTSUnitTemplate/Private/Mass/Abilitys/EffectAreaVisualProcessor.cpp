@@ -184,7 +184,7 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
                 if (World && World->GetNetMode() != NM_DedicatedServer
                     && RTSViewportUtils::IsLocationOnLocalViewport(World, BaseTransform.GetLocation(), Visibility.VisibilityOffset))
                 {
-                    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->ImpactVFX, BaseTransform.GetLocation());
+                    EffectArea->TrackSpawnedEffect(UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->ImpactVFX, BaseTransform.GetLocation()));
                 }
                 Impact.bImpactVFXTriggered = false;
             }
@@ -204,7 +204,8 @@ void UMassEffectAreaVisualProcessor::Execute(FMassEntityManager& EntityManager, 
                 {
 				    if (EffectArea->SpawnVFX)
 				    {
-					    UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->SpawnVFX, BaseTransform.GetLocation());
+					    // Tracked: a looping SpawnVFX used to stay on the ground forever after the area was gone.
+					    EffectArea->TrackSpawnedEffect(UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, EffectArea->SpawnVFX, BaseTransform.GetLocation()));
 				    }
 				    if (EffectArea->SpawnSound)
 				    {

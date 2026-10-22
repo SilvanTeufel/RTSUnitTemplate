@@ -132,6 +132,18 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, Replicated, Category = Transport)
 	int CurrentUnitsLoaded = 0;
+
+	/**
+	 * Bunker: fires the projectiles of the loaded units instead of its own - one at a time, each unit as often
+	 * as it would outside, so the bunker has their combined DPS (sets PauseDuration / AttackDuration), and the
+	 * hits use that unit's attack values. Loaded units share the bunker's XP gain, each 1 / their count. Units
+	 * without a projectile do not shoot; none loaded with one: the bunker's own projectile and timing.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Transport)
+	bool bFireLoadedUnitsProjectiles = false;
+
+	/** Called after a unit was loaded or unloaded (after LoadedUnit / UnloadedUnit). */
+	virtual void OnLoadedUnitsChanged() {}
 protected:
 
 	// Timer handle used to schedule unloading.

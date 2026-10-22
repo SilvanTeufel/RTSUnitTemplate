@@ -38,6 +38,8 @@ void ABuildingBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(ABuildingBase, EnergyWallArray);
+	DOREPLIFETIME(ABuildingBase, Extension);
+	DOREPLIFETIME(ABuildingBase, Origin);
 	DOREPLIFETIME(ABuildingBase, bHasRallyPoint);
 	DOREPLIFETIME(ABuildingBase, RallyPointLocation);
 	DOREPLIFETIME(ABuildingBase, StoredResources);
@@ -244,12 +246,27 @@ void ABuildingBase::ExtractionTick()
 
 	LinkResourcePlaceUnderneath();
 	AWorkArea* Place = ExtractionResourcePlace;
-	if (!IsValid(Place) || ExtractionAmount <= 0.f)
+	if (!IsValid(Place))
+	{
+		// Emptied by someone else (workers, a second extractor) - for us it is just as used up.
+		if (bDieWhenResourceDepleted && bHadExtractionResourcePlace)
+		{
+			DieFromDepletedResource();
+		}
+		return;
+	}
+	bHadExtractionResourcePlace = true;
+	if (ExtractionAmount <= 0.f)
 	{
 		return;
 	}
 
-	float Amount = FMath::Min(ExtractionAmount, Place->AvailableResourceAmount);
+	const float DepletionFactor = FMath::Max(0.f, ExtractionDepletionFactor);
+	float Amount = ExtractionAmount;
+	if (DepletionFactor > 0.f)
+	{
+		Amount = FMath::Min(Amount, Place->AvailableResourceAmount / DepletionFactor);
+	}
 	if (StorageCapacity > 0.f)
 	{
 		Amount = FMath::Min(Amount, StorageCapacity - GetStoredResourceTotal());
@@ -267,12 +284,28 @@ void ABuildingBase::ExtractionTick()
 	StoredResources[static_cast<int32>(ResourceType)] += Amount;
 	bIsExtracting = true;
 
-	Place->AvailableResourceAmount = FMath::Max(0.f, Place->AvailableResourceAmount - Amount);
+	if (DepletionFactor <= 0.f)
+	{
+		return;   // endless place
+	}
+	Place->AvailableResourceAmount = FMath::Max(0.f, Place->AvailableResourceAmount - Amount * DepletionFactor);
 	if (Place->AvailableResourceAmount <= KINDA_SMALL_NUMBER)
 	{
 		// Depleted, as when workers empty it: the place goes away (its EndPlay clears our pointer).
 		Place->Destroy();
+		if (bDieWhenResourceDepleted)
+		{
+			DieFromDepletedResource();
+		}
 	}
+}
+
+void ABuildingBase::DieFromDepletedResource()
+{
+	// Nothing left to extract: the building dies the normal way, so its death effects and sounds play.
+	SetExtractionResourcePlace(nullptr);
+	GetWorldTimerManager().ClearTimer(ExtractionTimerHandle);
+	SetHealth(0.f);
 }
 
 void ABuildingBase::SyncBaseTypeMirror()

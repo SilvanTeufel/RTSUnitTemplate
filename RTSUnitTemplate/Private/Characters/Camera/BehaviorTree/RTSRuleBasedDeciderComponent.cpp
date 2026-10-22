@@ -54,6 +54,7 @@ namespace
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Characters/Unit/AbilityUnit.h"
 #include "Actors/WorkArea.h"
 #include "GameplayTagContainer.h"
 #include "Characters/Camera/RL/RLRecorderSubsystem.h"
@@ -744,6 +745,15 @@ FString URTSRuleBasedDeciderComponent::EvaluateRuleRow(const FRTSRuleRow& Row, c
 	if (!CheckResource(GS.RareResource, GS.MaxRareResource, Thr.RareCost, EResourceType::Rare, TEXT("Rare"))) return TEXT("{}");
 	if (!CheckResource(GS.EpicResource, GS.MaxEpicResource, Thr.EpicCost, EResourceType::Epic, TEXT("Epic"))) return TEXT("{}");
 	if (!CheckResource(GS.LegendaryResource, GS.MaxLegendaryResource, Thr.LegendaryCost, EResourceType::Legendary, TEXT("Legendary"))) return TEXT("{}");
+
+	// Stock floor on top of the cost (spending valve), see FRTSRuleRow::ResourceMinStock.
+	if ((Row.ResourceMinStock.PrimaryCost > 0 && GS.PrimaryResource < (float)Row.ResourceMinStock.PrimaryCost)
+		|| (Row.ResourceMinStock.SecondaryCost > 0 && GS.SecondaryResource < (float)Row.ResourceMinStock.SecondaryCost)
+		|| (Row.ResourceMinStock.TertiaryCost > 0 && GS.TertiaryResource < (float)Row.ResourceMinStock.TertiaryCost))
+	{
+		if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: Row '%s' failed stock floor."), *RowLabel);
+		return TEXT("{}");
+	}
 
 	// Upper bounds: the rule is only allowed while the resource is still SHORT. Supply-like resources are
 	// judged by their remaining headroom, since "running out of energy" means the cap is close, not that
@@ -2328,6 +2338,14 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 				// Zahlen nebeneinander entscheiden das in einer einzigen Partie.
 				int32 EchteGebaeude = 0;
 				int32 EchteEinheiten = 0;
+				int32 LogistikEinheiten = 0;
+				float ExtraktorLager = 0.f;
+				float ExtraktorKapazitaet = 0.f;
+				int32 ExtraktorAnzahl = 0;
+				int32 ProduktionGesamt = 0;
+				int32 ProduktionBeschaeftigt = 0;
+				const FGameplayTag ProduktionsTag = FGameplayTag::RequestGameplayTag(FName(TEXT("KeyTag.CtrlQ")), false);
+				TMap<FString, int32> GebaeudeKlassen;
 				if (const ARTSGameModeBase* BestandGM = Cast<ARTSGameModeBase>(BestandWorld->GetAuthGameMode()))
 				{
 					const int32 MeinTeam = ResolveOwningTeamId();
@@ -2338,7 +2356,38 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 						{
 							continue;
 						}
-						if (Cast<ABuildingBase>(U)) { ++EchteGebaeude; } else { ++EchteEinheiten; }
+						if (Cast<ABuildingBase>(U))
+						{
+							++EchteGebaeude;
+							FString KlassenName = GetNameSafe(U->GetClass());
+							KlassenName.RemoveFromStart(TEXT("BP_BuildingBase_"));
+							KlassenName.RemoveFromEnd(TEXT("_C"));
+							++GebaeudeKlassen.FindOrAdd(KlassenName);
+							// Fuellstand der Extraktoren: voll heisst, die Logistik kommt mit dem Abtransport nicht nach.
+							if (const ABuildingBase* BB = Cast<ABuildingBase>(U))
+							{
+								if (BB->ExtractsByItself())
+								{
+									++ExtraktorAnzahl;
+									ExtraktorLager += BB->GetStoredResourceTotal();
+									ExtraktorKapazitaet += BB->StorageCapacity;
+								}
+							}
+							// Auslastung der Produktionsgebaeude (KeyTag CtrlQ): wie viele casten gerade?
+							if (ProduktionsTag.IsValid() && U->UnitTags.HasTagExact(ProduktionsTag))
+							{
+								++ProduktionGesamt;
+								if (U->GetUnitState() == UnitData::Casting) { ++ProduktionBeschaeftigt; }
+							}
+						}
+						else
+						{
+							++EchteEinheiten;
+							if (const AAbilityUnit* AU = Cast<AAbilityUnit>(U))
+							{
+								if (AU->UnitRole == EUnitRole::Logistics) { ++LogistikEinheiten; }
+							}
+						}
 					}
 				}
 
@@ -2349,6 +2398,28 @@ FString URTSRuleBasedDeciderComponent::ChooseJsonActionRuleBased(const FGameStat
 					GameState.Ctrl3TagFriendlyUnitCount, Kampf,
 					GameState.Ctrl5TagFriendlyUnitCount, GameState.CtrlQTagFriendlyUnitCount,
 					GameState.CtrlWTagFriendlyUnitCount, EchteGebaeude, EchteEinheiten);
+
+				// Wirtschaft: Bestand je Ressource (Pr/Se/Te/Ra) und Logistik-Einheiten. Dazu die Gebaeude je
+				// Klasse, damit sich die Eco-Kette (Extraktor -> Lager -> Konverter) ohne Rekonstruktion aus
+				// Einzelereignissen lesen laesst (Falle 5 im Messprotokoll: Ereignisse nicht aus Stichproben zaehlen).
+				FString KlassenText;
+				GebaeudeKlassen.KeySort([](const FString& A, const FString& B) { return A < B; });
+				for (const TPair<FString, int32>& KV : GebaeudeKlassen)
+				{
+					KlassenText += FString::Printf(TEXT("%s=%d "), *KV.Key, KV.Value);
+				}
+				float ResPr = 0.f, ResSe = 0.f, ResTe = 0.f, ResRa = 0.f, MaxRa = 0.f;
+				if (AResourceGameMode* BestandRM = Cast<AResourceGameMode>(BestandWorld->GetAuthGameMode()))
+				{
+					const int32 BT = ResolveOwningTeamId();
+					ResPr = BestandRM->GetResource(BT, EResourceType::Primary);
+					ResSe = BestandRM->GetResource(BT, EResourceType::Secondary);
+					ResTe = BestandRM->GetResource(BT, EResourceType::Tertiary);
+					ResRa = BestandRM->GetResource(BT, EResourceType::Rare);
+					MaxRa = BestandRM->GetMaxResource(EResourceType::Rare, BT);
+				}
+				UE_LOG(LogTemp, Warning, TEXT("[BestandEco] t=%.0f Team=%d Res=%.0f/%.0f/%.0f/%.0f Logistik=%d RareMax=%.0f Prod=%d/%d ExtrLager=%.0f/%.0f(%d) | %s"),
+					Jetzt, ResolveOwningTeamId(), ResPr, ResSe, ResTe, ResRa, LogistikEinheiten, MaxRa, ProduktionBeschaeftigt, ProduktionGesamt, ExtraktorLager, ExtraktorKapazitaet, ExtraktorAnzahl, *KlassenText);
 			}
 		}
 	}

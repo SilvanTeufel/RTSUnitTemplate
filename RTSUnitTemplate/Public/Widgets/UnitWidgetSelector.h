@@ -32,7 +32,18 @@ private:
 	FTimerHandle UpdateTimerHandle;
 
 	void StartUpdateTimer();
+
+	/** What the buttons showed at the last update - a change means the open tooltip shows something else. */
+	int32 LastTooltipAbilityArrayIndex = INDEX_NONE;
+	int32 LastTooltipUnitWidgetIndex = INDEX_NONE;
+	TWeakObjectPtr<AUnitBase> LastTooltipUnit;
 public:
+	/**
+	 * Closes the open tooltip so Slate builds it again for the widget under the cursor. The tooltips of the
+	 * ability and select buttons are Blueprint bindings that Slate evaluates only when a tooltip opens - scrolling
+	 * through the abilities or units kept showing the old one until the mouse left the button.
+	 */
+	static void RefreshOpenTooltip();
 
 	void InitWidget(ACustomControllerBase* InController);
 	// Replaces rarity keywords in text with specified values

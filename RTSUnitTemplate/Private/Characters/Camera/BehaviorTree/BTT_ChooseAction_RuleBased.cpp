@@ -194,6 +194,7 @@ EBTNodeResult::Type UBTT_ChooseAction_RuleBased::ExecuteTask(UBehaviorTreeCompon
         GS.CtrlWTagPendingBuildCount = Frisch.CtrlWTagPendingBuildCount;
         GS.CtrlETagPendingBuildCount = Frisch.CtrlETagPendingBuildCount;
         GS.CtrlRTagPendingBuildCount = Frisch.CtrlRTagPendingBuildCount;
+        GS.EcoClassCounts            = Frisch.EcoClassCounts;
     }
 
     auto SafeGetBBFloat = [&](FName KeyName) -> float

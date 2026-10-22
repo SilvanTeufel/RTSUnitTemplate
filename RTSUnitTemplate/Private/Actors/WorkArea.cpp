@@ -477,6 +477,10 @@ void AWorkArea::Tick(float DeltaTime)
 	{
 		float Value = (BuildTime > 0.f) ? FMath::Pow(FMath::Clamp(CurrentBuildTime / BuildTime, 0.0f, 1.0f), MaterializePower) : 0.0f;
 		WorkAreaMID->SetScalarParameterValue(MaterializeParameterName, Value);
+		for (UMaterialInstanceDynamic* SlotMID : AdditionalSlotMIDs)
+		{
+			SlotMID->SetScalarParameterValue(MaterializeParameterName, Value);
+		}
 	}
 
 	UpdateFogVisibility(DeltaTime);
@@ -1341,6 +1345,30 @@ void AWorkArea::SetupMID()
 				OriginalMaterial = WorkAreaMID;
 			}
 		}
+
+		// Further slots (merged meshes): the same build material, with the textures of that slot.
+		const int32 SlotCount = FMath::Min(AdditionalSlotTextures.Num(), Mesh->GetNumMaterials() - 1);
+		for (int32 i = 0; i < SlotCount; ++i)
+		{
+			const int32 Slot = i + 1;
+			UMaterialInterface* SlotSource = BuildMaterial ? BuildMaterial : Mesh->GetMaterial(Slot);
+			if (!SlotSource)
+			{
+				continue;
+			}
+			const FWorkAreaSlotTextures& Tex = AdditionalSlotTextures[i];
+			UMaterialInstanceDynamic* SlotMID = Mesh->CreateDynamicMaterialInstance(Slot, SlotSource);
+			SlotMID->SetScalarParameterValue(OffsetParameterName, OffsetParameterValue);
+			if (Tex.Base)
+				SlotMID->SetTextureParameterValue(BaseTexParameterName, Tex.Base);
+			if (Tex.Metallic)
+				SlotMID->SetTextureParameterValue(MetallicTexParameterName, Tex.Metallic);
+			if (Tex.Normal)
+				SlotMID->SetTextureParameterValue(NormalTexParameterName, Tex.Normal);
+			if (Tex.Spec)
+				SlotMID->SetTextureParameterValue(SpecTexParameterName, Tex.Spec);
+			AdditionalSlotMIDs.Add(SlotMID);
+		}
 	}
 }
 
@@ -1428,7 +1456,7 @@ bool AWorkArea::IsOccupiedByBuilding() const
 }
 
 AWorkArea* AWorkArea::FindFreeResourcePlace(const UWorld* World, const FVector& Location, EResourceType ResourceType,
-	float MaxDistance, const AWorkArea* IgnoreBuildArea)
+	float MaxDistance, const AWorkArea* IgnoreBuildArea, const TFunction<bool(const AWorkArea*)>& Accept)
 {
 	if (!World)
 	{
@@ -1455,7 +1483,7 @@ AWorkArea* AWorkArea::FindFreeResourcePlace(const UWorld* World, const FVector& 
 			continue;
 		}
 		const float DistSq = FVector::DistSquared2D(Place->GetActorLocation(), Location);
-		if (DistSq < BestDistSq)
+		if (DistSq < BestDistSq && (!Accept || Accept(Place)))
 		{
 			BestDistSq = DistSq;
 			Best = Place;

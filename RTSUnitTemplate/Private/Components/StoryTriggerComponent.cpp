@@ -93,7 +93,10 @@ void UStoryTriggerComponent::TryTriggerRandom(float ChancePercent)
 			{
 				Item.TriggeringSource = this;
 				Queue->EnqueueStory(Item);
-				OnStoryTriggered.Broadcast();
+				if (Item.Sound)
+				{
+					OnStoryTriggered.Broadcast();   // music only goes down for a spoken line
+				}
 			}
 		}
 	}
@@ -115,7 +118,10 @@ void UStoryTriggerComponent::TriggerSpecific(FName RowName)
 			{
 				Item.TriggeringSource = this;
 				Queue->EnqueueStory(Item);
-				OnStoryTriggered.Broadcast();
+				if (Item.Sound)
+				{
+					OnStoryTriggered.Broadcast();   // music only goes down for a spoken line
+				}
 			}
 		}
 	}

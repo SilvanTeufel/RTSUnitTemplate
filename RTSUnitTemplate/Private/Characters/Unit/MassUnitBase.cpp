@@ -95,6 +95,46 @@ void AMassUnitBase::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	InitializeUnitMode();
+	InitializeNamedAdditionalISMs();
+}
+
+UInstancedStaticMeshComponent* AMassUnitBase::FindISMByName(FName ComponentName) const
+{
+	if (ComponentName.IsNone())
+	{
+		return nullptr;
+	}
+	TInlineComponentArray<UInstancedStaticMeshComponent*> ISMs(this);
+	for (UInstancedStaticMeshComponent* Candidate : ISMs)
+	{
+		if (Candidate && Candidate->GetFName() == ComponentName)
+		{
+			return Candidate;
+		}
+	}
+	return nullptr;
+}
+
+void AMassUnitBase::InitializeNamedAdditionalISMs()
+{
+	for (const FName& Name : AdditionalISMNames)
+	{
+		UInstancedStaticMeshComponent* Candidate = FindISMByName(Name);
+		if (Candidate && Candidate != ISMComponent)
+		{
+			InitializeAdditionalISM(Candidate);
+		}
+	}
+}
+
+void AMassUnitBase::NotifyMassRegistrationFinished()
+{
+	if (UInstancedStaticMeshComponent* ChaseISM = FindISMByName(YawChaseISMName))
+	{
+		// Runs on every machine that registers the unit, so the local implementation is enough.
+		MulticastRotateISMYawToChase_Implementation(ChaseISM, YawChaseDuration, YawChaseEaseExponent, true, YawChaseOffsetDegrees, false);
+	}
+	OnMassRegistrationFinished();
 }
 
 void AMassUnitBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -1535,6 +1575,7 @@ void AMassUnitBase::BeginPlay()
 	// Before Super: the Blueprint BeginPlay (inside Super) registers the unit with Mass, and the additional
 	// ISM must be known by then. The server writes the replicated settings, which RegisterVisualsToMass
 	// applies on server and clients.
+	InitializeNamedAdditionalISMs();
 	if (CastOscillation.bEnabled)
 	{
 		TInlineComponentArray<UInstancedStaticMeshComponent*> ISMs(this);

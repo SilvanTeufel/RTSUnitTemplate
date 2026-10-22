@@ -9,6 +9,7 @@
 
 #include "Characters/Unit/UnitBase.h"
 #include "Characters/Unit/MassUnitBase.h" // SwitchEntityTag
+#include "Characters/Unit/BuildingBase.h" // UnlockedByExtensionClass
 #include "GameModes/RTSGameModeBase.h"
 #include "Containers/Map.h"
 #include "Containers/Set.h"
@@ -250,7 +251,12 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{
 								FTransform& Current = TransformFrag->GetMutableTransform();
-								Current.SetTranslation(Unit->GetMassActorLocation());
+								// ISM-Einheiten: die Position aus PositionedTransform nehmen, nicht aus dem FTransformFragment.
+								// Dessen Z liegt bei ISM-Einheiten tiefer als die gezeichnete Position. Nach einem Cast setzt
+								// ApplyRunAnimationTag zugleich den FRunAnimationTag, der den ActorTransformSyncProcessor (und damit
+								// die Bodenanpassung) fuer AnimTimeOnRotateFinished aussetzt - die Einheit versank so lange im Boden.
+								const FMassAgentCharacteristicsFragment* PosFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+								Current.SetTranslation((!Unit->bUseSkeletalMovement && PosFrag) ? PosFrag->PositionedTransform.GetLocation() : Unit->GetMassActorLocation());
 								Current.SetRotation(Unit->GetMassActorRotation().Quaternion());
 								Current.SetScale3D(Unit->GetActorScale3D());
 
@@ -628,7 +634,12 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 							if (FTransformFragment* TransformFrag = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
 							{
 								FTransform& Current = TransformFrag->GetMutableTransform();
-								Current.SetTranslation(Unit->GetMassActorLocation());
+								// ISM-Einheiten: die Position aus PositionedTransform nehmen, nicht aus dem FTransformFragment.
+								// Dessen Z liegt bei ISM-Einheiten tiefer als die gezeichnete Position. Nach einem Cast setzt
+								// ApplyRunAnimationTag zugleich den FRunAnimationTag, der den ActorTransformSyncProcessor (und damit
+								// die Bodenanpassung) fuer AnimTimeOnRotateFinished aussetzt - die Einheit versank so lange im Boden.
+								const FMassAgentCharacteristicsFragment* PosFrag = EntityManager.GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(Entity);
+								Current.SetTranslation((!Unit->bUseSkeletalMovement && PosFrag) ? PosFrag->PositionedTransform.GetLocation() : Unit->GetMassActorLocation());
 								Current.SetRotation(Unit->GetMassActorRotation().Quaternion());
 								Current.SetScale3D(Unit->GetActorScale3D());
 
@@ -740,6 +751,45 @@ void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, c
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 }
 
+// UnlockedByExtensionClass: does any building of the owner's class in this team carry such an Extension?
+// Asked by the ability buttons every frame, so the answer is cached for half a second per ability/host/team.
+static bool IsUnlockedByTeamExtension(const UGameplayAbilityBase* AbilityCDO, int32 TeamId, const UAbilitySystemComponent* OwnerASC)
+{
+	const AActor* Owner = OwnerASC->GetAvatarActor() ? OwnerASC->GetAvatarActor() : OwnerASC->GetOwnerActor();
+	UWorld* World = Owner ? Owner->GetWorld() : nullptr;
+	if (!World || !Owner->IsA(ABuildingBase::StaticClass()))
+	{
+		return false;
+	}
+
+	using FKey = TTuple<const UGameplayAbilityBase*, const UClass*, int32, const UWorld*>;
+	static TMap<FKey, TPair<double, bool>> Cache;
+	const FKey Key(AbilityCDO, Owner->GetClass(), TeamId, World);
+	const double Now = World->GetTimeSeconds();
+	if (const TPair<double, bool>* Hit = Cache.Find(Key))
+	{
+		if (Now >= Hit->Key && Now - Hit->Key < 0.5)
+		{
+			return Hit->Value;
+		}
+	}
+
+	bool bUnlocked = false;
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		const ABuildingBase* Host = *It;
+		if (Host->TeamId == TeamId && Host->GetClass() == Owner->GetClass()
+			&& IsValid(Host->Extension) && Host->Extension->IsA(AbilityCDO->UnlockedByExtensionClass)
+			&& Host->Extension->GetUnitState() != UnitData::Dead)
+		{
+			bUnlocked = true;
+			break;
+		}
+	}
+	Cache.Add(Key, TPair<double, bool>(Now, bUnlocked));
+	return bUnlocked;
+}
+
 bool UGameplayAbilityBase::IsAbilityKeyGateOpen(const UGameplayAbilityBase* AbilityCDO, int32 TeamId, const UAbilitySystemComponent* OwnerASC)
 {
 	if (!AbilityCDO)
@@ -771,6 +821,13 @@ bool UGameplayAbilityBase::IsAbilityKeyGateOpen(const UGameplayAbilityBase* Abil
 				return false;
 			}
 		}
+	}
+
+	// 2b) Fallback unlock by an extension on a host of the owner's class (see UnlockedByExtensionClass)
+	if (AbilityCDO->UnlockedByExtensionClass && TeamId != INDEX_NONE && OwnerASC
+		&& IsUnlockedByTeamExtension(AbilityCDO, TeamId, OwnerASC))
+	{
+		return true;
 	}
 
 	// 3) If this key is force-enabled for the team, allow regardless of asset flag or team/owner disabled-by-key

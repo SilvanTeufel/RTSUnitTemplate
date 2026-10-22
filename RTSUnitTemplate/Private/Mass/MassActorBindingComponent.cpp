@@ -242,7 +242,7 @@ void UMassActorBindingComponent::ConfigureNewEntity(FMassEntityManager& EntityMa
 	if (AMassUnitBase* MassUnit = Cast<AMassUnitBase>(MyOwner))
 	{
 		MassUnit->bIsMassUnit = true;
-		MassUnit->OnMassRegistrationFinished();
+		MassUnit->NotifyMassRegistrationFinished();
 	}
 
 	if (AEffectArea* EffectArea = Cast<AEffectArea>(MyOwner))
@@ -357,7 +357,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkOwnerToMassEntity()
 					MassUnit->bMassVisualsRegistered = true;
 					MassUnit->RemoveAdditionalISMInstances();
 				}
-				MassUnit->OnMassRegistrationFinished();
+				MassUnit->NotifyMassRegistrationFinished();
 			}
 			
 			// Client: Clear stale cache for any NetID this actor might have had previously 
@@ -866,7 +866,7 @@ FMassEntityHandle UMassActorBindingComponent::CreateAndLinkBuildingToMassEntity(
 					MassUnit->bMassVisualsRegistered = true;
 					MassUnit->RemoveAdditionalISMInstances();
 				}
-				MassUnit->OnMassRegistrationFinished();
+				MassUnit->NotifyMassRegistrationFinished();
 			}
 			// Server: assign NetID and update authoritative registry for buildings as well
 			if (UWorld* WorldPtr = GetWorld())
@@ -1225,6 +1225,8 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         {
             // <<< REPLACE Properties/Getters with your actual variable names/functions >>>
             CharFrag->bIsFlying = UnitOwner->IsFlying; // Assuming direct property access
+            const ABuildingBase* KeepHeightBuilding = Cast<ABuildingBase>(UnitOwner);
+            CharFrag->bKeepSpawnHeight = KeepHeightBuilding && KeepHeightBuilding->bKeepSpawnHeight;
         	CharFrag->FlyHeight = UnitOwner->FlyHeight;
 
             CharFrag->bCanOnlyAttackFlying = UnitOwner->CanOnlyAttackFlying;
@@ -1389,7 +1391,12 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
                 FVector TraceStart = ActorLoc + FVector(0.f, 0.f, 500.f);
                 FVector TraceEnd = ActorLoc - FVector(0.f, 0.f, 2500.f);
 
-                if (UnitOwner->GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
+                if (CharFrag->bKeepSpawnHeight)
+                {
+                    // Sits on another building: the spawn height is the ground.
+                    CharFrag->LastGroundLocation = ActorLoc.Z - (CharFrag->bIsFlying ? CharFrag->FlyHeight : CharFrag->CapsuleHeight);
+                }
+                else if (UnitOwner->GetWorld()->LineTraceSingleByObjectType(Hit, TraceStart, TraceEnd, ObjectParams, Params))
                 {
                     CharFrag->LastGroundLocation = Hit.ImpactPoint.Z;
                 }

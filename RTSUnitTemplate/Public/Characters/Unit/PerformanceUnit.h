@@ -95,6 +95,15 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float DelayDeadSound = 0.f;
+
+	/**
+	 * Pass the moment of death to the main mesh's material, on every machine: per-instance custom data 21 = world
+	 * time of death (0 = alive). The material animates from that by itself (Material_Master_B / M_XenoCocoon_AH:
+	 * swells up until the explosion). Match the material's DeathSwellDuration with DelayDeadVFX / DelayDeadSound
+	 * and HideActorTime of the Mass binding. Needs a pooled visual (22 custom data floats).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bDeathTimeToMaterial = false;
 	
 	virtual void BeginPlay() override;
 

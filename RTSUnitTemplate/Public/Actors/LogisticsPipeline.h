@@ -218,6 +218,51 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Packets, VisibleInstanceOnly, Category = "Logistics|Pipeline|Visual|Growth")
 	bool bRetractToSink = false;
 
+	// --- Merging: pipelines of a team that run close together become one thick pipeline ----------------
+	// The younger one bends onto the older one's centre line and ends inside it: where they run together only
+	// the older one is drawn (thicker), so there is exactly one visible tube.
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Merge")
+	bool bMergeNearbyPipes = true;
+
+	/** Centre lines closer than this (uu) count as running together. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Merge", meta = (ClampMin = "0"))
+	float PipeMergeDistance = 160.f;
+
+	/** Shortest stretch that is merged (uu) - a crossing is not. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Merge", meta = (ClampMin = "0"))
+	float PipeMergeMinLength = 300.f;
+
+	/** Length over which a pipeline bends onto the other one and away again (uu). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Merge", meta = (ClampMin = "1"))
+	float PipeMergeJoinLength = 300.f;
+
+	/** Extra thickness per pipeline merged into this one (0.35 = +35 % radius). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Merge", meta = (ClampMin = "0"))
+	float PipeMergeWidthPerPipe = 0.35f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Merge", meta = (ClampMin = "1"))
+	float PipeMergeMaxWidthScale = 1.8f;
+
+	// --- Ground units walk over the tube ------------------------------------------------------------
+
+	/**
+	 * Invisible capsules along the tube that only answer WorldStatic object queries (the ground trace of the
+	 * units): ground units walk over it. Navigation, camera and mouse traces ignore them.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Walkable")
+	bool bWalkableByGroundUnits = true;
+
+	/** Length of one collision capsule along the tube (uu). */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Pipeline|Walkable", meta = (ClampMin = "50"))
+	float WalkCollisionSegmentLength = 250.f;
+
+	/**
+	 * Lays out every pipeline of TeamId (but Leaving): centre lines, merging, then rebuilds those that changed.
+	 * Called whenever one of them changes or goes.
+	 */
+	static void SolvePipeNetwork(UWorld* World, int32 InTeamId, bool bInReplayRoads, const ALogisticsPipeline* Leaving);
+
 protected:
 	virtual void OnRoadInitialized() override;
 	virtual void RebuildVisuals() override;
@@ -232,8 +277,26 @@ protected:
 	/** The centre line from the source building's centre to the sink's, on the ground. */
 	void BuildCenterLine(TArray<FVector>& OutPoints) const;
 
-	/** The ground below P (ignores the two buildings); P itself if there is none. */
+	/** The ground below P (ignores the two buildings and other roads / pipelines); P itself if there is none. */
 	FVector TraceGround(const FVector& P) const;
+
+	/** Builds the tube along Line with the radius TubeRadius * RadiusScale per ring. Merged per ring: 0 open,
+	 *  1 lies on another pipeline (no roots), 2 inside another pipeline (not drawn). */
+	void BuildTube(const TArray<FVector>& Line, const TArray<float>& RadiusScale, const TArray<uint8>& Merged);
+
+	/** The walk capsules (bWalkableByGroundUnits) along Line. */
+	void BuildWalkCollision(const TArray<FVector>& Line, const TArray<float>& RadiusScale);
+	void ClearWalkCollision();
+
+	/** Centre line of the own lane (before merging). */
+	TArray<FVector> RawLine;
+
+	/** What the tube was last built from - unchanged = no rebuild. */
+	TArray<FVector> BuiltLine;
+	TArray<float> BuiltScale;
+
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<class UCapsuleComponent>> WalkCollision;
 
 	double GetServerTime() const;
 

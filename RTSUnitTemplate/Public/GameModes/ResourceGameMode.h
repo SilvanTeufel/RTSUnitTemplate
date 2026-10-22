@@ -38,15 +38,41 @@ struct FProceduralSettings
 	bool Procedural = false;
 
 	/**
-	 * Resource places per cluster (all of one type). Up to 6 lie on a ring, ClusterSpacing apart (3 = a triangle);
-	 * more: one in the centre, the rest on a ring around it.
+	 * Most resource places per cluster. A cluster gets MinClusterSize..ClusterSize places at random; start
+	 * clusters and those of AResourceClusterMarker always ClusterSize. How they lie: the ...ShapeWeight below.
 	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "1", ClampMax = "20", DisplayName = "Cluster Size (Max)"))
+	int32 ClusterSize = 4;
+
+	/** Fewest resource places per cluster (see ClusterSize). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "1", ClampMax = "20"))
-	int32 ClusterSize = 3;
+	int32 MinClusterSize = 3;
+
+	/**
+	 * Cluster shape (relative weights; 0 = never): Ring - on a ring (3 = triangle, 4 = square, more than 6: one in
+	 * the centre); Triangle - 3 corners, 4 = with one in the centre, 5-6 with places on the edges; Line - in a
+	 * slightly bent row. Places are always ClusterSpacing apart. All 0: Ring. Start clusters: the same at every base.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float RingShapeWeight = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float TriangleShapeWeight = 0.3f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
+	float LineShapeWeight = 0.2f;
 
 	/** Distance between two resource places of a cluster (uu). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "50"))
 	float ClusterSpacing = 400.f;
+
+	/**
+	 * Random offset of every resource place from its spot in the shape, as a share of ClusterSpacing (0.2 = up
+	 * to 80 uu at 400) - looks less orderly. A place stays on the navmesh and at least ClusterSpacing x
+	 * (1 - ClusterJitter) from every other place; if no offset fits, it keeps its spot.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0", ClampMax = "0.45"))
+	float ClusterJitter = 0.2f;
 
 	/** How often a cluster is of this type (relative weights; 0 = never) - only when all ...ClusterWeight below are 0. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural, meta = (ClampMin = "0"))
@@ -241,8 +267,11 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Procedural")
 	FProceduralSettings ProceduralSettings;
 
-	/** Server, game start: removes the map's resource places and spawns the clusters. */
-	void SpawnProceduralResources();
+	/**
+	 * Server, game start: removes the map's resource places and spawns the clusters (those of the
+	 * AResourceClusterMarker first). bMarkersOnly: only the markers' clusters, the map's places stay.
+	 */
+	void SpawnProceduralResources(bool bMarkersOnly = false);
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorkers();
@@ -277,6 +306,19 @@ public:
 	/** A logistics unit only sets off when at least this much (or its full capacity, if smaller) is waiting. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
 	float LogisticsMinPickupAmount = 10.f;
+
+	/**
+	 * A Converter is supplied over the shortest route by a supplier that has the input (a Collector next door
+	 * before the far main base). It keeps its supplier (and the road / pipeline to it) as long as that one has
+	 * some of the input, and this long (seconds) after it ran dry - stops the road from being torn down and built
+	 * again between two suppliers that take turns.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	float LogisticsSupplierSwitchDelay = 20.f;
+
+	/** A well stocked supplier takes over from the current one when its route is this much shorter (0.15 = 15 %). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0", ClampMax = "0.95"))
+	float LogisticsSupplierSwitchGain = 0.15f;
 
 	/** Straight-line limit for a road. 0 = any distance. A CollectOnly base without a sink in range gets no road. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))

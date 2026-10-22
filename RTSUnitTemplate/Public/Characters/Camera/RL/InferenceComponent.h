@@ -49,6 +49,9 @@ namespace UE::NNE
 }
 
 
+/** Number of eco-building counters at the end of the state vector (FGameStateData::EcoClassCounts). */
+constexpr int32 EcoStateSlots = 10;
+
 USTRUCT(BlueprintType)
 struct FGameStateData
 {
@@ -153,6 +156,19 @@ struct FGameStateData
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlWTagPendingBuildCount = 0;
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlETagPendingBuildCount = 0;
 	UPROPERTY(BlueprintReadWrite, Category = RLAgent) int32 CtrlRTagPendingBuildCount = 0;
+
+	/**
+	 * Eco buildings of the own team, finished PLUS planned, in this fixed order:
+	 *  0 Singularian Collector, 1 Stock, 2 Extractor Primary, 3 Extractor Secondary, 4 Extractor Tertiary, 5 Converter,
+	 *  6 Xeno GatheringMaw, 7 ReserveBladder, 8 DeepRoot (one tag for all three types), 9 DigestionChamber.
+	 *
+	 * The rule rows cap exactly these via ClassTagRequirement (CountByClassTag with bIncludePendingAreas), and none
+	 * of them carries a KeyTag, so neither the unit counts nor the pending counters above could show them. A net
+	 * that cannot see how many extractors it already has can only build them blindly. The slots of the other
+	 * faction stay 0; the vector keeps one shape for both.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = RLAgent)
+	TArray<int32> EcoClassCounts;
 
 	// Per-tag unit counts (friendly/enemy) for selection/ability groups
 	// Alt1..Alt6

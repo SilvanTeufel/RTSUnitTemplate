@@ -42,6 +42,9 @@ public:
 	 *                            cleared regardless of terrain height under the building. If true, the
 	 *                            test is a true 3D sphere.
 	 * @return Number of instances removed.
+	 *
+	 * Cliff PCG (graphs with "Cliff" in their name) is cleared with a smaller radius when the context object
+	 * is a building: Radius * ABuildingBase::GetPCGCliffClearScale() - nothing at all for an extractor.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|PCG", meta = (WorldContext = "WorldContextObject"))
 	static int32 ClearPCGInstancesInRadius(

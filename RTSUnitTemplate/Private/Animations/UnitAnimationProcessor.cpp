@@ -167,6 +167,8 @@ void UUnitAnimationProcessor::ConfigureQueries(const TSharedRef<FMassEntityManag
     // the animation update itself.
     EntityQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     EntityQuery.AddRequirement<FMassVelocityFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+    // Nur fuer den Anlauf: ein neuer Laufbefehl setzt die Stillstandsmessung zurueck.
+    EntityQuery.AddRequirement<FMassClientPredictionFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 
     // Gate on the dedicated StopAnimation tag (mirrors StopMovement except for CanAnimate opt-ins),
     // NOT StopMovement itself — this is what lets a stationary building with CanAnimate=true animate.
@@ -190,6 +192,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
         const TArrayView<FUnitAnimationFragment> AnimList = ChunkContext.GetMutableFragmentView<FUnitAnimationFragment>();
         const FTransformFragment* TransformList = ChunkContext.GetFragmentView<FTransformFragment>().GetData();
         const FMassVelocityFragment* VelocityList = ChunkContext.GetFragmentView<FMassVelocityFragment>().GetData();
+        const FMassClientPredictionFragment* PredictionList = ChunkContext.GetFragmentView<FMassClientPredictionFragment>().GetData();
         const float ChunkDeltaTime = ChunkContext.GetDeltaTimeSeconds();
 
         for (int32 i = 0; i < ChunkContext.GetNumEntities(); ++i)
@@ -262,6 +265,32 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                     {
                         const FVector Location = TransformList[i].GetTransform().GetLocation();
                         FAnimStandWatch& Watch = AnimStandWatches.FindOrAdd(Entity);
+
+                        // ---- Anlauf ------------------------------------------------------
+                        //
+                        // bFensterStill rastet nach einer halben Sekunde Stehen ein und loest
+                        // sich erst nach 60 uu Strecke oder am Ende eines Fensters mit genug
+                        // Fortschritt. Eine Einheit, die nach laengerem Stehen losgeschickt wird,
+                        // beschleunigt erst - das kostete 0,5 bis 1,2 s Idle-Pose im Laufen.
+                        // Ein frischer Befehl beweist aber, dass sie laufen soll: Messung neu.
+                        //
+                        // Bewusst NICHT bei jedem Wechsel in einen Bewegungszustand: am Wegpunkt
+                        // pendeln Einheiten zwischen PatrolRandom und PatrolIdle (siehe unten),
+                        // dort muss die Standzeit ueber den Wechsel hinweg erhalten bleiben. Nur
+                        // ein neuer Befehl oder der Aufbruch aus echtem Idle setzen zurueck.
+                        const bool bAusIdle = Watch.LetzterZustand == UnitData::Idle;
+                        const float Befehlszeit = PredictionList ? PredictionList[i].CommandPredictTime : -1000.f;
+                        const bool bNeuerBefehl = Befehlszeit > Watch.LetzteBefehlszeit + KINDA_SMALL_NUMBER;
+                        if (Watch.bHasLocation && bMovementState && (bAusIdle || bNeuerBefehl))
+                        {
+                            Watch.SecondsStanding = 0.f;
+                            Watch.bFensterStill = false;
+                            Watch.FensterStart = TransformList[i].GetTransform().GetLocation();
+                            Watch.FensterZeit = 0.f;
+                            Watch.FensterWunschSumme = 0.f;
+                        }
+                        Watch.LetzterZustand = static_cast<uint8>(RealState);
+                        Watch.LetzteBefehlszeit = Befehlszeit;
 
                         if (!Watch.bHasLocation)
                         {

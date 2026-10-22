@@ -169,10 +169,17 @@ void ULogisticsSubsystem::Tick(float DeltaTime)
 	AResourceGameMode* GameMode = World ? Cast<AResourceGameMode>(World->GetAuthGameMode()) : nullptr;
 	if (!GameMode || !GameMode->bEnableLogistics)
 	{
+		// No roads on this map: placed buildings have nothing to be routed around.
+		PendingObstacles.Reset();
 		return;
 	}
 
 	const double Now = World->GetTimeSeconds();
+
+	if (PendingObstacles.Num() > 0)
+	{
+		RerouteAroundObstacles(Now);
+	}
 
 	if (bRoadsDirty || Now - LastRoadRefresh >= GameMode->LogisticsRoadRefreshInterval)
 	{
@@ -214,6 +221,12 @@ void ULogisticsSubsystem::Tick(float DeltaTime)
 bool ULogisticsSubsystem::IsBaseAlive(const ABuildingBase* Base)
 {
 	return IsValid(Base) && Base->GetUnitState() != UnitData::Dead;
+}
+
+bool ULogisticsSubsystem::CanHaveRoad(const ABuildingBase* Base)
+{
+	// Roads and pipelines are fixed in the ground: only buildings that cannot move get one.
+	return IsBaseAlive(Base) && !Base->CanMove;
 }
 
 bool ULogisticsSubsystem::IsUnitAlive(const AUnitBase* Unit)
@@ -272,16 +285,17 @@ float ULogisticsSubsystem::GetDockDistance(const ABuildingBase* Base, const AUni
 
 FVector ULogisticsSubsystem::GetDockPoint(const ABuildingBase* Base, const AUnitBase* Unit, const FVector& Toward) const
 {
-	if (LandsOnRoof(Unit))
+	if (LandsOnRoof(Unit, Base))
 	{
 		return GetRoofDockPoint(Base, Toward);
 	}
 	return GetBaseEdgePoint(Base, Toward, GetDockDistance(Base, Unit) - GetBaseRadius(Base));
 }
 
-bool ULogisticsSubsystem::LandsOnRoof(const AUnitBase* Unit)
+bool ULogisticsSubsystem::LandsOnRoof(const AUnitBase* Unit, const ABuildingBase* Base)
 {
-	return Unit && Unit->LogisticsBehavior == ELogisticsBehavior::LandOnRoof && Unit->IsFlying;
+	return Unit && Unit->LogisticsBehavior == ELogisticsBehavior::LandOnRoof && Unit->IsFlying
+		&& (!Base || Base->bAllowRoofLanding);
 }
 
 FVector ULogisticsSubsystem::GetRoofDockPoint(const ABuildingBase* Base, const FVector& Toward) const
@@ -334,7 +348,7 @@ float ULogisticsSubsystem::GetRoofZ(const ABuildingBase* Base, const FVector& Lo
 void ULogisticsSubsystem::LandUnit(FLogisticsJob& Job, AUnitBase* Unit)
 {
 	const ABuildingBase* Base = Job.TargetBase.Get();
-	if (!LandsOnRoof(Unit) || !Base)
+	if (!Base || !LandsOnRoof(Unit, Base))
 	{
 		Unit->IsFlying = false;
 		Job.bLanded = true;
@@ -621,6 +635,83 @@ const FLogisticsRouteCache& ULogisticsSubsystem::GetOrComputeRoute(ABuildingBase
 	return RouteCache.Add(Key, MoveTemp(Route));
 }
 
+void ULogisticsSubsystem::NotifyObstaclePlaced(const AActor* Building, const FBox& Bounds)
+{
+	if (Bounds.IsValid)
+	{
+		PendingObstacles.Add({ Building, Bounds, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0 });
+	}
+}
+
+bool ULogisticsSubsystem::RouteCrossesBox(const TArray<FVector>& Points, const FBox& Box, float Margin)
+{
+	// 2D: the lane may float a little above or below the building's box.
+	const FBox Flat(FVector(Box.Min.X - Margin, Box.Min.Y - Margin, -1.0e6), FVector(Box.Max.X + Margin, Box.Max.Y + Margin, 1.0e6));
+	for (int32 i = 1; i < Points.Num(); ++i)
+	{
+		const FVector A = Points[i - 1];
+		const FVector B = Points[i];
+		if (Flat.IsInside(A) || Flat.IsInside(B) || FMath::LineBoxIntersection(Flat, A, B, B - A))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ULogisticsSubsystem::RerouteAroundObstacles(double Now)
+{
+	// The obstacle goes into the navmesh asynchronously: a path searched before that would run straight
+	// through the building again. Wait until the dirty area is rebuilt (and a moment at least).
+	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(GetWorld());
+	if (NavSys && (NavSys->HasDirtyAreasQueued() || NavSys->IsNavigationBuildInProgress()))
+	{
+		return;
+	}
+	for (const FPendingObstacle& Pending : PendingObstacles)
+	{
+		if (Now - Pending.Time < 0.3)
+		{
+			return;
+		}
+	}
+
+	// Half a road wide around the building: a lane that only grazes it is rerouted as well.
+	constexpr float Margin = 100.f;
+	int32 Dropped = 0;
+	for (auto It = RouteCache.CreateIterator(); It; ++It)
+	{
+		const ABuildingBase* Source = It.Key().Key.Get();
+		const ABuildingBase* Sink = It.Key().Value.Get();
+		for (const FPendingObstacle& Pending : PendingObstacles)
+		{
+			// A building at the road's end is what the road connects to - nothing to go around.
+			const AActor* Building = Pending.Building.Get();
+			if (Building && (Building == Source || Building == Sink))
+			{
+				continue;
+			}
+			if (RouteCrossesBox(It.Value().Points, Pending.Bounds, Margin))
+			{
+				It.RemoveCurrent();
+				++Dropped;
+				break;
+			}
+		}
+	}
+	PendingObstacles.Reset();
+
+	if (Dropped > 0)
+	{
+		// The next refresh searches these routes again and replaces the roads whose lane changed.
+		bRoadsDirty = true;
+		if (CVarLogisticsLog.GetValueOnGameThread() > 0)
+		{
+			UE_LOG(LogTemp, Log, TEXT("[Logistics] %d route(s) cross a new building - rerouting."), Dropped);
+		}
+	}
+}
+
 ABuildingBase* ULogisticsSubsystem::PickBestRouteEnd(ABuildingBase* From, TArray<ABuildingBase*> Candidates, bool bFromIsSource,
 	AResourceGameMode* GameMode, FLogisticsRouteCache& OutRoute)
 {
@@ -709,7 +800,7 @@ void ULogisticsSubsystem::RefreshRoads(AResourceGameMode* GameMode)
 	for (TActorIterator<ABuildingBase> It(World); It; ++It)
 	{
 		ABuildingBase* Base = *It;
-		if (!IsBaseAlive(Base))
+		if (!CanHaveRoad(Base))
 		{
 			continue;
 		}
@@ -781,7 +872,7 @@ void ULogisticsSubsystem::RefreshSupplyRoads(AResourceGameMode* GameMode)
 	for (TActorIterator<ABuildingBase> It(World); It; ++It)
 	{
 		ABuildingBase* Base = *It;
-		if (!IsBaseAlive(Base))
+		if (!CanHaveRoad(Base))
 		{
 			continue;
 		}
@@ -831,8 +922,10 @@ void ULogisticsSubsystem::RefreshSupplyRoads(AResourceGameMode* GameMode)
 			return Supplier->StoresLocally() ? Supplier->GetStoredResourceAmount(Input) : GetSupplyAvailable(Supplier, Input, GameMode);
 		};
 
-		// The nearest of: the current supplier while it still has some, and every supplier with a good
-		// stock (two pick-ups). A store hovering around one pick-up therefore does not flip the road.
+		// Suppliers with a good stock (two pick-ups) take the shortest route. The current supplier stays while it
+		// has some of the input (and LogisticsSupplierSwitchDelay seconds after it ran dry), unless a well stocked
+		// one has a clearly shorter route - two suppliers taking turns (a Converter between a Collector and the
+		// main base) otherwise tore the road / pipeline down and built it again with every turn.
 		TArray<ABuildingBase*> Pick;
 		for (ABuildingBase* Supplier : Stocked)
 		{
@@ -841,8 +934,34 @@ void ULogisticsSubsystem::RefreshSupplyRoads(AResourceGameMode* GameMode)
 				Pick.Add(Supplier);
 			}
 		}
-		if (Current && Candidates.Contains(Current) && OnShelf(Current) >= 1.f)
+		const bool bCurrentValid = Current && Candidates.Contains(Current);
+		bool bKeepCurrent = false;
+		if (bCurrentValid)
 		{
+			const double Now = World->GetTimeSeconds();
+			if (OnShelf(Current) >= 1.f)
+			{
+				SupplierEmptySince.Remove(Converter);
+				bKeepCurrent = true;
+			}
+			else
+			{
+				bKeepCurrent = Now - SupplierEmptySince.FindOrAdd(Converter, Now) < GameMode->LogisticsSupplierSwitchDelay;
+			}
+		}
+		else
+		{
+			SupplierEmptySince.Remove(Converter);
+		}
+		if (bKeepCurrent)
+		{
+			// Only a clearly shorter route (LogisticsSupplierSwitchGain) beats the current one.
+			const float CurrentLength = GetOrComputeRoute(Current, Converter, GameMode).Length;
+			const float Gain = FMath::Clamp(GameMode->LogisticsSupplierSwitchGain, 0.f, 0.95f);
+			Pick.RemoveAll([&](ABuildingBase* Supplier)
+			{
+				return Supplier != Current && GetOrComputeRoute(Supplier, Converter, GameMode).Length > CurrentLength * (1.f - Gain);
+			});
 			Pick.AddUnique(Current);
 		}
 
@@ -865,6 +984,10 @@ void ULogisticsSubsystem::RefreshSupplyRoads(AResourceGameMode* GameMode)
 
 		FLogisticsRouteCache Route;
 		ABuildingBase* Supplier = PickBestRouteEnd(Converter, MoveTemp(Pick), /*bFromIsSource=*/false, GameMode, Route);
+		if (Supplier != Current)
+		{
+			SupplierEmptySince.Remove(Converter);   // a new supplier starts with a clean slate
+		}
 		if (Supplier && UpdateRoad(SupplyRoadsByConverter, Converter, Supplier, Converter, Route, /*bSupplyRoad=*/true, GameMode))
 		{
 			ConvertersWithRoad.Add(Converter);
@@ -877,6 +1000,7 @@ void ULogisticsSubsystem::RefreshSupplyRoads(AResourceGameMode* GameMode)
 		ABuildingBase* Converter = It.Key().Get();
 		if (!Converter || !ConvertersWithRoad.Contains(Converter))
 		{
+			SupplierEmptySince.Remove(It.Key());
 			if (ALogisticsRoad* Road = It.Value().Get())
 			{
 				Road->Retire();
@@ -1157,7 +1281,7 @@ bool ULogisticsSubsystem::HasArrived(const FLogisticsJob& Job, const FVector& Un
 		return true;
 	}
 	// Roof landers fly over the edge on their way in - touching it is not arriving.
-	return Base && !LandsOnRoof(Job.Unit.Get())
+	return Base && !LandsOnRoof(Job.Unit.Get(), Base)
 		&& FVector::Dist2D(UnitLocation, Base->GetActorLocation()) <= GetDockDistance(Base, Job.Unit.Get()) + Tolerance;
 }
 
@@ -1747,7 +1871,7 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 			// Stopped short, or no progress for a while: send it again, give up after a few tries.
 			const bool bStoppedShort = bUnitIdle && Now - Job.StateStartTime > 1.0;
 			const bool bStuck = Now - Job.LastProgressTime > StuckSeconds;
-			if (bStoppedShort && Target && !LandsOnRoof(Unit)
+			if (bStoppedShort && Target && !LandsOnRoof(Unit, Target)
 				&& FVector::Dist2D(Location, Target->GetActorLocation()) <= GetDockDistance(Target, Unit) + 250.f)
 			{
 				// Blocked right next to the base (by the building itself or another shuttle): close enough.

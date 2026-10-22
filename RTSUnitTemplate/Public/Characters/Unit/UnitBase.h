@@ -462,8 +462,31 @@ public:
 	UFUNCTION(Server, Reliable, BlueprintCallable, meta = (DisplayName = "SpawnProjectileFromClassWithAim", Keywords = "RTSUnitTemplate SpawnProjectileFromClassWithAim"), Category = RTSUnitTemplate)
 	void SpawnProjectileFromClassWithAim(FVector Aim, TSubclassOf<class AProjectile> ProjectileClass, int MaxPiercedTargets, int ProjectileCount, float Spread, bool IsBouncingNext, bool IsBouncingBack, float ZOffset, float Scale = 1.f, FVector SpawnOffset = FVector(0.f, 0.f, 0.f), float ExtraDamage = 0.f, TSubclassOf<class UGameplayEffect> NewEffect = nullptr, TSubclassOf<class UGameplayEffect> NewEffect2 = nullptr, TSubclassOf<class UGameplayEffect> NewEffect3 = nullptr, FEffectAreaInfo AreaInfo = FEffectAreaInfo());
 
-    /** Version that accepts Mass Entity handles for direct registration */
-    void SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle());
+    /** Version that accepts Mass Entity handles for direct registration. Source: fire that unit's projectile (a bunker for a loaded unit). */
+    void SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(), const AUnitBase* Source = nullptr);
+
+	/** Bunker (bFireLoadedUnitsProjectiles): the loaded unit whose projectile the next shot is; nullptr: the own one. */
+	AUnitBase* PickLoadedShooter();
+
+	/** The unit whose attack values a hit of ProjectileClass uses: a loaded unit firing it through this bunker, else this. */
+	const AUnitBase* GetProjectileDamageSource(TSubclassOf<class AProjectile> ProjectileClass) const;
+
+	virtual void OnLoadedUnitsChanged() override;
+
+private:
+	/** Shots per second of a loaded unit, 0 without a projectile. */
+	static float GetLoadedShotRate(const ATransportUnit* Loaded);
+
+	/** PickLoadedShooter: credit per entry of LoadedUnits. */
+	TArray<float> LoadedShotCredits;
+
+	/** IncreaseExperience: hits since the loaded units last got one XP. */
+	int32 LoadedExperienceHits = 0;
+
+	/** AttackDuration before the loaded units set the timing. */
+	float OwnAttackDuration = -1.f;
+
+public:
 
 	void IncrementMassProjectileFireCounter(TSubclassOf<class AProjectile> ProjectileClass, float Speed, FMassEntityHandle ShooterEntity = FMassEntityHandle(), FMassEntityHandle TargetEntity = FMassEntityHandle(),
 		float InitialAngle = 0.f, float RotSpeed = 0.f, float MaxRadius = 0.f, float InterpSpeed = 0.f, bool bFollow = false, FVector TargetLocation = FVector::ZeroVector, FVector Scale = FVector::OneVector, float Spread = 0.f, float Damage = -1.f, int32 MaxPiercedTargets = -1,
@@ -625,6 +648,9 @@ public:
 	/** Kills the unit without the death effects. Use instead of SetHealth(0) where the death is cosmetic. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void KillSilently();
+
+	/** bDeathTimeToMaterial: writes the world time of death into custom data 21 of the main mesh (this machine). */
+	void WriteDeathTimeToMaterial();
 
 	/** Sets the suppression flag on every machine before the death multicast, so clients skip it too. */
 	UFUNCTION(NetMulticast, Reliable)

@@ -154,5 +154,7 @@ private:
 	void OnMusicRestoreDue();
 
 	void TryPlayNext();
+	/** Ende der Pause zwischen zwei Storys: gibt den Pausen-Timer frei, dann TryPlayNext. */
+	void OnNextStoryDelayFinished();
 	void OnActiveLifetimeFinished();
 };

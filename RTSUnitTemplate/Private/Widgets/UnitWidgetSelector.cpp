@@ -7,6 +7,7 @@
 #include "GAS/GameplayAbilityBase.h"
 #include "Characters/Unit/GASUnit.h"
 #include "AbilitySystemComponent.h"
+#include "Framework/Application/SlateApplication.h"
 
 
 
@@ -53,6 +54,19 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		SetUnitIcons(ControllerBase->SelectedUnits);
 
 		Update(ControllerBase->AbilityArrayIndex);
+
+		// Another page or unit under the buttons: the tooltip open over one of them is stale.
+		AUnitBase* TooltipUnit = ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)
+			? ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex] : nullptr;
+		if (ControllerBase->AbilityArrayIndex != LastTooltipAbilityArrayIndex
+			|| ControllerBase->CurrentUnitWidgetIndex != LastTooltipUnitWidgetIndex
+			|| TooltipUnit != LastTooltipUnit.Get())
+		{
+			LastTooltipAbilityArrayIndex = ControllerBase->AbilityArrayIndex;
+			LastTooltipUnitWidgetIndex = ControllerBase->CurrentUnitWidgetIndex;
+			LastTooltipUnit = TooltipUnit;
+			RefreshOpenTooltip();
+		}
 		
 		if (!ControllerBase->SelectedUnits.Num()) return;
 		if (ControllerBase->CurrentUnitWidgetIndex < 0 || ControllerBase->CurrentUnitWidgetIndex >= ControllerBase->SelectedUnits.Num()) return;
@@ -89,6 +103,14 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		UpdateAbilityCooldowns();
 		UpdateCurrentAbility();
 		UpdateQueuedAbilityIcons();
+	}
+}
+
+void UUnitWidgetSelector::RefreshOpenTooltip()
+{
+	if (FSlateApplication::IsInitialized())
+	{
+		FSlateApplication::Get().CloseToolTip();
 	}
 }
 
