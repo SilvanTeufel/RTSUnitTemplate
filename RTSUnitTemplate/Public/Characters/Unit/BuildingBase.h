@@ -81,6 +81,21 @@ public:
 	EBaseType BaseType = EBaseType::None;
 
 	/**
+	 * How much of the CLIFF vegetation/rocks (PCG graphs with "Cliff" in their name) this building clears when
+	 * it is placed, as a fraction of its clear radius (UPCGClearingBlueprintLibrary::ClearPCGInstancesInRadius).
+	 * Plain-ground PCG keeps the full radius. 0 = keep cliffs completely. Negative = automatic: 0 for
+	 * extractors (CollectOnlyWithoutWorker - they stand right at the cliffs), 0.4 for every other building.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|PCG")
+	float PCGCliffClearScale = -1.f;
+
+	float GetPCGCliffClearScale() const
+	{
+		return PCGCliffClearScale >= 0.f ? PCGCliffClearScale
+			: (BaseType == EBaseType::CollectOnlyWithoutWorker ? 0.f : 0.4f);
+	}
+
+	/**
 	 * Read-only mirror: true when WORKERS deliver here (CollectAndStore or CollectOnly). Kept so every
 	 * existing IsBase check - worker routing, AI base logic, Blueprints - keeps working. A StoreOnly
 	 * depot is deliberately not IsBase. Set BaseType instead; assets saved with IsBase = true are
@@ -142,8 +157,15 @@ public:
 	 * LogisticsBehavior = LandOnRoof touch down. 0 = automatic (top of the building's ISM mesh, or of its
 	 * skeletal mesh when bUseSkeletalMovement).
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0", EditCondition = "bAllowRoofLanding"))
 	float RoofLandingHeight = 0.f;
+
+	/**
+	 * Flying logistics units with LogisticsBehavior = LandOnRoof land on the roof of this building. Off = they
+	 * land on the ground beside it, like LogisticsBehavior = Default.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	bool bAllowRoofLanding = true;
 
 	// --- Converter --------------------------------------------------------------------------------
 	// The input is kept apart from StoredResources (the output), so the logistics units that empty the
@@ -229,6 +251,20 @@ public:
 	float ExtractionInterval = 2.f;
 
 	/**
+	 * CollectOnlyWithoutWorker: share of each extracted amount that the resource place loses.
+	 * 1 = the place shrinks by what is extracted, 0.5 = by half of it (the place lasts twice as long),
+	 * 0 = the place never runs out.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
+	          meta = (EditCondition = "BaseType == EBaseType::CollectOnlyWithoutWorker", ClampMin = "0"))
+	float ExtractionDepletionFactor = 1.f;
+
+	/** CollectOnlyWithoutWorker: the building dies (SetHealth(0) - death effects, sounds and all) once its resource place is used up. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
+	          meta = (EditCondition = "BaseType == EBaseType::CollectOnlyWithoutWorker"))
+	bool bDieWhenResourceDepleted = false;
+
+	/**
 	 * CollectOnlyWithoutWorker: the resource place this building extracts. Set when its BuildArea
 	 * finishes; a building placed in the level (or restored from a save) finds the place it stands on.
 	 */
@@ -249,6 +285,12 @@ public:
 
 private:
 	FTimerHandle ExtractionTimerHandle;
+
+	/** A resource place was linked at least once - with bDieWhenResourceDepleted losing it kills the building. */
+	bool bHadExtractionResourcePlace = false;
+
+	/** bDieWhenResourceDepleted: unlinks, stops extracting and calls SetHealth(0). */
+	void DieFromDepletedResource();
 
 	/** One extraction cycle: moves ExtractionAmount from the resource place into StoredResources. */
 	void ExtractionTick();
@@ -511,6 +553,14 @@ public:
 	bool bExtensionFollowsHostHeight = false;
 
 	/**
+	 * Stay at the height the building was built at instead of following the ground below - for a building
+	 * that sits on another one (e.g. a turret on a bunker roof). The ground trace ignores buildings, so
+	 * without this it sinks down to the terrain.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bKeepSpawnHeight = false;
+
+	/**
 	 * Extra yaw for extensions of THIS building, on top of the snap direction.
 	 *
 	 * The snap turns an extension so its local +X faces away from the host. Some buildings want it
@@ -542,10 +592,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ExtensionMovementAllowed = false;
 	
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	// Replicated so clients can evaluate UGameplayAbilityBase::UnlockedByExtensionClass too.
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ABuildingBase* Extension = nullptr;
 
-	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	UPROPERTY(Replicated, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ABuildingBase* Origin = nullptr;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)

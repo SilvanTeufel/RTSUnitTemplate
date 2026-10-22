@@ -297,6 +297,12 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
     // Determine height offset and scale based on unit type
     MassTransform.SetScale3D(UnitBase->GetActorScale3D());
     HeightOffset = UnitBase->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+    // ABuildingBase::bKeepSpawnHeight: stands on another building - the ground below is not its ground.
+    if (CharFragment.bKeepSpawnHeight)
+    {
+        return;
+    }
     /*else
     {
         

@@ -33,6 +33,20 @@ void USaveGameWidget::InitializeWidget(const FString& InSlotName, ASaveGameActor
     if (LoadButton) LoadButton->SetVisibility(ESlateVisibility::Visible);
 }
 
+void USaveGameWidget::CloseSelf()
+{
+    // Am Speicherpunkt schliesst der Aktor (er gibt auch die Kamera wieder frei). Aus einem Menue
+    // ohne Aktor geoeffnet (UMainMenuWidget) nimmt sich das Fenster selbst weg.
+    if (OwningActor)
+    {
+        OwningActor->CloseWidget();
+    }
+    else
+    {
+        RemoveFromParent();
+    }
+}
+
 void USaveGameWidget::NativeConstruct()
 {
     Super::NativeConstruct();
@@ -309,18 +323,12 @@ void USaveGameWidget::OnYesClicked()
         }
     }
 
-    if (OwningActor)
-    {
-        OwningActor->CloseWidget();
-    }
+    CloseSelf();
 }
 
 void USaveGameWidget::OnNoClicked()
 {
-    if (OwningActor)
-    {
-        OwningActor->CloseWidget();
-    }
+    CloseSelf();
 }
 
 void USaveGameWidget::OnLoadClicked()
@@ -346,8 +354,5 @@ void USaveGameWidget::OnLoadClicked()
         }
     }
 
-    if (OwningActor)
-    {
-        OwningActor->CloseWidget();
-    }
+    CloseSelf();
 }

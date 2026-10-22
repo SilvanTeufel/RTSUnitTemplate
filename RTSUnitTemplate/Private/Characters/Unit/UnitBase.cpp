@@ -25,6 +25,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "NavFilters/NavigationQueryFilter.h"
+#include "System/LogisticsSubsystem.h"
 #include "Navigation/CrowdAgentInterface.h"
 #include "Navigation/CrowdManager.h"
 #include "NavModifierComponent.h"
@@ -1079,7 +1080,38 @@ void AUnitBase::DeadMultiCast_Implementation()
 		return;
 	}
 
+	if (bDeathTimeToMaterial && GetNetMode() != NM_DedicatedServer)
+	{
+		WriteDeathTimeToMaterial();
+	}
+
 	FireEffects_Implementation(ChosenDeadVFX, DeadSound, ScaleDeadVFX, ScaleDeadSound, DelayDeadVFX, DelayDeadSound, -1);
+}
+
+void AUnitBase::WriteDeathTimeToMaterial()
+{
+	// Local world time - the material's Time. Pooled visual first; a unit drawn by its own ISM otherwise.
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+	bool bWritten = false;
+	for (const FCachedPooledVisual& Visual : CachedPooledVisuals)
+	{
+		UInstancedStaticMeshComponent* TargetISM = Visual.TargetISM.Get();
+		if (TargetISM && Visual.InstanceIndex != INDEX_NONE && TargetISM->NumCustomDataFloats > 21
+			&& TargetISM->IsValidInstance(Visual.InstanceIndex))
+		{
+			TargetISM->SetCustomDataValue(Visual.InstanceIndex, 21, Now, true);
+			bWritten = true;
+		}
+	}
+	if (!bWritten && ISMComponent && ISMComponent->NumCustomDataFloats > 21 && ISMComponent->IsValidInstance(0))
+	{
+		ISMComponent->SetCustomDataValue(0, 21, Now, true);
+	}
 }
 
 void AUnitBase::MulticastSuppressDeathEffects_Implementation()
@@ -1280,8 +1312,114 @@ void AUnitBase::UpdateSquadHealthBar()
 void AUnitBase::IncreaseExperience()
 {
 	LevelData.Experience++;
-		
+
 	UpdateWidget();
+
+	// Bunker (bFireLoadedUnitsProjectiles): the loaded units share its XP gain, each 1 / their count.
+	if (bFireLoadedUnitsProjectiles && LoadedUnits.Num() > 0 && ++LoadedExperienceHits >= LoadedUnits.Num())
+	{
+		LoadedExperienceHits = 0;
+		for (ATransportUnit* Loaded : LoadedUnits)
+		{
+			if (AUnitBase* Unit = Cast<AUnitBase>(Loaded))
+			{
+				Unit->LevelData.Experience++;
+				Unit->UpdateWidget();
+			}
+		}
+	}
+}
+
+float AUnitBase::GetLoadedShotRate(const ATransportUnit* Loaded)
+{
+	const AUnitBase* Unit = Cast<AUnitBase>(Loaded);
+	if (!Unit || !Unit->UseProjectile || !Unit->ProjectileBaseClass)
+	{
+		return 0.f;
+	}
+	return 1.f / FMath::Max(Unit->PauseDuration + Unit->AttackDuration, 0.05f);
+}
+
+void AUnitBase::OnLoadedUnitsChanged()
+{
+	Super::OnLoadedUnitsChanged();
+	if (!bFireLoadedUnitsProjectiles || !HasAuthority())
+	{
+		return;
+	}
+	LoadedShotCredits.Init(0.f, LoadedUnits.Num());
+	LoadedExperienceHits = 0;
+	if (OwnAttackDuration < 0.f)
+	{
+		OwnAttackDuration = AttackDuration;
+	}
+	float Rate = 0.f;
+	for (const ATransportUnit* Loaded : LoadedUnits)
+	{
+		Rate += GetLoadedShotRate(Loaded);
+	}
+	if (Rate <= 0.f)
+	{
+		// No loaded unit with a projectile: the bunker's own timing (the blueprint sets PauseDuration).
+		AttackDuration = OwnAttackDuration;
+		return;
+	}
+	// One shot per cycle, the loaded units' shot rates added up: the same DPS as the units outside.
+	const float Cycle = 1.f / Rate;
+	AttackDuration = FMath::Min(OwnAttackDuration, 0.5f * Cycle);
+	PauseDuration = Cycle - AttackDuration;
+}
+
+AUnitBase* AUnitBase::PickLoadedShooter()
+{
+	if (!bFireLoadedUnitsProjectiles || LoadedUnits.Num() == 0)
+	{
+		return nullptr;
+	}
+	if (LoadedShotCredits.Num() != LoadedUnits.Num())
+	{
+		LoadedShotCredits.Init(0.f, LoadedUnits.Num());
+	}
+	// Smooth weighted round robin: every unit earns credit at its shot rate, the one furthest ahead fires -
+	// one projectile at a time, a slower unit now and then in between.
+	float Rate = 0.f;
+	int32 Best = INDEX_NONE;
+	for (int32 i = 0; i < LoadedUnits.Num(); ++i)
+	{
+		const float UnitRate = GetLoadedShotRate(LoadedUnits[i]);
+		if (UnitRate <= 0.f)
+		{
+			continue;
+		}
+		LoadedShotCredits[i] += UnitRate;
+		Rate += UnitRate;
+		if (Best == INDEX_NONE || LoadedShotCredits[i] > LoadedShotCredits[Best])
+		{
+			Best = i;
+		}
+	}
+	if (Best == INDEX_NONE)
+	{
+		return nullptr;
+	}
+	LoadedShotCredits[Best] -= Rate;
+	return Cast<AUnitBase>(LoadedUnits[Best]);
+}
+
+const AUnitBase* AUnitBase::GetProjectileDamageSource(TSubclassOf<AProjectile> ProjectileClass) const
+{
+	if (bFireLoadedUnitsProjectiles && ProjectileClass)
+	{
+		for (const ATransportUnit* Loaded : LoadedUnits)
+		{
+			const AUnitBase* Unit = Cast<AUnitBase>(Loaded);
+			if (Unit && Unit->ProjectileBaseClass == ProjectileClass)
+			{
+				return Unit;
+			}
+		}
+	}
+	return this;
 }
 
 void AUnitBase::SetSelected()
@@ -2681,22 +2819,24 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
 	// Calculate Damage
 	float NewDamage = (DamageOverride >= 0.f) ? DamageOverride : CDO->Damage;
 	AUnitBase* ShootingUnit = Cast<AUnitBase>(Shooter);
+	// A bunker's shot for a loaded unit hits with that unit's attack values.
+	const AUnitBase* DamageUnit = ShootingUnit ? ShootingUnit->GetProjectileDamageSource(ProjectileClass) : nullptr;
 
-	if (ShootingUnit)
+	if (DamageUnit)
 	{
-		const UAttributeSetBase* ShooterAttributes = ShootingUnit->Attributes;
+		const UAttributeSetBase* ShooterAttributes = DamageUnit->Attributes;
 		if (ShooterAttributes)
 		{
 			if (CDO->UseAttributeDamage && DamageOverride < 0.f)
 			{
 				NewDamage = ShooterAttributes->GetAttackDamage() - Attributes->GetArmor();
-				if (ShootingUnit->IsDoingMagicDamage)
+				if (DamageUnit->IsDoingMagicDamage)
 					NewDamage = ShooterAttributes->GetAttackDamage() - Attributes->GetMagicResistance();
 			}
 			else if (DamageOverride < 0.f)
 			{
 				NewDamage = CDO->Damage - Attributes->GetArmor();
-				if (ShootingUnit->IsDoingMagicDamage)
+				if (DamageUnit->IsDoingMagicDamage)
 					NewDamage = CDO->Damage - Attributes->GetMagicResistance();
 			}
 		}
@@ -2846,10 +2986,13 @@ void AUnitBase::SpawnEffectArea(int InTeamId, FVector Location, FVector Scale, T
 	}
 }
 
-void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity)
+void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, const AUnitBase* Source)
 {
-    // Note: ProjectileBaseClass is available via inheritance from APerformanceUnit
-    if (!ProjectileBaseClass || !Target || !Attacker) return;
+    // Source: the unit whose projectile this is (a bunker firing for a loaded unit) - its class, scale,
+    // rotation and speed; position and team stay this unit's.
+    const AUnitBase* Src = Source ? Source : this;
+    const TSubclassOf<AProjectile> ProjectileClass = Src->ProjectileBaseClass;
+    if (!ProjectileClass || !Target || !Attacker) return;
 
     AUnitBase* ShootingUnit = Cast<AUnitBase>(Attacker);
     if (!ShootingUnit) return;
@@ -2857,7 +3000,7 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
     // --- Optimization: Increment Mass Replication Counter for Clients ---
     if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
     {
-        const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
+        const AProjectile* ProjectileCDO = ProjectileClass->GetDefaultObject<AProjectile>();
         if (ProjectileCDO && ProjectileCDO->bUseMass)
         {
             // We no longer return here. The main logic below will spawn the authoritative entity on the server.
@@ -2868,7 +3011,7 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
     }
     // --- End Optimization ---
 
-    const AProjectile* ProjectileCDO = ProjectileBaseClass->GetDefaultObject<AProjectile>();
+    const AProjectile* ProjectileCDO = ProjectileClass->GetDefaultObject<AProjectile>();
     if (ProjectileCDO && ProjectileCDO->bUseMass)
     {
         float TwinDistance = ProjectileCDO->TwinProjectileDistance;
@@ -2898,9 +3041,9 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
         }
 
         float SpeedFromAttributes = 0.f;
-        if (Attributes)
+        if (Src->Attributes)
         {
-            SpeedFromAttributes = Attributes->GetProjectileSpeed();
+            SpeedFromAttributes = Src->Attributes->GetProjectileSpeed();
         }
 
         for (const FVector& Pos : SpawnPositions)
@@ -2919,9 +3062,9 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                     Direction = (Direction + (Right * FMath::Cos(FMath::DegreesToRadians(Angle)) + Up * FMath::Sin(FMath::DegreesToRadians(Angle))) * 0.1f).GetSafeNormal();
                 }
 
-                FRotator InitialRotation = Direction.Rotation() + ProjectileRotationOffset;
+                FRotator InitialRotation = Direction.Rotation() + Src->ProjectileRotationOffset;
                 Transform.SetRotation(FQuat(InitialRotation));
-                Transform.SetScale3D(FVector(ProjectileScale));
+                Transform.SetScale3D(FVector(Src->ProjectileScale));
 
                 float FinalSpeed = SpeedFromAttributes;
 
@@ -2952,7 +3095,7 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 {
                     // Identisches Log-Format wie auf dem Client für einfachen Vergleich
 
-                    VisualManager->SpawnMassProjectile(ProjectileBaseClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets, false, nullptr, nullptr, nullptr, FEffectAreaInfo());
+                    VisualManager->SpawnMassProjectile(ProjectileClass, Transform, Attacker, Target, AimLocation, ShooterEntity, TargetEntity, FinalSpeed, TeamId, bFollow, InitialAngle, RotSpeed, MaxRadius, InterpSpeed, nullptr, Transform.GetScale3D(), -1.f, ProjectileCDO->MaxPiercedTargets, false, nullptr, nullptr, nullptr, FEffectAreaInfo());
                 }
             }
         }
@@ -2960,11 +3103,11 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
         // Increment replication counter for clients once for the whole burst
         if (RTSReplicationSettings::GetReplicationMode() == RTSReplicationSettings::Mass && HasAuthority())
         {
-            float SpeedFromAttributesInner = Attributes ? Attributes->GetProjectileSpeed() : 0.f;
+            float SpeedFromAttributesInner = Src->Attributes ? Src->Attributes->GetProjectileSpeed() : 0.f;
             if (SpeedFromAttributesInner <= 0.f) SpeedFromAttributesInner = ProjectileCDO->MovementSpeed;
 
             IncrementMassProjectileFireCounter(
-                ProjectileBaseClass, 
+                ProjectileClass, 
                 SpeedFromAttributesInner, 
                 ShooterEntity, 
                 TargetEntity, 
@@ -2974,7 +3117,7 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 ProjectileCDO->HomingInterpSpeed, 
                 ProjectileCDO->FollowTarget || (HomingCount > 0), 
                 AimLocation, 
-                ProjectileScale, 
+                Src->ProjectileScale, 
                 0.f, 
                 -1.f, 
                 ProjectileCDO->MaxPiercedTargets,
@@ -2991,6 +3134,11 @@ void AUnitBase::SpawnProjectileWithEntities(AActor* Target, AActor* Attacker, FM
                 FEffectAreaInfo()
             );
         }
+    }
+    else if (Src != this)
+    {
+        SpawnProjectileFromClass(Target, Attacker, ProjectileClass, ProjectileCDO ? ProjectileCDO->MaxPiercedTargets : 1, ProjectileCDO && ProjectileCDO->FollowTarget,
+            1, 0.f, false, false, false, 0.f, Src->ProjectileScale.X);
     }
     else
     {
@@ -3158,6 +3306,15 @@ void AUnitBase::Multicast_RegisterBuildingAsObstacle_Implementation()
 	if (UNavigationSystemV1* NavSys = FNavigationSystem::GetCurrent<UNavigationSystemV1>(World))
 	{
 		NavSys->AddDirtyArea(PaddedBounds, ENavigationDirtyFlag::All);
+	}
+
+	// 7. Roads and pipelines that now run through this building are routed around it (server).
+	if (HasAuthority())
+	{
+		if (ULogisticsSubsystem* Logistics = World->GetSubsystem<ULogisticsSubsystem>())
+		{
+			Logistics->NotifyObstaclePlaced(this, PaddedBounds);
+		}
 	}
 }
 

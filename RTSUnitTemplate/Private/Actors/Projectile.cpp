@@ -1119,17 +1119,19 @@ void AProjectile::Impact(AActor* ImpactTarget)
 	if(UnitToHit && ShootingUnit)
 	{
 		float NewDamage = Damage;
+		// A bunker's shot for a loaded unit hits with that unit's attack values.
+		const AUnitBase* DamageUnit = ShootingUnit->GetProjectileDamageSource(GetClass());
 		if (UseAttributeDamage)
 		{
-			NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
+			NewDamage = DamageUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetArmor();
 			
-			if(ShootingUnit->IsDoingMagicDamage)
-				NewDamage = ShootingUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
+			if(DamageUnit->IsDoingMagicDamage)
+				NewDamage = DamageUnit->Attributes->GetAttackDamage() - UnitToHit->Attributes->GetMagicResistance();
 		}else
 		{
 			NewDamage = Damage - UnitToHit->Attributes->GetArmor();
 			
-			if(ShootingUnit->IsDoingMagicDamage)
+			if(DamageUnit->IsDoingMagicDamage)
 				NewDamage = Damage - UnitToHit->Attributes->GetMagicResistance();
 		}
 		

@@ -1,4 +1,4 @@
-﻿// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
+// Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 
 #include "GameModes/ResourceGameMode.h"
@@ -8,6 +8,7 @@
 #include "Actors/WorkArea.h"
 #include "Actors/WinLoseConfigActor.h"
 #include "Actors/LogisticsRoad.h"
+#include "Actors/ResourceClusterMarker.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameStates/ResourceGameState.h"
@@ -70,14 +71,22 @@ void AResourceGameMode::BeginPlay()
 
 void AResourceGameMode::StartPlay()
 {
-	if (ProceduralSettings.Procedural && HasAuthority())
+	if (HasAuthority())
 	{
-		SpawnProceduralResources();
+		if (ProceduralSettings.Procedural)
+		{
+			SpawnProceduralResources(false);
+		}
+		else if (TActorIterator<AResourceClusterMarker>(GetWorld()))
+		{
+			// Not procedural: the map's resource places stay, only the markers get their clusters.
+			SpawnProceduralResources(true);
+		}
 	}
 	Super::StartPlay();
 }
 
-void AResourceGameMode::SpawnProceduralResources()
+void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 {
 	UWorld* World = GetWorld();
 	UNavigationSystemV1* NavSys = World ? FNavigationSystem::GetCurrent<UNavigationSystemV1>(World) : nullptr;
@@ -89,7 +98,8 @@ void AResourceGameMode::SpawnProceduralResources()
 	}
 	const FProceduralSettings& S = ProceduralSettings;
 
-	// 1) Remove the map's resource places; remember their classes (and scale) as the defaults per type.
+	// 1) Remove the map's resource places (not with bMarkersOnly); remember their classes (and scale) as the
+	//    defaults per type.
 	TArray<UClass*> MapClasses[3];
 	TMap<UClass*, FVector> MapScale;
 	TArray<AWorkArea*> ToRemove;
@@ -112,9 +122,18 @@ void AResourceGameMode::SpawnProceduralResources()
 			Blocked.Add(Area->GetActorLocation());
 		}
 	}
+	if (bMarkersOnly)
+	{
+		ToRemove.Reset();
+	}
 	for (AWorkArea* Area : ToRemove)
 	{
 		Area->Destroy();
+	}
+	TArray<AResourceClusterMarker*> Markers;
+	for (TActorIterator<AResourceClusterMarker> It(World); It; ++It)
+	{
+		Markers.Add(*It);
 	}
 	// Start positions for the start clusters: the main base (CollectAndStore) nearest to each player start,
 	// without one in MainBaseReach the player start itself. Positions close together (several slots of one
@@ -184,7 +203,7 @@ void AResourceGameMode::SpawnProceduralResources()
 	const FBox Bounds = NavData->GetBounds();
 	const FVector Size = Bounds.GetSize();
 	const float Area100m = Bounds.IsValid ? float(Size.X * Size.Y) / (10000.f * 10000.f) : 0.f;
-	const int32 Wanted = FMath::Min(S.MaxClusters, FMath::RoundToInt(Area100m * S.ClusterDensity));
+	const int32 Wanted = bMarkersOnly ? 0 : FMath::Min(S.MaxClusters, FMath::RoundToInt(Area100m * S.ClusterDensity));
 
 	// Seed 0: a new layout every start - clock and CPU cycles, so two starts never share it. Everything
 	// random below comes from this stream (also the candidate spots), so a fixed Seed repeats the layout.
@@ -192,20 +211,20 @@ void AResourceGameMode::SpawnProceduralResources()
 		: int32(uint32(FPlatformTime::Cycles64()) ^ uint32(FDateTime::Now().GetTicks()) ^ uint32(FDateTime::Now().GetTicks() >> 32));
 	FRandomStream Random(UsedSeed);
 	const FVector Extent(60.f, 60.f, 300.f);
-	// Formation (see ClusterSize): up to 6 places on a ring with ClusterSpacing between neighbours, more: one in
-	// the centre and the rest on a ring of radius ClusterSpacing.
-	const int32 PlacesPerCluster = FMath::Max(1, S.ClusterSize);
-	const bool bCentrePlace = PlacesPerCluster == 1 || PlacesPerCluster > 6;
-	const int32 RingCount = bCentrePlace ? PlacesPerCluster - 1 : PlacesPerCluster;
-	const float ClusterRadius = RingCount <= 0 ? 0.f
-		: bCentrePlace ? S.ClusterSpacing
-		: S.ClusterSpacing / (2.f * FMath::Sin(PI / float(RingCount)));
-	const float TestRadius = S.OpenRadius + ClusterRadius;
+	const int32 MaxPlaces = FMath::Max(1, S.ClusterSize);
+	const int32 MinPlaces = FMath::Clamp(S.MinClusterSize, 1, MaxPlaces);
+	const float Spacing = S.ClusterSpacing;
+	// Random offset of every place (ClusterJitter); places keep (1 - Jitter) x their plan's gap from each other.
+	const float Jitter = FMath::Clamp(S.ClusterJitter, 0.f, 0.45f);
+	const float JitterRadius = Jitter * Spacing;
+	const int32 JitterTries = Jitter > 0.f ? 5 : 1;
+	TArray<FVector> AllPlaces;
 
-	// Open, flat ground around P: the navmesh reaches TestRadius in 8 directions, no wall in between
+	// Open, flat ground around P: the navmesh reaches OpenRadius + Radius in 8 directions, no wall in between
 	// (a passage or a narrow spot fails) and no more than MaxHeightDifference up or down (a ramp fails).
-	auto IsOpenGround = [&](const FVector& P) -> bool
+	auto IsOpenGround = [&](const FVector& P, float Radius) -> bool
 	{
+		const float TestRadius = S.OpenRadius + Radius;
 		for (int32 i = 0; i < 8; ++i)
 		{
 			const FVector Dir = FVector(1.f, 0.f, 0.f).RotateAngleAxis(45.f * i, FVector::UpVector);
@@ -239,6 +258,7 @@ void AResourceGameMode::SpawnProceduralResources()
 	};
 
 	TArray<FVector> Centres;
+	TArray<float> CentreRadii;
 	int32 Spawned = 0;
 
 	// EdgeDistance to the navmesh's edge in 8 directions: the navmesh is there and no wall in between.
@@ -262,9 +282,6 @@ void AResourceGameMode::SpawnProceduralResources()
 		return true;
 	};
 
-	// The places of one cluster around C (the formation above), turned until every place is clear of the
-	// navmesh's edge (EdgeDistance) and - MinToBlocked > 0 - that far from player starts and buildings, and
-	// - Anchor set - StartClusterMinDistance from the main base. false: none fits.
 	// Type by the frequencies.
 	auto PickType = [&]() -> int32
 	{
@@ -313,61 +330,227 @@ void AResourceGameMode::SpawnProceduralResources()
 		return Found;
 	};
 
-	// Type of every place of a cluster of mix Mix: every type of the mix at least once, the rest at random,
-	// shuffled. INDEX_NONE: one type by the frequencies. Placed clusters are counted in SpawnCluster.
-	auto MakePlaceTypes = [&](int32 Mix) -> TArray<int32>
+	// Type of every place of a cluster of mix Mix with Num places: every type of the mix at least once, the
+	// rest at random, shuffled. INDEX_NONE: one type by the frequencies. Placed clusters are counted in SpawnCluster.
+	auto MakePlaceTypes = [&](int32 Mix, int32 Num) -> TArray<int32>
 	{
 		const TArray<int32> Chosen = Mix != INDEX_NONE ? Mixes[Mix] : TArray<int32>{ PickType() };
 		TArray<int32> Types;
-		Types.SetNum(PlacesPerCluster);
-		for (int32 n = 0; n < PlacesPerCluster; ++n)
+		Types.SetNum(Num);
+		for (int32 n = 0; n < Num; ++n)
 		{
 			Types[n] = n < Chosen.Num() ? Chosen[n] : Chosen[Random.RandHelper(Chosen.Num())];
 		}
-		for (int32 n = PlacesPerCluster - 1; n > 0; --n)
+		for (int32 n = Num - 1; n > 0; --n)
 		{
 			Types.Swap(n, Random.RandHelper(n + 1));
 		}
 		return Types;
 	};
 
-	auto SpawnCluster = [&](const FVector& C, int32 Mix, const TArray<int32>& PlaceTypes, float MinToBlocked, const FVector* Anchor, float EdgeDistance) -> bool
+	// A shape by the ...ShapeWeight (all 0: Ring).
+	auto PickShape = [&]() -> EResourceClusterShape
+	{
+		const float W[3] = { S.RingShapeWeight, S.TriangleShapeWeight, S.LineShapeWeight };
+		const float Sum = W[0] + W[1] + W[2];
+		if (Sum <= 0.f)
+		{
+			return EResourceClusterShape::Ring;
+		}
+		float Pick = Random.FRand() * Sum;
+		int32 i = 0;
+		while (i < 2 && (W[i] <= 0.f || Pick >= W[i])) { Pick -= W[i]; ++i; }
+		return i == 0 ? EResourceClusterShape::Ring : i == 1 ? EResourceClusterShape::Triangle : EResourceClusterShape::Line;
+	};
+
+	// Offsets of Num places around the cluster centre, neighbours Spacing apart.
+	auto MakeOffsets = [&](EResourceClusterShape Shape, int32 Num) -> TArray<FVector2D>
+	{
+		TArray<FVector2D> Offsets;
+		if (Num <= 1)
+		{
+			Offsets.Add(FVector2D::ZeroVector);
+			return Offsets;
+		}
+		if (Shape == EResourceClusterShape::Line)
+		{
+			// A row, the middle bent sideways by up to a quarter of the spacing.
+			const float Half = 0.5f * float(Num - 1);
+			const float Bend = Random.FRandRange(-0.25f, 0.25f) * Spacing;
+			for (int32 n = 0; n < Num; ++n)
+			{
+				const float U = (float(n) - Half) / Half;
+				Offsets.Add(FVector2D((float(n) - Half) * Spacing, Bend * (1.f - U * U)));
+			}
+			return Offsets;
+		}
+		const float Sqrt3 = FMath::Sqrt(3.f);
+		auto Corner = [](int32 i, float Radius)
+		{
+			const float A = 0.5f * PI + 2.f * PI * float(i) / 3.f;
+			return FVector2D(FMath::Cos(A), FMath::Sin(A)) * Radius;
+		};
+		if (Shape == EResourceClusterShape::Triangle && Num >= 3)
+		{
+			if (Num == 3)
+			{
+				for (int32 i = 0; i < 3; ++i) Offsets.Add(Corner(i, Spacing / Sqrt3));
+			}
+			else if (Num == 4)
+			{
+				// The corners Spacing from the one in the centre.
+				for (int32 i = 0; i < 3; ++i) Offsets.Add(Corner(i, Spacing));
+				Offsets.Add(FVector2D::ZeroVector);
+			}
+			else if (Num <= 6)
+			{
+				// Side 2 x Spacing: the corners, then the middles of the edges.
+				for (int32 i = 0; i < 3; ++i) Offsets.Add(Corner(i, 2.f * Spacing / Sqrt3));
+				for (int32 i = 0; i < 3 && Offsets.Num() < Num; ++i) Offsets.Add(0.5f * (Corner(i, 2.f * Spacing / Sqrt3) + Corner((i + 1) % 3, 2.f * Spacing / Sqrt3)));
+			}
+			else
+			{
+				// Rows of a triangular grid (1, 2, 3, ... places), around their centre.
+				FVector2D Sum = FVector2D::ZeroVector;
+				for (int32 Row = 0; Offsets.Num() < Num; ++Row)
+				{
+					for (int32 j = 0; j <= Row && Offsets.Num() < Num; ++j)
+					{
+						Offsets.Add(FVector2D((float(j) - 0.5f * float(Row)) * Spacing, float(Row) * Spacing * 0.5f * Sqrt3));
+						Sum += Offsets.Last();
+					}
+				}
+				for (FVector2D& O : Offsets) O -= Sum / float(Num);
+			}
+			return Offsets;
+		}
+		// Ring: up to 6 on a ring with Spacing between neighbours (3 = a triangle), more: one in the centre and
+		// the rest on a ring of radius Spacing.
+		const bool bCentrePlace = Num > 6;
+		const int32 RingCount = bCentrePlace ? Num - 1 : Num;
+		const float Radius = bCentrePlace ? Spacing : Spacing / (2.f * FMath::Sin(PI / float(RingCount)));
+		if (bCentrePlace)
+		{
+			Offsets.Add(FVector2D::ZeroVector);
+		}
+		for (int32 i = 0; i < RingCount; ++i)
+		{
+			const float A = 2.f * PI * float(i) / float(RingCount);
+			Offsets.Add(FVector2D(FMath::Cos(A), FMath::Sin(A)) * Radius);
+		}
+		return Offsets;
+	};
+
+	// One cluster: its mix, the type and the offset of every place, and how far its places reach.
+	struct FClusterPlan
+	{
+		int32 Mix = INDEX_NONE;
+		TArray<int32> Types;
+		TArray<FVector2D> Offsets;
+		float Radius = 0.f;
+		float Gap = 0.f; // nearest two places
+	};
+	auto MakePlan = [&](int32 Mix, EResourceClusterShape Shape, int32 Num) -> FClusterPlan
+	{
+		FClusterPlan Plan;
+		Plan.Mix = Mix;
+		Plan.Types = MakePlaceTypes(Mix, Num);
+		Plan.Offsets = MakeOffsets(Shape == EResourceClusterShape::Random ? PickShape() : Shape, Num);
+		for (const FVector2D& O : Plan.Offsets)
+		{
+			Plan.Radius = FMath::Max(Plan.Radius, float(O.Size()));
+		}
+		Plan.Gap = Spacing;
+		for (int32 a = 0; a < Plan.Offsets.Num(); ++a)
+		{
+			for (int32 b = a + 1; b < Plan.Offsets.Num(); ++b)
+			{
+				Plan.Gap = FMath::Min(Plan.Gap, float(FVector2D::Distance(Plan.Offsets[a], Plan.Offsets[b])));
+			}
+		}
+		return Plan;
+	};
+
+	// The places of Plan around C, turned until every place is on the navmesh, clear of its edge (EdgeDistance)
+	// and - MinToBlocked > 0 - that far from player starts and buildings, and - Anchor set -
+	// StartClusterMinDistance from the main base. false: no turn fits. bForce: then the first turn anyway,
+	// every place put onto the navmesh as near as it goes (a cluster placed by hand).
+	auto SpawnCluster = [&](const FVector& C, const FClusterPlan& Plan, float MinToBlocked, const FVector* Anchor, float EdgeDistance, bool bForce = false) -> bool
 	{
 		TArray<FVector> Places;
 		const float Turn0 = Random.FRand() * 360.f;
-		const float TurnStep = 360.f / float(FMath::Max(1, RingCount)) / 8.f;
-		for (int32 Turn = 0; Turn < 8 && Places.Num() == 0; ++Turn)
+		// Far enough from the places of this cluster and of the clusters before - no overlap.
+		const float MinPlaceGap = (1.f - Jitter) * Plan.Gap;
+		auto IsClear = [&](const FVector& P)
 		{
-			bool bFits = true;
-			for (int32 n = 0; n < PlacesPerCluster && bFits; ++n)
+			for (const FVector& Q : Places)
 			{
-				FVector P = C;
-				const int32 RingIndex = bCentrePlace ? n - 1 : n;
-				if (RingIndex >= 0 && ClusterRadius > 0.f)
+				if (FVector::DistSquared2D(Q, P) < FMath::Square(MinPlaceGap)) return false;
+			}
+			for (const FVector& Q : AllPlaces)
+			{
+				if (FVector::DistSquared2D(Q, P) < FMath::Square(MinPlaceGap)) return false;
+			}
+			return true;
+		};
+		for (int32 Turn = 0; Turn < (bForce ? 9 : 8) && Places.Num() == 0; ++Turn)
+		{
+			const bool bForced = Turn == 8;
+			bool bFits = true;
+			for (int32 n = 0; n < Plan.Offsets.Num() && bFits; ++n)
+			{
+				const FVector2D O = Plan.Offsets[n].GetRotated(Turn0 + (bForced ? 0.f : 45.f * Turn));
+				const FVector Spot = C + FVector(O.X, O.Y, 0.f);
+				// A few random offsets (ClusterJitter), the last try the spot itself.
+				bool bPlaced = false;
+				for (int32 Try = 0; Try < JitterTries && !bPlaced; ++Try)
 				{
-					const float Angle = Turn0 + Turn * TurnStep + 360.f * float(RingIndex) / float(RingCount) + Random.FRandRange(-8.f, 8.f);
-					P += FVector(1.f, 0.f, 0.f).RotateAngleAxis(Angle, FVector::UpVector) * ClusterRadius * Random.FRandRange(0.92f, 1.08f);
+					FVector P = Spot;
+					if (Try < JitterTries - 1)
+					{
+						const FVector2D J = FVector2D(Random.FRandRange(-1.f, 1.f), Random.FRandRange(-1.f, 1.f)).GetClampedToMaxSize(1.f) * JitterRadius;
+						P += FVector(J.X, J.Y, 0.f);
+					}
 					FNavLocation OnNav;
-					bFits = NavSys->ProjectPointToNavigation(P, OnNav, Extent) && FVector::Dist2D(OnNav.Location, P) <= 60.f;
+					if (bForced)
+					{
+						if (NavSys->ProjectPointToNavigation(P, OnNav, FVector(Spacing, Spacing, 500.f)))
+						{
+							P = OnNav.Location;
+						}
+						if (IsClear(P) || Try == JitterTries - 1)
+						{
+							Places.Add(P);
+							bPlaced = true;
+						}
+						continue;
+					}
+					bool bOk = NavSys->ProjectPointToNavigation(P, OnNav, Extent) && FVector::Dist2D(OnNav.Location, P) <= 60.f;
 					P = OnNav.Location;
+					for (int32 i = 0; bOk && MinToBlocked > 0.f && i < Blocked.Num(); ++i)
+					{
+						bOk = FVector::DistSquared2D(Blocked[i], P) >= FMath::Square(MinToBlocked);
+					}
+					bOk = bOk && (!Anchor || FVector::DistSquared2D(*Anchor, P) >= FMath::Square(S.StartClusterMinDistance));
+					bOk = bOk && IsClear(P) && HasEdgeClearance(P, EdgeDistance);
+					if (bOk)
+					{
+						Places.Add(P);
+						bPlaced = true;
+					}
 				}
-				for (int32 i = 0; bFits && MinToBlocked > 0.f && i < Blocked.Num(); ++i)
-				{
-					bFits = FVector::DistSquared2D(Blocked[i], P) >= FMath::Square(MinToBlocked);
-				}
-				bFits = bFits && (!Anchor || FVector::DistSquared2D(*Anchor, P) >= FMath::Square(S.StartClusterMinDistance));
-				bFits = bFits && HasEdgeClearance(P, EdgeDistance);
-				Places.Add(P);
+				bFits = bPlaced;
 			}
 			if (!bFits)
 			{
 				Places.Reset();
 			}
 		}
+		AllPlaces.Append(Places);
 		for (int32 n = 0; n < Places.Num(); ++n)
 		{
 			const FVector& P = Places[n];
-			const int32 Type = PlaceTypes.IsValidIndex(n) ? PlaceTypes[n] : PlaceTypes[0];
+			const int32 Type = Plan.Types.IsValidIndex(n) ? Plan.Types[n] : Plan.Types[0];
 			UClass* Class = Classes[Type][Random.RandHelper(Classes[Type].Num())];
 			FActorSpawnParameters Params;
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
@@ -380,42 +563,68 @@ void AResourceGameMode::SpawnProceduralResources()
 		}
 		if (Places.Num() > 0)
 		{
-			++MixClusters[Mix != INDEX_NONE ? Mix : MixCount];
+			++MixClusters[Plan.Mix != INDEX_NONE ? Plan.Mix : MixCount];
+			Centres.Add(C);
+			CentreRadii.Add(Plan.Radius);
 		}
 		return Places.Num() > 0;
 	};
 
-	// 3) Start clusters: every main base gets the same ones, just outside the main building's distance
-	//    to resources. Open ground first; where there is none, any navmesh at that distance with half the
-	//    edge distance.
+	// 3) The clusters placed by hand (AResourceClusterMarker): always, where the marker stands, always full size
+	//    unless the marker says otherwise. Edge distance if it fits, else less, else as near as it goes.
+	for (const AResourceClusterMarker* Marker : Markers)
+	{
+		int32 Mix = Marker->Mix == EResourceClusterMix::Random ? INDEX_NONE : int32(Marker->Mix) - 1;
+		if (Mix == INDEX_NONE || !Mixes[Mix].Num())
+		{
+			Mix = PickMix();
+		}
+		const FClusterPlan Plan = MakePlan(Mix, Marker->Shape, Marker->Size > 0 ? Marker->Size : MaxPlaces);
+		FVector C = Marker->GetActorLocation();
+		FNavLocation OnNav;
+		if (NavSys->ProjectPointToNavigation(C, OnNav, FVector(500.f, 500.f, 1000.f)))
+		{
+			C = OnNav.Location;
+		}
+		if (!SpawnCluster(C, Plan, 0.f, nullptr, S.MinEdgeDistance)
+			&& !SpawnCluster(C, Plan, 0.f, nullptr, 0.5f * S.MinEdgeDistance))
+		{
+			SpawnCluster(C, Plan, 0.f, nullptr, 0.f, /*bForce=*/true);
+		}
+	}
+	const int32 MarkerCentres = Centres.Num();
+
+	// 4) Start clusters: every main base gets the same ones (mix, shape, full size), just outside the main
+	//    building's distance to resources. Open ground first; where there is none, any navmesh at that
+	//    distance with half the edge distance.
 	TArray<int32> StartTypes;
 	for (int32 T = 0; T < 3; ++T)
 	{
 		if (Weights[T] > 0.f) StartTypes.Add(T);
 	}
-	// The same mixes for every base (fair start): the first one only Primary (bFirstStartClusterPrimaryOnly,
+	// The same plans for every base (fair start): the first one only Primary (bFirstStartClusterPrimaryOnly,
 	// if it has a class), the others by the weights.
-	TArray<int32> StartMixes;
-	TArray<TArray<int32>> StartPlaceTypes;
-	for (int32 k = 0; k < S.StartClusters && StartTypes.Num() > 0; ++k)
+	TArray<FClusterPlan> StartPlans;
+	for (int32 k = 0; !bMarkersOnly && k < S.StartClusters && StartTypes.Num() > 0; ++k)
 	{
-		StartMixes.Add(k == 0 && S.bFirstStartClusterPrimaryOnly && Classes[0].Num() > 0 ? 0 : PickMix());
-		StartPlaceTypes.Add(StartMixes[k] != INDEX_NONE ? MakePlaceTypes(StartMixes[k]) : TArray<int32>{});
-		if (StartMixes[k] == INDEX_NONE)
+		const int32 Mix = k == 0 && S.bFirstStartClusterPrimaryOnly && Classes[0].Num() > 0 ? 0 : PickMix();
+		StartPlans.Add(MakePlan(Mix, EResourceClusterShape::Random, MaxPlaces));
+		if (Mix == INDEX_NONE)
 		{
 			// No mix weights: as before, the first start cluster Primary, the next the next type.
-			StartPlaceTypes[k].Init(StartTypes[k % StartTypes.Num()], PlacesPerCluster);
+			StartPlans[k].Types.Init(StartTypes[k % StartTypes.Num()], MaxPlaces);
 		}
 	}
 	int32 StartCentres = 0;
-	const float StartReach = S.StartClusterMinDistance + ClusterRadius * 1.15f + 50.f;
 	const FVector StartExtent(250.f, 250.f, 500.f);
-	for (int32 s = 0; s < Starts.Num() && StartTypes.Num() > 0; ++s)
+	for (int32 s = 0; s < Starts.Num() && StartPlans.Num() > 0; ++s)
 	{
 		const FVector& Start = Starts[s];
 		const float BaseAngle = Random.FRand() * 360.f;
-		for (int32 k = 0; k < S.StartClusters; ++k)
+		for (int32 k = 0; k < StartPlans.Num(); ++k)
 		{
+			const FClusterPlan& Plan = StartPlans[k];
+			const float StartReach = S.StartClusterMinDistance + Plan.Radius * 1.15f + 50.f;
 			bool bPlaced = false;
 			for (int32 Pass = 0; Pass < 2 && !bPlaced; ++Pass)
 			{
@@ -423,7 +632,7 @@ void AResourceGameMode::SpawnProceduralResources()
 				{
 					// Spread evenly around the start, each try a little further round - and from the second
 					// round on a little further out.
-					const float Angle = BaseAngle + 360.f * float(k) / float(S.StartClusters) + float(((Try % 18) + 1) / 2) * 20.f * ((Try & 1) ? 1.f : -1.f);
+					const float Angle = BaseAngle + 360.f * float(k) / float(StartPlans.Num()) + float(((Try % 18) + 1) / 2) * 20.f * ((Try & 1) ? 1.f : -1.f);
 					const float Dist = StartReach + Random.FRand() * S.StartClusterSpread * (1.f + float(Try / 18));
 					FNavLocation OnNav;
 					if (!NavSys->ProjectPointToNavigation(Start + FVector(1.f, 0.f, 0.f).RotateAngleAxis(Angle, FVector::UpVector) * Dist, OnNav, StartExtent))
@@ -435,19 +644,18 @@ void AResourceGameMode::SpawnProceduralResources()
 						&& FVector::DistSquared2D(Start, C) >= FMath::Square(StartReach - 60.f);
 					for (int32 i = 0; bFree && i < Blocked.Num(); ++i)
 					{
-						bFree = FVector::DistSquared2D(Blocked[i], C) >= FMath::Square(S.StartClusterClearance + ClusterRadius);
+						bFree = FVector::DistSquared2D(Blocked[i], C) >= FMath::Square(S.StartClusterClearance + Plan.Radius);
 					}
 					for (int32 i = 0; bFree && i < Centres.Num(); ++i)
 					{
-						bFree = FVector::DistSquared2D(Centres[i], C) >= FMath::Square(2.f * ClusterRadius + 600.f);
+						bFree = FVector::DistSquared2D(Centres[i], C) >= FMath::Square(Plan.Radius + CentreRadii[i] + 600.f);
 					}
-					if (!bFree || (Pass == 0 && !IsOpenGround(C))
-						|| !SpawnCluster(C, StartMixes[k], StartPlaceTypes[k], S.StartClusterClearance, &Start,
+					if (!bFree || (Pass == 0 && !IsOpenGround(C, Plan.Radius))
+						|| !SpawnCluster(C, Plan, S.StartClusterClearance, &Start,
 							Pass == 0 ? S.MinEdgeDistance : 0.5f * S.MinEdgeDistance))
 					{
 						continue;
 					}
-					Centres.Add(C);
 					++StartCentres;
 					bPlaced = true;
 				}
@@ -455,12 +663,13 @@ void AResourceGameMode::SpawnProceduralResources()
 		}
 	}
 
-	// 4) The rest, anywhere on open ground away from the bases.
+	// 5) The rest, anywhere on open ground away from the bases, the markers' clusters and each other.
 	// Candidates: random spots in the navmesh's bounds from the stream, put onto the navmesh (misses are
 	// skipped - hence more tries).
+	const int32 FixedCentres = MarkerCentres + StartCentres;
 	const int32 MaxTries = FMath::Max(1, Wanted) * 150;
 	const FVector ProbeExtent(150.f, 150.f, FMath::Max(500.f, float(Size.Z) + 500.f));
-	for (int32 Try = 0; Try < MaxTries && Centres.Num() - StartCentres < Wanted && Bounds.IsValid; ++Try)
+	for (int32 Try = 0; Try < MaxTries && Centres.Num() - FixedCentres < Wanted && Bounds.IsValid; ++Try)
 	{
 		FNavLocation Candidate;
 		const FVector Probe(Random.FRandRange(Bounds.Min.X, Bounds.Max.X), Random.FRandRange(Bounds.Min.Y, Bounds.Max.Y), Bounds.GetCenter().Z);
@@ -478,20 +687,20 @@ void AResourceGameMode::SpawnProceduralResources()
 		{
 			if (FVector::DistSquared2D(Blocked[i], C) < FMath::Square(S.MinDistanceToBases)) bFree = false;
 		}
-		if (!bFree || !IsOpenGround(C))
+		if (!bFree)
 		{
 			continue;
 		}
 
-		const int32 Mix = PickMix();
-		if (SpawnCluster(C, Mix, MakePlaceTypes(Mix), 0.f, nullptr, S.MinEdgeDistance))
+		const FClusterPlan Plan = MakePlan(PickMix(), EResourceClusterShape::Random, Random.RandRange(MinPlaces, MaxPlaces));
+		if (IsOpenGround(C, Plan.Radius))
 		{
-			Centres.Add(C);
+			SpawnCluster(C, Plan, 0.f, nullptr, S.MinEdgeDistance);
 		}
 	}
-	UE_LOG(LogTemp, Log, TEXT("SpawnProceduralResources: seed %d, removed %d, spawned %d in %d start clusters (%d starts) + %d of %d clusters (navmesh %.1f x 100m^2), mixes P/PS/PT/ST/single %d/%d/%d/%d/%d, first %s."),
-		UsedSeed, ToRemove.Num(), Spawned, StartCentres, Starts.Num(), Centres.Num() - StartCentres, Wanted, Area100m, MixClusters[0], MixClusters[1], MixClusters[2], MixClusters[3], MixClusters[4],
-		Centres.IsValidIndex(StartCentres) ? *Centres[StartCentres].ToCompactString() : TEXT("-"));
+	UE_LOG(LogTemp, Log, TEXT("SpawnProceduralResources: seed %d, removed %d, spawned %d in %d marker + %d start clusters (%d starts) + %d of %d clusters (navmesh %.1f x 100m^2), mixes P/PS/PT/ST/single %d/%d/%d/%d/%d, first %s."),
+		UsedSeed, ToRemove.Num(), Spawned, MarkerCentres, StartCentres, Starts.Num(), Centres.Num() - FixedCentres, Wanted, Area100m, MixClusters[0], MixClusters[1], MixClusters[2], MixClusters[3], MixClusters[4],
+		Centres.IsValidIndex(FixedCentres) ? *Centres[FixedCentres].ToCompactString() : TEXT("-"));
 }
 
 void AResourceGameMode::CheckWinLoseConditionTimer()

@@ -1062,6 +1062,10 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bIsFlying = false;
 
+	/** ABuildingBase::bKeepSpawnHeight: no ground following, the spawn height stays. */
+	UPROPERTY(EditAnywhere, Category = "Characteristics")
+	bool bKeepSpawnHeight = false;
+
 	UPROPERTY(EditAnywhere, Category = "Characteristics")
 	float FlyHeight = 500.f;
 

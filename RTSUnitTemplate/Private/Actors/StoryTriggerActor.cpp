@@ -241,6 +241,7 @@ void AStoryTriggerActor::StoryEinreihen()
     {
         static const FString Kontext(TEXT("StoryTriggerActor_Folge"));
         int32 Eingereiht = 0;
+        bool bMitTon = false;
         for (const FName& ZeilenId : StoryRowIds)
         {
             if (ZeilenId.IsNone())
@@ -251,6 +252,7 @@ void AStoryTriggerActor::StoryEinreihen()
             {
                 ZeileEinreihen(*Zeile);
                 ++Eingereiht;
+                bMitTon |= Zeile->TriggerSound != nullptr;
             }
             else
             {
@@ -261,7 +263,11 @@ void AStoryTriggerActor::StoryEinreihen()
 
         if (Eingereiht > 0)
         {
-            OnStoryTriggered.Broadcast();
+            // Without any audio nothing speaks - the music (cassette, game sounds) stays as loud as it is.
+            if (bMitTon)
+            {
+                OnStoryTriggered.Broadcast();
+            }
             return;
         }
 
@@ -290,7 +296,10 @@ void AStoryTriggerActor::StoryEinreihen()
                 Item.AudioEndExtraDelay = AudioEndExtraDelay;
                 Item.TriggeringSource = this;
                 Queue->EnqueueStory(Item);
-                OnStoryTriggered.Broadcast();
+                if (Item.Sound)
+                {
+                    OnStoryTriggered.Broadcast();   // music only goes down for a spoken line
+                }
             }
         }
     }

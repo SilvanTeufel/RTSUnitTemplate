@@ -514,6 +514,25 @@ public:
 	float ExpansionClaimedRadius = 3500.f;
 
 	/**
+	 * AI only. Farthest an ordinary building (no main base, no resource extractor, no defence area) may
+	 * stand from the nearest own CollectAndStore base. The agent drops buildings under its camera and the
+	 * camera drifts towards the enemy; a drop that is merely LEGAL used to be kept wherever it was, so
+	 * Singularian buildings crept from the start base (0.7-1.3k) out to 5.5k and into the map centre
+	 * (measured 20.10.2026 on Helix_Basin_KITraining_AH). A drop beyond this is re-anchored on the base.
+	 * 0 switches the rule off.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI Placement", meta=(ClampMin="0.0"))
+	float AIMaxBuildDistFromBase = 3200.f;
+
+	/**
+	 * AI only. An extractor (bPlaceOnResource area) takes the free resource place of its type that is
+	 * nearest to the own storing base, not the one nearest to the camera - and only within this distance
+	 * of a storing base (its logistics units have to haul the load home). 0 = no limit.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AI Placement", meta=(ClampMin="0.0"))
+	float AIExtractorMaxDistFromBase = 7000.f;
+
+	/**
 	 * Mindestabstand einer Basis zu einem Vorkommen, wenn sie auf einem AIExpansionSite-Marker entsteht.
 	 *
 	 * Der Markerpfad ueberspringt bewusst die allgemeine Abstandsaufloesung und den grossen

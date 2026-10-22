@@ -28,6 +28,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "System/PlayerTeamSubsystem.h"
+#include "GameModes/ProceduralPondComponent.h"
 #include "Characters/Camera/BehaviorTree/RTSBTController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 
@@ -53,6 +54,20 @@ static void SeedSpawnStoredLocationFromWaypoint(AUnitBase* UnitBase);
 
 
 
+ARTSGameModeBase::ARTSGameModeBase()
+{
+	ProceduralPonds = CreateDefaultSubobject<UProceduralPondComponent>(TEXT("ProceduralPonds"));
+}
+
+void ARTSGameModeBase::StartPlay()
+{
+	if (HasAuthority() && ProceduralPonds && ProceduralPonds->bEnabled)
+	{
+		ProceduralPonds->GeneratePonds();
+	}
+	Super::StartPlay();
+}
+
 void ARTSGameModeBase::BeginPlay()
 {
 	// Ganz vorn, bevor irgendetwas den Zufall zieht - Super::BeginPlay() spawnt bereits.
@@ -76,7 +91,15 @@ void ARTSGameModeBase::BeginPlay()
 	FillUnitArrays();
 
 	FTimerHandle TimerHandleGatherController;
-	GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
+	if (GatherControllerTimer > 0)
+	{
+		GetWorldTimerManager().SetTimer(TimerHandleGatherController, this, &ARTSGameModeBase::SetTeamIdsAndWaypoints, GatherControllerTimer, false);
+	}
+	else
+	{
+		// SetTimer mit 0 startet keinen Timer - dann fehlten Team, Fog und Minimap ganz.
+		GetWorldTimerManager().SetTimerForNextTick(this, &ARTSGameModeBase::SetTeamIdsAndWaypoints);
+	}
 
 	// Show loading widget via GameState (robust for late joiners)
 	if (LoadingWidgetClass)
@@ -966,7 +989,66 @@ void ARTSGameModeBase::PostLogin(APlayerController* NewPlayer)
 	if (NewPlayer)
 	{
 		SetupLoadingWidgetForPlayer(NewPlayer);
+
+		// Nach dem Sammeln verbunden: SetTeamIdsAndWaypoints erreicht ihn nicht mehr, also einzeln einrichten.
+		ACameraControllerBase* CameraPC = Cast<ACameraControllerBase>(NewPlayer);
+		if (bInitializeLateJoiners && bControllersGathered && CameraPC && !CameraPC->bIsAi && !CameraPC->bRTSPlayerInitialized)
+		{
+			TryInitializeLateJoiner(CameraPC, 0);
+		}
 	}
+}
+
+void ARTSGameModeBase::TryInitializeLateJoiner(TWeakObjectPtr<ACameraControllerBase> CameraControllerBase, int32 Attempt)
+{
+	ACameraControllerBase* PC = CameraControllerBase.Get();
+	if (!PC || PC->bRTSPlayerInitialized)
+	{
+		return;
+	}
+	// Kamera-Pawn und PlayerState kommen erst kurz nach PostLogin - bis dahin alle 0.25 s nachsehen (max. 10 s).
+	if ((!PC->GetPawn() || !PC->PlayerState) && Attempt < 40)
+	{
+		FTimerHandle Retry;
+		GetWorldTimerManager().SetTimer(Retry, FTimerDelegate::CreateUObject(this, &ARTSGameModeBase::TryInitializeLateJoiner, CameraControllerBase, Attempt + 1), 0.25f, false);
+		return;
+	}
+	PC->InitCameraHUDGameMode();
+	InitializeLateJoiningPlayer(PC);
+}
+
+bool ARTSGameModeBase::InitializeLateJoiningPlayer(ACameraControllerBase* CameraControllerBase)
+{
+	if (!HasAuthority() || !CameraControllerBase || CameraControllerBase->bRTSPlayerInitialized)
+	{
+		return false;
+	}
+	if (!bControllersGathered)
+	{
+		// Noch vor dem Sammeln: SetTeamIdsAndWaypoints erwischt ihn ohnehin.
+		return false;
+	}
+
+	UPlayerTeamSubsystem* TeamSubsystem = GetGameInstance() ? GetGameInstance()->GetSubsystem<UPlayerTeamSubsystem>() : nullptr;
+	TArray<APlayerStartBase*> PlayerStarts;
+	for (APlayerStartBase* Start : FreePlayerStarts)
+	{
+		if (Start)
+		{
+			PlayerStarts.Add(Start);
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("[GM] Late join: %s, %d freie PlayerStarts"), *CameraControllerBase->GetName(), PlayerStarts.Num());
+
+	if (!SetupHumanController(CameraControllerBase, PlayerStarts, TeamSubsystem, NextPlayerIndex))
+	{
+		return false;
+	}
+	FreePlayerStarts.Reset();
+	FreePlayerStarts.Append(PlayerStarts);
+
+	CameraControllerBase->Client_InitializeWinLoseSystem();
+	return true;
 }
 
 void ARTSGameModeBase::HandleSeamlessTravelPlayer(AController*& C)
@@ -1172,6 +1254,122 @@ void ARTSGameModeBase::FillUnitArrays()
 	}
 }
 
+bool ARTSGameModeBase::SetupHumanController(ACameraControllerBase* CameraControllerBase, TArray<APlayerStartBase*>& PlayerStarts, UPlayerTeamSubsystem* TeamSubsystem, int32& PlayerIndex)
+{
+	if (CameraControllerBase->CameraBase)
+	{
+		CameraControllerBase->CameraBase->BlockControls = true;
+	}
+
+	// 1) Get TeamId from Lobby subsystem (if any)
+	int32 LobbyTeamId = 0;
+	if (TeamSubsystem && CameraControllerBase->PlayerState)
+	{
+		UE_LOG(LogTemp, Log, TEXT("TeamSubsystem FOUND!"));
+		// bConsume=true: remove the entry after using it
+		TeamSubsystem->GetTeamForPlayer(CameraControllerBase, LobbyTeamId, true);
+		UE_LOG(LogTemp, Log, TEXT("LobbyTeamId: %d"), LobbyTeamId);
+	}
+
+	// 2) Find appropriate PlayerStart
+	APlayerStartBase* CustomPlayerStart = nullptr;
+	if (LobbyTeamId != 0)
+	{
+		for (APlayerStartBase* Start : PlayerStarts)
+		{
+			if (Start && Start->SelectableTeamId == LobbyTeamId && !Start->bIsAi)
+			{
+				CustomPlayerStart = Start; // prefer human-designated starts
+				break;
+			}
+		}
+		// If no non-AI start found for this team, allow any start with that team id
+		if (!CustomPlayerStart)
+		{
+			for (APlayerStartBase* Start : PlayerStarts)
+			{
+				if (Start && Start->SelectableTeamId == LobbyTeamId)
+				{
+					CustomPlayerStart = Start;
+					break;
+				}
+			}
+		}
+	}
+
+	// Fallback: when no lobby selection present or not found
+	if (!CustomPlayerStart && PlayerStarts.Num() > 0)
+	{
+		// If no lobby selection, prefer a non-AI PlayerStart for humans when available
+		if (LobbyTeamId == 0)
+		{
+			for (APlayerStartBase* Start : PlayerStarts)
+			{
+				if (Start && !Start->bIsAi)
+				{
+					CustomPlayerStart = Start;
+					break;
+				}
+			}
+		}
+		// If still none, fallback to index-based selection
+		if (!CustomPlayerStart)
+		{
+			CustomPlayerStart = PlayerStarts[PlayerIndex % PlayerStarts.Num()];
+			LobbyTeamId = CustomPlayerStart->SelectableTeamId; // adopt team id from the start
+		}
+	}
+
+	if (!CustomPlayerStart)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("No suitable PlayerStart found for controller %s"), *CameraControllerBase->GetName());
+		if (CameraControllerBase->CameraBase)
+		{
+			CameraControllerBase->CameraBase->BlockControls = false;
+		}
+		return false;
+	}
+
+	// Ensure this PlayerStart isn't assigned to another controller in this pass
+	PlayerStarts.RemoveSingle(CustomPlayerStart);
+	// 3) Apply customizations and set team/waypoint
+	ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
+
+	const int32 FinalTeamId = CustomPlayerStart->SelectableTeamId;
+	UE_LOG(LogTemp, Log, TEXT("Assigning TeamId: %d to Controller: %s"), FinalTeamId, *CameraControllerBase->GetName());
+
+	SetTeamIdAndDefaultWaypoint_Implementation(FinalTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
+	UE_LOG(LogTemp, Log, TEXT("TeamId is now: %d from Controller: %s"),
+		CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
+	UE_LOG(LogTemp, Log, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
+
+	// 4) Remaining initialization
+	CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
+	CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
+
+	// Find camera unit by tag
+	FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerIndex));
+	FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
+	CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
+	CameraControllerBase->Multi_SetCameraOnly();
+	CameraControllerBase->Client_InitializeMainHUD();
+	
+	CameraControllerBase->Multi_HideEnemyWaypoints();
+	CameraControllerBase->Multi_InitFogOfWar();
+	CameraControllerBase->Multi_SetupPlayerMiniMap();
+
+	if (CameraControllerBase->CameraBase)
+	{
+		CameraControllerBase->CameraBase->BlockControls = false;
+	}
+
+	CameraControllerBase->AgentInit();
+
+	CameraControllerBase->bRTSPlayerInitialized = true;
+	PlayerIndex++;
+	return true;
+}
+
 void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 {
 	UE_LOG(LogTemp, Log, TEXT("SetTeamIdsAndWaypoints_Implementation!!! World=%s HasAuthority=%s"), *GetNameSafe(GetWorld()), HasAuthority() ? TEXT("true") : TEXT("false"));
@@ -1198,125 +1396,25 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 	// First, assign existing player controllers (humans)
 	for (FConstControllerIterator It = GetWorld()->GetControllerIterator(); It; ++It)
 	{
-		AController* PlayerController = It->Get();
-		ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(PlayerController);
-		if (!CameraControllerBase)
+		ACameraControllerBase* CameraControllerBase = Cast<ACameraControllerBase>(It->Get());
+		if (!CameraControllerBase || CameraControllerBase->bRTSPlayerInitialized)
 		{
 			continue;
 		}
-
-		if (CameraControllerBase->CameraBase)
+		if (SetupHumanController(CameraControllerBase, PlayerStarts, TeamSubsystem, PlayerIndex))
 		{
-			CameraControllerBase->CameraBase->BlockControls = true;
+			OccupiedTeamIds.Add(CameraControllerBase->SelectableTeamId);
 		}
+	}
 
-		// 1) Get TeamId from Lobby subsystem (if any)
-		int32 LobbyTeamId = 0;
-		if (TeamSubsystem && CameraControllerBase->PlayerState)
+	// Freie Nicht-KI-Starts merken: wer spaeter joint, bekommt einen davon (InitializeLateJoiningPlayer).
+	FreePlayerStarts.Reset();
+	for (APlayerStartBase* Start : PlayerStarts)
+	{
+		if (Start && !Start->bIsAi)
 		{
-			UE_LOG(LogTemp, Log, TEXT("TeamSubsystem FOUND!"));
-			// bConsume=true: remove the entry after using it
-			TeamSubsystem->GetTeamForPlayer(CameraControllerBase, LobbyTeamId, true);
-			UE_LOG(LogTemp, Log, TEXT("LobbyTeamId: %d"), LobbyTeamId);
+			FreePlayerStarts.Add(Start);
 		}
-
-		// 2) Find appropriate PlayerStart
-		APlayerStartBase* CustomPlayerStart = nullptr;
-		if (LobbyTeamId != 0)
-		{
-			for (APlayerStartBase* Start : PlayerStarts)
-			{
-				if (Start && Start->SelectableTeamId == LobbyTeamId && !Start->bIsAi)
-				{
-					CustomPlayerStart = Start; // prefer human-designated starts
-					break;
-				}
-			}
-			// If no non-AI start found for this team, allow any start with that team id
-			if (!CustomPlayerStart)
-			{
-				for (APlayerStartBase* Start : PlayerStarts)
-				{
-					if (Start && Start->SelectableTeamId == LobbyTeamId)
-					{
-						CustomPlayerStart = Start;
-						break;
-					}
-				}
-			}
-		}
-
-		// Fallback: when no lobby selection present or not found
-		if (!CustomPlayerStart && PlayerStarts.Num() > 0)
-		{
-			// If no lobby selection, prefer a non-AI PlayerStart for humans when available
-			if (LobbyTeamId == 0)
-			{
-				for (APlayerStartBase* Start : PlayerStarts)
-				{
-					if (Start && !Start->bIsAi)
-					{
-						CustomPlayerStart = Start;
-						break;
-					}
-				}
-			}
-			// If still none, fallback to index-based selection
-			if (!CustomPlayerStart)
-			{
-				CustomPlayerStart = PlayerStarts[PlayerIndex % PlayerStarts.Num()];
-				LobbyTeamId = CustomPlayerStart->SelectableTeamId; // adopt team id from the start
-			}
-		}
-
-		if (!CustomPlayerStart)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("No suitable PlayerStart found for controller %s"), *CameraControllerBase->GetName());
-			if (CameraControllerBase->CameraBase)
-			{
-				CameraControllerBase->CameraBase->BlockControls = false;
-			}
-			continue;
-		}
-
-		// Ensure this PlayerStart isn't assigned to another controller in this pass
-		PlayerStarts.RemoveSingle(CustomPlayerStart);
-		// 3) Apply customizations and set team/waypoint
-		ApplyCustomizationsFromPlayerStart(CameraControllerBase, CustomPlayerStart);
-
-		const int32 FinalTeamId = CustomPlayerStart->SelectableTeamId;
-		UE_LOG(LogTemp, Log, TEXT("Assigning TeamId: %d to Controller: %s"), FinalTeamId, *CameraControllerBase->GetName());
-
-		SetTeamIdAndDefaultWaypoint_Implementation(FinalTeamId, CustomPlayerStart->DefaultWaypoint, CameraControllerBase);
-		OccupiedTeamIds.Add(FinalTeamId);
-
-		UE_LOG(LogTemp, Log, TEXT("TeamId is now: %d from Controller: %s"),
-			CameraControllerBase->SelectableTeamId, *CameraControllerBase->GetName());
-		UE_LOG(LogTemp, Log, TEXT("AllUnits.Num(): %d"), AllUnits.Num());
-
-		// 4) Remaining initialization
-		CameraControllerBase->Multi_SetMyTeamUnits(AllUnits);
-		CameraControllerBase->Multi_SetCamLocation(CustomPlayerStart->GetActorLocation());
-
-		// Find camera unit by tag
-		FName SpecificCameraUnitTagName = FName(*FString::Printf(TEXT("Character.CameraUnit.%d"), PlayerIndex));
-		FGameplayTag SpecificCameraUnitTag = FGameplayTag::RequestGameplayTag(SpecificCameraUnitTagName);
-		CameraControllerBase->SetCameraUnitWithTag_Implementation(SpecificCameraUnitTag, CameraControllerBase->SelectableTeamId);
-		CameraControllerBase->Multi_SetCameraOnly();
-		CameraControllerBase->Client_InitializeMainHUD();
-		
-		CameraControllerBase->Multi_HideEnemyWaypoints();
-		CameraControllerBase->Multi_InitFogOfWar();
-		CameraControllerBase->Multi_SetupPlayerMiniMap();
-
-		if (CameraControllerBase->CameraBase)
-		{
-			CameraControllerBase->CameraBase->BlockControls = false;
-		}
-
-		CameraControllerBase->AgentInit();
-
-		PlayerIndex++;
 	}
 
 	// Now ensure AI players are spawned for AI-designated PlayerStarts whose teams have no controller
@@ -1470,8 +1568,12 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 			AIPC->CameraBase->BlockControls = false;
 		}
 		AIPC->AgentInit();
+		AIPC->bRTSPlayerInitialized = true;
 		PlayerIndex++;
 	}
+
+	NextPlayerIndex = PlayerIndex;
+	bControllersGathered = true;
 
 	NavInitialisation();
 
@@ -1543,7 +1645,8 @@ void ARTSGameModeBase::SetupTimerFromDataTable_Implementation(FVector Location, 
 					
 						FTimerHandle TimerHandle;
 						//SpawnTimerHandles.Add(TimerHandle);
-						GetWorld()->GetTimerManager().SetTimer(TimerHandle, TimerCallback, SpawnParameter.LoopTime, true);
+						GetWorld()->GetTimerManager().SetTimer(TimerHandle, TimerCallback, SpawnParameter.LoopTime, true,
+							SpawnParameter.FirstSpawnDelay > 0.f ? SpawnParameter.FirstSpawnDelay : -1.f);
 
 						FTimerHandleMapping TimerMap;
 						TimerMap.Id = SpawnParameter.Id;

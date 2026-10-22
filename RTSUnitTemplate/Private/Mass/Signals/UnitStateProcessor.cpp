@@ -1861,7 +1861,8 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
                         }
 
                         // Fallback: Spawn Projectile manually if no ability activated
-                        StrongAttacker->SpawnProjectileWithEntities(StrongTarget, StrongAttacker, Entity, TargetEntity);
+                        // A bunker fires the projectiles of its loaded units in turn (bFireLoadedUnitsProjectiles).
+                        StrongAttacker->SpawnProjectileWithEntities(StrongTarget, StrongAttacker, Entity, TargetEntity, StrongAttacker->PickLoadedShooter());
                         
                         // Switch State (assuming UnitSignals::Attack moves to Cooldown or similar)
                         SwitchState(UnitSignals::Attack, Entity, GTEntityManager);

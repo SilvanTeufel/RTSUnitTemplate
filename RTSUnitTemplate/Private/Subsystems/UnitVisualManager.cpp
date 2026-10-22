@@ -151,6 +151,11 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	{
 		ISM->SetCustomDataValue(NewIndex, 20, 0.0f, true);
 	}
+	// And the death of the previous owner (21, AUnitBase::bDeathTimeToMaterial) - it would swell up at once.
+	if (ISM->NumCustomDataFloats > 21)
+	{
+		ISM->SetCustomDataValue(NewIndex, 21, 0.0f, true);
+	}
 
 	// Copy collision settings from template to the pooled ISM
 	// Note: Since ISMs are pooled by mesh/material, the last one assigned will dictate collision for all instances.
@@ -168,8 +173,9 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	// (which would zero all instances).
 	// +1: index 14 = emissive blink while working (AMassUnitBase::bBlinkEmissiveWhileWorking).
 	// 15..17 = Converter colours, 18 / 19 = cast start / cast time (AMassUnitBase::bCastProgressToMaterial),
-	// 20 = last resource arrival (ABuildingBase::bPulseOnResourceArrival).
-	ISM->SetNumCustomDataFloats(FMath::Max(21, TemplateISM->NumCustomDataFloats));
+	// 20 = last resource arrival (ABuildingBase::bPulseOnResourceArrival),
+	// 21 = time of death (AUnitBase::bDeathTimeToMaterial).
+	ISM->SetNumCustomDataFloats(FMath::Max(22, TemplateISM->NumCustomDataFloats));
 
 	// Map ISM instance to MassUnitBase
 	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(ISM);
@@ -441,6 +447,11 @@ void UUnitVisualManager::SwapUnitVisualToRuin(FMassEntityHandle Entity, AMassUni
 	if (RuinISM->NumCustomDataFloats > GDissolveCustomDataIndex)
 	{
 		RuinISM->SetCustomDataValue(NewIndex, GDissolveCustomDataIndex, 0.0f, true);
+	}
+	// A ruin is dead already - it must not swell like the building that just died (21, bDeathTimeToMaterial).
+	if (RuinISM->NumCustomDataFloats > 21)
+	{
+		RuinISM->SetCustomDataValue(NewIndex, 21, 0.0f, true);
 	}
 	// Start hidden (zero scale); the placement processor reveals it next tick from RuinRelative.
 	RuinISM->UpdateInstanceTransform(NewIndex, FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector::ZeroVector), true, true, true);

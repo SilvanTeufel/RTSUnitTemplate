@@ -405,6 +405,15 @@ struct FUnitSpawnParameter : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float LoopTime = 3.f;
 
+	/**
+	 * Seconds from the start of the spawn tables to the FIRST spawn of this row (> 0). After that the row
+	 * repeats every LoopTime. <= 0 = first spawn after LoopTime, as before.
+	 * Lets a row join late in a match (e.g. from minute 9) and then spawn often, instead of a late row
+	 * also having to repeat as slowly as its start is late.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float FirstSpawnDelay = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ShouldLoop = false;
 

@@ -58,6 +58,15 @@ class RTSUNITTEMPLATE_API ARTSGameModeBase : public AGameModeBase
 	GENERATED_BODY()
 
 public:
+	ARTSGameModeBase();
+
+	/** Procedural ponds (water drawn by the landscape material, navmesh blocked). Off by default - bEnabled. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Procedural")
+	TObjectPtr<class UProceduralPondComponent> ProceduralPonds;
+
+	/** Places the procedural ponds - after the procedural resources (AResourceGameMode::StartPlay), before any BeginPlay. */
+	virtual void StartPlay() override;
+
 	/**
 	 * NUR FUER MESSLAEUFE. 0 = aus, jede Partie laeuft mit echtem Zufall wie im Spiel.
 	 * Ein Wert != 0 setzt den globalen Zufall bei JEDEM Partiestart auf diesen Startwert.
@@ -242,6 +251,38 @@ public:
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetTeamIdsAndWaypoints();
+
+	/** True, sobald SetTeamIdsAndWaypoints gelaufen ist. Wer danach joint, wird einzeln eingerichtet. */
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bControllersGathered = false;
+
+	/** Spieler, die nach GatherControllerTimer joinen, automatisch einrichten (PostLogin). Aus fuer GameModes mit eigener Team-Logik. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bInitializeLateJoiners = true;
+
+	/**
+	 * Richtet einen Spieler ein, der erst nach GatherControllerTimer verbunden wurde (PostLogin / Seamless Travel):
+	 * Team, PlayerStart, Kamera, HUD, Fog, Minimap, WinLose - dieselbe Kette wie in SetTeamIdsAndWaypoints.
+	 * Tut nichts, wenn der Controller schon eingerichtet ist (bRTSPlayerInitialized).
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	bool InitializeLateJoiningPlayer(ACameraControllerBase* CameraControllerBase);
+
+protected:
+	/** Pro-Spieler-Teil von SetTeamIdsAndWaypoints. Entfernt den gewaehlten Start aus PlayerStarts und zaehlt PlayerIndex hoch. */
+	bool SetupHumanController(ACameraControllerBase* CameraControllerBase, TArray<APlayerStartBase*>& PlayerStarts, class UPlayerTeamSubsystem* TeamSubsystem, int32& PlayerIndex);
+
+	/** Wartet nach PostLogin, bis der Spieler Kamera-Pawn und PlayerState hat, und richtet ihn dann ein. */
+	void TryInitializeLateJoiner(TWeakObjectPtr<ACameraControllerBase> CameraControllerBase, int32 Attempt);
+
+	/** Nicht-KI-Starts, die beim Sammeln frei geblieben sind - fuer spaeter joinende Spieler. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<APlayerStartBase>> FreePlayerStarts;
+
+	/** Naechster Index fuer Character.CameraUnit.N und die Start-Rueckfallwahl. */
+	int32 NextPlayerIndex = 0;
+
+public:
 	
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetupTimerFromDataTable(FVector Location, AUnitBase* UnitToChase);

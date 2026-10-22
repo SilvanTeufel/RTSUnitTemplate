@@ -107,8 +107,61 @@ void AEffectArea::BeginPlay()
 
 }
 
+void AEffectArea::TrackSpawnedEffect(UNiagaraComponent* Effect)
+{
+	if (!Effect)
+	{
+		return;
+	}
+	SpawnedEffects.RemoveAll([](const TWeakObjectPtr<UNiagaraComponent>& Weak) { return !Weak.IsValid(); });
+	SpawnedEffects.Add(Effect);
+
+	if (SpawnEffectKillDelay > 0.f && GetWorld())
+	{
+		TWeakObjectPtr<UNiagaraComponent> WeakEffect = Effect;
+		FTimerHandle Handle;
+		GetWorld()->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([WeakEffect]()
+		{
+			if (UNiagaraComponent* Comp = WeakEffect.Get())
+			{
+				Comp->Deactivate();
+			}
+		}), SpawnEffectKillDelay, false);
+	}
+}
+
+void AEffectArea::StopSpawnedEffects()
+{
+	UWorld* World = GetWorld();
+	for (const TWeakObjectPtr<UNiagaraComponent>& Weak : SpawnedEffects)
+	{
+		UNiagaraComponent* Comp = Weak.Get();
+		if (!Comp)
+		{
+			continue;
+		}
+		// Deactivate lets the living particles finish (the component auto-destroys when done). The timer
+		// is the backstop for systems whose particles never die by themselves.
+		Comp->Deactivate();
+		if (World)
+		{
+			FTimerHandle Handle;
+			World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([Weak]()
+			{
+				if (UNiagaraComponent* Late = Weak.Get())
+				{
+					Late->DestroyComponent();
+				}
+			}), 5.f, false);
+		}
+	}
+	SpawnedEffects.Reset();
+}
+
 void AEffectArea::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    StopSpawnedEffects();
+
     Super::EndPlay(EndPlayReason);
 
     if (UWorld* World = GetWorld())
@@ -430,6 +483,7 @@ void AEffectArea::HandleDeath(bool bIsVisible)
 		Niagara_A->Deactivate();
 		Niagara_A->SetVisibility(false);
 	}
+	StopSpawnedEffects();
 
 	OnEffectAreaDead.Broadcast();
 

@@ -186,6 +186,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
 	class USoundBase* SpawnSound;
 
+	/**
+	 * SpawnVFX and ImpactVFX are spawned in the world, not attached to the area. A LOOPING system there
+	 * never finished on its own and stayed on the ground for the whole match after the area was gone
+	 * (the boss goo pools on Level_6_Survive). They are now stopped when the area dies or ends.
+	 * > 0: additionally stop them after this many seconds. 0: only when the area ends.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass", meta = (ClampMin = "0"))
+	float SpawnEffectKillDelay = 0.f;
+
+	/** Remember a spawned SpawnVFX/ImpactVFX so it is stopped together with the area (see SpawnEffectKillDelay). */
+	void TrackSpawnedEffect(UNiagaraComponent* Effect);
+
+	/** Stop every tracked effect: no new particles, the running ones fade out; destroyed shortly after. */
+	void StopSpawnedEffects();
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Mass")
 	float StartScaleTime = 0.f;
 
@@ -242,6 +257,8 @@ public:
 
 	UPROPERTY()
 	UNiagaraComponent* DeathNiagaraComp = nullptr;
+
+	TArray<TWeakObjectPtr<UNiagaraComponent>> SpawnedEffects;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TSubclassOf<UGameplayEffect> AreaEffectOne;

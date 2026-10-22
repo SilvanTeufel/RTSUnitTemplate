@@ -2620,13 +2620,21 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
     }
 
     // An area that stands ON a resource (CollectOnlyWithoutWorker) skips the side-by-side snapping and
-    // the spacing pass below - both push it AWAY from resources. It always sits on the free resource
-    // place of its type nearest to the cursor; with none left it follows the cursor and flashes, and
-    // the drop will refuse it.
+    // the spacing pass below - both push it AWAY from resources. It sits on the free resource place of
+    // its type nearest to the cursor - only one the player can see on screen; with none there it follows
+    // the cursor and flashes, and the drop cancels it.
     if (DraggedWorkArea->bPlaceOnResource)
     {
+        int32 ViewX = 0, ViewY = 0;
+        GetViewportSize(ViewX, ViewY);
+        auto IsOnScreen = [this, ViewX, ViewY](const AWorkArea* Place)
+        {
+            FVector2D Screen;
+            return ProjectWorldLocationToScreen(Place->GetActorLocation(), Screen)
+                && Screen.X >= 0.f && Screen.Y >= 0.f && Screen.X <= ViewX && Screen.Y <= ViewY;
+        };
         if (AWorkArea* Place = AWorkArea::FindFreeResourcePlace(GetWorld(), MouseGround,
-                DraggedWorkArea->RequiredResourceType, 0.f, DraggedWorkArea))
+                DraggedWorkArea->RequiredResourceType, 0.f, DraggedWorkArea, IsOnScreen))
         {
             DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Place->GetActorLocation()));
             WorkAreaIsSnapped = true;
@@ -5732,11 +5740,38 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 		const bool bResourceArea = !bIsExtensionArea && DraggedWorkArea->bPlaceOnResource;
 		if (bResourceArea)
 		{
-			AWorkArea* Place = AWorkArea::FindFreeResourcePlace(GetWorld(), DraggedWorkArea->GetActorLocation(),
-				DraggedWorkArea->RequiredResourceType, 0.f, DraggedWorkArea);
+			// A player's ghost sits exactly on the place it snapped to (on screen only); not snapped = not on a
+			// place = cancel. The AI drops anywhere and gets the nearest place.
+			FVector PlaceSearchOrigin = DraggedWorkArea->GetActorLocation();
+			float PlaceSearchRange = bIsAi ? 0.f : 150.f;
+			if (bIsAi)
+			{
+				// The camera hover spot says nothing about where an extractor makes sense: with "nearest to the
+				// drop" the AI would grab a deposit in the middle of the map (or one beside the enemy base), far
+				// from any storing base its logistics units could haul to. Search around the own storing base
+				// nearest to the worker instead, and only within AIExtractorMaxDistFromBase of it.
+				const FVector WorkerLoc = UnitBase->GetMassActorLocation();
+				double BestBaseSq = TNumericLimits<double>::Max();
+				for (TActorIterator<ABuildingBase> ItStore(GetWorld()); ItStore; ++ItStore)
+				{
+					const ABuildingBase* Store = *ItStore;
+					if (!IsValid(Store) || Store->TeamId != UnitBase->TeamId) continue;
+					if (Store->BaseType != EBaseType::CollectAndStore && Store->BaseType != EBaseType::StoreOnly) continue;
+					if (Store->GetUnitState() == UnitData::Dead) continue;
+					const double DistSq = FVector::DistSquared2D(Store->GetActorLocation(), WorkerLoc);
+					if (DistSq < BestBaseSq)
+					{
+						BestBaseSq = DistSq;
+						PlaceSearchOrigin = Store->GetActorLocation();
+						PlaceSearchRange = AIExtractorMaxDistFromBase;
+					}
+				}
+			}
+			AWorkArea* Place = AWorkArea::FindFreeResourcePlace(GetWorld(), PlaceSearchOrigin,
+				DraggedWorkArea->RequiredResourceType, PlaceSearchRange, DraggedWorkArea);
 			if (!Place)
 			{
-				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because no free resource place of the required type is left."));
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because no free resource place of the required type is there."));
 				if (InDropWorkAreaFailedSound)
 				{
 					Client_PlaySound2D(InDropWorkAreaFailedSound);
@@ -6189,6 +6224,44 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				}
 			}
 
+			// BASISBINDUNG (20.10.2026, Nutzerbefund "die Singularianer bauen in der Kartenmitte").
+			// Gemessen mit der [Bauplatz]-Zeile: fast jede Ablage lief als "KeineUmsetzung" durch - der
+			// Kamerapunkt war gueltig, also blieb er stehen. Die Kamera driftet aber Richtung Gegner, und so
+			// wanderten die Gebaeude Stueck fuer Stueck von 0.7k auf 5.5k Abstand zur eigenen Basis aus der
+			// Startbasis heraus. Nur "ungueltig" loeste eine Umsetzung aus. Jetzt gilt zusaetzlich: ein
+			// gewoehnliches Gebaeude muss innerhalb von AIMaxBuildDistFromBase einer eigenen Basis stehen,
+			// sonst wird es um diese Basis herum neu gesucht. Ausgenommen: Hauptbasen (Marker-Logik),
+			// Extraktoren (sitzen auf Lagerstaetten), Verteidigung (steht absichtlich vorn), Erweiterungen.
+			const bool bBaseRangeApplies = bIsAi && AIMaxBuildDistFromBase > 0.f && DraggedWorkArea
+				&& !DraggedWorkArea->bPlaceOnResource && !DraggedWorkArea->bIsDefenseArea && !DraggedWorkArea->IsExtensionArea;
+			auto NearestOwnStoreBase = [this, UnitBase](const FVector& Loc, FVector* OutBaseLoc) -> float
+			{
+				double BestSq = TNumericLimits<double>::Max();
+				for (TActorIterator<ABuildingBase> ItSB(GetWorld()); ItSB; ++ItSB)
+				{
+					const ABuildingBase* SB = *ItSB;
+					if (!IsValid(SB) || SB->TeamId != UnitBase->TeamId || SB->BaseType != EBaseType::CollectAndStore) continue;
+					if (SB->GetUnitState() == UnitData::Dead) continue;
+					const double DistSq = FVector::DistSquared2D(SB->GetActorLocation(), Loc);
+					if (DistSq < BestSq)
+					{
+						BestSq = DistSq;
+						if (OutBaseLoc) *OutBaseLoc = SB->GetActorLocation();
+					}
+				}
+				return BestSq == TNumericLimits<double>::Max() ? -1.f : FMath::Sqrt((float)BestSq);
+			};
+			if (bBaseRangeApplies && !bForceAiRelocation)
+			{
+				const float DistToBase = NearestOwnStoreBase(DraggedWorkArea->GetActorLocation(), nullptr);
+				if (DistToBase > AIMaxBuildDistFromBase)
+				{
+					bForceAiRelocation = true;
+					UE_LOG(LogTemp, Warning, TEXT("[Basisbindung] Team=%d %s liegt %.0f von der naechsten eigenen Basis (Grenze %.0f) - wird neu gesucht."),
+					       UnitBase->TeamId, *GetNameSafe(DraggedWorkArea->GetClass()), DistToBase, AIMaxBuildDistFromBase);
+				}
+			}
+
 			// Nur fuer die [Bauplatz]-Diagnose weiter unten: der Umsetzblock hat einen eigenen
 			// Gueltigkeitsbereich, seine Werte sind danach nicht mehr erreichbar.
 			FVector DiagDropOrigin  = DraggedWorkArea ? DraggedWorkArea->GetActorLocation() : FVector::ZeroVector;
@@ -6405,6 +6478,18 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 							Origin = Building->GetActorLocation();
 						}
 					}
+
+					// Das naechste beliebige eigene Gebaeude ist ein Kriechanker: steht das letzte Gebaeude schon
+					// am Rand, rutscht der Anker mit jedem Bau weiter nach aussen. Mit Basisbindung ist es die
+					// naechste eigene BASIS.
+					if (bBaseRangeApplies)
+					{
+						FVector StoreBaseLoc;
+						if (NearestOwnStoreBase(DropOrigin, &StoreBaseLoc) >= 0.f)
+						{
+							Origin = StoreBaseLoc;
+						}
+					}
 				}
 
 				// A main base has to end up next to the deposit it is claiming, or its workers walk the whole
@@ -6553,6 +6638,11 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				auto HeightRuleOk = [&](const FVector& Loc) -> bool
 				{
 					if (bIsMainBase) return true;
+					if (bBaseRangeApplies)
+					{
+						const float DistToBase = NearestOwnStoreBase(Loc, nullptr);
+						if (DistToBase > AIMaxBuildDistFromBase) return false;
+					}
 					bool bHadBase = false;
 					const bool bOk = IsOnOwnBaseLevel(Loc, bHadBase);
 					return bHadBase ? bOk : true;
@@ -6632,7 +6722,12 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				if (bUsedMarker && bPlacementValid)
 				{
 					const float DriftSq = FVector::DistSquared2D(DraggedWorkArea->GetActorLocation(), Origin);
-					const float MaxDrift = 450.f;
+					// The marker pass may push a base clear of the nearby deposit by up to MarkerMinResourceDistance
+					// (it walks rings of 200 until the distance holds). A fixed 450 rejected every base that had
+					// to move 600: on Helix_Basin_KITraining_AH all six markers sit 190-255 from a Primary place,
+					// so NO expansion was ever built (measured 20.10.2026: "placed on marker ... 600 uu abgerueckt"
+					// directly followed by "rejected: drifted 600" in every match, 0 hives / 0 DataCenters).
+					const float MaxDrift = FMath::Max(450.f, MarkerMinResourceDistance + 250.f);
 					if (DriftSq > MaxDrift * MaxDrift)
 					{
 						UE_LOG(LogTemp, Warning, TEXT("[Expansion] team %d rejected: drifted %.0f from its marker."),

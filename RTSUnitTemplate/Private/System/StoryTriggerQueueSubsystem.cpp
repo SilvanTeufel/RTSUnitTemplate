@@ -56,6 +56,8 @@ float UStoryTriggerQueueSubsystem::GetMasterVolume() const
 void UStoryTriggerQueueSubsystem::EnqueueStory(const FStoryQueueItem& Item)
 {
 	Pending.Add(Item);
+	UE_LOG(LogTemp, Verbose, TEXT("[StoryQueue] Eingereiht von %s (Ton %s), wartend %d, aktiv %d"), *GetNameSafe(Item.TriggeringSource.Get()),
+		*GetNameSafe(Item.Sound), Pending.Num(), ActiveWidget ? 1 : 0);
 
 	// Quelle merken - siehe QuellenSeitRuhe im Header. Wer beim Ausloesen die Musik leiser
 	// dreht, muss das Ende auch dann erfahren, wenn zwischendurch eine andere Quelle die
@@ -70,6 +72,7 @@ void UStoryTriggerQueueSubsystem::EnqueueStory(const FStoryQueueItem& Item)
 
 void UStoryTriggerQueueSubsystem::StoryEndeAnAlleMelden()
 {
+	UE_LOG(LogTemp, Verbose, TEXT("[StoryQueue] Ende an alle melden, %d Quellen seit Ruhe"), QuellenSeitRuhe.Num());
 	TSet<UObject*> Gemeldet;
 	for (const TWeakObjectPtr<UObject>& Quelle : QuellenSeitRuhe)
 	{
@@ -109,6 +112,7 @@ void UStoryTriggerQueueSubsystem::StoryEndeAnAlleMelden()
 
 void UStoryTriggerQueueSubsystem::ClearActive()
 {
+	UE_LOG(LogTemp, Verbose, TEXT("[StoryQueue] ClearActive, wartend %d"), Pending.Num());
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ActiveTimerHandle);
@@ -252,7 +256,12 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	// Ab hier ist die Story sicher sichtbar und der Schliess-Timer wird unten bewaffnet -
 	// erst jetzt darf die uebrige Tonkulisse leiser werden (siehe Hinweis oben).
 	bIsStoryActive = true;
-	if (Item.TriggeringSource.IsValid())
+	if (!Item.Sound)
+	{
+		// Nothing is spoken: the other voices stay as loud as they are.
+		GlobalSoundMultiplier = 1.0f;
+	}
+	else if (Item.TriggeringSource.IsValid())
 	{
 		if (AStoryTriggerActor* Actor = Cast<AStoryTriggerActor>(Item.TriggeringSource.Get()))
 		{
@@ -296,6 +305,8 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 		DisplayTime = FallbackDisplaySeconds;
 	}
 	World->GetTimerManager().SetTimer(ActiveTimerHandle, this, &UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished, DisplayTime, false);
+	UE_LOG(LogTemp, Verbose, TEXT("[StoryQueue] Zeige von %s (Ton %s) fuer %.1f s, wartend %d"), *GetNameSafe(Item.TriggeringSource.Get()),
+		*GetNameSafe(Item.Sound), DisplayTime, Pending.Num());
 }
 
 void UStoryTriggerQueueSubsystem::OnMusicRestoreDue()
@@ -308,6 +319,17 @@ void UStoryTriggerQueueSubsystem::OnMusicRestoreDue()
 	}
 }
 
+void UStoryTriggerQueueSubsystem::OnNextStoryDelayFinished()
+{
+	// 19.10.2026: Der Pausen-Timer rief TryPlayNext direkt auf. Waehrend seines eigenen Rueckrufs
+	// meldet IsTimerActive ihn aber noch als aktiv (Status Executing) - TryPlayNext stieg an der
+	// Pausen-Pruefung aus, und die naechste Story blieb fuer immer liegen. Mit nicht leerer
+	// Warteschlange kam auch StoryEndeAnAlleMelden nie: die Musik blieb leise (gesehen bei der
+	// WinCondition-Ansage von Cmdr. Vael direkt nach einem Philosophy-Spruch).
+	NextStoryTimerHandle.Invalidate();
+	TryPlayNext();
+}
+
 void UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished()
 {
 	ClearActive();
@@ -315,6 +337,6 @@ void UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished()
 	// Add 3s delay before proceeding to next item
 	if (UWorld* World = GetWorld())
 	{
-		World->GetTimerManager().SetTimer(NextStoryTimerHandle, this, &UStoryTriggerQueueSubsystem::TryPlayNext, 3.0f, false);
+		World->GetTimerManager().SetTimer(NextStoryTimerHandle, this, &UStoryTriggerQueueSubsystem::OnNextStoryDelayFinished, 3.0f, false);
 	}
 }

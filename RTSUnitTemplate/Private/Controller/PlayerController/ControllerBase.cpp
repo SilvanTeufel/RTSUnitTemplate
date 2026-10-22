@@ -232,6 +232,7 @@ void AControllerBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & O
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
 	DOREPLIFETIME(AControllerBase, CameraBase);
+	DOREPLIFETIME(AControllerBase, bRTSPlayerInitialized);
 	DOREPLIFETIME(AControllerBase, UseUnrealEnginePathFinding);
 	DOREPLIFETIME(AControllerBase, MissileRainClass);
 	DOREPLIFETIME(AControllerBase, EffectAreaClass);
