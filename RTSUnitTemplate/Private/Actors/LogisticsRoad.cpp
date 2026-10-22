@@ -79,7 +79,7 @@ void ALogisticsRoad::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	// The roads merged into this one show their own stretches again.
 	if (EndPlayReason == EEndPlayReason::Destroyed && bMergeOverlappingRoads && RVTPath.Num() >= 2)
 	{
-		SolveRoadNetwork(GetWorld(), TeamId, this);
+		SolveRoadNetwork(GetWorld(), TeamId, bReplayRoad, this);
 	}
 	Super::EndPlay(EndPlayReason);
 }
@@ -128,7 +128,7 @@ void ALogisticsRoad::InitializeRoad(ABuildingBase* InSource, ABuildingBase* InSi
 	}
 
 	// A new RVT road is laid from the source to the sink - once; a later lane change does not lay it again.
-	if (RoadGrowStartTime < 0.0 && RoadGrowSpeed > 0.f && bGroundLaneAsRVT && bHasGroundLane)
+	if (RoadGrowStartTime < 0.0 && !bLayWhole && RoadGrowSpeed > 0.f && bGroundLaneAsRVT && bHasGroundLane)
 	{
 		RoadGrowStartTime = GetRoadServerTime();
 	}
@@ -136,6 +136,24 @@ void ALogisticsRoad::InitializeRoad(ABuildingBase* InSource, ABuildingBase* InSi
 	OnRoadInitialized();
 	RebuildVisuals();
 	ForceNetUpdate();
+}
+
+void ALogisticsRoad::InitializeReplayRoad(int32 InTeamId, const TArray<FVector>& InGroundPoints, bool bInHasGroundLane,
+	float InAirHeight, bool bInSupplyRoad, bool bGrow)
+{
+	bReplayRoad = true;
+	bIsSupplyRoad = bInSupplyRoad;
+	bLayWhole = !bGrow;
+	InitializeRoad(nullptr, nullptr, InTeamId, InGroundPoints, bInHasGroundLane, InAirHeight);
+}
+
+void ALogisticsRoad::SetHiddenForReplay(bool bHide)
+{
+	if (bHiddenForReplay != bHide)
+	{
+		bHiddenForReplay = bHide;
+		UpdateTeamVisibility();
+	}
 }
 
 void ALogisticsRoad::Retire()
@@ -166,7 +184,7 @@ void ALogisticsRoad::Retire()
 	if (bMergeOverlappingRoads)
 	{
 		// Drawn whole while it is taken up; the roads merged into it show their own stretches again.
-		SolveRoadNetwork(GetWorld(), TeamId, nullptr);
+		SolveRoadNetwork(GetWorld(), TeamId, bReplayRoad, nullptr);
 	}
 	UpdateRoadReveal();
 }
@@ -192,7 +210,7 @@ void ALogisticsRoad::OnRep_RoadReveal()
 	if (bMergeOverlappingRoads && RoadRetractStartTime >= 0.0 && RVTPath.Num() >= 2)
 	{
 		// Retiring: drawn whole, the roads merged into it show their own stretches again (redraws only changes).
-		SolveRoadNetwork(GetWorld(), TeamId, nullptr);
+		SolveRoadNetwork(GetWorld(), TeamId, bReplayRoad, nullptr);
 	}
 	UpdateRoadReveal();
 }
@@ -597,7 +615,7 @@ void ALogisticsRoad::DrawRVT()
 	UpdateRoadReveal();
 }
 
-void ALogisticsRoad::SolveRoadNetwork(UWorld* World, int32 InTeamId, const ALogisticsRoad* Leaving)
+void ALogisticsRoad::SolveRoadNetwork(UWorld* World, int32 InTeamId, bool bInReplayRoads, const ALogisticsRoad* Leaving)
 {
 	if (!World || World->GetNetMode() == NM_DedicatedServer)
 	{
@@ -610,8 +628,9 @@ void ALogisticsRoad::SolveRoadNetwork(UWorld* World, int32 InTeamId, const ALogi
 	for (TActorIterator<ALogisticsRoad> It(World); It; ++It)
 	{
 		ALogisticsRoad* Road = *It;
+		// Replay roads merge only with each other - a live road still standing under a replay is no part of it.
 		if (Road != Leaving && IsValid(Road) && !Road->IsActorBeingDestroyed() && Road->TeamId == InTeamId
-			&& Road->bMergeOverlappingRoads && Road->bGroundLaneAsRVT && Road->RVTPath.Num() >= 2)
+			&& Road->bReplayRoad == bInReplayRoads && Road->bMergeOverlappingRoads && Road->bGroundLaneAsRVT && Road->RVTPath.Num() >= 2)
 		{
 			Roads.Add(Road);
 		}
@@ -1118,7 +1137,7 @@ void ALogisticsRoad::RebuildVisuals()
 	{
 		// This road against the team's others (draws it, and redraws the ones it changes - also when it has
 		// no RVT path any more).
-		SolveRoadNetwork(World, TeamId, nullptr);
+		SolveRoadNetwork(World, TeamId, bReplayRoad, nullptr);
 		if (!bRVTDrawn && RVTPath.Num() >= 2)
 		{
 			DrawRVT();
@@ -1141,6 +1160,7 @@ void ALogisticsRoad::UpdateTeamVisibility()
 			bVisible = LocalController->SelectableTeamId <= 0 || LocalController->SelectableTeamId == TeamId;
 		}
 	}
+	bVisible = bVisible && !bHiddenForReplay;
 	SetActorHiddenInGame(!bVisible);
 	bTeamVisible = bVisible;
 	if (RVTComponents.Num() > 0)

@@ -18,6 +18,25 @@ class AWorkingUnitBase;
 class UMaterialInstanceDynamic;
 class UTexture;
 
+/** Build-material textures for one more material slot of the work area mesh (slot 1, 2, ...). */
+USTRUCT(BlueprintType)
+struct FWorkAreaSlotTextures
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	TObjectPtr<UTexture> Base = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	TObjectPtr<UTexture> Metallic = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	TObjectPtr<UTexture> Normal = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	TObjectPtr<UTexture> Spec = nullptr;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AWorkArea : public AActor
 {
@@ -298,9 +317,11 @@ public:
 	/**
 	 * The resource place of ResourceType nearest to Location that still holds resources and is not
 	 * occupied (a place occupied by IgnoreBuildArea counts as free). MaxDistance <= 0: no limit.
+	 * Accept (optional): further filter, e.g. only places on screen.
 	 */
 	static AWorkArea* FindFreeResourcePlace(const UWorld* World, const FVector& Location, EResourceType ResourceType,
-		float MaxDistance = 0.f, const AWorkArea* IgnoreBuildArea = nullptr);
+		float MaxDistance = 0.f, const AWorkArea* IgnoreBuildArea = nullptr,
+		const TFunction<bool(const AWorkArea*)>& Accept = TFunction<bool(const AWorkArea*)>());
 
 	/** BuildArea: links this area and Place both ways (nullptr releases the current place). Server only. */
 	void SetTargetResourcePlace(AWorkArea* Place);
@@ -566,6 +587,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
 	UTexture* SpecTexParameterValue = nullptr;
 
+	/**
+	 * Meshes with more than one material slot (e.g. a merged building): entry 0 is slot 1, entry 1 slot 2, ...
+	 * Each slot gets its own build material with these textures. Slots without an entry keep their material.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Material")
+	TArray<FWorkAreaSlotTextures> AdditionalSlotTextures;
+
 	UPROPERTY(ReplicatedUsing = OnRep_MIDEnabled)
 	bool bMIDEnabled = false;
 
@@ -574,6 +602,10 @@ public:
 
 	UPROPERTY()
 	UMaterialInstanceDynamic* WorkAreaMID;
+
+	/** Build materials of the slots in AdditionalSlotTextures. */
+	UPROPERTY(Transient)
+	TArray<TObjectPtr<UMaterialInstanceDynamic>> AdditionalSlotMIDs;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void EnableMID();

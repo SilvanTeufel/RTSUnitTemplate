@@ -3,7 +3,9 @@
 #include "Actors/LogisticsPipeline.h"
 
 #include "Characters/Unit/BuildingBase.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "EngineUtils.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "GameFramework/GameStateBase.h"
@@ -88,6 +90,12 @@ void ALogisticsPipeline::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		World->GetTimerManager().ClearTimer(GrowEndTimer);
 		World->GetTimerManager().ClearTimer(RetractEndTimer);
 	}
+	// The pipelines merged into this one lie on their own again.
+	if (EndPlayReason == EEndPlayReason::Destroyed && bMergeNearbyPipes)
+	{
+		SolvePipeNetwork(GetWorld(), TeamId, bReplayRoad, this);
+	}
+	ClearWalkCollision();
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -124,7 +132,7 @@ void ALogisticsPipeline::OnRoadInitialized()
 	PacketTravelTime = FMath::Max(0.5f, Length / FMath::Max(10.f, FlowSpeed));
 
 	// A new pipeline grows from the source to the sink - once; a later lane change does not regrow it.
-	if (GrowStartTime < 0.0 && GrowSpeedFactor > 0.f)
+	if (GrowStartTime < 0.0 && !bLayWhole && GrowSpeedFactor > 0.f)
 	{
 		GrowStartTime = GetServerTime();
 	}
@@ -346,6 +354,9 @@ void ALogisticsPipeline::ClearVisuals()
 	PipeComponent = nullptr;
 	PipeMesh = nullptr;
 	PipeMID = nullptr;
+	ClearWalkCollision();
+	BuiltLine.Reset();
+	BuiltScale.Reset();
 	VisualLength = 0.f;
 	VisualGrowLength = 0.f;
 	VisualTailMin = 0.f;
@@ -360,9 +371,19 @@ FVector ALogisticsPipeline::TraceGround(const FVector& P) const
 	if (SourceBase) TraceParams.AddIgnoredActor(SourceBase);
 	if (SinkBase) TraceParams.AddIgnoredActor(SinkBase);
 
+	// Not onto another pipeline's walk capsules - try again past them.
 	FHitResult Hit;
-	if (World && World->LineTraceSingleByObjectType(Hit, P + FVector(0, 0, 300.f), P - FVector(0, 0, 600.f), FCollisionObjectQueryParams(ECC_WorldStatic), TraceParams))
+	for (int32 Try = 0; Try < 4 && World; ++Try)
 	{
+		if (!World->LineTraceSingleByObjectType(Hit, P + FVector(0, 0, 300.f), P - FVector(0, 0, 600.f), FCollisionObjectQueryParams(ECC_WorldStatic), TraceParams))
+		{
+			break;
+		}
+		if (ALogisticsRoad* Other = Cast<ALogisticsRoad>(Hit.GetActor()))
+		{
+			TraceParams.AddIgnoredActor(Other);
+			continue;
+		}
 		return Hit.Location;
 	}
 	return P;
@@ -455,18 +476,356 @@ void ALogisticsPipeline::BuildCenterLine(TArray<FVector>& OutPoints) const
 	OutPoints.Add(Points.Last());
 }
 
-void ALogisticsPipeline::RebuildVisuals()
+void ALogisticsPipeline::SolvePipeNetwork(UWorld* World, int32 InTeamId, bool bInReplayRoads, const ALogisticsPipeline* Leaving)
 {
-	ClearVisuals();
-
-	if (GetNetMode() == NM_DedicatedServer || GroundPoints.Num() < 2)
+	if (!World)
 	{
 		return;
 	}
+	TArray<ALogisticsPipeline*> Pipes;
+	for (TActorIterator<ALogisticsPipeline> It(World); It; ++It)
+	{
+		ALogisticsPipeline* Pipe = *It;
+		if (IsValid(Pipe) && Pipe != Leaving && Pipe->TeamId == InTeamId && Pipe->bReplayRoad == bInReplayRoads && !Pipe->IsActorBeingDestroyed())
+		{
+			if (Pipe->RawLine.Num() < 2 && Pipe->GroundPoints.Num() >= 2)
+			{
+				Pipe->BuildCenterLine(Pipe->RawLine);
+			}
+			Pipes.Add(Pipe);
+		}
+	}
+	// Oldest first - the same order on every machine (RoadOrderTime replicates).
+	Pipes.Sort([](const ALogisticsPipeline& A, const ALogisticsPipeline& B)
+	{
+		if (A.RoadOrderTime != B.RoadOrderTime) return A.RoadOrderTime < B.RoadOrderTime;
+		const FVector PA = A.GroundPoints.Num() ? A.GroundPoints[0] : FVector::ZeroVector;
+		const FVector PB = B.GroundPoints.Num() ? B.GroundPoints[0] : FVector::ZeroVector;
+		return PA.X != PB.X ? PA.X < PB.X : PA.Y < PB.Y;
+	});
 
-	TArray<FVector> Line;
-	BuildCenterLine(Line);
+	const int32 N = Pipes.Num();
+	TArray<TArray<FVector>> Lines;
+	TArray<TArray<float>> Wrap;        // per ring: 0..1 how far it lies on an older pipeline
+	TArray<TArray<int32>> WrapPipe;    // ... on which one (index into Pipes)
+	TArray<TArray<int32>> WrapRing;    // ... at which of its rings
+	Lines.SetNum(N); Wrap.SetNum(N); WrapPipe.SetNum(N); WrapRing.SetNum(N);
+	for (int32 k = 0; k < N; ++k)
+	{
+		Lines[k] = Pipes[k]->RawLine;
+		Wrap[k].Init(0.f, Lines[k].Num());
+		WrapPipe[k].Init(INDEX_NONE, Lines[k].Num());
+		WrapRing[k].Init(INDEX_NONE, Lines[k].Num());
+	}
+
+	// Nearest point on pipeline j's (final) centre line to P: distance, ring and position.
+	auto Nearest = [&](int32 j, const FVector& P, int32& OutRing, FVector& OutPos) -> float
+	{
+		float Best = TNumericLimits<float>::Max();
+		const TArray<FVector>& L = Lines[j];
+		for (int32 s = 0; s + 1 < L.Num(); ++s)
+		{
+			const FVector Q = FMath::ClosestPointOnSegment(P, L[s], L[s + 1]);
+			const float D = FVector::DistSquared(P, Q);
+			if (D < Best)
+			{
+				Best = D;
+				OutPos = Q;
+				OutRing = FVector::DistSquared(Q, L[s]) < FVector::DistSquared(Q, L[s + 1]) ? s : s + 1;
+			}
+		}
+		return FMath::Sqrt(Best);
+	};
+
+	// Every younger pipeline onto the older ones it runs along.
+	for (int32 k = 1; k < N; ++k)
+	{
+		const ALogisticsPipeline* Pipe = Pipes[k];
+		const TArray<FVector>& Raw = Pipe->RawLine;
+		if (!Pipe->bMergeNearbyPipes || Raw.Num() < 2)
+		{
+			continue;
+		}
+		const int32 Count = Raw.Num();
+		TArray<float> Along;
+		Along.SetNumZeroed(Count);
+		for (int32 i = 1; i < Count; ++i)
+		{
+			Along[i] = Along[i - 1] + FVector::Dist(Raw[i - 1], Raw[i]);
+		}
+
+		// Every ring near an older pipeline (the nearest one).
+		TArray<int32> HitPipe;
+		HitPipe.Init(INDEX_NONE, Count);
+		for (int32 i = 0; i < Count; ++i)
+		{
+			float BestDist = Pipe->PipeMergeDistance;
+			for (int32 j = 0; j < k; ++j)
+			{
+				if (!Pipes[j]->bMergeNearbyPipes || Lines[j].Num() < 2)
+				{
+					continue;
+				}
+				int32 Ring = INDEX_NONE;
+				FVector Pos;
+				const float D = Nearest(j, Raw[i], Ring, Pos);
+				if (D < BestDist)
+				{
+					BestDist = D;
+					HitPipe[i] = j;
+				}
+			}
+		}
+
+		// Runs along the same pipeline at least PipeMergeMinLength long - a crossing is not one. The pipeline
+		// bends onto it over PipeMergeJoinLength before and after.
+		TArray<float> Weight;
+		Weight.Init(0.f, Count);
+		TArray<int32> RunPipe;
+		RunPipe.Init(INDEX_NONE, Count);
+		const float Join = FMath::Max(1.f, Pipe->PipeMergeJoinLength);
+		for (int32 i = 0; i < Count;)
+		{
+			if (HitPipe[i] == INDEX_NONE)
+			{
+				++i;
+				continue;
+			}
+			int32 End = i;
+			while (End + 1 < Count && HitPipe[End + 1] == HitPipe[i])
+			{
+				++End;
+			}
+			if (Along[End] - Along[i] >= Pipe->PipeMergeMinLength)
+			{
+				for (int32 r = 0; r < Count; ++r)
+				{
+					const float Outside = r < i ? Along[i] - Along[r] : r > End ? Along[r] - Along[End] : 0.f;
+					const float W = 1.f - FMath::SmoothStep(0.f, Join, Outside);
+					if (W > Weight[r])
+					{
+						Weight[r] = W;
+						RunPipe[r] = HitPipe[i];
+					}
+				}
+			}
+			i = End + 1;
+		}
+
+		for (int32 i = 0; i < Count; ++i)
+		{
+			const int32 j = RunPipe[i];
+			if (j == INDEX_NONE || Weight[i] <= 0.f)
+			{
+				continue;
+			}
+			int32 Ring = INDEX_NONE;
+			FVector Pos = Raw[i];
+			Nearest(j, Raw[i], Ring, Pos);
+			Lines[k][i] = FMath::Lerp(Raw[i], Pos, Weight[i]);
+			Wrap[k][i] = Weight[i];
+			WrapPipe[k][i] = j;
+			WrapRing[k][i] = Ring;
+		}
+	}
+
+	// Thickness: the younger pipelines a pipeline carries (per ring, smoothed along it). Where a pipeline lies
+	// on an older one it shrinks to just inside that one, so its bulges never poke through and its open ends
+	// are hidden; the fully merged part is not drawn at all (BuildTube).
+	TArray<TArray<float>> Scale;
+	Scale.SetNum(N);
+	for (int32 k = 0; k < N; ++k)
+	{
+		const ALogisticsPipeline* Pipe = Pipes[k];
+		const int32 Count = Lines[k].Num();
+		TArray<float> Num;
+		Num.Init(0.f, Count);
+		for (int32 y = k + 1; y < N; ++y)
+		{
+			TArray<float> Mark;
+			Mark.Init(0.f, Count);
+			for (int32 i = 0; i < Wrap[y].Num(); ++i)
+			{
+				if (WrapPipe[y][i] == k && Mark.IsValidIndex(WrapRing[y][i]))
+				{
+					Mark[WrapRing[y][i]] = FMath::Max(Mark[WrapRing[y][i]], Wrap[y][i]);
+				}
+			}
+			for (int32 r = 0; r < Count; ++r)
+			{
+				Num[r] += Mark[r];
+			}
+		}
+		// Close the gaps between marked rings and soften the ends.
+		for (int32 Pass = 0; Pass < 6; ++Pass)
+		{
+			TArray<float> Next = Num;
+			for (int32 r = 1; r + 1 < Count; ++r)
+			{
+				Next[r] = FMath::Max(Num[r], 0.5f * (Num[r - 1] + Num[r + 1]));
+			}
+			Num = MoveTemp(Next);
+		}
+		Scale[k].SetNum(Count);
+		for (int32 r = 0; r < Count; ++r)
+		{
+			Scale[k][r] = FMath::Min(Pipe->PipeMergeMaxWidthScale, 1.f + Pipe->PipeMergeWidthPerPipe * Num[r]);
+		}
+	}
+	for (int32 k = 0; k < N; ++k)
+	{
+		for (int32 i = 0; i < Scale[k].Num(); ++i)
+		{
+			const int32 j = WrapPipe[k][i];
+			if (j != INDEX_NONE && Scale[j].IsValidIndex(WrapRing[k][i]))
+			{
+				const float Inner = Scale[j][WrapRing[k][i]] * Pipes[j]->TubeRadius / FMath::Max(1.f, Pipes[k]->TubeRadius) * 0.8f;
+				Scale[k][i] = FMath::Lerp(Scale[k][i], Inner, Wrap[k][i]);
+			}
+		}
+	}
+
+	// Rebuild what changed.
+	for (int32 k = 0; k < N; ++k)
+	{
+		ALogisticsPipeline* Pipe = Pipes[k];
+		bool bSame = (Pipe->PipeComponent || Pipe->GetNetMode() == NM_DedicatedServer)
+			&& Pipe->BuiltLine.Num() == Lines[k].Num() && Pipe->BuiltScale == Scale[k];
+		for (int32 i = 0; bSame && i < Lines[k].Num(); ++i)
+		{
+			bSame = Pipe->BuiltLine[i].Equals(Lines[k][i], 0.5f);
+		}
+		if (!bSame)
+		{
+			TArray<uint8> Merged;
+			Merged.SetNum(Lines[k].Num());
+			for (int32 i = 0; i < Merged.Num(); ++i)
+			{
+				Merged[i] = Wrap[k][i] >= 0.97f ? 2 : Wrap[k][i] > 0.5f ? 1 : 0;
+			}
+			Pipe->BuildTube(Lines[k], Scale[k], Merged);
+		}
+	}
+}
+
+void ALogisticsPipeline::ClearWalkCollision()
+{
+	for (UCapsuleComponent* Capsule : WalkCollision)
+	{
+		if (IsValid(Capsule))
+		{
+			Capsule->DestroyComponent();
+		}
+	}
+	WalkCollision.Reset();
+}
+
+void ALogisticsPipeline::BuildWalkCollision(const TArray<FVector>& Line, const TArray<float>& RadiusScale)
+{
+	ClearWalkCollision();
+	if (!bWalkableByGroundUnits || Line.Num() < 2)
+	{
+		return;
+	}
+	// Not inside the buildings (the ends dive into their centres).
+	const float SourceClear = SourceBase && GroundPoints.Num() ? FVector::Dist2D(GroundPoints[0], SourceBase->GetActorLocation()) : 0.f;
+	const float SinkClear = SinkBase && GroundPoints.Num() ? FVector::Dist2D(GroundPoints.Last(), SinkBase->GetActorLocation()) : 0.f;
+	auto InOpen = [&](const FVector& P)
+	{
+		return (!SourceBase || FVector::Dist2D(P, SourceBase->GetActorLocation()) > SourceClear)
+			&& (!SinkBase || FVector::Dist2D(P, SinkBase->GetActorLocation()) > SinkClear);
+	};
+
+	auto AddCapsule = [&](const FVector& A, const FVector& B, float Radius)
+	{
+		const FVector Dir = B - A;
+		const float Length = Dir.Size();
+		if (Length < 1.f)
+		{
+			return;
+		}
+		UCapsuleComponent* Capsule = NewObject<UCapsuleComponent>(this, NAME_None, RF_Transient);
+		Capsule->SetMobility(EComponentMobility::Movable);
+		Capsule->SetUsingAbsoluteLocation(true);
+		Capsule->SetUsingAbsoluteRotation(true);
+		Capsule->SetUsingAbsoluteScale(true);
+		Capsule->InitCapsuleSize(Radius, 0.5f * Length + Radius);
+		// Only the units' ground trace (a WorldStatic object query) sees it - no trace channel, no navigation.
+		Capsule->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		Capsule->SetCollisionObjectType(ECC_WorldStatic);
+		Capsule->SetCollisionResponseToAllChannels(ECR_Ignore);
+		Capsule->SetCanEverAffectNavigation(false);
+		Capsule->SetGenerateOverlapEvents(false);
+		Capsule->SetHiddenInGame(true);
+		Capsule->SetupAttachment(GetRootComponent());
+		Capsule->SetWorldLocationAndRotation(0.5f * (A + B), FRotationMatrix::MakeFromZ(Dir / Length).Rotator());
+		Capsule->RegisterComponent();
+		WalkCollision.Add(Capsule);
+	};
+
+	// Pieces of about WalkCollisionSegmentLength along the line, each as thick as the tube there.
+	const float SegmentLength = FMath::Max(50.f, WalkCollisionSegmentLength);
+	int32 Start = INDEX_NONE;
+	float Run = 0.f;
+	float RadiusMax = 0.f;
+	for (int32 i = 0; i < Line.Num(); ++i)
+	{
+		if (Start == INDEX_NONE)
+		{
+			if (!InOpen(Line[i]))
+			{
+				continue;
+			}
+			Start = i;
+			Run = 0.f;
+			RadiusMax = 0.f;
+		}
+		RadiusMax = FMath::Max(RadiusMax, TubeRadius * (RadiusScale.IsValidIndex(i) ? RadiusScale[i] : 1.f));
+		if (i > Start)
+		{
+			Run += FVector::Dist(Line[i - 1], Line[i]);
+		}
+		const bool bLast = i == Line.Num() - 1 || !InOpen(Line[i + 1]);
+		if (i > Start && (Run >= SegmentLength || bLast))
+		{
+			AddCapsule(Line[Start], Line[i], RadiusMax);
+			Start = bLast ? INDEX_NONE : i;
+			Run = 0.f;
+			RadiusMax = TubeRadius * (RadiusScale.IsValidIndex(i) ? RadiusScale[i] : 1.f);
+		}
+		else if (bLast)
+		{
+			Start = INDEX_NONE;
+		}
+	}
+}
+
+void ALogisticsPipeline::RebuildVisuals()
+{
+	RawLine.Reset();
+	if (GroundPoints.Num() >= 2)
+	{
+		BuildCenterLine(RawLine);
+	}
+	if (RawLine.Num() < 2)
+	{
+		ClearVisuals();
+	}
+	// This one and every other of the team (merging), each rebuilt only if it changed.
+	SolvePipeNetwork(GetWorld(), TeamId, bReplayRoad, nullptr);
+}
+
+void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<float>& RadiusScale, const TArray<uint8>& Merged)
+{
+	ClearVisuals();
 	if (Line.Num() < 2)
+	{
+		return;
+	}
+	BuiltLine = Line;
+	BuiltScale = RadiusScale;
+	BuildWalkCollision(Line, RadiusScale);
+	if (GetNetMode() == NM_DedicatedServer)
 	{
 		return;
 	}
@@ -576,14 +935,39 @@ void ALogisticsPipeline::RebuildVisuals()
 			}
 			MainDistance[Ring] = Distance;
 			MainSide[Ring] = Side;
-			MainData[Ring].Radius = TubeRadius;
+			MainData[Ring].Radius = TubeRadius * (RadiusScale.IsValidIndex(Ring) ? RadiusScale[Ring] : 1.f);
 			MainData[Ring].OwnDistance = Distance;
 			MainData[Ring].Main = FVector2f(Distance, 0.f);
 			MainData[Ring].MainSide = FVector2f(Side.X, Side.Y);
 		}
 		VisualLength = Distance;
 	}
-	AddTube(Line, MainData, FMath::Clamp(TubeSides, 4, 32));
+	{
+		// Only the parts outside other pipelines; each piece reaches one ring into the hidden part, so its
+		// open end lies inside the pipeline it joins.
+		const int32 Sides = FMath::Clamp(TubeSides, 4, 32);
+		auto Hidden = [&](int32 Ring) { return Merged.IsValidIndex(Ring) && Merged[Ring] == 2; };
+		for (int32 Ring = 0; Ring < Rings;)
+		{
+			if (Hidden(Ring))
+			{
+				++Ring;
+				continue;
+			}
+			int32 End = Ring;
+			while (End + 1 < Rings && !Hidden(End + 1))
+			{
+				++End;
+			}
+			const int32 First = FMath::Max(Ring - 1, 0);
+			const int32 Last = FMath::Min(End + 1, Rings - 1);
+			if (Last > First)
+			{
+				AddTube(TArray<FVector>(Line.GetData() + First, Last - First + 1), TArray<FTubeRing>(MainData.GetData() + First, Last - First + 1), Sides);
+			}
+			Ring = End + 1;
+		}
+	}
 
 	// --- Roots ---
 	if (RootSpacing > 0.f && VisualLength > 0.f)
@@ -652,8 +1036,10 @@ void ALogisticsPipeline::RebuildVisuals()
 				++Ring;
 			}
 			const FVector& P = Line[Ring];
+			// Not where it lies on another pipeline: that one has its own roots there.
 			const bool bInOpen = (!SourceBase || FVector::Dist2D(P, SourceBase->GetActorLocation()) > SourceClear)
-				&& (!SinkBase || FVector::Dist2D(P, SinkBase->GetActorLocation()) > SinkClear);
+				&& (!SinkBase || FVector::Dist2D(P, SinkBase->GetActorLocation()) > SinkClear)
+				&& !(Merged.IsValidIndex(Ring) && Merged[Ring]);
 			if (bInOpen)
 			{
 				const float SideSign = Random.FRand() < 0.5f ? 1.f : -1.f;

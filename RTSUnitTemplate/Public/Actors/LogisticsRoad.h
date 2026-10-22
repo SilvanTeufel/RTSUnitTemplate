@@ -71,6 +71,23 @@ public:
 	void InitializeRoad(ABuildingBase* InSource, ABuildingBase* InSink, int32 InTeamId,
 		const TArray<FVector>& InGroundPoints, bool bInHasGroundLane, float InAirHeight);
 
+	/**
+	 * Replay playback: lays a recorded road - no buildings at its ends, nothing replicated.
+	 * bGrow: laid out like a new road (it appeared while the replay ran on), else whole (seeked to).
+	 */
+	void InitializeReplayRoad(int32 InTeamId, const TArray<FVector>& InGroundPoints, bool bInHasGroundLane,
+		float InAirHeight, bool bInSupplyRoad, bool bGrow);
+
+	/** Hides a live road while a replay plays over the level, and shows it again. */
+	void SetHiddenForReplay(bool bHide);
+
+	/**
+	 * Built by the replay playback (InitializeReplayRoad). The logistics subsystem does not know it, the
+	 * replay recorder skips it, and it merges only with other replay roads.
+	 */
+	UPROPERTY(Transient, VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
+	bool bReplayRoad = false;
+
 	UPROPERTY(Replicated, VisibleInstanceOnly, BlueprintReadOnly, Category = Logistics)
 	TObjectPtr<ABuildingBase> SourceBase = nullptr;
 
@@ -402,7 +419,7 @@ protected:
 	 * Clients: which stretches of the team's RVT roads are drawn and how wide - every road against the older
 	 * ones. Redraws the roads whose result changed. Leaving: a road that is going away (left out).
 	 */
-	static void SolveRoadNetwork(UWorld* World, int32 InTeamId, const ALogisticsRoad* Leaving);
+	static void SolveRoadNetwork(UWorld* World, int32 InTeamId, bool bInReplayRoads, const ALogisticsRoad* Leaving);
 
 	/** The smoothed centre line of the RVT road (clients). */
 	TArray<FVector> RVTPath;
@@ -446,6 +463,12 @@ protected:
 
 	/** Seen by the local player's team (bOnlyVisibleToOwnTeam). */
 	bool bTeamVisible = true;
+
+	/** Hidden by SetHiddenForReplay. */
+	bool bHiddenForReplay = false;
+
+	/** InitializeReplayRoad without growth: the road (or pipeline) is laid whole at once. */
+	bool bLayWhole = false;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<USplineMeshComponent>> SegmentComponents;

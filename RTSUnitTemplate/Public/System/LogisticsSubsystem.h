@@ -123,6 +123,13 @@ public:
 	void MarkRoadsDirty() { bRoadsDirty = true; }
 
 	/**
+	 * A building now blocks the navmesh at Bounds (AUnitBase::Multicast_RegisterBuildingAsObstacle).
+	 * Roads and pipelines that run through it and do not end at it are routed around it - as soon as the
+	 * navmesh has taken the obstacle in.
+	 */
+	void NotifyObstaclePlaced(const AActor* Building, const FBox& Bounds);
+
+	/**
 	 * A Converter switched its conversion. Supply runs for it that have not loaded yet are dropped,
 	 * loaded ones turn back to the base they were loaded at. Rebuilds its supply road.
 	 */
@@ -172,6 +179,12 @@ private:
 
 	const FLogisticsRouteCache& GetOrComputeRoute(ABuildingBase* Source, ABuildingBase* Sink, AResourceGameMode* GameMode);
 
+	/** Drops the cached routes that cross a newly placed building, once the navmesh is up to date. */
+	void RerouteAroundObstacles(double Now);
+
+	/** True when the polyline crosses Box (2D, grown by Margin). */
+	static bool RouteCrossesBox(const TArray<FVector>& Points, const FBox& Box, float Margin);
+
 	/** Pick-up / drop-off point on the edge of a base, facing Toward. */
 	FVector GetBaseEdgePoint(const ABuildingBase* Base, const FVector& Toward, float Margin) const;
 
@@ -180,8 +193,8 @@ private:
 	/** Distance from Base's centre at which Unit touches it (base radius + unit radius + LogisticsDockGap). */
 	float GetDockDistance(const ABuildingBase* Base, const AUnitBase* Unit) const;
 
-	/** A flyer with LogisticsBehavior = LandOnRoof: docks on the roof instead of at the edge. */
-	static bool LandsOnRoof(const AUnitBase* Unit);
+	/** A flyer with LogisticsBehavior = LandOnRoof at a base that allows it (bAllowRoofLanding): docks on the roof instead of at the edge. */
+	static bool LandsOnRoof(const AUnitBase* Unit, const ABuildingBase* Base);
 	/** Roof point a LandsOnRoof unit docks at: a fifth of the base radius from the centre, facing Toward. */
 	FVector GetRoofDockPoint(const ABuildingBase* Base, const FVector& Toward) const;
 	/** World Z of the roof of Base (RoofLandingHeight, else the top of its ISM / skeletal mesh, else its capsule). */
@@ -191,6 +204,8 @@ private:
 	/** Undoes LandUnit. */
 	static void TakeOffUnit(FLogisticsJob& Job, AUnitBase* Unit);
 	static bool IsBaseAlive(const ABuildingBase* Base);
+	/** Alive and CanMove == false: roads and pipelines only connect buildings that stay put. */
+	static bool CanHaveRoad(const ABuildingBase* Base);
 	static bool IsUnitAlive(const AUnitBase* Unit);
 
 	ABuildingBase* FindNearestSink(int32 TeamId, const FVector& From) const;
@@ -242,10 +257,22 @@ private:
 	/** Supply road per Converter (its source is the collecting base that supplies it). */
 	TMap<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ALogisticsRoad>> SupplyRoadsByConverter;
 
+	/** Per Converter: since when (world seconds) its current supplier has had none of the input. */
+	TMap<TWeakObjectPtr<ABuildingBase>, double> SupplierEmptySince;
+
 	/** Ground routes per (source, sink), so a periodic refresh does not path-find again. */
 	TMap<TPair<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ABuildingBase>>, FLogisticsRouteCache> RouteCache;
 
 	TWeakObjectPtr<ACustomControllerBase> CachedController;
+
+	/** Buildings placed since the last reroute, waiting for the navmesh (NotifyObstaclePlaced). */
+	struct FPendingObstacle
+	{
+		TWeakObjectPtr<const AActor> Building;
+		FBox Bounds;
+		double Time = 0.0;
+	};
+	TArray<FPendingObstacle> PendingObstacles;
 
 	bool bRoadsDirty = true;
 	double LastRoadRefresh = -1000.0;
