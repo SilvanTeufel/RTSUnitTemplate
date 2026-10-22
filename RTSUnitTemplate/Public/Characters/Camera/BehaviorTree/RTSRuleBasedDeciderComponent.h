@@ -71,6 +71,15 @@ struct FRTSRuleRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
 	FBuildingCost ResourceMaxThresholds;
 
+	/**
+	 * Stock floor ON TOP of the ability cost - a spending valve. With bDeriveThresholdsFromAbility the table's
+	 * ResourceThresholds are replaced by the real cost, so "only build the 3rd factory when we float 800
+	 * Primary" cannot be written there. A non-zero entry means "only match while the team holds at least this
+	 * much"; 0 disables the check. Primary/Secondary/Tertiary only (supply-like resources have no stock to float).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Resources")
+	FBuildingCost ResourceMinStock;
+
 	// Caps
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Rule|Caps")
 	int32 MaxFriendlyUnitCount = 999;

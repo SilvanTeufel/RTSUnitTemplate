@@ -22,6 +22,10 @@
 #include "Characters/Unit/LevelUnit.h"
 #include "Widgets/SoundControlWidget.h"
 #include "Widgets/WinConditionWidget.h"
+#include "Core/RTSUnitTemplateSettings.h"
+#include "Core/WinConditionNarration.h"
+#include "System/StoryTriggerQueueSubsystem.h"
+#include "Widgets/StoryWidgetBase.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/UserWidget.h"
 #include "Widgets/Layout/SBox.h"
@@ -154,6 +158,13 @@ bool AExtendedCameraBase::InitializeWinConditionDisplay()
 		}
 
 		GetWorldTimerManager().ClearTimer(InitialWinConditionDelayTimerHandle);
+
+		// The narrator explains it once at the start (after the loading screen, like the goal widget). This
+		// init is retried every half second until the whole HUD is up - so plan it only once.
+		if (!bWinConditionStartNarrated && !GetWorldTimerManager().IsTimerActive(WinConditionNarrationTimerHandle))
+		{
+			ScheduleWinConditionNarration(URTSUnitTemplateSettings::Get()->NarrationDelay + FMath::Max(0.f, Delay - TargetConfig->InitialDisplayDelay), true);
+		}
 		
 		if (Delay > 0)
 		{
@@ -341,6 +352,98 @@ void AExtendedCameraBase::OnWinConditionChanged(AWinLoseConfigActor* Config, EWi
 	if (Config->TeamId == MyTeamId || Config->TeamId == 0)
 	{
 		ShowWinConditionWidget(Config->WinConditionDisplayDuration);
+		ScheduleWinConditionNarration(URTSUnitTemplateSettings::Get()->NarrationChangeDelay, false);
+	}
+}
+
+void AExtendedCameraBase::ScheduleWinConditionNarration(float Delay, bool bGameStart)
+{
+	const ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	if (!URTSUnitTemplateSettings::Get()->bNarrateWinConditions || !MyPC || !MyPC->IsLocalController())
+	{
+		return;
+	}
+	TWeakObjectPtr<AExtendedCameraBase> WeakThis(this);
+	GetWorldTimerManager().SetTimer(WinConditionNarrationTimerHandle, [WeakThis, bGameStart]()
+	{
+		if (AExtendedCameraBase* StrongThis = WeakThis.Get())
+		{
+			StrongThis->NarrateWinCondition(bGameStart);
+		}
+	}, FMath::Max(Delay, 0.01f), false);
+}
+
+void AExtendedCameraBase::NarrateWinCondition(bool bGameStart)
+{
+	const URTSUnitTemplateSettings* Settings = URTSUnitTemplateSettings::Get();
+	const ACameraControllerBase* MyPC = Cast<ACameraControllerBase>(GetController());
+	UGameInstance* GameInstance = GetGameInstance();
+	if (!Settings->bNarrateWinConditions || !MyPC || !MyPC->IsLocalController() || !GameInstance)
+	{
+		return;
+	}
+	const AWinLoseConfigActor* Config = AWinLoseConfigActor::GetWinLoseConfigForTeam(this, MyPC->SelectableTeamId);
+	UStoryTriggerQueueSubsystem* Queue = GameInstance->GetSubsystem<UStoryTriggerQueueSubsystem>();
+	if (!Config || !Queue)
+	{
+		return;
+	}
+	if (bGameStart)
+	{
+		bWinConditionStartNarrated = true;
+	}
+
+	// The narrator of the player's faction: the first FactionNarrators entry whose tags one of the player's
+	// own units carries; empty fields (and no match) use the default narrator.
+	const FFactionNarrator* Faction = nullptr;
+	if (Settings->FactionNarrators.Num() > 0)
+	{
+		for (TActorIterator<AUnitBase> It(GetWorld()); It && !Faction; ++It)
+		{
+			if (It->TeamId != MyPC->SelectableTeamId)
+			{
+				continue;
+			}
+			for (const FFactionNarrator& Entry : Settings->FactionNarrators)
+			{
+				if (!Entry.FactionTags.IsEmpty() && It->UnitTags.HasAny(Entry.FactionTags))
+				{
+					Faction = &Entry;
+					break;
+				}
+			}
+		}
+	}
+	const EWinConditionNarrationStyle Style = Faction ? Faction->Style : Settings->NarrationStyle;
+	const FText& Name = Faction && !Faction->Name.IsEmpty() ? Faction->Name : Settings->NarratorName;
+	const TSoftClassPtr<UStoryWidgetBase>& WidgetSoft = Faction && !Faction->WidgetClass.IsNull() ? Faction->WidgetClass : Settings->NarratorWidgetClass;
+	const bool bOwnPortrait = Faction && (!Faction->Material.IsNull() || !Faction->Image.IsNull());
+	const TSoftObjectPtr<UMaterialInterface> Material = bOwnPortrait ? Faction->Material : Settings->NarratorMaterial;
+	const TSoftObjectPtr<UTexture2D> Image = bOwnPortrait ? Faction->Image : Settings->NarratorImage;
+
+	// The resource names the goal widget shows, so both say the same.
+	const TMap<EResourceType, FText>* ResourceNames = WinConditionWidget ? &WinConditionWidget->ResourceDisplayNames : nullptr;
+	const TArray<FString> Sentences = WinConditionNarration::BuildSentences(Config, bGameStart, Style, ResourceNames);
+	UE_LOG(LogTemp, Log, TEXT("[WinCondition] Narration (%s): %d sentences, stage %d, narrator '%s'."), bGameStart ? TEXT("start") : TEXT("change"),
+		Sentences.Num(), Config->CurrentWinConditionIndex + 1, *Name.ToString());
+	for (const FString& Sentence : Sentences)
+	{
+		UE_LOG(LogTemp, Log, TEXT("[WinCondition]   \"%s\""), *Sentence);
+	}
+	const FString Speaker = Name.ToString();
+	UClass* WidgetClass = WidgetSoft.LoadSynchronous();
+	for (const FString& Message : WinConditionNarration::ToMessages(Sentences, Settings->NarrationMaxCharsPerMessage))
+	{
+		FStoryQueueItem Item;
+		Item.WidgetClass = WidgetClass;
+		Item.Text = FText::FromString(Speaker.IsEmpty() ? Message : Speaker + TEXT(":\n") + Message);
+		Item.MaterialSoft = Material;
+		Item.ImageSoft = Image;
+		TArray<FString> Words;
+		Message.ParseIntoArrayWS(Words);
+		Item.LifetimeSeconds = FMath::Max(Settings->NarrationMinSeconds, Words.Num() * Settings->NarrationSecondsPerWord);
+		Item.bTillAudioEnds = false;
+		Queue->EnqueueStory(Item);
 	}
 }
 
@@ -2076,6 +2179,8 @@ void AExtendedCameraBase::HandleState_AbilityArrayIndex(const FInputActionValue&
 	{
 		CameraControllerBase->AddAbilityIndex(-1);
 	}
+	// Scrolled under the mouse: show the tooltip of what the button holds now, not of what it held.
+	UUnitWidgetSelector::RefreshOpenTooltip();
 }
 
 void AExtendedCameraBase::HandleState_AbilityUnitIndex(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase)
@@ -2091,6 +2196,7 @@ void AExtendedCameraBase::HandleState_AbilityUnitIndex(const FInputActionValue& 
 		CameraControllerBase->AbilityArrayIndex = 0;
 		CameraControllerBase->AddToCurrentUnitWidgetIndex(-1);
 	}
+	UUnitWidgetSelector::RefreshOpenTooltip();
 }
 
 void AExtendedCameraBase::HandleState_ScrollZoom(const FInputActionValue& InputActionValue, ACameraControllerBase* CameraControllerBase)

@@ -475,6 +475,13 @@ TArray<float> UInferenceComponent::StateToArray(const FGameStateData& GameStateD
     StateArray.Add(static_cast<float>(GameStateData.CtrlETagPendingBuildCount));
     StateArray.Add(static_cast<float>(GameStateData.CtrlRTagPendingBuildCount));
 
+    // Eco buildings (finished + planned), appended at the END so the indices of everything above stay put.
+    for (int32 EcoIdx = 0; EcoIdx < EcoStateSlots; ++EcoIdx)
+    {
+        StateArray.Add(GameStateData.EcoClassCounts.IsValidIndex(EcoIdx)
+            ? static_cast<float>(GameStateData.EcoClassCounts[EcoIdx]) : 0.f);
+    }
+
     check(StateArray.Num() == GetStateSize());
     return StateArray;
 }
@@ -498,7 +505,11 @@ int32 UInferenceComponent::GetStateSize()
     //     baut; ohne diese Zahl kann das Netz den Unterschied gar nicht sehen.
     // Erfolgskriterium ist zuerst die Uebereinstimmung im Training (kostet keine Partie): steigt
     // sie ueber 54,5 %, traegt der Weg. Erst dann im Spiel gegenmessen.
-    return 55;
+    //
+    // 21.10.2026: 55 -> 65. Zehn Eco-Gebaeudezaehler (fertig + geplant) am Ende, siehe
+    // FGameStateData::EcoClassCounts. Die neue Regel-KI deckelt genau diese Klassen; das Netz konnte sie nicht
+    // sehen. Das Alt-Netz ist damit ungueltig (es war ohnehin gegen die alte Regel-KI trainiert).
+    return 55 + EcoStateSlots;
 }
 
 FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)
