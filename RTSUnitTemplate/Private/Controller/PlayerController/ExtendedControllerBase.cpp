@@ -89,6 +89,38 @@ static bool IsDeadForPlacement(const AActor* Actor)
 // Vorwaertsdeklaration: GatherBlockersByBounds braucht sie, steht aber davor.
 static bool GetActorBoundsForSnap(AActor* Actor, FVector& OutCenter, FVector& OutExtent);
 
+namespace
+{
+	/** What a placed building, or the building of a build area, does with resources. */
+	EBaseType PlacementBaseType(const AActor* Actor)
+	{
+		if (const ABuildingBase* Building = Cast<ABuildingBase>(Actor))
+		{
+			return Building->BaseType;
+		}
+		const AWorkArea* Area = Cast<AWorkArea>(Actor);
+		const ABuildingBase* Cdo = Area && Area->BuildingClass ? Area->BuildingClass->GetDefaultObject<ABuildingBase>() : nullptr;
+		return Cdo ? Cdo->BaseType : EBaseType::None;
+	}
+
+	/**
+	 * Centre distance the dragged area must keep from Neighbor because one is a Converter and the other a
+	 * storing base (AWorkArea::ConverterStockGap between the footprints, radii DragR / NeighborR); 0 = no rule.
+	 */
+	float ConverterStockSpacing(const AWorkArea* Dragged, const AActor* Neighbor, float DragR, float NeighborR)
+	{
+		if (!Dragged || Dragged->ConverterStockGap <= 0.f || !Neighbor)
+		{
+			return 0.f;
+		}
+		auto IsStock = [](EBaseType T) { return T == EBaseType::StoreOnly || T == EBaseType::CollectAndStore; };
+		const EBaseType Own = PlacementBaseType(Dragged);
+		const EBaseType Other = PlacementBaseType(Neighbor);
+		const bool bApplies = (Own == EBaseType::Converter && IsStock(Other)) || (IsStock(Own) && Other == EBaseType::Converter);
+		return bApplies ? DragR + NeighborR + Dragged->ConverterStockGap : 0.f;
+	}
+}
+
 /**
  * Findet WorkAreas und Gebaeude, deren Ausdehnung einen Testkasten schneidet - OHNE Kollision.
  *
@@ -2754,7 +2786,7 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                 FVector NC, NE;
                 if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                 const float NR = FMath::Max(NE.X, NE.Y);
-                float Required = DragR + NR + SnapGap;
+                float Required = FMath::Max(DragR + NR + SnapGap, ConverterStockSpacing(DraggedWorkArea, N, DragR, NR));
                 // Enforce resource distance if enabled on dragged WorkArea and neighbor is a resource WorkArea
                 if (DraggedWorkArea->DenyPlacementCloseToResources)
                 {
@@ -2816,7 +2848,7 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                     FVector NC, NE;
                     if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
-                    float Required = DragR2 + NR + SnapGap;
+                    float Required = FMath::Max(DragR2 + NR + SnapGap, ConverterStockSpacing(DraggedWorkArea, N, DragR2, NR));
                     if (DraggedWorkArea->DenyPlacementCloseToResources)
                     {
                         if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
@@ -2949,6 +2981,7 @@ void AExtendedControllerBase::PerformWorkAreaDistanceResolution(AWorkArea* Dragg
             
             // Required distance: if snapped, we allow zero clearance; otherwise use SnapGap
             float Required = DragR + NR + (bWorkAreaIsSnapped ? 0.f : SnapGap);
+            Required = FMath::Max(Required, ConverterStockSpacing(DraggedWorkArea, N, DragR, NR));
 
             // Enforce resource distance if enabled on dragged WorkArea and neighbor is a resource WorkArea
             if (DraggedWorkArea->DenyPlacementCloseToResources)
@@ -5986,6 +6019,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			bool bIsOverlappingWithValidArea = false;
 			bool bIsNoBuildZone = false;
 			bool bTooCloseToResources = false;
+			bool bTooCloseToStock = false;
 			bool bNeedsBeaconOutOfRange = false;
 			bool bOffNavMesh = false;
 			bool bOnSlope = false;
@@ -5999,6 +6033,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				bIsOverlappingWithValidArea = false;
 				bIsNoBuildZone = false;
 				bTooCloseToResources = false;
+				bTooCloseToStock = false;
 				bNeedsBeaconOutOfRange = false;
 				bOffNavMesh = false;
 				bOnSlope = false;
@@ -6081,6 +6116,34 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					}
 				}
 
+				// Converter <-> storing base: AWorkArea::ConverterStockGap between the footprints.
+				if (DraggedWorkArea->ConverterStockGap > 0.f && PlacementBaseType(DraggedWorkArea) != EBaseType::None)
+				{
+					FVector DragC, DragE;
+					if (GetActorBoundsForSnap(DraggedWorkArea, DragC, DragE))
+					{
+						const float DragR = FMath::Max(DragE.X, DragE.Y);
+						auto TooClose = [&](AActor* Other)
+						{
+							FVector OC, OE;
+							if (!Other || Other == DraggedWorkArea || !GetActorBoundsForSnap(Other, OC, OE))
+							{
+								return false;
+							}
+							const float Required = ConverterStockSpacing(DraggedWorkArea, Other, DragR, FMath::Max(OE.X, OE.Y));
+							return Required > 0.f && FVector::Dist2D(DragC, OC) < Required;
+						};
+						for (TActorIterator<ABuildingBase> It(GetWorld()); It && !bTooCloseToStock; ++It)
+						{
+							bTooCloseToStock = TooClose(*It);
+						}
+						for (TActorIterator<AWorkArea> It(GetWorld()); It && !bTooCloseToStock; ++It)
+						{
+							bTooCloseToStock = TooClose(*It);
+						}
+					}
+				}
+
 				if (DraggedWorkArea->NeedsBeacon)
 				{
 					if (UWorld* WorldCtx = GetWorld())
@@ -6149,7 +6212,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				}
 
 				return !((bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) || bIsNoBuildZone
-					|| bNeedsBeaconOutOfRange || bTooCloseToResources || bOffNavMesh
+					|| bNeedsBeaconOutOfRange || bTooCloseToResources || bTooCloseToStock || bOffNavMesh
 					|| bOnSlope || bTooCloseToCliff);
 			};
 
@@ -6834,6 +6897,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 				if (bIsNoBuildZone) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because in No-Build Zone."));
 				if (bNeedsBeaconOutOfRange) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because beacon required but out of range."));
 				if (bTooCloseToResources) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because too close to resources."));
+				if (bTooCloseToStock) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because a Converter is too close to a storing base."));
 				if (bOffNavMesh) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because location is off NavMesh."));
 				if (bOnSlope) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because ground is too steep."));
 				if (bTooCloseToCliff) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because too close to a NavMesh edge (cliff)."));
@@ -7087,7 +7151,17 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			Server_FinalizeWorkAreaPosition(UnitBase->CurrentDraggedWorkArea,
 				UnitBase->CurrentDraggedWorkArea->GetActorTransform(), UnitBase);
 			Server_SpawnExtensionConstructionUnit(UnitBase, UnitBase->CurrentDraggedWorkArea);
-			SetAbilityEnabledByKey(UnitBase, "ExtensionAbility", false);
+			// Waende bauende Tuerme sperren nicht pauschal: sie duerfen bis MaxEnergyWalls
+			// Verbindungen (fertige Waende plus laufende Baustellen) gleichzeitig anlegen.
+			ABuildingBase* WandTurm = Cast<ABuildingBase>(UnitBase);
+			if (WandTurm && WandTurm->EnergyWallClass && WandTurm->MaxEnergyWalls > 0)
+			{
+				WandTurm->RefreshEnergyWallBuildAbility();
+			}
+			else
+			{
+				SetAbilityEnabledByKey(UnitBase, "ExtensionAbility", false);
+			}
 			return true;
 		}
 
@@ -7233,8 +7307,8 @@ bool AExtendedControllerBase::IsCompatibleForEnergyWallDetailed(ABuildingBase* I
 	}
 
 	bool bSameClass = Initiator->EnergyWallClass && Initiator->EnergyWallClass == Target->EnergyWallClass;
-	bool bInitiatorHasSpace = Initiator->EnergyWallArray.Num() < 2;
-	bool bTargetHasSpace = Target->EnergyWallArray.Num() < 2;
+	bool bInitiatorHasSpace = Initiator->GetEnergyWallCount() < FMath::Max(1, Initiator->MaxEnergyWalls);
+	bool bTargetHasSpace = Target->GetEnergyWallCount() < FMath::Max(1, Target->MaxEnergyWalls);
 
 	float ZDiff = 0.f;
 	FVector InitC, InitE, TargetC, TargetE;

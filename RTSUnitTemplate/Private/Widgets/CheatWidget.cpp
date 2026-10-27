@@ -10,6 +10,7 @@
 #include "Engine/World.h"
 #include "Core/WorkerData.h"
 #include "Controller/PlayerController/WidgetController.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 
 #define LOCTEXT_NAMESPACE "CheatWidget"
 
@@ -62,6 +63,30 @@ void UCheatWidget::WinCurrentLevel()
 	PC->Server_CheatWinCurrentLevel();
 }
 
+void UCheatWidget::ToggleFogOfWar()
+{
+	ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetLocalWidgetController());
+	if (!PC)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[Cheat] FoW nicht umschaltbar: kein CustomController"));
+		return;
+	}
+	PC->SetFogOfWarCheatDisabled(!PC->bFogOfWarCheatDisabled);
+}
+
+FReply UCheatWidget::HandleFogClicked()
+{
+	ToggleFogOfWar();
+	return FReply::Handled();
+}
+
+FText UCheatWidget::GetFogLabel() const
+{
+	const ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetLocalWidgetController());
+	return (PC && PC->bFogOfWarCheatDisabled) ? LOCTEXT("CheatFogOff", "FoW Toggle (aus)")
+	                                          : LOCTEXT("CheatFogOn", "FoW Toggle (an)");
+}
+
 FReply UCheatWidget::HandleToggleClicked()
 {
 	bPanelOpen = !bPanelOpen;
@@ -98,7 +123,7 @@ TSharedRef<SWidget> UCheatWidget::RebuildWidget()
 
 	const FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Bold", FontSize);
 
-	auto MacheKnopf = [this, Font](const FText& Beschriftung, FOnClicked BeiKlick)
+	auto MacheKnopf = [this, Font](const TAttribute<FText>& Beschriftung, FOnClicked BeiKlick)
 	{
 		return SNew(SButton)
 			.OnClicked(BeiKlick)
@@ -157,9 +182,18 @@ TSharedRef<SWidget> UCheatWidget::RebuildWidget()
 
 				+ SVerticalBox::Slot()
 				.AutoHeight()
+				.Padding(0.f, 0.f, 0.f, 4.f)
 				[
 					MacheKnopf(LOCTEXT("CheatWin", "Level gewinnen"),
 						FOnClicked::CreateUObject(this, &UCheatWidget::HandleWinClicked))
+				]
+
+				+ SVerticalBox::Slot()
+				.AutoHeight()
+				[
+					MacheKnopf(TAttribute<FText>::Create(
+							TAttribute<FText>::FGetter::CreateUObject(this, &UCheatWidget::GetFogLabel)),
+						FOnClicked::CreateUObject(this, &UCheatWidget::HandleFogClicked))
 				]
 			]
 		];

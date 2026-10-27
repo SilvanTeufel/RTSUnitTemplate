@@ -147,15 +147,29 @@ void AFogActor::InitializeFogPostProcess()
 	if (CustomPC && CustomPC->IsLocalController() && TeamId != -1 && CustomPC->SelectableTeamId == TeamId)
 	{
 		UPostProcessComponent* PPC = PostProcessComponent;
+		if (CustomPC->bFogOfWarCheatDisabled)
+		{
+			// Cheat "FoW Toggle": aus, bis der Schalter wieder umgelegt wird.
+			if (PPC && PPC->bEnabled)
+			{
+				PPC->bEnabled = false;
+			}
+			return;
+		}
 		if (FogMaterial && FogMaskTexture && PPC)
 		{
 			if (!PPC->bEnabled)
 			{
-				if (!FogMID) FogMID = UMaterialInstanceDynamic::Create(FogMaterial, this);
+				// Das Blendable nur einmal anlegen - nach einem Cheat-Aus wird der PostProcess hier
+				// erneut eingeschaltet, und ein zweites Blendable wuerde den Nebel doppelt legen.
+				if (!FogMID)
+				{
+					FogMID = UMaterialInstanceDynamic::Create(FogMaterial, this);
+					PPC->Settings.AddBlendable(FogMID, 1.0f);
+				}
 				FogMID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
 				FVector4 FogBounds(FogMinBounds.X, FogMinBounds.Y, FogMaxBounds.X, FogMaxBounds.Y);
 				FogMID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
-				PPC->Settings.AddBlendable(FogMID, 1.0f);
 				PPC->bEnabled = true;
 				GetWorldTimerManager().ClearTimer(FogUpdateTimerHandle);
 			}
@@ -186,6 +200,13 @@ bool AFogActor::IsWorldPositionRevealed(const FVector& WorldPosition) const
 {
 	// The mapping below must stay identical to the one in UpdateFogMaskWithCircles_Local, otherwise
 	// this reads a different pixel than the one the units wrote.
+	if (const ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController()))
+	{
+		if (CustomPC->bFogOfWarCheatDisabled)
+		{
+			return true;   // cheat "FoW Toggle": no fog, everything revealed
+		}
+	}
 	if (FogTexSize <= 0 || FogPixels.Num() < FogTexSize * FogTexSize)
 	{
 		return true;   // no mask on this machine - see the header: unknown never hides

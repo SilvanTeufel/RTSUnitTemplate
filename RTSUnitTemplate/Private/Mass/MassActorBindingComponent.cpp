@@ -1237,6 +1237,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
         	CharFrag->PositionedTransform = UnitOwner->GetActorTransform();
         	CharFrag->CapsuleHeight = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
         	CharFrag->CapsuleRadius = UnitOwner->GetCapsuleComponent()->GetScaledCapsuleRadius()+AdditionalCapsuleRadius;
+        	CharFrag->bResistPush = bResistPush;
 
 			// Sichtbare Oberkante einmalig erfassen - siehe FMassAgentCharacteristicsFragment::VisualTopOffset.
 			// ComputeVisualBounds filtert Widgets und leere ISMs bereits heraus und laeuft hier nach

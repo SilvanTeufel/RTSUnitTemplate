@@ -678,6 +678,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ResourcePlacementDistance = 1000.f;
 
+	// A Converter keeps at least this gap (between the two footprints) to a storing base (Store Only,
+	// Collect And Store) - and a storing base to a Converter. Read from the area being placed; 0 = no rule.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0"))
+	float ConverterStockGap = 700.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool NeedsBeacon = false;
 

@@ -151,6 +151,26 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float VisibilityOffset = 150.f;
 
+	/**
+	 * Fog state of THIS moment, set by UUnitVisibilityProcessor. Unlike IsVisibleEnemy it has no
+	 * memory: a building that was seen once stays drawn (IsVisibleEnemy), but its sounds and effects
+	 * must only fire while it is really revealed.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool IsRevealedByFogNow = false;
+
+	/** World distance around the view inside which FireEffects / PlayFogAwareSound still play. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float EffectViewportMargin = 1000.f;
+
+	/** True when the local player may see/hear an effect of this unit at Location (fog + view + margin). */
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	bool CanLocalPlayerPerceiveEffect(const FVector& Location) const;
+
+	/** PlaySoundAtLocation that respects fog of war and the view (+ EffectViewportMargin). Local only. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void PlayFogAwareSound(USoundBase* Sound, FVector Location, float VolumeMultiplier = 1.f, float PitchMultiplier = 1.f);
+
 	void UpdateWidgetPositions(const FVector& Location);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)

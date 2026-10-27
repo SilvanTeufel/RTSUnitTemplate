@@ -608,6 +608,29 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SpawnEnergyWall(TSubclassOf<AEnergyWall> InEnergyWallClass, ABuildingBase* InOrigin);
 
+	/**
+	 * Wie viele EnergyWalls ein Turm hoechstens hat. Solange er weniger hat, bleibt seine
+	 * Bau-Ability (Schluessel ExtensionAbility) frei - er kann also auch nach dem ersten Turm
+	 * einen zweiten bauen. Nur fuer Gebaeude mit EnergyWallClass; 0 = Ability nicht anfassen.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 MaxEnergyWalls = 2;
+
+	/** Gueltige EnergyWalls dieses Gebaeudes. */
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	int32 GetEnergyWallCount() const;
+
+	/** Extensions dieses Gebaeudes, die gerade noch gebaut werden (laufende Baustellen). */
+	UFUNCTION(BlueprintPure, Category = RTSUnitTemplate)
+	int32 GetPendingExtensionBuildCount() const;
+
+	/**
+	 * Schaltet die Bau-Ability nach der Zahl der Waende plus laufender Baustellen frei oder ab
+	 * (Server). Laeuft einen Takt verzoegert, damit es nach dem Blueprint-BeginPlay der Extension
+	 * greift, das den Wirt sperrt.
+	 */
+	void RefreshEnergyWallBuildAbility();
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetEnergyWallsActive(bool bActive);
 

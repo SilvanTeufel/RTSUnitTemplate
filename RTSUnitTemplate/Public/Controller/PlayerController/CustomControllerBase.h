@@ -183,6 +183,18 @@ public:
 	UFUNCTION(NetMulticast, Reliable)
 	void Multi_InitFogOfWar();
 
+	/**
+	 * Cheat: Fog of War nur auf diesem Rechner aus. Der Fog-PostProcess wird abgeschaltet, die
+	 * Minimap aufgedeckt, und UUnitVisibilityProcessor zeigt jede Einheit - auch spaeter gespawnte,
+	 * weil der Processor die Flagge bei jedem Durchlauf liest. Nicht repliziert; ein neues Level
+	 * (neuer Controller) beginnt wieder mit Nebel.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Cheat")
+	bool bFogOfWarCheatDisabled = false;
+
+	UFUNCTION(BlueprintCallable, Category = "Cheat")
+	void SetFogOfWarCheatDisabled(bool bDisabled);
+
 	
 	UFUNCTION(Client, Reliable)
 	void AgentInit();

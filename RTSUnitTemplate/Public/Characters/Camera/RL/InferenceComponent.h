@@ -32,12 +32,20 @@ struct FRLAction
 	UPROPERTY()
 	int32 CameraState;
 
+	/** Ability array this action presses in (0..3); -1 = leave the controller's array untouched. */
+	UPROPERTY()
+	int32 AbilityArray = -1;
+
 	// Default constructor
 	FRLAction() : InputValue(0.0f), bAlt(false), bCtrl(false), CameraState(0) {}
 
 	// Helper constructor for easy initialization
 	FRLAction(const FString& InType, float InValue, bool InAlt, bool InCtrl, const FString& InAction, int32 InCamState)
 		: Type(InType), InputValue(InValue), bAlt(InAlt), bCtrl(InCtrl), Action(InAction), CameraState(InCamState)
+	{}
+
+	FRLAction(const FString& InType, float InValue, bool InAlt, bool InCtrl, const FString& InAction, int32 InCamState, int32 InAbilityArray)
+		: Type(InType), InputValue(InValue), bAlt(InAlt), bCtrl(InCtrl), Action(InAction), CameraState(InCamState), AbilityArray(InAbilityArray)
 	{}
 };
 
@@ -49,8 +57,13 @@ namespace UE::NNE
 }
 
 
-/** Number of eco-building counters at the end of the state vector (FGameStateData::EcoClassCounts). */
-constexpr int32 EcoStateSlots = 10;
+/**
+ * Number of building-class counters at the end of the state vector (FGameStateData::EcoClassCounts).
+ * Slots 0-9 are the eco buildings, 10-15 the capped Xeno production/tech classes (24.10.2026): the rule table caps
+ * LarvalPod, CarapacePod, AerialPod, TitanPod, SynapseCluster and gates build order on them, but the vector
+ * did not carry them, so the network could not tell "cap reached" from "cap open".
+ */
+constexpr int32 EcoStateSlots = 16;
 
 USTRUCT(BlueprintType)
 struct FGameStateData
@@ -443,6 +456,9 @@ private:
 	int32 ResolveOwningTeamId() const;
 
 	bool bModelInitialised = false;
+
+	/** Number of scores the loaded ONNX model returns; older models have fewer than ActionSpace.Num(). */
+	int32 ModelOutputCount = 0;
 
 	/** Action this component chose last, fed back as the LastActionIndex feature on the next inference. */
 	int32 LastChosenActionIndex = -1;

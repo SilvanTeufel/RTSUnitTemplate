@@ -25,7 +25,7 @@
 // 2 = zusaetzlich unbezahlbare Bauaktionen ausblenden.
 // 3 = leere Gruppenwahlen ausblenden (Anlauf 4, 02.09.2026).
 // 4 = den Zweitakt "waehlen, feuern" erzwingen (Anlauf 5, 19.09.2026) - siehe IstAktionMoeglich.
-static int32 GRLActionMask = 0;
+static int32 GRLActionMask = 4; // Standard seit 25.10.2026: Zweitakt waehlen/feuern fuer das Netz, siehe rts.rl.actions.per.decision
 static FAutoConsoleVariableRef CVarRLActionMask(
     TEXT("rts.rl.action.mask"),
     GRLActionMask,
@@ -319,7 +319,17 @@ void UInferenceComponent::EnsureModelInitialised()
         return;
     }
 
-    UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Runtime model and instance created successfully."));
+    ModelOutputCount = ActionSpace.Num();
+    {
+        const TConstArrayView<FTensorShape> OutShapes = ModelInstance->GetOutputTensorShapes();
+        if (OutShapes.Num() > 0 && OutShapes[0].Volume() > 0)
+        {
+            // Models trained before the ability-array actions return fewer scores; size the buffer to the model.
+            ModelOutputCount = FMath::Min<int32>(ActionSpace.Num(), static_cast<int32>(OutShapes[0].Volume()));
+        }
+    }
+
+    UE_LOG(LogTemp, Log, TEXT("InferenceComponent: Runtime model and instance created successfully (%d of %d actions)."), ModelOutputCount, ActionSpace.Num());
 }
 
 TArray<float> UInferenceComponent::ConvertStateToArray(const FGameStateData& GameStateData) const
@@ -506,6 +516,7 @@ int32 UInferenceComponent::GetStateSize()
     // Erfolgskriterium ist zuerst die Uebereinstimmung im Training (kostet keine Partie): steigt
     // sie ueber 54,5 %, traegt der Weg. Erst dann im Spiel gegenmessen.
     //
+    // 24.10.2026: 65 -> 71 (sechs Xeno-Klassenzaehler, siehe EcoStateSlots).
     // 21.10.2026: 55 -> 65. Zehn Eco-Gebaeudezaehler (fertig + geplant) am Ende, siehe
     // FGameStateData::EcoClassCounts. Die neue Regel-KI deckelt genau diese Klassen; das Netz konnte sie nicht
     // sehen. Das Alt-Netz ist damit ungueltig (es war ohnehin gegen die alte Regel-KI trainiert).
@@ -530,6 +541,10 @@ FString UInferenceComponent::GetActionAsJSON(int32 ActionIndex)
     JsonObject->SetBoolField(TEXT("ctrl"), SelectedAction.bCtrl);
     JsonObject->SetStringField(TEXT("action"), SelectedAction.Action);
     JsonObject->SetNumberField(TEXT("camera_state"), SelectedAction.CameraState);
+    if (SelectedAction.AbilityArray >= 0)
+    {
+        JsonObject->SetNumberField(TEXT("ability_array_index"), SelectedAction.AbilityArray);
+    }
 
     // Serialize the JSON object to a string
     FString OutputString;
@@ -713,7 +728,30 @@ void UInferenceComponent::InitializeActionSpace()
         {"Control", 1.0f, true,  false, "switch_camera_state", 23},
         {"Control", 1.0f, true,  false, "switch_camera_state", 24},
         {"Control", 1.0f, true,  false, "switch_camera_state", 25},
-        {"Control", 1.0f, true,  false, "switch_camera_state", 26}
+        {"Control", 1.0f, true,  false, "switch_camera_state", 26},
+
+        // Ability 1-6 pressed in ability array 1, 2, 3 (index 36 + (Array-1)*6 + Slot).
+        // The rule table builds most economy and tech buildings from arrays 1 and 3, and the
+        // network had no way to ask for them: every ability press went to whatever array the
+        // controller happened to hold (normally 0).
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 21, 1},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 22, 1},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 23, 1},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 24, 1},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 25, 1},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 26, 1},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 21, 2},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 22, 2},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 23, 2},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 24, 2},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 25, 2},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 26, 2},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 21, 3},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 22, 3},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 23, 3},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 24, 3},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 25, 3},
+        {"Control", 1.0f, false, false, "switch_camera_state_ability", 26, 3}
     };
 }
 
@@ -743,7 +781,7 @@ int32 UInferenceComponent::ChooseAction(const TArray<float>& GameState)
 
     // --- Prepare Output Tensor ---
     TArray<float> QValues;
-    QValues.SetNumZeroed(ActionSpace.Num()); // The size of your ACTION_SPACE
+    QValues.SetNumZeroed(ModelOutputCount > 0 ? ModelOutputCount : ActionSpace.Num()); // The size of your ACTION_SPACE
 
     TArray<FTensorBindingCPU> OutputBindings;
     OutputBindings.Emplace();
@@ -809,7 +847,7 @@ bool UInferenceComponent::IstAktionMoeglich(int32 ActionIndex) const
     {
         const bool bVorigeWarGruppenwahl = (LastChosenActionIndex >= 0 && LastChosenActionIndex <= 9);
         const bool bIstGruppenwahl = (ActionIndex >= 0 && ActionIndex <= 9);
-        const bool bIstFaehigkeit = (ActionIndex >= 10 && ActionIndex <= 15);
+        const bool bIstFaehigkeit = (ActionIndex >= 10 && ActionIndex <= 15) || (ActionIndex >= 36 && ActionIndex <= 53);
 
         if (bVorigeWarGruppenwahl && bIstGruppenwahl)
         {
@@ -1094,7 +1132,7 @@ FString UInferenceComponent::GetActionFromRLModel(const FGameStateData& GameStat
     InputBindings[0].SizeInBytes = GameStateArray.Num() * sizeof(float);
 
     TArray<float> QValues;
-    QValues.SetNumZeroed(ActionSpace.Num());
+    QValues.SetNumZeroed(ModelOutputCount > 0 ? ModelOutputCount : ActionSpace.Num());
 
     TArray<UE::NNE::FTensorBindingCPU> OutputBindings;
     OutputBindings.Emplace();

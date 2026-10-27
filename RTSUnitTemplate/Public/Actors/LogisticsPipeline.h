@@ -271,6 +271,9 @@ protected:
 	UFUNCTION()
 	void OnRep_Packets();
 
+	/** The network was solved again since this pipeline began to retract (it is no merge target then). */
+	bool bSolvedAsRetracting = false;
+
 	/** Clients / listen server: writes the packets into the material. */
 	void UpdatePacketParameters();
 

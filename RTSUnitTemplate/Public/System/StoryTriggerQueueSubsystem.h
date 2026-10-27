@@ -63,6 +63,14 @@ struct FStoryQueueItem
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	float AudioEndExtraDelay = 2.5f;
 
+	// Played one after another after Sound (FollowUpGap seconds apart), in the same window - e.g. one
+	// recording per sentence of a message. bTillAudioEnds then waits for the last of them.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	TArray<TObjectPtr<USoundBase>> FollowUpSounds;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
+	float FollowUpGap = 0.3f;
+
 	UPROPERTY(BlueprintReadWrite, Category = "StoryQueue")
 	TWeakObjectPtr<UObject> TriggeringSource = nullptr;
 };
@@ -152,6 +160,11 @@ private:
 	float MusicRestoreDelay = 0.5f;
 	FTimerHandle MusicRestoreTimerHandle;
 	void OnMusicRestoreDue();
+
+	/** CurrentItem.FollowUpSounds: the next one to play and its timer. */
+	int32 NextFollowUp = 0;
+	FTimerHandle FollowUpTimerHandle;
+	void PlayNextFollowUp();
 
 	void TryPlayNext();
 	/** Ende der Pause zwischen zwei Storys: gibt den Pausen-Timer frei, dann TryPlayNext. */

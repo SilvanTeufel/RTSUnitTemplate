@@ -235,6 +235,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "EnergyWall")
 	bool IsDeactivated() const { return bIsDeactivated; }
 
+	/** Server: the wall closed or opened - roads and pipelines near it look for their way again. */
+	void NotifyLogisticsPassageChanged() const;
+
 private:
 	UPROPERTY(Replicated)
 	ABuildingBase* CachedBuildingA;

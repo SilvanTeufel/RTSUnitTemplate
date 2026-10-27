@@ -38,9 +38,14 @@ namespace
      * beim Lehrer gegen 529 beim Netz, also Faktor 5,2. Der Leistungsabstand hat dieselbe
      * Groessenordnung: das Netz handelt nicht schlechter, es handelt seltener.
      *
-     * 1 = wie bisher, aendert nichts.
+     * 1 = ein Zug je Entscheidung.
+     *
+     * Standard 2 (25.10.2026): ein Zug der Regel ist "Gruppe waehlen, Faehigkeit druecken". Mit sauberen
+     * Lehrerlabels (nur die gefeuerte Regelzeile, siehe RecordDecisionForTraining) und der Zweitakt-Maske
+     * (rts.rl.action.mask=4) liefert das Netz beide Haelften in EINER Entscheidung: Helix_Basin 51 % -> 64/66 %
+     * (n=30/25), Regel 66 %. Betrifft nur den KI-Pfad (BTT), nicht den Spieler.
      */
-    static int32 GRLAktionenJeEntscheidung = 1;
+    static int32 GRLAktionenJeEntscheidung = 2;
     static FAutoConsoleVariableRef CVarRLAktionenJeEntscheidung(
         TEXT("rts.rl.actions.per.decision"),
         GRLAktionenJeEntscheidung,

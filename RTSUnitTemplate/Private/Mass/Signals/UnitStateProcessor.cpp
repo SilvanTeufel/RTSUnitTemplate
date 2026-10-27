@@ -1992,6 +1992,16 @@ void UUnitStateProcessor::HandleStartDead(FName SignalName, TArray<FMassEntityHa
                                     Wall->StartDespawn(BuildingBase);
                                     if (BuildingBase->Origin) BuildingBase->Origin->EnergyWallArray.Remove(Wall);
                                     if (BuildingBase->Extension) BuildingBase->Extension->EnergyWallArray.Remove(Wall);
+
+                                    // Auch beim Turm am anderen Ende austragen: ein Turm kann zwei Tuerme
+                                    // gebaut haben (Extension merkt sich nur einen) oder per Einrasten
+                                    // verbunden sein. Sonst zaehlte die tote Wand dort weiter mit.
+                                    ABuildingBase* Gegenueber = Wall->GetBuildingA() == BuildingBase ? Wall->GetBuildingB() : Wall->GetBuildingA();
+                                    if (IsValid(Gegenueber) && Gegenueber != BuildingBase)
+                                    {
+                                        Gegenueber->EnergyWallArray.Remove(Wall);
+                                        Gegenueber->RefreshEnergyWallBuildAbility();
+                                    }
                                 }
                             }
                             BuildingBase->EnergyWallArray.Empty();

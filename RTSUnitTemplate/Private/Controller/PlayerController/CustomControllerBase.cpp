@@ -179,6 +179,20 @@ void ACustomControllerBase::Multi_InitFogOfWar_Implementation()
 	}
 }
 
+void ACustomControllerBase::SetFogOfWarCheatDisabled(bool bDisabled)
+{
+	bFogOfWarCheatDisabled = bDisabled;
+
+	// Die Einheiten folgen von selbst (UUnitVisibilityProcessor liest die Flagge), der PostProcess
+	// muss hier umgeschaltet werden.
+	for (TActorIterator<AFogActor> It(GetWorld()); It; ++It)
+	{
+		It->InitializeFogPostProcess();
+	}
+
+	UE_LOG(LogTemp, Warning, TEXT("[Cheat] Fog of War %s"), bDisabled ? TEXT("aus") : TEXT("an"));
+}
+
 void ACustomControllerBase::AgentInit_Implementation()
 {
 	// Only execute for the local controller (Client RPC). Server-spawned AI controllers without owning client will skip here.

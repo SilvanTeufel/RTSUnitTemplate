@@ -19,6 +19,7 @@
 #include "MassEntitySubsystem.h"
 #include "NavigationPath.h"
 #include "NavigationSystem.h"
+#include "NavFilters/NavFilter_LogisticsRoad.h"
 
 static TAutoConsoleVariable<int32> CVarLogisticsDebug(
 	TEXT("RTS.Logistics.Debug"),
@@ -572,6 +573,56 @@ TArray<ALogisticsRoad*> ULogisticsSubsystem::GetSupplyRoadsOfTeam(int32 TeamId) 
 // Roads
 // ---------------------------------------------------------------------------------------------
 
+namespace
+{
+	/**
+	 * Rueckt die Knickpunkte eines Navmesh-Wegs nach aussen. Der Weg streift die Ecken der Hindernisse
+	 * so knapp, wie die Einheiten es duerfen - eine Strasse ist aber viel breiter und lag dort mit
+	 * einer Haelfte im Turm. Verschoben wird nur, wenn der neue Punkt und beide Teilstrecken zu ihm
+	 * frei auf dem zulaessigen Navmesh liegen; sonst halber Abstand, sonst bleibt der Punkt.
+	 */
+	void RueckeEckenNachAussen(TArray<FVector>& Punkte, UNavigationSystemV1* NavSys, const ANavigationData* NavData,
+		FSharedConstNavQueryFilter Filter, float Abstand)
+	{
+		if (!NavSys || !NavData || Punkte.Num() < 3 || Abstand <= 0.f) return;
+
+		const TArray<FVector> Original = Punkte;
+		for (int32 i = 1; i < Original.Num() - 1; ++i)
+		{
+			const FVector A = Punkte[i - 1];
+			const FVector B = Original[i];
+			const FVector C = Original[i + 1];
+			const FVector Rein = (FVector(B.X - A.X, B.Y - A.Y, 0.f)).GetSafeNormal();
+			const FVector Raus = (FVector(C.X - B.X, C.Y - B.Y, 0.f)).GetSafeNormal();
+			if (Rein.IsNearlyZero() || Raus.IsNearlyZero()) continue;
+			// Kaum geknickt: kein Hindernis zu umrunden.
+			if (FMath::Abs(Rein.X * Raus.Y - Rein.Y * Raus.X) < 0.05f && (Rein | Raus) > 0.f) continue;
+
+			// (Raus - Rein) zeigt in die Innenseite der Kurve - dort liegt das umrundete Hindernis.
+			const FVector Aussen = -(Raus - Rein).GetSafeNormal();
+			if (Aussen.IsNearlyZero()) continue;
+
+			for (const float Anteil : { 1.f, 0.5f })
+			{
+				const FVector Kandidat = B + Aussen * (Abstand * Anteil);
+				FNavLocation Auf;
+				if (!NavSys->ProjectPointToNavigation(Kandidat, Auf, FVector(20.f, 20.f, 500.f), NavData, Filter)
+					|| FVector::DistSquared2D(Auf.Location, Kandidat) > FMath::Square(10.f))
+				{
+					continue;
+				}
+				FVector Treffer;
+				if (NavData->Raycast(A, Auf.Location, Treffer, Filter) || NavData->Raycast(Auf.Location, C, Treffer, Filter))
+				{
+					continue;
+				}
+				Punkte[i] = Auf.Location;
+				break;
+			}
+		}
+	}
+}
+
 const FLogisticsRouteCache& ULogisticsSubsystem::GetOrComputeRoute(ABuildingBase* Source, ABuildingBase* Sink, AResourceGameMode* GameMode)
 {
 	const TPair<TWeakObjectPtr<ABuildingBase>, TWeakObjectPtr<ABuildingBase>> Key(Source, Sink);
@@ -603,21 +654,42 @@ const FLogisticsRouteCache& ULogisticsSubsystem::GetOrComputeRoute(ABuildingBase
 	UWorld* World = GetWorld();
 	if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
 	{
+		// Nur das freie Navmesh: Gebaeude und geschlossene Waende sind fuer die Strasse gesperrt,
+		// nicht bloss teuer. Auch Start und Ziel werden auf zulaessige Flaeche projiziert - der
+		// Randpunkt am Gebaeude liegt oft noch in dessen Sperrflaeche.
+		const ANavigationData* NavData = NavSys->GetDefaultNavDataInstance(FNavigationSystem::DontCreate);
+		FSharedConstNavQueryFilter Filter = NavData
+			? UNavigationQueryFilter::GetQueryFilter(*NavData, this, UNavFilter_LogisticsRoad::StaticClass())
+			: nullptr;
+
 		const FVector Extent(600.f, 600.f, 1500.f);
 		FNavLocation StartNav;
 		FNavLocation EndNav;
-		const bool bStartOnNav = NavSys->ProjectPointToNavigation(Start, StartNav, Extent);
-		const bool bEndOnNav = NavSys->ProjectPointToNavigation(End, EndNav, Extent);
+		const bool bStartOnNav = NavSys->ProjectPointToNavigation(Start, StartNav, Extent, NavData, Filter);
+		const bool bEndOnNav = NavSys->ProjectPointToNavigation(End, EndNav, Extent, NavData, Filter);
 		if (bStartOnNav) Start = StartNav.Location;
 		if (bEndOnNav) End = EndNav.Location;
 
 		if (bStartOnNav && bEndOnNav)
 		{
-			UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(World, Start, End);
+			UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(World, Start, End, nullptr, UNavFilter_LogisticsRoad::StaticClass());
 			if (Path && Path->IsValid() && !Path->IsPartial() && Path->PathPoints.Num() >= 2)
 			{
 				Route.Points = Path->PathPoints;
+				// Halbe Strassenbreite Luft an den Ecken (vgl. Margin in RerouteAroundObstacles).
+				RueckeEckenNachAussen(Route.Points, NavSys, NavData, Filter, 100.f);
 				Route.bHasGroundLane = true;
+			}
+			else
+			{
+				// Kein Weg ueber freie Flaeche (z.B. ringsum ummauert): lieber der alte Weg mit
+				// Kosten als eine Luftlinie quer durch alles.
+				UNavigationPath* Notweg = UNavigationSystemV1::FindPathToLocationSynchronously(World, Start, End);
+				if (Notweg && Notweg->IsValid() && !Notweg->IsPartial() && Notweg->PathPoints.Num() >= 2)
+				{
+					Route.Points = Notweg->PathPoints;
+					Route.bHasGroundLane = true;
+				}
 			}
 		}
 	}
@@ -640,6 +712,14 @@ void ULogisticsSubsystem::NotifyObstaclePlaced(const AActor* Building, const FBo
 	if (Bounds.IsValid)
 	{
 		PendingObstacles.Add({ Building, Bounds, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0 });
+	}
+}
+
+void ULogisticsSubsystem::NotifyPassageChanged(const FBox& Bounds)
+{
+	if (Bounds.IsValid)
+	{
+		PendingObstacles.Add({ nullptr, Bounds, GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0, true });
 	}
 }
 
@@ -678,6 +758,7 @@ void ULogisticsSubsystem::RerouteAroundObstacles(double Now)
 
 	// Half a road wide around the building: a lane that only grazes it is rerouted as well.
 	constexpr float Margin = 100.f;
+	constexpr float PassageMargin = 600.f;
 	int32 Dropped = 0;
 	for (auto It = RouteCache.CreateIterator(); It; ++It)
 	{
@@ -691,7 +772,19 @@ void ULogisticsSubsystem::RerouteAroundObstacles(double Now)
 			{
 				continue;
 			}
-			if (RouteCrossesBox(It.Value().Points, Pending.Bounds, Margin))
+			// A passage: a road that went around the closed wall does not cross it, but its detour runs
+			// close by - every route whose extent comes near the wall is searched again.
+			bool bAffected = false;
+			if (Pending.bPassage)
+			{
+				FBox RouteBox(It.Value().Points);
+				bAffected = RouteBox.IsValid && RouteBox.ExpandBy(FVector(PassageMargin, PassageMargin, 1.0e6)).Intersect(Pending.Bounds);
+			}
+			else
+			{
+				bAffected = RouteCrossesBox(It.Value().Points, Pending.Bounds, Margin);
+			}
+			if (bAffected)
 			{
 				It.RemoveCurrent();
 				++Dropped;

@@ -612,7 +612,12 @@ private:
 	 * rule AI seeds the first RL model: it already plays a competent game, so its decisions are the cheapest
 	 * source of "understands the rules" behaviour there is. No-op unless a recording is running.
 	 */
-	void RecordDecisionForTraining(const TArray<int32>& Indices) const;
+	void RecordDecisionForTraining(const TArray<int32>& Indices, int32 AbilityArrayIndex = 0) const;
+
+	/** True while EvaluateRulesFromDataTable scans rows: BuildCompositeActionJSON then parks its indices instead of recording. */
+	mutable bool bDeferRecording = false;
+	mutable TArray<int32> DeferredIndices;
+	mutable int32 DeferredAbilityArray = 0;
 
 	/** State that produced the current decision, cached so each recorded action pairs with its own input. */
 	FGameStateData CachedRecordingState;
