@@ -39,6 +39,8 @@ namespace
 		bool bIsBracingAgainstWall = false;
 		bool bIsFlying = false;
 		bool bIsFollowing = false;
+		/** FMassAgentCharacteristicsFragment::bResistPush: pushes the others, is never pushed itself. */
+		bool bResistPush = false;
 	};
 
 	static FVector Horizontal(const FVector& V)
@@ -137,6 +139,7 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 			Info.CapsuleRadius = Characs[i].CapsuleRadius;
 			Info.Target = Targets[i].TargetEntity;
 			Info.bIsFlying = Characs[i].bIsFlying;
+			Info.bResistPush = Characs[i].bResistPush;
 			
 			Info.bUseWorkerStrength = DoesEntityHaveTag(EntityManager, Info.Entity, FMassStateResourceExtractionTag::StaticStruct());
 
@@ -238,12 +241,13 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 
 				// GEÄNDERT: Wende die Kraft NUR an, wenn die Einheit nicht an der Wand lehnt!
 				// So stoßen die Einheiten an der Wand die Crowd zurück, lassen sich aber nicht durch die Wand quetschen.
-				if (!A.bIsBracingAgainstWall)
+				// A heavy unit (bResistPush) stands its ground; the other one makes way alone.
+				if (!A.bIsBracingAgainstWall && !A.bResistPush)
 				{
 					AccumPush.FindOrAdd(A.Entity) += PushA;
 				}
 
-				if (!B.bIsBracingAgainstWall)
+				if (!B.bIsBracingAgainstWall && !B.bResistPush)
 				{
 					AccumPush.FindOrAdd(B.Entity) += PushB;
 				}

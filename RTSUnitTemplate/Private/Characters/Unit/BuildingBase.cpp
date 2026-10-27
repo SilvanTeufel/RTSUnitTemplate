@@ -17,6 +17,7 @@
 #include "Characters/Unit/WorkingUnitBase.h"
 #include "System/LogisticsSubsystem.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "Characters/Unit/ConstructionUnit.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -628,6 +629,18 @@ void ABuildingBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	// A finished building takes over the selection of its construction site (AControllerBase::OnBuildingAppeared).
+	if (UWorld* World = GetWorld())
+	{
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (AControllerBase* PC = Cast<AControllerBase>(It->Get()); PC && PC->IsLocalController())
+			{
+				PC->OnBuildingAppeared(this);
+			}
+		}
+	}
+
 	// Gebaeude sperren Einheiten nicht mehr physisch - das Umlaufen regelt das Navigationsnetz.
 	// Anklicken laeuft ueber ECC_Visibility und bleibt davon unberuehrt.
 	if (UCapsuleComponent* Kapsel = GetCapsuleComponent())
@@ -830,8 +843,70 @@ void ABuildingBase::SpawnEnergyWall(TSubclassOf<AEnergyWall> InEnergyWallClass, 
 			NewWall->Multicast_InitializeWall(InOrigin, this);
 			EnergyWallArray.Add(NewWall);
 			InOrigin->EnergyWallArray.Add(NewWall);
+
+			RefreshEnergyWallBuildAbility();
+			InOrigin->RefreshEnergyWallBuildAbility();
 		}
 	}
+}
+
+int32 ABuildingBase::GetEnergyWallCount() const
+{
+	int32 Anzahl = 0;
+	for (const AEnergyWall* Wall : EnergyWallArray)
+	{
+		if (IsValid(Wall))
+		{
+			++Anzahl;
+		}
+	}
+	return Anzahl;
+}
+
+int32 ABuildingBase::GetPendingExtensionBuildCount() const
+{
+	int32 Anzahl = 0;
+	for (TActorIterator<AConstructionUnit> It(GetWorld()); It; ++It)
+	{
+		const AConstructionUnit* Baustelle = *It;
+		if (IsValid(Baustelle) && !Baustelle->IsActorBeingDestroyed() && Baustelle->Worker == this
+			&& Baustelle->WorkArea && Baustelle->WorkArea->IsExtensionArea
+			&& Baustelle->GetUnitState() != UnitData::Dead)
+		{
+			++Anzahl;
+		}
+	}
+	return Anzahl;
+}
+
+void ABuildingBase::RefreshEnergyWallBuildAbility()
+{
+	if (!HasAuthority() || !EnergyWallClass || MaxEnergyWalls <= 0) return;
+
+	UWorld* World = GetWorld();
+	if (!World) return;
+
+	// Einen Takt spaeter: die Extension sperrt ihren Wirt im Blueprint-BeginPlay, also NACH dem
+	// C++-BeginPlay, in dem die Wand entsteht. Erst danach entscheidet die Wandzahl.
+	TWeakObjectPtr<ABuildingBase> WeakThis(this);
+	World->GetTimerManager().SetTimerForNextTick([WeakThis]()
+	{
+		ABuildingBase* Turm = WeakThis.Get();
+		if (!IsValid(Turm) || Turm->GetUnitState() == UnitData::Dead) return;
+
+		// Laufende Baustellen zaehlen schon mit: so laesst sich der zweite Turm sofort ziehen,
+		// aber nicht mehr als MaxEnergyWalls Verbindungen auf einmal.
+		const bool bFrei = Turm->GetEnergyWallCount() + Turm->GetPendingExtensionBuildCount() < Turm->MaxEnergyWalls;
+		const FString Schluessel = NormalizeAbilityKey(TEXT("ExtensionAbility"));
+		for (FConstPlayerControllerIterator It = Turm->GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get());
+			if (PC && PC->SelectableTeamId == Turm->TeamId)
+			{
+				PC->Client_ApplyOwnerAbilityKeyToggle(Turm, Schluessel, bFrei);
+			}
+		}
+	});
 }
 
 void ABuildingBase::SetEnergyWallsActive(bool bActive)

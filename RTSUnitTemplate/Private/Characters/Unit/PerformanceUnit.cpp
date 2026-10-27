@@ -541,9 +541,39 @@ void APerformanceUnit::HideAbilityIndicator_Implementation(AAbilityIndicator* Ab
 	}
 }
 
+bool APerformanceUnit::CanLocalPlayerPerceiveEffect(const FVector& Location) const
+{
+	// Fog: the CURRENT reveal, not IsVisibleEnemy - that one never drops for immobile units (buildings,
+	// cocoons) once they were seen, or after the FoW cheat was toggled, so their production and
+	// construction sounds kept playing from deep inside the fog.
+	if (EnableFog && !IsMyTeam && !IsRevealedByFogNow)
+	{
+		return false;
+	}
+	return RTSViewportUtils::IsLocationNearLocalViewport(this, Location, EffectViewportMargin);
+}
+
+void APerformanceUnit::PlayFogAwareSound(USoundBase* Sound, FVector Location, float VolumeMultiplier, float PitchMultiplier)
+{
+	if (!Sound || !CanLocalPlayerPerceiveEffect(Location))
+	{
+		return;
+	}
+
+	float Multiplier = VolumeMultiplier;
+	if (UGameInstance* GI = GetGameInstance())
+	{
+		if (AControllerBase* ControllerBase = Cast<AControllerBase>(GI->GetFirstLocalPlayerController()))
+		{
+			Multiplier *= ControllerBase->GetSoundMultiplier();
+		}
+	}
+	UGameplayStatics::PlaySoundAtLocation(this, Sound, Location, Multiplier, PitchMultiplier);
+}
+
 void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USoundBase* ImpactSound, FVector ScaleVFX, float ScaleSound, float EffectDelay, float SoundDelay, int32 ID)
 {
-    if (IsOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
+    if (CanLocalPlayerPerceiveEffect(GetMassActorLocation()))
     {
         UWorld* World = GetWorld();
         if (!World)
@@ -661,9 +691,9 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
     // impacts a screen away whenever the shooter happened to be visible.
     // The fog half of the gate DOES stay anchored to the unit: fog asks "can the local player see
     // who fired", which is a property of the shooter, not of the point that got hit.
-    const bool bImpactOnViewport = RTSViewportUtils::IsLocationOnLocalViewport(this, Location, VisibilityOffset);
-
-    if (bImpactOnViewport && (!EnableFog || IsVisibleEnemy || IsMyTeam))
+    // Viewport test with the world margin (EffectViewportMargin) at the impact point, fog test on the
+    // shooter's CURRENT reveal - see CanLocalPlayerPerceiveEffect.
+    if (CanLocalPlayerPerceiveEffect(Location))
     {
         UWorld* World = GetWorld();
         if (!World)

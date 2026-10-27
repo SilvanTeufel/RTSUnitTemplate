@@ -265,6 +265,14 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool StopSeparation = false;
+
+	/**
+	 * Heavy unit: the separation (UUnitSeparationProcessor) still pushes friends and enemies away from it,
+	 * but never moves this unit - melee attackers no longer shove it aside, and it does not slide while the
+	 * units around it sort themselves out. Unlike StopSeparation it keeps the others at a distance.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
+	bool bResistPush = false;
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass")
 	bool GroundAlignment = true;

@@ -572,6 +572,8 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 
 		const FNavigationObstacleHashGrid2D& AvoidanceObstacleGrid = ContextNavSubsystem->GetObstacleGrid();
 
+		const bool bChunkIdle = Context.DoesArchetypeHaveTag<FMassStateIdleTag>();
+
 		for (FMassExecutionContext::FEntityIterator EntityIt = Context.CreateEntityIterator(); EntityIt; ++EntityIt)
 		{
 			// @todo: this check should eventually be part of the query (i.e. only handle moving agents).
@@ -579,7 +581,17 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 			const bool bHasAttack = DoesEntityHaveTag(EntityManager, Context.GetEntity(EntityIt), FMassStateAttackTag::StaticStruct());
 			const bool bIsStationaryAttack = bHasAttack && CombatList.IsValidIndex(EntityIt) && !CombatList[EntityIt].bCanMoveWhileAttacking;
 
-			if (MoveTarget.GetCurrentAction() == EMassMovementAction::Animate || MoveTarget.GetCurrentAction() == EMassMovementAction::Stand || bIsStationaryAttack)
+			// Im Leerlauf und schon am Ziel heisst stehen, auch wenn die Aktion noch auf Move steht -
+			// so beginnen im Level platzierte Einheiten (Ziel = eigener Standort). Ohne diese Pruefung
+			// wichen sie beim Spielstart einander aus und rutschten wackelnd auseinander, bis ein
+			// erster Befehl kam. Laeuft eine Leerlauf-Einheit zu ihrem Platz zurueck, ist sie nicht
+			// am Ziel und weicht weiter aus. Ueberlappungen loest weiterhin der UUnitSeparationProcessor.
+			const bool bStehtMitMoveAktion = bChunkIdle
+				&& MoveTarget.GetCurrentAction() == EMassMovementAction::Move
+				&& FVector::DistSquared2D(MoveTarget.Center, LocationList[EntityIt].GetTransform().GetLocation())
+					<= FMath::Square(FMath::Max(MoveTarget.SlackRadius, 50.f));
+
+			if (MoveTarget.GetCurrentAction() == EMassMovementAction::Animate || MoveTarget.GetCurrentAction() == EMassMovementAction::Stand || bIsStationaryAttack || bStehtMitMoveAktion)
 			{
 				continue;
 			}

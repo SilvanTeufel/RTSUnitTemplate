@@ -141,6 +141,9 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		}
 	}
 
+	// Cheat "FoW Toggle": read every run, so units spawned later are covered as well.
+	const bool bFogCheatDisabled = CustomPC && CustomPC->bFogOfWarCheatDisabled;
+
 	//const bool bIsClient = (World->GetNetMode() != NM_DedicatedServer);
 	const float DeltaTime = Context.GetDeltaTimeSeconds();
 
@@ -223,7 +226,7 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					Vis.bIsOnViewport = bCalculatedOnViewport;
 
 					// 1.5) Update Fog Visibility
-					if (Vis.bIsMyTeam || !Vis.bAffectedByFogOfWar)
+					if (Vis.bIsMyTeam || !Vis.bAffectedByFogOfWar || bFogCheatDisabled)
 					{
 						bIsVisibleByFog = true;
 					}
@@ -296,8 +299,10 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 						// path below already assigns Vis.bIsMyTeam; this makes both paths agree.
 						Unit->IsMyTeam = Vis.bIsMyTeam;
 						Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
+						// Without the building memory above - effects/sounds gate on this.
+						Unit->IsRevealedByFogNow = bIsVisibleByFog;
 					}
-					
+
 					if (UnitBase && Vis.bIsVisibleEnemy)
 					{
 						UnitBase->LastVisibleTime = CurrentTime;
@@ -352,8 +357,9 @@ void UUnitVisibilityProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 					Unit->IsMyTeam = Vis.bIsMyTeam;
 					Unit->IsOnViewport = Vis.bIsOnViewport;
 					Unit->IsVisibleEnemy = Vis.bIsVisibleEnemy;
+					Unit->IsRevealedByFogNow = Vis.bIsVisibleEnemy;
 				}
-				
+
 				if (UnitBase)
 				{
 					UnitBase->bIsInvisible = CharList[i].bIsInvisible;

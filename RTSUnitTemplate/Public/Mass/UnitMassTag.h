@@ -1119,6 +1119,9 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
     UPROPERTY(EditAnywhere, Category = "Characteristics")
     bool bCanDetectInvisible = false;
 
+    /** UMassActorBindingComponent::bResistPush: separation pushes others away from this unit, never this unit. */
+    bool bResistPush = false;
+
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	bool CanManipulateNavMesh = true;
 	

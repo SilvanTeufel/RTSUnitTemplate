@@ -16,6 +16,8 @@
 #include "Core/UnitData.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Mass/MassUnitVisualFragments.h"
+#include "Controller/PlayerController/ControllerBase.h"
+#include "Engine/World.h"
 
 AConstructionUnit::AConstructionUnit(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -94,6 +96,27 @@ void AConstructionUnit::SetCharacterVisibility(bool desiredVisibility)
 
 void AConstructionUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// Was the site selected, its building takes over the selection once it appears - on every machine
+	// with a local player (the server's own handover only reaches the host).
+	if (EndPlayReason == EEndPlayReason::Destroyed && GetWorld())
+	{
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			if (AControllerBase* PC = Cast<AControllerBase>(It->Get()); PC && PC->IsLocalController())
+			{
+				PC->RememberFinishedConstruction(this);
+			}
+		}
+	}
+
+	// Baustelle weg (fertig oder abgebrochen): der Wirt rechnet seine Bau-Ability neu.
+	if (ABuildingBase* Wirt = Cast<ABuildingBase>(Worker))
+	{
+		if (WorkArea && WorkArea->IsExtensionArea)
+		{
+			Wirt->RefreshEnergyWallBuildAbility();
+		}
+	}
 	Super::EndPlay(EndPlayReason);
 }
 
