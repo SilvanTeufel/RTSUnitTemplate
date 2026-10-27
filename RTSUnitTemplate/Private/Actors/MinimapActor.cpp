@@ -625,8 +625,15 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     if (!MinimapTexture || MinimapPixels.Num() == 0) return;
 
     // --- Pass 1: Clear the entire map with the Fog Color (apply FogOpacity) ---
+    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController());
+
+    // Cheat "FoW Toggle": the whole map counts as revealed.
     FColor AdjustedFogColor = FogColor;
     AdjustedFogColor.A = FMath::Clamp(FMath::RoundToInt(FogOpacity * 255.f), 0, 255);
+    if (CustomPC && CustomPC->bFogOfWarCheatDisabled)
+    {
+        AdjustedFogColor = BackgroundColor;
+    }
     for (FColor& Pixel : MinimapPixels)
     {
         Pixel = AdjustedFogColor;
@@ -638,7 +645,6 @@ void AMinimapActor::Multicast_UpdateMinimap_Implementation(
     if (WorldExtentX <= 0 || WorldExtentY <= 0) return;
     const int32 Count = FMath::Min(ActorRefs.Num(), Positions.Num());
 
-    ACustomControllerBase* CustomPC = Cast<ACustomControllerBase>(GetWorld()->GetFirstPlayerController());
     int64 LocalAllianceMask = CustomPC ? CustomPC->AlliedTeamsMask : (1LL << TeamId);
 
     for (int32 i = 0; i < Count; ++i)

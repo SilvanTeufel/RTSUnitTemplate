@@ -305,6 +305,11 @@ public:
 	void NarrateWinCondition(bool bGameStart);
 	void ScheduleWinConditionNarration(float Delay, bool bGameStart);
 
+	/** The recording of a narration sentence (URTSUnitTemplateSettings::NarrationVoiceTable), else null. */
+	class USoundBase* FindNarrationVoice(const FString& Sentence);
+	/** NarrationVoiceTable by lower-case text; read on first use. */
+	TOptional<TMap<FString, TSoftObjectPtr<class USoundBase>>> NarrationVoices;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ShowWinConditionWidget(float Duration);
 

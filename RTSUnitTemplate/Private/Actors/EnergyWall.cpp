@@ -23,6 +23,7 @@
 #include "Kismet/KismetMathLibrary.h"
 #include "Engine/StaticMesh.h"
 #include "Components/DecalComponent.h"
+#include "System/LogisticsSubsystem.h"
 
 AEnergyWall::AEnergyWall()
 {
@@ -516,7 +517,8 @@ void AEnergyWall::UpdateVisibility()
 
 	if (FoundationDecal)
 	{
-		FoundationDecal->SetVisibility(bIsVisibleByFoW && !bIsDeactivated);
+		// Ohne Material kein Fundament: ein Decal ohne Material zeichnet sonst das weisse Standardmaterial.
+		FoundationDecal->SetVisibility(bIsVisibleByFoW && !bIsDeactivated && FoundationDecal->GetDecalMaterial() != nullptr);
 	}
 
 	SchreibeBatchTransformationen();
@@ -655,7 +657,24 @@ bool AEnergyWall::IsWallActive() const
 	// bIsInitialized allein genuegt nicht: die Box wird erst in RegisterObstacle vermessen, und
 	// bis dahin hat sie keine Ausdehnung. Ein Quader ohne Ausdehnung wuerde jede Einheit als
 	// "nicht drin" melden - harmlos, aber die Pruefung kostet dann jeden Durchlauf umsonst.
-	return bIsInitialized && NavObstacleBox && NavObstacleBox->GetScaledBoxExtent().SizeSquared() > 1.f;
+	// Eine geoeffnete (oder sich gerade aufloesende) Wand haelt niemanden mehr auf: DeactivateNavigation
+	// schaltet nur Kollision und NavModifier ab, die Box behaelt ihre Groesse - ohne diese Pruefung schob der
+	// UEnergyWallFieldProcessor Arbeiter und Logistiker weiter vor der offenen Wand zurueck.
+	return bIsInitialized && !bIsDeactivated && !bIsDespawning && NavObstacleBox && NavObstacleBox->GetScaledBoxExtent().SizeSquared() > 1.f;
+}
+
+void AEnergyWall::NotifyLogisticsPassageChanged() const
+{
+	// Strassen und Pipelines suchen ihren Weg neu, sobald das Navmesh die Aenderung uebernommen hat:
+	// geschlossen um die Wand herum, geoeffnet wieder hindurch. Nur der Server fuehrt die Logistik.
+	if (!HasAuthority() || !NavObstacleBox)
+	{
+		return;
+	}
+	if (ULogisticsSubsystem* Logistics = GetWorld() ? GetWorld()->GetSubsystem<ULogisticsSubsystem>() : nullptr)
+	{
+		Logistics->NotifyPassageChanged(NavObstacleBox->Bounds.GetBox());
+	}
 }
 
 void AEnergyWall::RegisterObstacle(float Length, float Height)
@@ -741,6 +760,7 @@ void AEnergyWall::RegisterObstacle(float Length, float Height)
 	// Erst HIER, nicht frueher: vorher steht die Box noch nicht in ihrer endgueltigen Groesse,
 	// und ein Freiraeumen nach einer halben Laenge liesse die zweite Haelfte bewachsen.
 	RaeumePCGEntlangDerWand();
+	NotifyLogisticsPassageChanged();
 }
 
 int32 AEnergyWall::RaeumePCGEntlangDerWand()
@@ -813,6 +833,7 @@ void AEnergyWall::DeactivateNavigation()
 			NavSys->AddDirtyArea(DirtyBox, ENavigationDirtyFlag::All);
 		}
 	}
+	NotifyLogisticsPassageChanged();
 }
 
 void AEnergyWall::ApplyDespawnEffects()

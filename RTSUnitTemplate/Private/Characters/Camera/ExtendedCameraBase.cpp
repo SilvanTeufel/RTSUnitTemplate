@@ -25,6 +25,9 @@
 #include "Core/RTSUnitTemplateSettings.h"
 #include "Core/WinConditionNarration.h"
 #include "System/StoryTriggerQueueSubsystem.h"
+#include "Actors/StoryTriggerActor.h"
+#include "Engine/DataTable.h"
+#include "Sound/SoundBase.h"
 #include "Widgets/StoryWidgetBase.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Blueprint/UserWidget.h"
@@ -432,19 +435,106 @@ void AExtendedCameraBase::NarrateWinCondition(bool bGameStart)
 	}
 	const FString Speaker = Name.ToString();
 	UClass* WidgetClass = WidgetSoft.LoadSynchronous();
-	for (const FString& Message : WinConditionNarration::ToMessages(Sentences, Settings->NarrationMaxCharsPerMessage))
+
+	// The recording of each sentence (NarrationVoiceTable, looked up by text); null = shown only.
+	TArray<USoundBase*> Voices;
+	Voices.Reserve(Sentences.Num());
+	for (const FString& Sentence : Sentences)
+	{
+		Voices.Add(FindNarrationVoice(Sentence));
+	}
+
+	// Sentences into messages as WinConditionNarration::ToMessages does (a sentence is never split) - but
+	// a message keeps the recordings of its sentences: they play one after another in its window.
+	struct FMessage { FString Text; TArray<USoundBase*> Sounds; int32 Silent = 0; };
+	TArray<FMessage> Messages;
+	for (int32 i = 0; i < Sentences.Num(); ++i)
+	{
+		const FString& S = Sentences[i];
+		if (Messages.Num() == 0 || Messages.Last().Text.Len() + 1 + S.Len() > Settings->NarrationMaxCharsPerMessage)
+		{
+			Messages.AddDefaulted();
+		}
+		FMessage& M = Messages.Last();
+		M.Text = M.Text.IsEmpty() ? S : M.Text + TEXT(" ") + S;
+		if (Voices[i])
+		{
+			M.Sounds.Add(Voices[i]);
+		}
+		else
+		{
+			++M.Silent;
+		}
+	}
+
+	bool bSpoken = false;
+	for (const FMessage& Message : Messages)
 	{
 		FStoryQueueItem Item;
 		Item.WidgetClass = WidgetClass;
-		Item.Text = FText::FromString(Speaker.IsEmpty() ? Message : Speaker + TEXT(":\n") + Message);
+		Item.Text = FText::FromString(Speaker.IsEmpty() ? Message.Text : Speaker + TEXT(":\n") + Message.Text);
 		Item.MaterialSoft = Material;
 		Item.ImageSoft = Image;
 		TArray<FString> Words;
-		Message.ParseIntoArrayWS(Words);
+		Message.Text.ParseIntoArrayWS(Words);
 		Item.LifetimeSeconds = FMath::Max(Settings->NarrationMinSeconds, Words.Num() * Settings->NarrationSecondsPerWord);
 		Item.bTillAudioEnds = false;
+		if (Message.Sounds.Num() > 0)
+		{
+			Item.Sound = Message.Sounds[0];
+			Item.FollowUpSounds.Append(Message.Sounds.GetData() + 1, Message.Sounds.Num() - 1);
+			// Fully spoken: the window closes shortly after the voice. A sentence without a recording
+			// still needs its reading time - then the longer of both.
+			float AudioSeconds = 0.f;
+			for (const USoundBase* Sound : Message.Sounds)
+			{
+				AudioSeconds += Sound->GetDuration() + Item.FollowUpGap;
+			}
+			Item.bTillAudioEnds = Message.Silent == 0;
+			Item.AudioEndExtraDelay = 1.f;
+			Item.LifetimeSeconds = FMath::Max(Item.LifetimeSeconds, AudioSeconds + 1.f);
+			bSpoken = true;
+		}
 		Queue->EnqueueStory(Item);
 	}
+
+	// The music goes down for a spoken line like for every story: the trigger actors share the cassette
+	// (their Blueprints lower it on OnStoryTriggered); the queue raises it again at its end for all of them.
+	if (bSpoken)
+	{
+		for (TActorIterator<AStoryTriggerActor> It(GetWorld()); It; ++It)
+		{
+			if (IsValid(*It) && It->OnStoryTriggered.IsBound())
+			{
+				It->OnStoryTriggered.Broadcast();
+				break;
+			}
+		}
+	}
+}
+
+USoundBase* AExtendedCameraBase::FindNarrationVoice(const FString& Sentence)
+{
+	if (!NarrationVoices.IsSet())
+	{
+		NarrationVoices.Emplace();
+		if (const UDataTable* Table = URTSUnitTemplateSettings::Get()->NarrationVoiceTable.LoadSynchronous())
+		{
+			if (Table->GetRowStruct() && Table->GetRowStruct()->IsChildOf(FWinConditionVoiceRow::StaticStruct()))
+			{
+				for (const TPair<FName, uint8*>& Row : Table->GetRowMap())
+				{
+					const FWinConditionVoiceRow* Voice = reinterpret_cast<const FWinConditionVoiceRow*>(Row.Value);
+					if (Voice && !Voice->Sound.IsNull() && !Voice->Text.IsEmpty())
+					{
+						NarrationVoices->Add(Voice->Text.TrimStartAndEnd().ToLower(), Voice->Sound);
+					}
+				}
+			}
+		}
+	}
+	const TSoftObjectPtr<USoundBase>* Found = NarrationVoices->Find(Sentence.TrimStartAndEnd().ToLower());
+	return Found ? Found->LoadSynchronous() : nullptr;
 }
 
 void AExtendedCameraBase::OnTagProgressUpdated(AWinLoseConfigActor* Config)
@@ -1548,6 +1638,53 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 				// If we have selected units, cancel their actions before deselecting
 				if (CameraControllerBase->HUDBase->SelectedUnits.Num() > 0)
 				{
+					// Stufe 1: laeuft bei einer selektierten Einheit noch etwas, bricht Esc nur das ab und
+					// behaelt die Auswahl - die laufende Ability (bzw. eine Gebaeude-Platzierung), und wenn
+					// keine laeuft, der vorderste Queue-Eintrag. Mehrfaches Druecken leert so die Queue,
+					// wie der Current-Ability-Button im UnitWidgetSelector. Erst wenn nichts mehr laeuft,
+					// waehlt Esc ab, und ohne Auswahl oeffnet es das Menue.
+					bool bEtwasAbgebrochen = false;
+					for (AUnitBase* Unit : CameraControllerBase->HUDBase->SelectedUnits)
+					{
+						if (!Unit)
+						{
+							continue;
+						}
+
+						AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(Unit);
+						if (Worker && Worker->CurrentDraggedWorkArea)
+						{
+							CameraControllerBase->DestroyDraggedArea(Worker);
+							CameraControllerBase->CancelCurrentAbility(Unit);
+							bEtwasAbgebrochen = true;
+							continue;
+						}
+
+						if (Unit->CurrentSnapshot.AbilityClass)
+						{
+							const UGameplayAbilityBase* AbilityCDO = Unit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>();
+							if (!AbilityCDO || AbilityCDO->AbilityCanBeCanceled)
+							{
+								CameraControllerBase->CancelCurrentAbility(Unit);
+								bEtwasAbgebrochen = true;
+								continue;
+							}
+						}
+
+						// Nichts (Abbrechbares) laeuft, aber die Queue wartet noch - etwa in der kurzen
+						// Pause nach einem Abbruch, bevor der naechste Eintrag startet.
+						if (Unit->GetQueuedAbilities().Num() > 0)
+						{
+							CameraControllerBase->DeQueAbility(Unit, 0);
+							bEtwasAbgebrochen = true;
+						}
+					}
+
+					if (bEtwasAbgebrochen)
+					{
+						return;
+					}
+
 					for (AUnitBase* Unit : CameraControllerBase->HUDBase->SelectedUnits)
 					{
 						if (Unit)

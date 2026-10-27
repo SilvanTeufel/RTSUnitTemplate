@@ -80,4 +80,38 @@ namespace RTSViewportUtils
 
 		return false;
 	}
+
+	/**
+	 * True when WorldLocation lies within WorldMargin world units of the LOCAL view, i.e. the point
+	 * itself or one of eight ground-plane neighbours at that distance projects onto the screen.
+	 *
+	 * For one-shot effects (sounds above all): a pixel margin shrinks to nothing when zoomed out and
+	 * grows huge when zoomed in, while "you hear what happens just off the screen edge" is a world
+	 * distance. Nine projections per call - fine for events, too expensive for per-entity ticks.
+	 */
+	inline bool IsLocationNearLocalViewport(const UObject* WorldContextObject, const FVector& WorldLocation, float WorldMargin)
+	{
+		if (IsLocationOnLocalViewport(WorldContextObject, WorldLocation, 0.f))
+		{
+			return true;
+		}
+		if (WorldMargin <= 0.f || !IsInGameThread())
+		{
+			return false;
+		}
+
+		const float D = WorldMargin * 0.70710678f;
+		const FVector Offsets[8] = {
+			FVector(WorldMargin, 0.f, 0.f), FVector(-WorldMargin, 0.f, 0.f),
+			FVector(0.f, WorldMargin, 0.f), FVector(0.f, -WorldMargin, 0.f),
+			FVector(D, D, 0.f), FVector(D, -D, 0.f), FVector(-D, D, 0.f), FVector(-D, -D, 0.f) };
+		for (const FVector& O : Offsets)
+		{
+			if (IsLocationOnLocalViewport(WorldContextObject, WorldLocation + O, 0.f))
+			{
+				return true;
+			}
+		}
+		return false;
+	}
 }
