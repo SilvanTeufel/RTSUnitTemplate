@@ -9,8 +9,8 @@
 /**
  * Kleines Entwickler-Panel fuer Testlaeufe.
  *
- * Ein schmaler Knopf klappt zwei Schalter auf: Ressourcen auffuellen und die aktuelle
- * Siegbedingung erfuellen. Damit laesst sich eine Kampagne durchklicken, ohne jedes Level
+ * Ein schmaler Knopf klappt drei Schalter auf: Ressourcen auffuellen, die aktuelle
+ * Siegbedingung erfuellen und den Fog of War an/aus schalten. Damit laesst sich eine Kampagne durchklicken, ohne jedes Level
  * wirklich zu spielen - gedacht vor allem, um die Levelwechsel zu pruefen.
  *
  * Bewusst als UWidget mit eigener Slate-Oberflaeche gebaut und NICHT als UUserWidget mit
@@ -51,6 +51,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Cheat")
 	void WinCurrentLevel();
 
+	/** Fog of War samt PostProcess lokal an/aus - siehe ACustomControllerBase::bFogOfWarCheatDisabled. */
+	UFUNCTION(BlueprintCallable, Category = "Cheat")
+	void ToggleFogOfWar();
+
 	virtual void ReleaseSlateResources(bool bReleaseChildren) override;
 #if WITH_EDITOR
 	virtual const FText GetPaletteCategory() override;
@@ -63,6 +67,8 @@ private:
 	FReply HandleToggleClicked();
 	FReply HandleFillClicked();
 	FReply HandleWinClicked();
+	FReply HandleFogClicked();
+	FText GetFogLabel() const;
 	EVisibility GetPanelVisibility() const;
 	FText GetToggleLabel() const;
 

@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "Engine/DeveloperSettings.h"
 #include "GameplayTagContainer.h"
 #include "RTSUnitTemplateSettings.generated.h"
@@ -48,6 +49,23 @@ struct FFactionNarrator
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
 	TSoftObjectPtr<class UTexture2D> Image;
+};
+
+/**
+ * One spoken sentence of the win condition narration (URTSUnitTemplateSettings::NarrationVoiceTable).
+ * The narration looks every sentence up by its Text; a sentence with a row is played with its Sound.
+ */
+USTRUCT(BlueprintType)
+struct FWinConditionVoiceRow : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	/** The sentence word for word, as the narration builds it (case and outer spaces do not matter). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
+	FString Text;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Narration")
+	TSoftObjectPtr<class USoundBase> Sound;
 };
 
 /**
@@ -223,6 +241,13 @@ public:
 	/** Sentences are put together into messages of at most this many characters. */
 	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (ClampMin = "40"))
 	int32 NarrationMaxCharsPerMessage = 190;
+
+	/**
+	 * Audio for the sentences (rows FWinConditionVoiceRow): a sentence found here is spoken, the window stays
+	 * open until its audio ends and the music goes down meanwhile. Sentences without a row are only shown.
+	 */
+	UPROPERTY(config, EditAnywhere, Category = "Narration", meta = (RequiredAssetDataTags = "RowStructure=/Script/RTSUnitTemplate.WinConditionVoiceRow"))
+	TSoftObjectPtr<class UDataTable> NarrationVoiceTable;
 
 	/** Convenience accessor; never returns null (UDeveloperSettings are CDO-backed). */
 	static const URTSUnitTemplateSettings* Get();

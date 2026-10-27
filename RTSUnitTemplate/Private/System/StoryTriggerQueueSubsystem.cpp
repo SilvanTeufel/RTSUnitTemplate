@@ -26,6 +26,7 @@ void UStoryTriggerQueueSubsystem::Deinitialize()
 	{
 		World->GetTimerManager().ClearTimer(NextStoryTimerHandle);
 		World->GetTimerManager().ClearTimer(MusicRestoreTimerHandle);
+		World->GetTimerManager().ClearTimer(FollowUpTimerHandle);
 	}
 	Pending.Empty();
 	Super::Deinitialize();
@@ -116,6 +117,7 @@ void UStoryTriggerQueueSubsystem::ClearActive()
 	if (UWorld* World = GetWorld())
 	{
 		World->GetTimerManager().ClearTimer(ActiveTimerHandle);
+		World->GetTimerManager().ClearTimer(FollowUpTimerHandle);
 	}
 
 	// 03.10.2026: OnStoryFinished is NOT sent per item any more while more stories are waiting.
@@ -246,9 +248,28 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	Widget->SetVisibility(ESlateVisibility::Visible);
 	Widget->StartStory(Item.Text, ResolvedTexture, ResolvedMaterial);
 
+	// The length of all audio of this item: Sound, then each follow-up after FollowUpGap. 0 = none / looping.
+	float AudioSeconds = 0.f;
 	if (Item.Sound)
 	{
 		UGameplayStatics::PlaySound2D(World, Item.Sound);
+		AudioSeconds = Item.Sound->GetDuration();
+		const float Gap = FMath::Max(0.f, Item.FollowUpGap);
+		for (const USoundBase* FollowUp : Item.FollowUpSounds)
+		{
+			const float Dur = FollowUp ? FollowUp->GetDuration() : 0.f;
+			if (Dur > 0.f && Dur < INDEFINITELY_LOOPING_DURATION && AudioSeconds < INDEFINITELY_LOOPING_DURATION)
+			{
+				AudioSeconds += Gap + Dur;
+			}
+		}
+		NextFollowUp = 0;
+		World->GetTimerManager().ClearTimer(FollowUpTimerHandle);
+		if (Item.FollowUpSounds.Num() > 0 && AudioSeconds > 0.f && Item.Sound->GetDuration() < INDEFINITELY_LOOPING_DURATION)
+		{
+			World->GetTimerManager().SetTimer(FollowUpTimerHandle, this, &UStoryTriggerQueueSubsystem::PlayNextFollowUp,
+				FMath::Max(Item.Sound->GetDuration() + Gap, 0.01f), false);
+		}
 	}
 
 	ActiveWidget = Widget;
@@ -284,7 +305,7 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	World->GetTimerManager().ClearTimer(MusicRestoreTimerHandle);
 	if (Item.bTillAudioEnds && Item.Sound)
 	{
-		const float Dur = Item.Sound->GetDuration();
+		const float Dur = AudioSeconds;
 		if (Dur > 0.f && Dur < INDEFINITELY_LOOPING_DURATION)
 		{
 			DisplayTime = Dur + FMath::Max(0.f, Item.AudioEndExtraDelay);
@@ -307,6 +328,32 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 	World->GetTimerManager().SetTimer(ActiveTimerHandle, this, &UStoryTriggerQueueSubsystem::OnActiveLifetimeFinished, DisplayTime, false);
 	UE_LOG(LogTemp, Verbose, TEXT("[StoryQueue] Zeige von %s (Ton %s) fuer %.1f s, wartend %d"), *GetNameSafe(Item.TriggeringSource.Get()),
 		*GetNameSafe(Item.Sound), DisplayTime, Pending.Num());
+}
+
+void UStoryTriggerQueueSubsystem::PlayNextFollowUp()
+{
+	UWorld* World = GetWorld();
+	if (!World || !ActiveWidget)
+	{
+		return;
+	}
+	// Skip empty or unplayable entries; play the next one and arm the timer for the one after it.
+	while (CurrentItem.FollowUpSounds.IsValidIndex(NextFollowUp))
+	{
+		USoundBase* Sound = CurrentItem.FollowUpSounds[NextFollowUp++];
+		const float Dur = Sound ? Sound->GetDuration() : 0.f;
+		if (Dur <= 0.f || Dur >= INDEFINITELY_LOOPING_DURATION)
+		{
+			continue;
+		}
+		UGameplayStatics::PlaySound2D(World, Sound);
+		if (CurrentItem.FollowUpSounds.IsValidIndex(NextFollowUp))
+		{
+			World->GetTimerManager().SetTimer(FollowUpTimerHandle, this, &UStoryTriggerQueueSubsystem::PlayNextFollowUp,
+				Dur + FMath::Max(0.f, CurrentItem.FollowUpGap), false);
+		}
+		return;
+	}
 }
 
 void UStoryTriggerQueueSubsystem::OnMusicRestoreDue()

@@ -143,6 +143,23 @@ void UUnitWidgetSelector::UpdateCurrentAbility()
 	}
 
 	FQueuedAbility CurrentSnapshot = UnitBase->GetCurrentSnapshot();
+
+	// Zwischen dem Abbruch und dem Start des naechsten Queue-Eintrags (AbilityReactivationThrottle)
+	// ist CurrentSnapshot leer. Verschwand der Button dort, traf der naechste Klick beim Spammen die
+	// Einheit darunter und waehlte sie ab, statt die Queue zu leeren. Solange etwas wartet, bleibt der
+	// Button deshalb stehen und zeigt den naechsten Eintrag - siehe OnCurrentAbilityButtonClicked.
+	if (!CurrentSnapshot.AbilityClass)
+	{
+		if (AGASUnit* GASUnit = Cast<AGASUnit>(UnitBase))
+		{
+			const TArray<FQueuedAbility>& Queued = GASUnit->GetQueuedAbilities();
+			if (Queued.Num() > 0)
+			{
+				CurrentSnapshot = Queued[0];
+			}
+		}
+	}
+
 	if (CurrentSnapshot.AbilityClass)
 	{
 		// Get the default object to read its icon
@@ -327,6 +344,13 @@ void UUnitWidgetSelector::OnCurrentAbilityButtonClicked()
 	{
 		if (!GASUnit->CurrentSnapshot.AbilityClass)
 		{
+			// Nichts laeuft, aber die Queue wartet noch (der Button steht deshalb weiter, siehe
+			// UpdateCurrentAbility): den vordersten Eintrag entfernen. So leert Spammen die Queue.
+			if (GASUnit->GetQueuedAbilities().Num() > 0)
+			{
+				ControllerBase->DeQueAbility(UnitBase, 0);
+				UpdateQueuedAbilityIcons();
+			}
 			return;
 		}
 		if (const UGameplayAbilityBase* AbilityCDO = GASUnit->CurrentSnapshot.AbilityClass->GetDefaultObject<UGameplayAbilityBase>())

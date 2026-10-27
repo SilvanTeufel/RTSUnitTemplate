@@ -359,6 +359,68 @@ void AControllerBase::ReplaceSelectedUnit(AUnitBase* OldUnit, AUnitBase* NewUnit
 	}
 }
 
+namespace
+{
+	/** Does Building stand where the site's build area is, and is it the building that area builds? */
+	bool IsBuildingOfSite(const ABuildingBase* Building, const FVector& SiteLocation, const UClass* BuildingClass)
+	{
+		return Building && BuildingClass && Building->GetClass()->IsChildOf(BuildingClass)
+			&& FVector::Dist2D(Building->GetActorLocation(), SiteLocation) < 300.f;
+	}
+}
+
+void AControllerBase::RememberFinishedConstruction(const AConstructionUnit* Site)
+{
+	if (!Site || !HUDBase || !IsLocalController() || !HUDBase->SelectedUnits.Contains(Site)
+		|| !IsValid(Site->WorkArea) || !Site->WorkArea->BuildingClass)
+	{
+		return;
+	}
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	PendingBuildSelections.Add({ Site->WorkArea->GetActorLocation(), Site->WorkArea->BuildingClass.Get(), Now });
+	// The building may already stand (the server spawned it before the site went): then it takes over here.
+	RemoveUnitFromSelection(const_cast<AConstructionUnit*>(Site));
+	if (IsValid(Site->WorkArea->Building))
+	{
+		OnBuildingAppeared(Site->WorkArea->Building);
+	}
+}
+
+void AControllerBase::OnBuildingAppeared(ABuildingBase* Building)
+{
+	if (!IsValid(Building) || !HUDBase || !IsLocalController())
+	{
+		return;
+	}
+	// The site is still there (a drone site lingers, or the building replicated first): swap it out.
+	for (AUnitBase* Selected : TArray<AUnitBase*>(HUDBase->SelectedUnits))
+	{
+		const AConstructionUnit* Site = Cast<AConstructionUnit>(Selected);
+		if (IsValid(Site) && IsValid(Site->WorkArea) && IsBuildingOfSite(Building, Site->WorkArea->GetActorLocation(), Site->WorkArea->BuildingClass.Get()))
+		{
+			PendingBuildSelections.RemoveAll([&](const FPendingBuildSelection& P) { return FVector::Dist2D(P.Location, Site->WorkArea->GetActorLocation()) < 1.f; });
+			ReplaceSelectedUnit(const_cast<AConstructionUnit*>(Site), Building);
+			return;
+		}
+	}
+	// The site already left the selection when it was removed.
+	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	for (int32 i = PendingBuildSelections.Num() - 1; i >= 0; --i)
+	{
+		const FPendingBuildSelection& Pending = PendingBuildSelections[i];
+		if (Now - Pending.Time > 5.0)
+		{
+			PendingBuildSelections.RemoveAt(i);
+		}
+		else if (IsBuildingOfSite(Building, Pending.Location, Pending.BuildingClass.Get()))
+		{
+			PendingBuildSelections.RemoveAt(i);
+			ReplaceSelectedUnit(nullptr, Building);
+			return;
+		}
+	}
+}
+
 void AControllerBase::RemoveUnitFromSelection(AUnitBase* Unit)
 {
 	if (!Unit || !HUDBase) return;

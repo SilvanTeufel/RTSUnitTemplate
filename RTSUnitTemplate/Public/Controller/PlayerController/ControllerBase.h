@@ -279,6 +279,16 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ReplaceSelectedUnit(AUnitBase* OldUnit, AUnitBase* NewUnit);
 
+	/**
+	 * Local controllers, every machine: a construction site leaves the game. Was it selected, its building
+	 * is selected as soon as it appears (OnBuildingAppeared) - the site is usually gone first, and on a
+	 * client the server's selection handover (UUnitStateProcessor) never arrives.
+	 */
+	void RememberFinishedConstruction(const class AConstructionUnit* Site);
+
+	/** Local controllers: a building began play - selected instead of its (selected or just removed) site. */
+	void OnBuildingAppeared(class ABuildingBase* Building);
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void SetRunLocation(AUnitBase* Unit, const FVector& DestinationLocation);
 	
@@ -509,6 +519,15 @@ public:
 	
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray <AUnitBase*> SelectedUnits;
+
+	/** RememberFinishedConstruction: sites that were selected when they left, waiting for their building. */
+	struct FPendingBuildSelection
+	{
+		FVector Location = FVector::ZeroVector;
+		TWeakObjectPtr<UClass> BuildingClass;
+		double Time = 0.0;
+	};
+	TArray<FPendingBuildSelection> PendingBuildSelections;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_SelectableTeamId, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int SelectableTeamId = -1;
