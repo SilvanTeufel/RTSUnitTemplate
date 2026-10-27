@@ -1161,7 +1161,10 @@ FGameStateData ARLAgent::GatherGameState(int32 SelectableTeamId)
             TEXT("Buildings.Singularian.ExtractorPrimary"), TEXT("Buildings.Singularian.ExtractorSecondary"),
             TEXT("Buildings.Singularian.ExtractorTertiary"), TEXT("Buildings.Singularian.Converter"),
             TEXT("Buildings.Xeno.GatheringMaw"), TEXT("Buildings.Xeno.ReserveBladder"),
-            TEXT("Buildings.Xeno.DeepRoot"), TEXT("Buildings.Xeno.DigestionChamber") };
+            TEXT("Buildings.Xeno.DeepRoot"), TEXT("Buildings.Xeno.DigestionChamber"),
+            TEXT("Buildings.Xeno.LaravalPod"), TEXT("Buildings.Xeno.CarapacePod"),
+            TEXT("Buildings.Xeno.AerialPod"), TEXT("Buildings.Xeno.TitanPod"),
+            TEXT("Buildings.Xeno.SynapseCluster"), TEXT("Buildings.Xeno.MetabolicSiphon") };
         TArray<FGameplayTag> Out;
         for (const TCHAR* N : Names)
         {

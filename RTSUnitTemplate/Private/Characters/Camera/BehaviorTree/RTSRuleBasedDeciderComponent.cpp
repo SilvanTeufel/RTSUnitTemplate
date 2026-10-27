@@ -261,7 +261,7 @@ int32 URTSRuleBasedDeciderComponent::PickWanderActionIndex(const FGameStateData&
 	return (int32)MoveUpAction;
 }
 
-void URTSRuleBasedDeciderComponent::RecordDecisionForTraining(const TArray<int32>& Indices) const
+void URTSRuleBasedDeciderComponent::RecordDecisionForTraining(const TArray<int32>& Indices, int32 AbilityArrayIndex) const
 {
 	if (!bHasCachedRecordingState)
 	{
@@ -298,9 +298,18 @@ void URTSRuleBasedDeciderComponent::RecordDecisionForTraining(const TArray<int32
 			continue;
 		}
 
+		// An ability press in array 1..3 is its own action for the network (36 + (Array-1)*6 + Slot);
+		// the JSON stamps the array on the executed action, the sample has to say the same.
+		int32 SampleIndex = Index;
+		if (Index >= (int32)ERTSAIAction::Ability1 && Index <= (int32)ERTSAIAction::Ability6
+			&& AbilityArrayIndex >= 1 && AbilityArrayIndex <= 3)
+		{
+			SampleIndex = 36 + (AbilityArrayIndex - 1) * 6 + (Index - (int32)ERTSAIAction::Ability1);
+		}
+
 		StateForSample.LastActionIndex = LastRecordedActionIndex;
-		Recorder->RecordSample(TeamId, UInferenceComponent::StateToArray(StateForSample), Index, ERLSampleSource::RuleBased);
-		LastRecordedActionIndex = Index;
+		Recorder->RecordSample(TeamId, UInferenceComponent::StateToArray(StateForSample), SampleIndex, ERLSampleSource::RuleBased);
+		LastRecordedActionIndex = SampleIndex;
 	}
 }
 
@@ -313,7 +322,18 @@ FString URTSRuleBasedDeciderComponent::BuildCompositeActionJSON(const TArray<int
 		return TEXT("{}");
 	}
 
-	RecordDecisionForTraining(Indices);
+	if (bDeferRecording)
+	{
+		// Table scan: every matching row builds its JSON, but only ONE of them fires. Recording here wrote the
+		// whole matching set as the teacher's answer (4 or more select/ability pairs on 42 % of all decision
+		// points, measured 25.10.2026); the fired row is recorded by EvaluateRulesFromDataTable instead.
+		DeferredIndices = Indices;
+		DeferredAbilityArray = AbilityArrayIndexOverride;
+	}
+	else
+	{
+		RecordDecisionForTraining(Indices, AbilityArrayIndexOverride);
+	}
 
 	if (Indices.Num() == 1 && AbilityArrayIndexOverride < 0 && !bAimAtTransporter)
 	{
@@ -975,6 +995,8 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 		FName Name;
 		float Frequency;
 		FString Output;
+		TArray<int32> Indices;
+		int32 AbilityArray = 0;
 	};
 	TArray<FMatchingRule> MatchingRules;
 	float TotalFrequency = 0.0f;
@@ -995,11 +1017,15 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 			continue;
 		}
 
+		DeferredIndices.Reset();
+		DeferredAbilityArray = 0;
+		bDeferRecording = true;
 		const FString Out = EvaluateRuleRow(*Row, GS, Inference);
+		bDeferRecording = false;
 		if (!Out.IsEmpty() && Out != TEXT("{}"))
 		{
 			float Freq = FMath::Max(0.0f, Row->Frequency);
-			MatchingRules.Add({ Name, Freq, Out });
+			MatchingRules.Add({ Name, Freq, Out, DeferredIndices, FMath::Max(0, DeferredAbilityArray) });
 			TotalFrequency += Freq;
 		}
 	}
@@ -1025,6 +1051,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 						{
 							LastSupplyForceTimeSeconds = Now;
 							MarkRuleFired(Match.Name);
+							RecordDecisionForTraining(Match.Indices, Match.AbilityArray);
 							UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: supply rule '%s' forced (headroom %.0f)."),
 							       *Match.Name.ToString(), Headroom);
 							return Match.Output;
@@ -1048,6 +1075,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 					{
 						LastExpansionFireTimeSeconds = Now;
 						MarkRuleFired(Match.Name);
+						RecordDecisionForTraining(Match.Indices, Match.AbilityArray);
 						UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: expansion rule '%s' forced by cadence at %.0fs."),
 						       *Match.Name.ToString(), Now);
 						return Match.Output;
@@ -1071,6 +1099,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 
 			if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: T%d DataTable rule '%s' fired (deterministic, freq=%.1f)."), ResolveOwningTeamId(), *Best->Name.ToString(), Best->Frequency);
 			MarkRuleFired(Best->Name);
+			RecordDecisionForTraining(Best->Indices, Best->AbilityArray);
 			return Best->Output;
 		}
 
@@ -1085,6 +1114,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 				{
 					if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: T%d DataTable rule '%s' fired (weighted random, freq=%.1f/%.1f)."), ResolveOwningTeamId(), *Match.Name.ToString(), Match.Frequency, TotalFrequency);
 					MarkRuleFired(Match.Name);
+					RecordDecisionForTraining(Match.Indices, Match.AbilityArray);
 					return Match.Output;
 				}
 			}
@@ -1093,6 +1123,7 @@ FString URTSRuleBasedDeciderComponent::EvaluateRulesFromDataTable(const FGameSta
 		// Fallback to first matching if total frequency is 0
 		if (bDebug) UE_LOG(LogTemp, Log, TEXT("RuleBasedDecider: T%d DataTable rule '%s' fired (fallback to first, total frequency was 0)."), ResolveOwningTeamId(), *MatchingRules[0].Name.ToString());
 		MarkRuleFired(MatchingRules[0].Name);
+		RecordDecisionForTraining(MatchingRules[0].Indices, MatchingRules[0].AbilityArray);
 		return MatchingRules[0].Output;
 	}
 
