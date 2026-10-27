@@ -161,6 +161,12 @@ void ALogisticsPipeline::Retire()
 	const double Duration = PacketTravelTime * (1.0 + Extra / Length) / FMath::Clamp(RetractSpeedFactor, 0.05f, 1.f);
 	RetractStartTime = Now;
 	RetractEndTime = Now + Duration;
+	// No merge target any more (SolvePipeNetwork): the pipelines lying on this one draw - and grow - on their own.
+	if (bMergeNearbyPipes)
+	{
+		bSolvedAsRetracting = true;
+		SolvePipeNetwork(GetWorld(), TeamId, bReplayRoad, nullptr);
+	}
 
 	if (!bRetractToSink)
 	{
@@ -243,6 +249,12 @@ float ALogisticsPipeline::GetInFlightAmount(EResourceType Type) const
 
 void ALogisticsPipeline::OnRep_Packets()
 {
+	// Clients: the pipeline started to retract - the ones lying on it lie on their own from now on.
+	if (RetractStartTime >= 0.0 && !bSolvedAsRetracting && bMergeNearbyPipes)
+	{
+		bSolvedAsRetracting = true;
+		SolvePipeNetwork(GetWorld(), TeamId, bReplayRoad, nullptr);
+	}
 	UpdatePacketParameters();
 }
 
@@ -562,7 +574,10 @@ void ALogisticsPipeline::SolvePipeNetwork(UWorld* World, int32 InTeamId, bool bI
 			float BestDist = Pipe->PipeMergeDistance;
 			for (int32 j = 0; j < k; ++j)
 			{
-				if (!Pipes[j]->bMergeNearbyPipes || Lines[j].Num() < 2)
+				// A retracting pipeline is no merge target (like the roads): the reroute that replaces it runs
+				// along it almost everywhere - merged onto it, the new one would stay hidden while it grows and
+				// only pop in whole once the old one is gone.
+				if (!Pipes[j]->bMergeNearbyPipes || Lines[j].Num() < 2 || Pipes[j]->RetractStartTime >= 0.0)
 				{
 					continue;
 				}

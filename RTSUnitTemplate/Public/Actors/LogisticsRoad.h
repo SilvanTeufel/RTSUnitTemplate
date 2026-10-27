@@ -146,6 +146,18 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual")
 	float GroundSegmentLength = 300.f;
 
+	/**
+	 * Passes of corner smoothing on the RVT road before its corners are rounded (each pass pulls every point
+	 * halfway to the middle of its neighbours, ends kept): the navmesh path has hard corners and the end
+	 * points at the buildings add hooks - more passes give wider curves. 0 = only the light rounding.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual|RVT", meta = (ClampMin = "0", ClampMax = "16"))
+	int32 RVTSmoothPasses = 4;
+
+	/** The same after the bend onto an older road (merging), so the junction curve has no kink. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual|RVT|Merge", meta = (ClampMin = "0", ClampMax = "16"))
+	int32 MergeSmoothPasses = 2;
+
 	/** Draw the ground lane as one continuous decal strip from building edge to building edge
 	 *  (instead of the mesh pieces above). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual|Decal")

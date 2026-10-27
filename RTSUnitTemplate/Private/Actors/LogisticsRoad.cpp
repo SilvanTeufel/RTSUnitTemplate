@@ -18,6 +18,55 @@
 #include "GameFramework/GameStateBase.h"
 #include "EngineUtils.h"
 
+namespace
+{
+	/** Pulls each inner point halfway towards the middle of its neighbours in XY (ends and heights kept). */
+	void SmoothPolyline2D(TArray<FVector>& Points, int32 Passes, bool bDichtNachsetzen = false)
+	{
+		if (Points.Num() < 3 || Passes <= 0)
+		{
+			return;
+		}
+
+		// Erst dicht nachsetzen. Der Navmesh-Weg hat nur seine Eckpunkte; auf denen zog die Glaettung
+		// eine Ecke fast bis auf die Luftlinie zwischen den Nachbarn - quer durch den Turm, um den
+		// der Weg herumfuehrte. Mit dichten Punkten rundet sie nur noch im Umkreis weniger Abstaende.
+		// Nur auf Wunsch: am Einmuendungsweg haengen Parallel-Arrays an den Punktindizes.
+		if (bDichtNachsetzen)
+		{
+			constexpr float Abstand = 80.f;
+			TArray<FVector> Dicht;
+			Dicht.Reserve(Points.Num() * 4);
+			Dicht.Add(Points[0]);
+			for (int32 i = 1; i < Points.Num(); ++i)
+			{
+				const FVector A = Points[i - 1];
+				const FVector B = Points[i];
+				const int32 Teile = FMath::Clamp(FMath::CeilToInt(FVector::Dist2D(A, B) / Abstand), 1, 200);
+				for (int32 k = 1; k <= Teile; ++k)
+				{
+					Dicht.Add(FMath::Lerp(A, B, static_cast<float>(k) / Teile));
+				}
+			}
+			Points = MoveTemp(Dicht);
+		}
+
+		const int32 Num = Points.Num();
+		TArray<FVector> Next = Points;
+		for (int32 Pass = 0; Pass < Passes; ++Pass)
+		{
+			for (int32 i = 1; i + 1 < Num; ++i)
+			{
+				const FVector Mid = 0.5f * (Points[i - 1] + Points[i + 1]);
+				Next[i].X = 0.5f * (Points[i].X + Mid.X);
+				Next[i].Y = 0.5f * (Points[i].Y + Mid.Y);
+			}
+			Swap(Points, Next);
+			Next = Points;
+		}
+	}
+}
+
 namespace RoadReveal
 {
 	// VisibleFrom / VisibleTo of a piece that is drawn whole.
@@ -366,7 +415,11 @@ void ALogisticsRoad::AddRVTPolyline(const TArray<FVector>& InPoints, UMaterialIn
 	// Round off the corners (Chaikin, end points kept), so the straight quads do not leave wedge-shaped
 	// gaps on the outside of a bend.
 	TArray<FVector> Points = InPoints;
-	for (int32 Pass = 0; Pass < 2 && Points.Num() > 2; ++Pass)
+	SmoothPolyline2D(Points, RVTSmoothPasses, /*bDichtNachsetzen=*/true);
+	// Nach der Glaettung auf dichten Punkten ist der Verlauf schon rund; Chaikin wuerde die Punktzahl
+	// nur noch vervierfachen. Ohne Glaettung rundet Chaikin wie bisher.
+	const int32 ChaikinPasses = RVTSmoothPasses > 0 ? 0 : 2;
+	for (int32 Pass = 0; Pass < ChaikinPasses && Points.Num() > 2; ++Pass)
 	{
 		TArray<FVector> Next;
 		Next.Reserve(Points.Num() * 2);
@@ -831,6 +884,12 @@ void ALogisticsRoad::SolveRoadNetwork(UWorld* World, int32 InTeamId, bool bInRep
 				const FVector2D Bent = FMath::Lerp(FVector2D(Path[t]), HitPos[k][t], Bend[t]);
 				DrawPaths[k][t] = FVector(Bent, Path[t].Z);
 			}
+		}
+		// Every point snapped to its own nearest piece of the older road: where that one bends, neighbours
+		// land on different pieces - smooth the bent path so the junction curve runs clean.
+		if (Runs[k].Num() > 0)
+		{
+			SmoothPolyline2D(DrawPaths[k], Roads[k]->MergeSmoothPasses);
 		}
 		auto IsCovered = [&](int32 t)
 		{

@@ -130,6 +130,13 @@ public:
 	void NotifyObstaclePlaced(const AActor* Building, const FBox& Bounds);
 
 	/**
+	 * A passage at Bounds opened or closed (an energy wall). Every road and pipeline whose route comes near
+	 * it is searched again once the navmesh has the change: through the opened wall, around the closed one.
+	 * Roads whose lane stays the same are kept as they are.
+	 */
+	void NotifyPassageChanged(const FBox& Bounds);
+
+	/**
 	 * A Converter switched its conversion. Supply runs for it that have not loaded yet are dropped,
 	 * loaded ones turn back to the base they were loaded at. Rebuilds its supply road.
 	 */
@@ -271,6 +278,8 @@ private:
 		TWeakObjectPtr<const AActor> Building;
 		FBox Bounds;
 		double Time = 0.0;
+		/** NotifyPassageChanged: a route only needs to come near Bounds, not cross it (it may go around). */
+		bool bPassage = false;
 	};
 	TArray<FPendingObstacle> PendingObstacles;
 
