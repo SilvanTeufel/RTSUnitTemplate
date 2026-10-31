@@ -354,6 +354,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<FUnitSpawnData> UnitSpawnDataSets;
 
+	/**
+	 * Highest level the units of a spawn row (by Id) have reached. Rows with LoadLevelAfterSpawn start their
+	 * new units at this level - a boss that comes back keeps what it earned last time.
+	 */
+	TMap<int32, int32> EarnedLevelBySpawnId;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<class UDataTable*> UnitSpawnParameters;
 

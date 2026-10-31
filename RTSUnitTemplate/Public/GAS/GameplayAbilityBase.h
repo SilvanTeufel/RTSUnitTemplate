@@ -100,6 +100,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	float AnimTimeOnRotateFinished = 0.6f;
 	
+	/**
+	 * Research (AUpgradeGameState::ResearchUpgradeByName, e.g. an upgrade ability's UpgradeName "UpgradeMultishot")
+	 * that shortens this ability's cooldown: once the owner's team has researched it, the cooldown effect's
+	 * duration is multiplied by ResearchedCooldownMultiplier. Empty = off.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FString CooldownResearchName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.01"))
+	float ResearchedCooldownMultiplier = 0.5f;
+
+	/** True when CooldownResearchName is set and researched by the team of ActorInfo's avatar. */
+	bool IsCooldownResearched(const FGameplayAbilityActorInfo* ActorInfo) const;
+
+	virtual void ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const override;
+
 	// New: Unique key to group abilities, default "None"
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FString AbilityKey = "None";

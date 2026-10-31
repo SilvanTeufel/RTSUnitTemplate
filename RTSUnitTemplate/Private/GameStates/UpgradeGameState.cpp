@@ -111,22 +111,28 @@ bool AUpgradeGameState::GetUpgradeResearchedStatus(int32 TeamId, FString Upgrade
 
 void AUpgradeGameState::ResearchUpgradeByName(int32 TeamId, FString UpgradeName)
 {
-    if (HasAuthority() && TeamId >= 1)
+    if (HasAuthority() && TeamId >= 1 && !UpgradeName.IsEmpty())
     {
         int32 TeamIndex = TeamId - 1;
+        TeamUpgradesArray.SetNum(FMath::Max(TeamUpgradesArray.Num(), TeamIndex + 1));
 
-        if (TeamIndex < TeamUpgradesArray.Num())
+        for (FUpgradeStatus& Upgrade : TeamUpgradesArray[TeamIndex].Upgrades)
         {
-            for (FUpgradeStatus& Upgrade : TeamUpgradesArray[TeamIndex].Upgrades)
+            if (Upgrade.Name.Equals(UpgradeName))
             {
-                if (Upgrade.Name.Equals(UpgradeName))
-                {
-                    Upgrade.Researched = true;
-                    TeamUpgradesArray[TeamIndex].MarkItemDirty(Upgrade);
-                    return;
-                }
+                Upgrade.Researched = true;
+                TeamUpgradesArray[TeamIndex].MarkItemDirty(Upgrade);
+                return;
             }
         }
+
+        // Not in the game mode's initial list (e.g. the research abilities' UpgradeName "UpgradeMultishot", which
+        // GameplayAbilityBase::CooldownResearchName reads): add it - before, such a research was silently lost.
+        FUpgradeStatus NewUpgrade;
+        NewUpgrade.Name = UpgradeName;
+        NewUpgrade.Researched = true;
+        TeamUpgradesArray[TeamIndex].Upgrades.Add(NewUpgrade);
+        TeamUpgradesArray[TeamIndex].MarkArrayDirty();
     }
 }
 
