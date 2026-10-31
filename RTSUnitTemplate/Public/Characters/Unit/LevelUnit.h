@@ -197,6 +197,13 @@ public:
 	void AutoLevelUp();
 
 	/**
+	 * Server: lifts the unit to TargetLevel (or MaxCharacterLevel) at once, investing the talent points like
+	 * AutoLevelUp - for units that come back with the level they had earned. Nothing happens below its level.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Leveling")
+	void RaiseToLevel(int32 TargetLevel);
+
+	/**
 	 * Darf ein Stufenaufstieg die Gesundheit wieder auffuellen?
 	 *
 	 * Vorgabe AUS. Bis zum 21.09.2026 stand eine Einheit nach jedem Aufstieg wieder bei voller

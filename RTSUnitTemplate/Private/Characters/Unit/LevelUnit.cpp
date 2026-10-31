@@ -130,6 +130,28 @@ void ALevelUnit::LevelUp_Implementation()
 	//UE_LOG(LogTemp, Log, TEXT("After Level Up: Level %d, Experience %d"), LevelData.CharacterLevel, LevelData.Experience);
 }
 
+void ALevelUnit::RaiseToLevel(int32 TargetLevel)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// LevelUp() only rises with enough experience and takes it off again, so top it up before every step.
+	int32 Steps = 0;
+	while (LevelData.CharacterLevel < TargetLevel && Steps < 500)
+	{
+		LevelData.Experience = LevelUpData.ExperiencePerLevel * (LevelData.CharacterLevel + 1) + 1;
+		const int32 Before = LevelData.CharacterLevel;
+		AutoLevelUp();
+		if (LevelData.CharacterLevel == Before)
+		{
+			// MaxCharacterLevel reached.
+			break;
+		}
+		++Steps;
+	}
+}
+
 void ALevelUnit::AutoLevelUp()
 {
 	// Siehe bFullHealOnLevelUp: der Gesundheitsstand wird ueber den GESAMTEN Aufstieg gehalten,

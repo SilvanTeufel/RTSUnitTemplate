@@ -1,6 +1,7 @@
 // Copyright 2023 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Characters/Unit/PerformanceUnit.h"
+#include "Actors/LevelVFXSettingsActor.h"
 #include "System/DamageNumberSubsystem.h"
 #include "Actors/AreaDecalComponent.h"   // ground painting is exempt from the fog visibility push
 #include "Characters/Unit/BuildingBase.h"
@@ -600,6 +601,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
                             FRotator Rotation = Unit->GetMassActorRotation();
                             if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(Unit->GetWorld(), ImpactVFX, Location, Rotation, ScaleVFX))
                             {
+                                ALevelVFXSettingsActor::ApplyToNiagaraComponent(NiagaraComp);
                                 Unit->ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
                             }
                         }
@@ -613,6 +615,7 @@ void APerformanceUnit::FireEffects_Implementation(UNiagaraSystem* ImpactVFX, USo
             {
                 if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), ImpactVFX, GetMassActorLocation(), GetActorRotation(), ScaleVFX))
                 {
+                    ALevelVFXSettingsActor::ApplyToNiagaraComponent(NiagaraComp);
                     ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
                 }
             }
@@ -712,6 +715,7 @@ void APerformanceUnit::FireEffectsAtLocation_Implementation(UNiagaraSystem* Impa
                 {
                     if (UNiagaraComponent* NiagaraComp = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, ImpactVFX, Location, Rotation, ScaleVFX))
                     {
+                        ALevelVFXSettingsActor::ApplyToNiagaraComponent(NiagaraComp);
                         Unit->ActiveNiagara.Add(FActiveNiagaraEffect(NiagaraComp, ID));
 
                         if (KillDelay > 0.0f)
