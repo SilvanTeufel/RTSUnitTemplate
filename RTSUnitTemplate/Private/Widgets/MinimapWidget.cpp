@@ -16,6 +16,12 @@ void UMinimapWidget::InitializeForTeam(int32 TeamId)
     // --- 1. Find the correct MinimapActor for this player ---
     if (!GetWorld()) return;
 
+    // A new team (e.g. switched at runtime) must not keep the previous team's actor.
+    if (MinimapActorRef && MinimapActorRef->TeamId != TeamId)
+    {
+        MinimapActorRef = nullptr;
+    }
+
     // Use the TeamId passed into this function
     const int32 PlayerTeamId = TeamId;
 

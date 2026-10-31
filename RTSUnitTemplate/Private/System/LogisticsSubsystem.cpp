@@ -13,6 +13,7 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "DrawDebugHelpers.h"
 #include "EngineUtils.h"
+#include "Kismet/GameplayStatics.h"
 #include "GameModes/ResourceGameMode.h"
 #include "GAS/AttributeSetBase.h"
 #include "Mass/UnitMassTag.h"
@@ -284,8 +285,12 @@ float ULogisticsSubsystem::GetDockDistance(const ABuildingBase* Base, const AUni
 	return FMath::Max(GetBaseRadius(Base) + UnitRadius + Gap, 0.f);
 }
 
-FVector ULogisticsSubsystem::GetDockPoint(const ABuildingBase* Base, const AUnitBase* Unit, const FVector& Toward) const
+FVector ULogisticsSubsystem::GetDockPoint(const ABuildingBase* Base, const AUnitBase* Unit, const FVector& InToward) const
 {
+	// A flyer docks on the side it comes from. Toward is usually the end of the GROUND road, and that one runs
+	// round energy walls: the flyer then flew round the wall to the far side of the base (or stuck between
+	// wall and base) instead of straight over it.
+	const FVector Toward = (Unit && Unit->IsFlying) ? Unit->GetMassActorLocation() : InToward;
 	if (LandsOnRoof(Unit, Base))
 	{
 		return GetRoofDockPoint(Base, Toward);
@@ -1187,7 +1192,7 @@ void ULogisticsSubsystem::RefreshLogisticsUnit(AAbilityUnit* InUnit)
 	}
 }
 
-void ULogisticsSubsystem::ResumeLogistics(AUnitBase* Unit)
+void ULogisticsSubsystem::ResumeLogistics(AUnitBase* Unit, ABuildingBase* PreferredSource)
 {
 	if (!IsValid(Unit) || !Unit->IsLogisticsUnit())
 	{
@@ -1202,6 +1207,23 @@ void ULogisticsSubsystem::ResumeLogistics(AUnitBase* Unit)
 	}
 
 	const double Now = GetWorld()->GetTimeSeconds();
+
+	// Sent to a collecting base: haul from there from now on. Without this the dispatcher picked the source
+	// with the most waiting - often another extractor on the way - and the unit loaded Primary instead of
+	// the Rare it was sent to.
+	const bool bPreferSource = PreferredSource && RoadsBySource.Contains(PreferredSource);
+	Job->PreferredSource = bPreferSource ? PreferredSource : nullptr;
+	if (bPreferSource && Job->State == ELogisticsJobState::ToPickup && Job->TargetBase.Get() != PreferredSource)
+	{
+		// On the way to another source with nothing loaded yet: turn round now.
+		ReleaseReservation(*Job);
+		ResetJobKind(*Job);
+		SetJobState(*Job, ELogisticsJobState::Idle, Now);
+		Job->NextAssignTime = 0.0;
+		Job->bResumeRequested = true;
+		return;
+	}
+
 	switch (Job->State)
 	{
 	case ELogisticsJobState::ToPickup:
@@ -1295,6 +1317,8 @@ void ULogisticsSubsystem::SetJobState(FLogisticsJob& Job, ELogisticsJobState New
 	{
 		Job.bHasIssuedTarget = false;
 		Job.bResumeRequested = false;
+		// Another order of the player: the source it was sent to no longer counts.
+		Job.PreferredSource = nullptr;
 	}
 
 	if (AUnitBase* Unit = Job.Unit.Get())
@@ -1410,6 +1434,78 @@ bool ULogisticsSubsystem::WasOverridden(const FLogisticsJob& Job) const
 	return FVector::Dist2D(State->StoredLocation, Job.IssuedTarget) > 300.f;
 }
 
+void ULogisticsSubsystem::GetResourceNeedWeights(const AResourceGameMode* GameMode, int32 TeamId, TArray<float>& OutWeights) const
+{
+	OutWeights.Init(1.f, NumResourceTypes);
+	const float Strength = GameMode ? GameMode->LogisticsBalanceStrength : 0.f;
+	if (Strength <= 0.f)
+	{
+		return;
+	}
+
+	// Types in play: stocked by the team or waiting at one of its sources. A type nobody collects must not
+	// drag the average down (and make every real type look plentiful).
+	TArray<bool> InPlay;
+	InPlay.Init(false, NumResourceTypes);
+	TArray<float> Stock;
+	Stock.Init(0.f, NumResourceTypes);
+	for (int32 i = 0; i < NumResourceTypes; ++i)
+	{
+		Stock[i] = FMath::Max(0.f, GameMode->GetResource(TeamId, static_cast<EResourceType>(i)));
+		InPlay[i] = Stock[i] > 0.f;
+	}
+	for (const auto& Pair : RoadsBySource)
+	{
+		const ABuildingBase* Source = Pair.Key.Get();
+		if (!IsBaseAlive(Source) || Source->TeamId != TeamId)
+		{
+			continue;
+		}
+		for (int32 i = 0; i < NumResourceTypes; ++i)
+		{
+			InPlay[i] |= Source->GetStoredResourceAmount(static_cast<EResourceType>(i)) > 0.f;
+		}
+	}
+
+	float Sum = 0.f;
+	int32 Count = 0;
+	for (int32 i = 0; i < NumResourceTypes; ++i)
+	{
+		if (InPlay[i])
+		{
+			Sum += Stock[i];
+			++Count;
+		}
+	}
+	if (Count < 2)
+	{
+		return;
+	}
+	// The offset keeps tiny stocks (start of a match) from producing huge ratios.
+	constexpr float Offset = 50.f;
+	const float Average = Sum / Count;
+	for (int32 i = 0; i < NumResourceTypes; ++i)
+	{
+		if (InPlay[i])
+		{
+			OutWeights[i] = FMath::Clamp(FMath::Pow((Average + Offset) / (Stock[i] + Offset), Strength), 0.25f, 4.f);
+		}
+	}
+}
+
+float ULogisticsSubsystem::GetSourceNeedFactor(const ABuildingBase* Source, const TArray<float>& Weights)
+{
+	float Plain = 0.f;
+	float Weighted = 0.f;
+	for (int32 i = 0; i < NumResourceTypes && i < Weights.Num(); ++i)
+	{
+		const float Amount = Source->GetStoredResourceAmount(static_cast<EResourceType>(i));
+		Plain += Amount;
+		Weighted += Amount * Weights[i];
+	}
+	return Plain > 0.f ? Weighted / Plain : 1.f;
+}
+
 void ULogisticsSubsystem::DoLoad(FLogisticsJob& Job, double Now)
 {
 	AUnitBase* Unit = Job.Unit.Get();
@@ -1426,15 +1522,28 @@ void ULogisticsSubsystem::DoLoad(FLogisticsJob& Job, double Now)
 		Unit->LogisticsCargo.SetNumZeroed(NumResourceTypes);
 	}
 
-	// Largest stack first, so a mixed store empties evenly and the most-needed type moves first.
+	// What the team is shortest of first (LogisticsBalanceStrength), then the largest stack, so a mixed store
+	// empties evenly.
+	TArray<float> Weights;
+	GetResourceNeedWeights(Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(this)), Unit->TeamId, Weights);
 	TArray<int32> Order;
 	for (int32 i = 0; i < NumResourceTypes; ++i)
 	{
 		Order.Add(i);
 	}
-	Order.Sort([Source](int32 A, int32 B)
+	Order.Sort([Source, &Weights](int32 A, int32 B)
 	{
-		return Source->GetStoredResourceAmount(static_cast<EResourceType>(A)) > Source->GetStoredResourceAmount(static_cast<EResourceType>(B));
+		const float StockA = Source->GetStoredResourceAmount(static_cast<EResourceType>(A));
+		const float StockB = Source->GetStoredResourceAmount(static_cast<EResourceType>(B));
+		if ((StockA > 0.f) != (StockB > 0.f))
+		{
+			return StockA > 0.f;
+		}
+		if (!FMath::IsNearlyEqual(Weights[A], Weights[B], 0.01f))
+		{
+			return Weights[A] > Weights[B];
+		}
+		return StockA > StockB;
 	});
 
 	// Leave what other haulers on their way here have claimed (ours was released above), or the
@@ -2073,6 +2182,14 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 			ALogisticsRoad* BestRoad = nullptr;
 			float BestScore = 0.f;
 			float BestAvailable = 0.f;
+			TArray<float> NeedWeights;
+			GetResourceNeedWeights(GameMode, Unit->TeamId, NeedWeights);
+			ABuildingBase* Preferred = Job.PreferredSource.Get();
+			if (Preferred && (!IsBaseAlive(Preferred) || !RoadsBySource.Contains(Preferred)))
+			{
+				Job.PreferredSource = nullptr;
+				Preferred = nullptr;
+			}
 			for (const auto& Pair : RoadsBySource)
 			{
 				ALogisticsRoad* Road = Pair.Value.Get();
@@ -2096,8 +2213,15 @@ void ULogisticsSubsystem::TickDispatcher(AResourceGameMode* GameMode)
 				}
 
 				// Most waiting, discounted by how far away it is - a nearly full store across the map
-				// still beats an almost empty one next door, but not by an unlimited margin.
-				const float Score = FMath::Min(Available, Unit->LogisticsCapacity) / (1.f + FVector::Dist2D(Location, Road->GetSourceEnd()) / 5000.f);
+				// still beats an almost empty one next door, but not by an unlimited margin. Weighted by what
+				// the team is short of, so the stocks stay even (LogisticsBalanceStrength).
+				float Score = FMath::Min(Available, Unit->LogisticsCapacity) / (1.f + FVector::Dist2D(Location, Road->GetSourceEnd()) / 5000.f)
+					* GetSourceNeedFactor(Source, NeedWeights);
+				// The source the player sent this unit to wins whenever it has a load waiting.
+				if (Source == Preferred)
+				{
+					Score += 1.0e6f;
+				}
 				if (Score > BestScore)
 				{
 					BestScore = Score;

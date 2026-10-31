@@ -159,6 +159,14 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
 	bool IsRevealedByFogNow = false;
 
+	/**
+	 * Multiplies the SpawnVFX scale of every projectile this unit fires (muzzle flash). Lets two units
+	 * share one projectile class and still flash at their own size - set by the WeaponModule from
+	 * FWeaponData::SpawnVFXScale on every weapon switch. Local only, both sides set it themselves.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0"))
+	float SpawnVFXScaleMultiplier = 1.f;
+
 	/** World distance around the view inside which FireEffects / PlayFogAwareSound still play. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float EffectViewportMargin = 1000.f;

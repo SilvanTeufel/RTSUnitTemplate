@@ -469,7 +469,10 @@ void ARTSGameModeBase::CheckWinLoseCondition(AUnitBase* DestroyedUnit)
 		// Abschusszaehler. Genau hier, weil DeadEffectsAndEvents() die einzige Stelle ist, an
 		// der ein Tod serverseitig und dank DeadEffectsExecuted genau EINMAL durchlaeuft.
 		// Die Zahl landet im GameState, damit sie auch auf dem Client ankommt.
-		if (AResourceGameState* GS = GetGameState<AResourceGameState>())
+		// Not for a cosmetic death (KillSilently): the Xeno worker that turns into its finished building
+		// counted as a kill of the player - in Level_6_Survive the counter rose before any fight.
+		AResourceGameState* GS = GetGameState<AResourceGameState>();
+		if (GS && !DestroyedUnit->bSuppressDeathEffects)
 		{
 			GS->AddUnitLoss(DestroyedUnit->TeamId);
 		}
@@ -2072,6 +2075,21 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 		return;
 	}
 
+	// LoadLevelAfterSpawn: remember what the row's units have reached before the dead leave the list.
+	int32 EarnedLevel = 0;
+	if (SpawnParameter.LoadLevelAfterSpawn)
+	{
+		int32& Earned = EarnedLevelBySpawnId.FindOrAdd(SpawnParameter.Id);
+		for (const FUnitSpawnData& Data : UnitSpawnDataSets)
+		{
+			if (Data.Id == SpawnParameter.Id && IsValid(Data.UnitBase))
+			{
+				Earned = FMath::Max(Earned, Data.UnitBase->LevelData.CharacterLevel);
+			}
+		}
+		EarnedLevel = Earned;
+	}
+
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
 
 	// Adaptive reinforcement. Returns exactly 1.0 when the row has bAdaptiveSpawn off, so
@@ -2231,6 +2249,11 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 					}
 				}
 			
+				if (EarnedLevel > UnitBase->LevelData.CharacterLevel)
+				{
+					UnitBase->RaiseToLevel(EarnedLevel);
+				}
+
 				//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 				// Assign a new unique UnitIndex without reusing old ones
 				AddUnitIndexAndAssignToAllUnitsArrayWithIndex(UnitBase, INDEX_NONE, SpawnParameter);

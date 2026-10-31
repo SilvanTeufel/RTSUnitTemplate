@@ -22,6 +22,7 @@ class RTSUNITTEMPLATE_API UUnitWidgetSelector : public UUserWidget
 
 	
 	virtual void NativeConstruct() override;
+	virtual void NativeDestruct() override;
 
 	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
@@ -32,6 +33,12 @@ private:
 	FTimerHandle UpdateTimerHandle;
 
 	void StartUpdateTimer();
+
+	/** Shows Unit in the 3D window, or hides the window (nullptr / no material). */
+	void UpdateUnitPreview(AUnitBase* Unit);
+
+	UPROPERTY(Transient)
+	TObjectPtr<class AUnitPreviewStage> UnitPreviewStage;
 
 	/** What the buttons showed at the last update - a change means the open tooltip shows something else. */
 	int32 LastTooltipAbilityArrayIndex = INDEX_NONE;
@@ -170,5 +177,33 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	ACustomControllerBase* ControllerBase;
+
+	/**
+	 * 3D window: a turning view of the unit shown in the selector. The material must have a texture
+	 * parameter UnitPreviewTextureParameter holding a render target (e.g. M_UnitPreview_AH with
+	 * RT_UnitPreview_AH); AUnitPreviewStage renders the unit into it. None = the window stays hidden
+	 * and nothing is rendered.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UnitPreview")
+	class UMaterialInterface* UnitPreviewMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UnitPreview")
+	FName UnitPreviewTextureParameter = TEXT("Preview");
+
+	/** Degrees per second of the turntable. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UnitPreview")
+	float UnitPreviewRotationSpeed = 30.f;
+
+	/** Renders of the 3D window per second. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UnitPreview", meta = (ClampMin = "1"))
+	float UnitPreviewCaptureRate = 30.f;
+
+	/** The whole window (frame included); collapsed without material or unit. */
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|UnitPreview", meta = (BindWidgetOptional))
+	class UWidget* UnitPreviewBox = nullptr;
+
+	/** Shows UnitPreviewMaterial. */
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|UnitPreview", meta = (BindWidgetOptional))
+	class UImage* UnitPreviewImage = nullptr;
 	
 };

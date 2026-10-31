@@ -23,6 +23,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TSoftObjectPtr<UWorld> Map2Name;
 
+	/** Off = Map1Button is shown greyed out and cannot be clicked (e.g. not part of the beta). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bMap1Enabled = true;
+
+	/** Off = Map2Button is shown greyed out and cannot be clicked. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bMap2Enabled = true;
+
 protected:
 	UPROPERTY(meta = (BindWidget))
 	UButton* Map1Button;

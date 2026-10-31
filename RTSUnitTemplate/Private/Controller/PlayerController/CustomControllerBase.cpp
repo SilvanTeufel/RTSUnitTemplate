@@ -2001,7 +2001,8 @@ void ACustomControllerBase::Server_SetUnitsFollowTarget_Implementation(const TAr
 			{
 				if (Logistics && Unit && Unit->IsLogisticsUnit() && Unit->TeamId == ClickedBase->TeamId)
 				{
-					Logistics->ResumeLogistics(Unit);
+					// A collecting base clicked: haul from that one (a storing base just resumes).
+					Logistics->ResumeLogistics(Unit, const_cast<ABuildingBase*>(ClickedBase));
 					return true;
 				}
 				return false;

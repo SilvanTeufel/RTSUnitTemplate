@@ -45,6 +45,8 @@ void ABossWaveSpawner::BeginPlay()
 
 	GetWorldTimerManager().SetTimer(WaveTimer, this, &ABossWaveSpawner::SpawnWave,
 		FMath::Max(1.f, IntervalSeconds), true, FMath::Max(1.f, FirstWaveDelay));
+	// A dead boss may be cleaned up long before its class comes again - note its level while it is there.
+	GetWorldTimerManager().SetTimer(LevelTimer, this, &ABossWaveSpawner::RememberEarnedLevels, 5.f, true);
 
 	UE_LOG(LogTemp, Log, TEXT("[BossWelle] bereit: erster Boss nach %.0f s, danach alle %.0f s, Stufe %d (+%d je Welle)"),
 		FirstWaveDelay, IntervalSeconds, StartLevel, LevelPerWave);
@@ -76,6 +78,7 @@ void ABossWaveSpawner::SpawnWave()
 
 	const int32 Stufe = GetNextWaveLevel();
 	int32 Gesetzt = 0;
+	RememberEarnedLevels();
 
 	for (int32 i = 0; i < FMath::Max(1, BossesPerWave); ++i)
 	{
@@ -103,7 +106,9 @@ void ABossWaveSpawner::SpawnWave()
 
 		if (Boss)
 		{
-			HebeAufStufe(Boss, Stufe);
+			const int32* Earned = bKeepEarnedLevel ? EarnedLevels.Find(Klasse.Get()) : nullptr;
+			HebeAufStufe(Boss, FMath::Max(Stufe, Earned ? *Earned : 0));
+			SpawnedBosses.Add(Boss);
 			++Gesetzt;
 		}
 	}
@@ -149,6 +154,22 @@ void ABossWaveSpawner::SpawnWave()
 	++WaveIndex;
 	UE_LOG(LogTemp, Warning, TEXT("[BossWelle] Welle %d: %d Boss(e) und %d Begleiter auf Stufe %d gesetzt (naechste Stufe %d)"),
 		WaveIndex, Gesetzt, Begleiter, Stufe, GetNextWaveLevel());
+}
+
+void ABossWaveSpawner::RememberEarnedLevels()
+{
+	// Dead bosses stay valid until they are cleaned up; read every one that is still there.
+	for (int32 i = SpawnedBosses.Num() - 1; i >= 0; --i)
+	{
+		const AUnitBase* Boss = SpawnedBosses[i].Get();
+		if (!IsValid(Boss))
+		{
+			SpawnedBosses.RemoveAt(i);
+			continue;
+		}
+		int32& Level = EarnedLevels.FindOrAdd(Boss->GetClass());
+		Level = FMath::Max(Level, Boss->LevelData.CharacterLevel);
+	}
 }
 
 void ABossWaveSpawner::HebeAufStufe(AUnitBase* Einheit, int32 Zielstufe) const

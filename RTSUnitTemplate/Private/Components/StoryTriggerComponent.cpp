@@ -62,14 +62,9 @@ bool UStoryTriggerComponent::BuildQueueItemFromRandomRow(FStoryQueueItem& OutIte
 		return false;
 	}
 
-	const TArray<FName> RowNames = StoryDataTable->GetRowNames();
-	if (RowNames.Num() == 0)
-	{
-		return false;
-	}
-
-	const int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
-	return BuildQueueItemFromRow(RowNames[Index], OutItem);
+	// Shuffled deck per table (all lines once before any repeats, never twice in a row).
+	const FName RowName = UStoryTriggerQueueSubsystem::DrawRandomRowFor(this, StoryDataTable);
+	return !RowName.IsNone() && BuildQueueItemFromRow(RowName, OutItem);
 }
 
 void UStoryTriggerComponent::TryTriggerRandom(float ChancePercent)

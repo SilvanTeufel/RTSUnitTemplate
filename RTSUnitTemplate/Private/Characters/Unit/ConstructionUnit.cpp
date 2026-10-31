@@ -494,7 +494,9 @@ void AConstructionUnit::KillConstructionUnit()
 {
 	if (HasAuthority())
 	{
-		// Perform immediately on the server
+		// Perform immediately on the server. The site is done, not destroyed: a cosmetic death - no
+		// death effects and no kill on the counter (AResourceGameState::AddUnitLoss).
+		bSuppressDeathEffects = true;
 		SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
 		SetHealth(0.f);
 		SetHidden(true);
@@ -508,6 +510,7 @@ void AConstructionUnit::KillConstructionUnit()
 
 void AConstructionUnit::Server_KillConstructionUnit_Implementation()
 {
+	bSuppressDeathEffects = true;
 	SwitchEntityTagByState(UnitData::Dead, UnitData::Dead);
 	SetHealth(0.f);
 	SetHidden(true);

@@ -36,6 +36,7 @@
 #include "Actors/AbilityIndicator.h"
 #include "GameFramework/PlayerState.h"
 #include "GameModes/ResourceGameMode.h"
+#include "GameStates/UpgradeGameState.h"
 #include "MassEntitySubsystem.h"
 #include "Mass/UnitMassTag.h"
 #include "Mass/Abilitys/CastingFallBackProcessor.h"
@@ -1090,6 +1091,35 @@ void UGameplayAbilityBase::SetAbilitiesForceEnabledForTeamByKey(const FString& K
 			// Additionally apply owner-scoped disable (synced via SetAbilityEnabledByKey)
 			SetAbilityEnabledByKey(NormalizedKey, false);
 		}
+	}
+}
+
+bool UGameplayAbilityBase::IsCooldownResearched(const FGameplayAbilityActorInfo* ActorInfo) const
+{
+	if (CooldownResearchName.IsEmpty() || !ActorInfo)
+	{
+		return false;
+	}
+	const ASpawnerUnit* Unit = Cast<ASpawnerUnit>(ActorInfo->AvatarActor.Get());
+	const UWorld* World = Unit ? Unit->GetWorld() : nullptr;
+	const AUpgradeGameState* State = World ? World->GetGameState<AUpgradeGameState>() : nullptr;
+	return State && State->GetUpgradeResearchedStatus(Unit->TeamId, CooldownResearchName);
+}
+
+void UGameplayAbilityBase::ApplyCooldown(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo) const
+{
+	const UGameplayEffect* CooldownGE = GetCooldownGameplayEffect();
+	if (!CooldownGE || !IsCooldownResearched(ActorInfo))
+	{
+		Super::ApplyCooldown(Handle, ActorInfo, ActivationInfo);
+		return;
+	}
+	// Same as Super, with the researched duration locked into the spec.
+	FGameplayEffectSpecHandle Spec = MakeOutgoingGameplayEffectSpec(Handle, ActorInfo, ActivationInfo, CooldownGE->GetClass(), GetAbilityLevel(Handle, ActorInfo));
+	if (Spec.IsValid())
+	{
+		Spec.Data->SetDuration(Spec.Data->GetDuration() * FMath::Max(ResearchedCooldownMultiplier, 0.01f), true);
+		ApplyGameplayEffectSpecToOwner(Handle, ActorInfo, ActivationInfo, Spec);
 	}
 }
 

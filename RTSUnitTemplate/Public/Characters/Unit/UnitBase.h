@@ -34,6 +34,14 @@ public:
 	
 	static const FName BoxCollisionTag;
 
+	/**
+	 * Moves the model in the unit selector's 3D window, as a fraction of the model's size (Z: + = up).
+	 * The window centres the mesh bounds; a mesh whose visible part sits off its bounds (e.g. a VAT mesh
+	 * animated away from its rest pose) is put right with this.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Preview")
+	FVector PreviewModelOffset = FVector::ZeroVector;
+
 	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
 	UBoxComponent* BoxCollisionComponent = nullptr;
 

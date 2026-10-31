@@ -290,6 +290,12 @@ void UUnitSeparationProcessor::Execute(FMassEntityManager& EntityManager, FMassE
 		int32 Verworfen = 0;
 		for (const FClumpUnitInfo& Info : Units)
 		{
+			// Flyers cannot be pushed over an edge, and they are above the navmesh anyway: the raycast
+			// from up there always reported a hit and dropped every push between air units.
+			if (Info.bIsFlying)
+			{
+				continue;
+			}
 			FVector* Push = AccumPush.Find(Info.Entity);
 			if (!Push)
 			{

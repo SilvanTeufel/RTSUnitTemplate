@@ -59,6 +59,13 @@ struct RTSUNITTEMPLATE_API FMainMenuEntry
 	FString URL;
 
 	/**
+	 * Off = the button is always greyed out, whatever the unlock gate below says (e.g. not part of
+	 * the beta). LockedHint is shown under it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MainMenu|Unlock")
+	bool bEnabled = true;
+
+	/**
 	 * Gate: the button stays greyed out until one of the two conditions below is met.
 	 * Both empty = always open.
 	 *

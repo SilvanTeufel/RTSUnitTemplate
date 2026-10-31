@@ -72,7 +72,7 @@ private:
 	 *                  entirely - a one-shot burst has no later frame in which it could be un-hidden,
 	 *                  so there is nothing to gain from spawning it hidden.
 	 */
-	void FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible);
+	void FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible, float ScaleMultiplier = 1.f);
 
 	UPROPERTY()
 	TMap<TSubclassOf<AProjectile>, FProjectileClassData> ProjectileDataMap;

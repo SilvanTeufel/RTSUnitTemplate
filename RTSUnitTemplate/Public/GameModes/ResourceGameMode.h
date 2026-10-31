@@ -344,6 +344,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
 	float LogisticsConverterSupplyPriority = 1.5f;
 
+	/**
+	 * Keep the team's resources even: an idle logistics unit prefers sources that hold what the team is short
+	 * of, and loads the scarcest type first. The weight of a type is (average stock / its stock) to this power,
+	 * clamped to 0.25 .. 4. 0 = off (the old choice: most waiting, discounted by distance).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0", ClampMax = "3"))
+	float LogisticsBalanceStrength = 1.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Work)
 	float ResourceDistanceMultiplier = 2.0f;
 

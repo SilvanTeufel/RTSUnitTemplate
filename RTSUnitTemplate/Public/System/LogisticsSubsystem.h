@@ -85,6 +85,12 @@ struct FLogisticsJob
 
 	/** FlyHeight before the roof landing, restored on take-off. */
 	float SavedFlyHeight = 0.f;
+
+	/**
+	 * The collecting base the player sent this unit to (right-click on it): hauled from first whenever it has
+	 * a load waiting, before the dispatcher's own choice. Cleared when the player gives another order.
+	 */
+	TWeakObjectPtr<ABuildingBase> PreferredSource;
 };
 
 /**
@@ -150,7 +156,7 @@ public:
 	 * bases with it selected. Ends a pause, continues an interrupted trip, delivers held cargo.
 	 */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Logistics")
-	void ResumeLogistics(AUnitBase* Unit);
+	void ResumeLogistics(AUnitBase* Unit, ABuildingBase* PreferredSource = nullptr);
 
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
 	TArray<ALogisticsRoad*> GetRoadsOfTeam(int32 TeamId) const;
@@ -216,6 +222,16 @@ private:
 	static bool IsUnitAlive(const AUnitBase* Unit);
 
 	ABuildingBase* FindNearestSink(int32 TeamId, const FVector& From) const;
+
+	/**
+	 * Per resource type: how much the team needs it compared to the others (1 = average, above 1 = the team
+	 * is short of it), from the team's stock. Only types that are stocked or waiting at one of its sources
+	 * count. All 1 with LogisticsBalanceStrength 0.
+	 */
+	void GetResourceNeedWeights(const AResourceGameMode* GameMode, int32 TeamId, TArray<float>& OutWeights) const;
+
+	/** What Source holds, each type weighted by how much the team needs it, relative to its plain total (1 = average). */
+	static float GetSourceNeedFactor(const ABuildingBase* Source, const TArray<float>& Weights);
 	float GetReservedAt(const ABuildingBase* Source) const;
 
 	/** What Source can still hand out of Type as Converter supply, after the claims of other units. */

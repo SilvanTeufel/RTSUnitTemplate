@@ -107,8 +107,26 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+public:
+	/**
+	 * A boss class that comes again starts at least at the level its last one had reached (it levels up by
+	 * killing), not only at the wave level.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
+	bool bKeepEarnedLevel = true;
+
 private:
 	FTimerHandle WaveTimer;
+
+	/** Bosses this spawner placed, to read the level they reached. */
+	TArray<TWeakObjectPtr<AUnitBase>> SpawnedBosses;
+
+	/** Highest level reached per boss class. */
+	TMap<TObjectPtr<UClass>, int32> EarnedLevels;
+
+	void RememberEarnedLevels();
+
+	FTimerHandle LevelTimer;
 
 	void SpawnWave();
 	void HebeAufStufe(AUnitBase* Einheit, int32 Zielstufe) const;

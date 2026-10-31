@@ -411,6 +411,10 @@ bool UMainMenuWidget::IsEntryUnlocked(int32 Index) const
 	}
 
 	const FMainMenuEntry& Entry = Config.Entries[Index];
+	if (!Entry.bEnabled)
+	{
+		return false;
+	}
 	if (Entry.RequiredSaveSlot.IsEmpty() && Entry.RequiredSwitchTag.IsNone())
 	{
 		return true;
