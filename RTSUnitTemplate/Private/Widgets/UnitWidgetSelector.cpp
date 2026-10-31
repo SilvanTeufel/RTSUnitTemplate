@@ -8,6 +8,9 @@
 #include "Characters/Unit/GASUnit.h"
 #include "AbilitySystemComponent.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Actors/UnitPreviewStage.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Materials/MaterialInterface.h"
 
 
 
@@ -19,6 +22,61 @@ void UUnitWidgetSelector::NativeConstruct()
 	SetButtonIds();
 	SetVisibleButtonCount(ShowButtonCount);
 	SetButtonLabelCount(ShowButtonCount);;
+
+	if (UnitPreviewImage && UnitPreviewMaterial)
+	{
+		UnitPreviewImage->SetBrushFromMaterial(UnitPreviewMaterial);
+	}
+	UpdateUnitPreview(nullptr);
+}
+
+void UUnitWidgetSelector::NativeDestruct()
+{
+	if (UnitPreviewStage)
+	{
+		UnitPreviewStage->Destroy();
+		UnitPreviewStage = nullptr;
+	}
+	Super::NativeDestruct();
+}
+
+void UUnitWidgetSelector::UpdateUnitPreview(AUnitBase* Unit)
+{
+	UTexture* Texture = nullptr;
+	if (UnitPreviewMaterial)
+	{
+		UnitPreviewMaterial->GetTextureParameterValue(FMaterialParameterInfo(UnitPreviewTextureParameter), Texture);
+	}
+	UTextureRenderTarget2D* Target = Cast<UTextureRenderTarget2D>(Texture);
+	const bool bShow = Unit && Target && UnitPreviewBox;
+
+	if (UnitPreviewBox)
+	{
+		UnitPreviewBox->SetVisibility(bShow ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (!bShow)
+	{
+		if (UnitPreviewStage)
+		{
+			UnitPreviewStage->ShowUnit(nullptr, nullptr);
+		}
+		return;
+	}
+
+	if (!UnitPreviewStage && GetWorld())
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Params.ObjectFlags |= RF_Transient;
+		// High above the map: nothing up there throws a shadow onto it or stands in the picture.
+		UnitPreviewStage = GetWorld()->SpawnActor<AUnitPreviewStage>(AUnitPreviewStage::StaticClass(), FVector(0.f, 0.f, 150000.f), FRotator::ZeroRotator, Params);
+	}
+	if (UnitPreviewStage)
+	{
+		UnitPreviewStage->RotationSpeed = UnitPreviewRotationSpeed;
+		UnitPreviewStage->CaptureRate = UnitPreviewCaptureRate;
+		UnitPreviewStage->ShowUnit(Unit, Target);
+	}
 }
 
 
@@ -68,6 +126,8 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 			RefreshOpenTooltip();
 		}
 		
+		UpdateUnitPreview(TooltipUnit);
+
 		if (!ControllerBase->SelectedUnits.Num()) return;
 		if (ControllerBase->CurrentUnitWidgetIndex < 0 || ControllerBase->CurrentUnitWidgetIndex >= ControllerBase->SelectedUnits.Num()) return;
 		if (!ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex]) return;

@@ -11,14 +11,24 @@ void UMapMenuWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
+	// A switched-off map button stays visible but greyed out: disabled (no clicks, disabled draw
+	// effect on the label) and dimmed, so it reads as "not available" with any button style.
+	auto ApplyMapButtonEnabled = [](UButton* Button, bool bEnabled)
+	{
+		Button->SetIsEnabled(bEnabled);
+		Button->SetRenderOpacity(bEnabled ? 1.f : 0.45f);
+	};
+
 	if (Map1Button)
 	{
 		Map1Button->OnClicked.AddUniqueDynamic(this, &UMapMenuWidget::OnMap1Clicked);
+		ApplyMapButtonEnabled(Map1Button, bMap1Enabled);
 	}
 
 	if (Map2Button)
 	{
 		Map2Button->OnClicked.AddUniqueDynamic(this, &UMapMenuWidget::OnMap2Clicked);
+		ApplyMapButtonEnabled(Map2Button, bMap2Enabled);
 	}
 
 	if (ExitButton)
@@ -150,7 +160,7 @@ void UMapMenuWidget::OnRestartClicked()
 
 void UMapMenuWidget::OnMap1Clicked()
 {
-	if (bAlreadyClicked) return;
+	if (bAlreadyClicked || !bMap1Enabled) return;
 
 	FString MapToTravel = Map1Name.IsNull() ? "" : Map1Name.ToSoftObjectPath().GetLongPackageName();
 	if (MapToTravel.IsEmpty()) return;
@@ -170,7 +180,7 @@ void UMapMenuWidget::OnMap1Clicked()
 
 void UMapMenuWidget::OnMap2Clicked()
 {
-	if (bAlreadyClicked) return;
+	if (bAlreadyClicked || !bMap2Enabled) return;
 
 	FString MapToTravel = Map2Name.IsNull() ? "" : Map2Name.ToSoftObjectPath().GetLongPackageName();
 	if (MapToTravel.IsEmpty()) return;
