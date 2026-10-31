@@ -9,14 +9,66 @@
 #include "Engine/AssetManager.h"
 #include "Actors/StoryTriggerActor.h"
 #include "Components/StoryTriggerComponent.h"
+#include "Engine/DataTable.h"
 #include "Sound/SoundClass.h"
 #include "Sound/SoundBase.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Blueprint/UserWidget.h"
 #include "EngineUtils.h"
+#include "Misc/ConfigCacheIni.h"
 
 UStoryTriggerQueueSubsystem::UStoryTriggerQueueSubsystem()
 {
+}
+
+FName UStoryTriggerQueueSubsystem::DrawRandomRow(const UDataTable* Table)
+{
+	if (!Table)
+	{
+		return NAME_None;
+	}
+	const TArray<FName> RowNames = Table->GetRowNames();
+	if (RowNames.Num() == 0)
+	{
+		return NAME_None;
+	}
+
+	FRandomRowDeck& Deck = RandomRowDecks.FindOrAdd(FSoftObjectPath(Table));
+	// Rows removed from the table since the deck was dealt must not come out of it.
+	Deck.Remaining.RemoveAll([&RowNames](const FName& Row) { return !RowNames.Contains(Row); });
+
+	if (Deck.Remaining.Num() == 0)
+	{
+		Deck.Remaining = RowNames;
+		for (int32 Index = Deck.Remaining.Num() - 1; Index > 0; --Index)
+		{
+			Deck.Remaining.Swap(Index, FMath::RandRange(0, Index));
+		}
+		// Drawn from the back: keep the line that ended the last round away from the start of this one.
+		if (Deck.Remaining.Num() > 1 && Deck.Remaining.Last() == Deck.Last)
+		{
+			Deck.Remaining.Swap(Deck.Remaining.Num() - 1, FMath::RandRange(0, Deck.Remaining.Num() - 2));
+		}
+	}
+
+	Deck.Last = Deck.Remaining.Pop(EAllowShrinking::No);
+	return Deck.Last;
+}
+
+FName UStoryTriggerQueueSubsystem::DrawRandomRowFor(const UObject* WorldContext, const UDataTable* Table)
+{
+	if (const UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr)
+	{
+		if (UGameInstance* GI = World->GetGameInstance())
+		{
+			if (UStoryTriggerQueueSubsystem* Queue = GI->GetSubsystem<UStoryTriggerQueueSubsystem>())
+			{
+				return Queue->DrawRandomRow(Table);
+			}
+		}
+	}
+	const TArray<FName> RowNames = Table ? Table->GetRowNames() : TArray<FName>();
+	return RowNames.Num() > 0 ? RowNames[FMath::RandRange(0, RowNames.Num() - 1)] : NAME_None;
 }
 
 void UStoryTriggerQueueSubsystem::Deinitialize()
@@ -30,6 +82,37 @@ void UStoryTriggerQueueSubsystem::Deinitialize()
 	}
 	Pending.Empty();
 	Super::Deinitialize();
+}
+
+bool UStoryTriggerQueueSubsystem::AreStoryWidgetsEnabled()
+{
+	bool bEnabled = true;
+	if (GConfig)
+	{
+		GConfig->GetBool(TEXT("StoryQueue"), TEXT("ShowStoryWidgets"), bEnabled, GGameUserSettingsIni);
+	}
+	return bEnabled;
+}
+
+void UStoryTriggerQueueSubsystem::SkipDisabledStories()
+{
+	UE_LOG(LogTemp, Verbose, TEXT("[StoryQueue] Story-Popups aus: %d wartende uebersprungen"), Pending.Num());
+	Pending.Empty();
+	if (ActiveWidget)
+	{
+		return; // ClearActive reports the end once the current one closes.
+	}
+	// Next tick: the sources lower the music on OnStoryTriggered right AFTER they enqueued.
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (!ActiveWidget && Pending.Num() == 0)
+			{
+				StoryEndeAnAlleMelden();
+			}
+		}));
+	}
 }
 
 void UStoryTriggerQueueSubsystem::SetDefaultSoundVolume(float Volume)
@@ -165,6 +248,12 @@ void UStoryTriggerQueueSubsystem::TryPlayNext()
 
 	if (Pending.Num() == 0)
 	{
+		return;
+	}
+
+	if (!AreStoryWidgetsEnabled())
+	{
+		SkipDisabledStories();
 		return;
 	}
 

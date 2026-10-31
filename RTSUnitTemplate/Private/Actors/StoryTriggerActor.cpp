@@ -78,16 +78,18 @@ void AStoryTriggerActor::LoadRow(bool bReroll)
     const FStoryWidgetTable* Row = nullptr;
     if (UseRandomRow)
     {
-        const TArray<FName> RowNames = StoryDataTable->GetRowNames();
-        if (RowNames.Num() > 0)
+        // A row drawn but never shown yet (BeginPlay) is kept for the first repeat - otherwise every
+        // map start would throw one line of the deck away unheard.
+        if (!bReroll || !bRandomRowUnused)
         {
-            int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
-            if (bReroll && RowNames.Num() > 1 && RowNames[Index] == LastRandomRow)
-            {
-                Index = (Index + 1 + FMath::RandRange(0, RowNames.Num() - 2)) % RowNames.Num();
-            }
-            LastRandomRow = RowNames[Index];
-            Row = StoryDataTable->FindRow<FStoryWidgetTable>(RowNames[Index], ContextString, true);
+            // Shuffled deck per table in the game instance: all lines once before any repeats, no
+            // line twice in a row, and the round carries over map changes (UStoryTriggerQueueSubsystem).
+            LastRandomRow = UStoryTriggerQueueSubsystem::DrawRandomRowFor(this, StoryDataTable);
+            bRandomRowUnused = true;
+        }
+        if (!LastRandomRow.IsNone())
+        {
+            Row = StoryDataTable->FindRow<FStoryWidgetTable>(LastRandomRow, ContextString, true);
         }
     }
     else if (!StoryRowId.IsNone())
@@ -235,6 +237,8 @@ void AStoryTriggerActor::TriggerStory()
 
 void AStoryTriggerActor::StoryEinreihen()
 {
+    bRandomRowUnused = false;
+
     // Mehrere Zeilen? Dann jede einzeln einreihen. Die Warteschlange spielt sie nacheinander
     // ab und haelt immer nur ein Widget offen - es spricht also nie mehr als eine Figur.
     if (StoryRowIds.Num() > 0 && StoryDataTable)

@@ -99,11 +99,10 @@ void UStoryBlueprintLibrary::EnqueueFromDataTableRow(UObject* WorldContextObject
 
 	if (RowName.IsNone() && bRandomIfNone)
 	{
-		const TArray<FName> RowNames = Table->GetRowNames();
-		if (RowNames.Num() > 0)
+		const FName Drawn = UStoryTriggerQueueSubsystem::DrawRandomRowFor(WorldContextObject, Table);
+		if (!Drawn.IsNone())
 		{
-			const int32 Index = FMath::RandRange(0, RowNames.Num() - 1);
-			Row = Table->FindRow<FStoryWidgetTable>(RowNames[Index], Context, true);
+			Row = Table->FindRow<FStoryWidgetTable>(Drawn, Context, true);
 		}
 	}
 	else if (!RowName.IsNone())

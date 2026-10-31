@@ -86,6 +86,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category="StoryQueue")
 	void EnqueueStory(const FStoryQueueItem& Item);
 
+	/**
+	 * False when the player turned the story popups off (GameUserSettings.ini [StoryQueue] ShowStoryWidgets,
+	 * written by the cassette widget's story button). Stories are then skipped: no window, no voice line;
+	 * their sources still get OnStoryFinished, so music they lowered comes back up.
+	 */
+	UFUNCTION(BlueprintPure, Category="StoryQueue")
+	static bool AreStoryWidgetsEnabled();
+
 	// Force remove the currently active widget, if any
 	UFUNCTION(BlueprintCallable, Category="StoryQueue")
 	void ClearActive();
@@ -108,6 +116,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "StoryQueue")
 	TObjectPtr<class USoundClass> MasterSoundClass;
 
+	/**
+	 * Next random row of Table, drawn like from a shuffled deck: every row comes once, in random
+	 * order, before any row repeats, and a new round never starts with the row that ended the last
+	 * one. The deck lives for the whole session, so a map change does not start the round over.
+	 * NAME_None = no table or no rows.
+	 */
+	FName DrawRandomRow(const class UDataTable* Table);
+
+	/** DrawRandomRow of the game instance of WorldContext; plain RandRange without one. */
+	static FName DrawRandomRowFor(const UObject* WorldContext, const class UDataTable* Table);
+
 protected:
 	virtual void Deinitialize() override;
 
@@ -120,6 +139,14 @@ private:
 	FStoryQueueItem CurrentItem;
 
 	bool bIsStoryActive = false;
+
+	/** One shuffled deck per table (DrawRandomRow). Remaining is drawn from the back. */
+	struct FRandomRowDeck
+	{
+		TArray<FName> Remaining;
+		FName Last;
+	};
+	TMap<FSoftObjectPath, FRandomRowDeck> RandomRowDecks;
 
 	/**
 	 * Alle Quellen, die seit der letzten Ruhephase eine Story eingereiht haben.
@@ -167,6 +194,8 @@ private:
 	void PlayNextFollowUp();
 
 	void TryPlayNext();
+	/** Popups turned off: drops what is waiting and, unless a story is still showing, reports the end next tick. */
+	void SkipDisabledStories();
 	/** Ende der Pause zwischen zwei Storys: gibt den Pausen-Timer frei, dann TryPlayNext. */
 	void OnNextStoryDelayFinished();
 	void OnActiveLifetimeFinished();

@@ -254,6 +254,9 @@ private:
 	/** Last random row, so a repeat does not play the same line twice in a row. */
 	FName LastRandomRow;
 
+	/** LastRandomRow was drawn but not shown yet - the next repeat shows it instead of drawing anew. */
+	bool bRandomRowUnused = false;
+
 	void RemoveActiveWidget();
 
 	/** Reiht die Story ein: entweder die Zeilenfolge aus StoryRowIds oder die eine gemerkte Zeile. */
