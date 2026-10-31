@@ -90,6 +90,19 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 FogTexSize = 0.25*1024;
 
+	/**
+	 * For maps without an opaque ground (space, transparent landscape): the fog post process reads
+	 * the fog mask at the scene depth, and background pixels are "infinitely" far away - they then
+	 * sample the clamped border texels and paint huge bright/dark wedges across the sky. On = such
+	 * pixels are cut at the horizontal plane GroundPlaneZ, so the sky shows the fog of the ground
+	 * below it. Off = unchanged (material parameter GroundPlaneZ stays far below every map).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bUseFogGroundPlane = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (EditCondition = "bUseFogGroundPlane"))
+	float FogGroundPlaneZ = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int32 CircleRadius = 32;
 

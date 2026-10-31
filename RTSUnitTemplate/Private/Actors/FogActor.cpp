@@ -170,6 +170,7 @@ void AFogActor::InitializeFogPostProcess()
 				FogMID->SetTextureParameterValue(TEXT("FogMaskTex"), FogMaskTexture);
 				FVector4 FogBounds(FogMinBounds.X, FogMinBounds.Y, FogMaxBounds.X, FogMaxBounds.Y);
 				FogMID->SetVectorParameterValue(TEXT("FogBounds"), FogBounds);
+				FogMID->SetScalarParameterValue(TEXT("GroundPlaneZ"), bUseFogGroundPlane ? FogGroundPlaneZ : -10000000.f);
 				PPC->bEnabled = true;
 				GetWorldTimerManager().ClearTimer(FogUpdateTimerHandle);
 			}
