@@ -22,6 +22,7 @@
 #include "Components/AudioComponent.h"
 #include "TimerManager.h"
 #include "Core/ViewportUtils.h"
+#include "Characters/Unit/PerformanceUnit.h"
 
 void UProjectileVisualManager::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -195,7 +196,7 @@ const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProje
 	return Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 }
 
-void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible)
+void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible, float ScaleMultiplier)
 {
 	if (!CDO || !bVisible) return;
 	if (!CDO->SpawnVFX && !CDO->SpawnSound) return;
@@ -215,7 +216,7 @@ void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FT
 		// bAutoDestroy (default true) already covers one-shot systems; the kill delay is the backstop
 		// for a looping one. Deliberately not registered in APerformanceUnit::ActiveNiagara - that
 		// array is only ever emptied by StopAllEffects, so a per-shot effect would accumulate there.
-		if (UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, CDO->SpawnVFX, Loc, Rot, CDO->ScaleSpawnVFX))
+		if (UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, CDO->SpawnVFX, Loc, Rot, CDO->ScaleSpawnVFX * ScaleMultiplier))
 		{
 			if (KillDelay > 0.f)
 			{
@@ -782,7 +783,11 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 			bSpawnFXOnScreen = RTSViewportUtils::IsLocationOnLocalViewport(this, Shooter->GetActorLocation(), CDO->VisibilityOffset);
 		}
 
-		FireSpawnEffects(CDO, SpawnFXTransform, bSpawnFXUnfogged && bSpawnFXOnScreen);
+		// Per-shooter size of the muzzle flash (weapon table column SpawnVFXScale): the same projectile
+		// class flashes smaller on a gunship than on a soldier. No shooter actor (client, actor-less) = 1.
+		const APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(Shooter);
+		const float SpawnVFXScale = PerfShooter ? PerfShooter->SpawnVFXScaleMultiplier : 1.f;
+		FireSpawnEffects(CDO, SpawnFXTransform, bSpawnFXUnfogged && bSpawnFXOnScreen, SpawnVFXScale);
 	}
 
     // Apply fragments
