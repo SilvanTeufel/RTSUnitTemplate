@@ -8,7 +8,10 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/Widget.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "Engine/World.h"
+#include "Materials/MaterialInterface.h"
 
 namespace
 {
@@ -43,8 +46,9 @@ AUnitPreviewStage::AUnitPreviewStage()
 	Capture->bCaptureOnMovement = false;
 	Capture->bAlwaysPersistRenderingState = true;
 	Capture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-	// HDR scene colour carries the coverage in alpha, so the widget material can cut out the background.
-	Capture->CaptureSource = ESceneCaptureSource::SCS_SceneColorHDR;
+	// Scene depth in alpha: the widget material cuts out the background where nothing was drawn (endless depth).
+	// Coverage used to come from brightness, which made dark models (DataCenter, tanks) see-through.
+	Capture->CaptureSource = ESceneCaptureSource::SCS_SceneColorSceneDepth;
 	Capture->FOVAngle = 30.f;
 	Capture->ShowFlags.SetAtmosphere(false);
 	Capture->ShowFlags.SetFog(false);
@@ -94,6 +98,47 @@ void AUnitPreviewStage::ShowUnit(AUnitBase* Unit, UTextureRenderTarget2D* Target
 	Capture->CaptureScene();
 }
 
+void AUnitPreviewStage::UpdateWindow(UObject* WorldContext, TObjectPtr<AUnitPreviewStage>& Stage, UWidget* Box, UMaterialInterface* Material,
+	FName TextureParameter, AUnitBase* Unit, float InRotationSpeed, float InCaptureRate, const FVector& StageLocation)
+{
+	UTexture* Texture = nullptr;
+	if (Material)
+	{
+		Material->GetTextureParameterValue(FMaterialParameterInfo(TextureParameter), Texture);
+	}
+	UTextureRenderTarget2D* Target = Cast<UTextureRenderTarget2D>(Texture);
+	const bool bShow = Unit && Target && Box;
+
+	if (Box)
+	{
+		Box->SetVisibility(bShow ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	}
+	if (!bShow)
+	{
+		if (Stage)
+		{
+			Stage->ShowUnit(nullptr, nullptr);
+		}
+		return;
+	}
+
+	UWorld* World = WorldContext ? WorldContext->GetWorld() : nullptr;
+	if (!Stage && World)
+	{
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		Params.ObjectFlags |= RF_Transient;
+		// High above the map: nothing up there throws a shadow onto it or stands in the picture.
+		Stage = World->SpawnActor<AUnitPreviewStage>(AUnitPreviewStage::StaticClass(), StageLocation, FRotator::ZeroRotator, Params);
+	}
+	if (Stage)
+	{
+		Stage->RotationSpeed = InRotationSpeed;
+		Stage->CaptureRate = InCaptureRate;
+		Stage->ShowUnit(Unit, Target);
+	}
+}
+
 void AUnitPreviewStage::ClearModel()
 {
 	Capture->ShowOnlyComponents.Reset();
@@ -115,6 +160,13 @@ void AUnitPreviewStage::BuildModel(AUnitBase* Unit)
 
 	TArray<UMeshComponent*> SourceMeshes;
 	Unit->GetComponents<UMeshComponent>(SourceMeshes);
+	// Skeletal meshes first: weapons on their sockets are attached to the copy of their skeleton below,
+	// which has to exist (and be registered) by then.
+	SourceMeshes.StableSort([](const UMeshComponent& A, const UMeshComponent& B)
+	{
+		return A.IsA<USkeletalMeshComponent>() && !B.IsA<USkeletalMeshComponent>();
+	});
+	TMap<const USceneComponent*, USkeletalMeshComponent*> SkeletonCopies;
 	for (UMeshComponent* Source : SourceMeshes)
 	{
 		if (!Source || IsHelperMesh(Source))
@@ -164,9 +216,24 @@ void AUnitPreviewStage::BuildModel(AUnitBase* Unit)
 		Copy->SetCastShadow(false);
 		Copy->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Copy->SetVisibleInSceneCaptureOnly(true);
-		Copy->SetupAttachment(ModelRoot);
-		Copy->SetRelativeTransform(Source->GetComponentTransform().GetRelativeTransform(UnitTransform));
+		// A mesh on a socket of a copied skeleton (a sword in the hand) follows the copy's animation from
+		// the same socket. Copied flat it froze where it was at copy time while the hand moved on.
+		USkeletalMeshComponent* const* ParentCopy = Source->GetAttachParent() ? SkeletonCopies.Find(Source->GetAttachParent()) : nullptr;
+		if (ParentCopy && *ParentCopy)
+		{
+			Copy->SetupAttachment(*ParentCopy, Source->GetAttachSocketName());
+			Copy->SetRelativeTransform(Source->GetRelativeTransform());
+		}
+		else
+		{
+			Copy->SetupAttachment(ModelRoot);
+			Copy->SetRelativeTransform(Source->GetComponentTransform().GetRelativeTransform(UnitTransform));
+		}
 		Copy->RegisterComponent();
+		if (USkeletalMeshComponent* SkelCopy = Cast<USkeletalMeshComponent>(Copy))
+		{
+			SkeletonCopies.Add(Source, SkelCopy);
+		}
 		ModelMeshes.Add(Copy);
 		Capture->ShowOnlyComponents.Add(Copy);
 	}

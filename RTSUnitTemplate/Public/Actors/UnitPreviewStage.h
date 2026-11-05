@@ -11,6 +11,8 @@ class USceneCaptureComponent2D;
 class UPointLightComponent;
 class UTextureRenderTarget2D;
 class UMeshComponent;
+class UMaterialInterface;
+class UWidget;
 
 /**
  * Turntable for the 3D unit window of UUnitWidgetSelector. Sits far above the map, holds copies of the
@@ -27,7 +29,17 @@ public:
 	AUnitPreviewStage();
 
 	/** Show Unit (nullptr = show nothing and stop capturing). Cheap when it already shows that unit. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void ShowUnit(AUnitBase* Unit, UTextureRenderTarget2D* Target);
+
+	/**
+	 * Drives one 3D window (UUnitWidgetSelector, UUnitStatsTooltipWidget): shows Unit in the render target behind
+	 * Material's texture parameter, spawning Stage on demand at StageLocation, and collapses Box without a unit or
+	 * render target. Each window needs its own render target and StageLocation - two stages at one spot would
+	 * light each other's models.
+	 */
+	static void UpdateWindow(UObject* WorldContext, TObjectPtr<AUnitPreviewStage>& Stage, UWidget* Box, UMaterialInterface* Material,
+		FName TextureParameter, AUnitBase* Unit, float InRotationSpeed, float InCaptureRate, const FVector& StageLocation);
 
 	/** Degrees per second of the turntable. */
 	float RotationSpeed = 30.f;

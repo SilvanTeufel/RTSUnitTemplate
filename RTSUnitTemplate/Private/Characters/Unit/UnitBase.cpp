@@ -1221,6 +1221,11 @@ void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
 			bShowLevelOnly = false;
 			CheckHealthBarVisibility(); // Forces UI visibility refresh instantly
 		}
+
+		// Minimap attack alert. On a client this is the path the replicated health / shield take; on the
+		// server UAttributeSetBase reports every health change itself (combat writes the value directly,
+		// which does not fire this delegate).
+		NotifyDamageForAttackAlert(Data.OldValue, Data.NewValue);
 	}
 
 	if (SquadId > 0)
@@ -1230,6 +1235,26 @@ void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
 	else
 	{
 		UpdateWidget();
+	}
+}
+
+void AUnitBase::NotifyDamageForAttackAlert(float OldValue, float NewValue)
+{
+	UWorld* World = GetWorld();
+	// The first seconds of a unit are its start values being applied (a GE may set Health below the
+	// class default) - that is no attack.
+	if (!World || NewValue >= OldValue - 1.0f || OldValue <= 0.5f || IsInvestmentActive() || GetGameTimeSinceCreation() < 3.f)
+	{
+		return;
+	}
+	// Each machine only tells its own local controllers; a remote client gets the replicated value.
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		ACustomControllerBase* PC = Cast<ACustomControllerBase>(It->Get());
+		if (PC && PC->IsLocalController() && PC->SelectableTeamId == TeamId)
+		{
+			PC->ReportUnderAttack(GetActorLocation());
+		}
 	}
 }
 
@@ -2312,8 +2337,10 @@ bool bDoGroundTrace, float WaypointDirectionOffset, FVector OffsetLocation)
 	SpawnParameter.UnitBaseClass = UnitBaseClass;
 	SpawnParameter.UnitOffset = FVector3d(0.f,0.f,0.f);
 	SpawnParameter.ServerMeshRotation = HostMeshRotation;
-	// Deliberate rotation from the caller - mark it so the spawn path applies it.
-	SpawnParameter.bOverrideServerMeshRotation = true;
+	// A rotation from the caller overrides the unit's own ServerMeshRotation. (0,0,0) is the unset Blueprint pin and
+	// means "keep the class default", as for placed units - overriding with it turned every summoned unit with the
+	// usual -90 mesh yaw sideways (the Kraken boss's small krakens walked sideways).
+	SpawnParameter.bOverrideServerMeshRotation = !HostMeshRotation.IsNearlyZero();
 	SpawnParameter.State = UState;
 	SpawnParameter.StatePlaceholder = UStatePlaceholder;
 	SpawnParameter.Material = Material;

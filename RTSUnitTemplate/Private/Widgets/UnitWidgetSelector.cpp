@@ -42,41 +42,8 @@ void UUnitWidgetSelector::NativeDestruct()
 
 void UUnitWidgetSelector::UpdateUnitPreview(AUnitBase* Unit)
 {
-	UTexture* Texture = nullptr;
-	if (UnitPreviewMaterial)
-	{
-		UnitPreviewMaterial->GetTextureParameterValue(FMaterialParameterInfo(UnitPreviewTextureParameter), Texture);
-	}
-	UTextureRenderTarget2D* Target = Cast<UTextureRenderTarget2D>(Texture);
-	const bool bShow = Unit && Target && UnitPreviewBox;
-
-	if (UnitPreviewBox)
-	{
-		UnitPreviewBox->SetVisibility(bShow ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
-	}
-	if (!bShow)
-	{
-		if (UnitPreviewStage)
-		{
-			UnitPreviewStage->ShowUnit(nullptr, nullptr);
-		}
-		return;
-	}
-
-	if (!UnitPreviewStage && GetWorld())
-	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		Params.ObjectFlags |= RF_Transient;
-		// High above the map: nothing up there throws a shadow onto it or stands in the picture.
-		UnitPreviewStage = GetWorld()->SpawnActor<AUnitPreviewStage>(AUnitPreviewStage::StaticClass(), FVector(0.f, 0.f, 150000.f), FRotator::ZeroRotator, Params);
-	}
-	if (UnitPreviewStage)
-	{
-		UnitPreviewStage->RotationSpeed = UnitPreviewRotationSpeed;
-		UnitPreviewStage->CaptureRate = UnitPreviewCaptureRate;
-		UnitPreviewStage->ShowUnit(Unit, Target);
-	}
+	AUnitPreviewStage::UpdateWindow(this, UnitPreviewStage, UnitPreviewBox, UnitPreviewMaterial, UnitPreviewTextureParameter, Unit,
+		UnitPreviewRotationSpeed, UnitPreviewCaptureRate, FVector(0.f, 0.f, 150000.f));
 }
 
 
