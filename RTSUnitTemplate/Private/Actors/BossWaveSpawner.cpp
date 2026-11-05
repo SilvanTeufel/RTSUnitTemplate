@@ -82,7 +82,7 @@ void ABossWaveSpawner::SpawnWave()
 
 	for (int32 i = 0; i < FMath::Max(1, BossesPerWave); ++i)
 	{
-		TSubclassOf<AUnitBase> Klasse = BossClasses[(WaveIndex + i) % BossClasses.Num()];
+		TSubclassOf<AUnitBase> Klasse = BossClasses[NextBossIndex(i)];
 		if (!Klasse)
 		{
 			continue;
@@ -154,6 +154,33 @@ void ABossWaveSpawner::SpawnWave()
 	++WaveIndex;
 	UE_LOG(LogTemp, Warning, TEXT("[BossWelle] Welle %d: %d Boss(e) und %d Begleiter auf Stufe %d gesetzt (naechste Stufe %d)"),
 		WaveIndex, Gesetzt, Begleiter, Stufe, GetNextWaveLevel());
+}
+
+int32 ABossWaveSpawner::NextBossIndex(int32 Slot)
+{
+	if (!bRandomBossOrder)
+	{
+		return (WaveIndex + Slot) % BossClasses.Num();
+	}
+	// Mischbeutel: jeder Boss genau einmal pro Durchgang - und an der Durchgangsgrenze nicht
+	// derselbe zweimal hintereinander.
+	if (BossOrder.Num() == 0)
+	{
+		for (int32 Idx = 0; Idx < BossClasses.Num(); ++Idx)
+		{
+			BossOrder.Add(Idx);
+		}
+		for (int32 Idx = BossOrder.Num() - 1; Idx > 0; --Idx)
+		{
+			BossOrder.Swap(Idx, FMath::RandRange(0, Idx));
+		}
+		if (BossOrder.Num() > 1 && BossOrder.Last() == LastBossIndex)
+		{
+			BossOrder.Swap(BossOrder.Num() - 1, 0);
+		}
+	}
+	LastBossIndex = BossOrder.Pop(EAllowShrinking::No);
+	return LastBossIndex;
 }
 
 void ABossWaveSpawner::RememberEarnedLevels()

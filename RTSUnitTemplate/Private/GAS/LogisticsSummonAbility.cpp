@@ -6,6 +6,10 @@
 #include "Characters/Unit/UnitBase.h"
 #include "EngineUtils.h"
 #include "GameModes/ResourceGameMode.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Characters/Camera/RLAgent.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
 #include "TimerManager.h"
 #include "HAL/IConsoleManager.h"
 
@@ -252,6 +256,48 @@ void ULogisticsSummonAbility::OnRemoveAbility(const FGameplayAbilityActorInfo* A
 	Super::OnRemoveAbility(ActorInfo, Spec);
 }
 
+void ULogisticsSummonAbility::AnnounceMissingResources(const AUnitBase* Owner, const TArray<EResourceType>& Missing) const
+{
+	const bool bEnergy = Missing.Contains(EnergyResourceType);
+	USoundBase* Sound = bEnergy && NotEnoughEnergySound ? NotEnoughEnergySound : NotEnoughResourcesSound;
+	UWorld* World = Owner ? Owner->GetWorld() : nullptr;
+	if (!Sound || !World)
+	{
+		return;
+	}
+
+	// Per team, not per owner: every extractor of the team retries on its own timer, and three of them
+	// must not make three announcements. The worlds differ between PIE sessions, hence the world key.
+	static TMap<TPair<TWeakObjectPtr<UWorld>, int32>, double> LastAnnounced;
+	const TPair<TWeakObjectPtr<UWorld>, int32> Key(World, Owner->TeamId);
+	const double Now = World->GetTimeSeconds();
+	if (const double* Last = LastAnnounced.Find(Key))
+	{
+		if (Now >= *Last && Now - *Last < NotEnoughResourcesSoundInterval)
+		{
+			return;
+		}
+	}
+	LastAnnounced.Add(Key, Now);
+
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		AExtendedControllerBase* PC = Cast<AExtendedControllerBase>(It->Get());
+		if (!PC || PC->SelectableTeamId != Owner->TeamId || (PC->GetPawn() && PC->GetPawn()->IsA(ARLAgent::StaticClass())))
+		{
+			continue;
+		}
+		if (PC->IsLocalPlayerController())
+		{
+			UGameplayStatics::PlaySound2D(PC, Sound, PC->GetSoundMultiplier());
+		}
+		else
+		{
+			PC->Client_PlaySound2D(Sound, 1.f, 1.f);
+		}
+	}
+}
+
 void ULogisticsSummonAbility::TryAutoCast()
 {
 	AUnitBase* Owner = AutoCastOwner.Get();
@@ -295,9 +341,11 @@ void ULogisticsSummonAbility::TryAutoCast()
 
 	if (AResourceGameMode* GameMode = Cast<AResourceGameMode>(Owner->GetWorld()->GetAuthGameMode()))
 	{
-		if (!GameMode->CanAffordConstruction(ConstructionCost, Owner->TeamId))
+		TArray<EResourceType> Missing;
+		if (!GameMode->CanAffordConstructionExtended(ConstructionCost, Owner->TeamId, Missing))
 		{
 			Skip(TEXT("cannot afford"));
+			AnnounceMissingResources(Owner, Missing);
 			return;
 		}
 	}

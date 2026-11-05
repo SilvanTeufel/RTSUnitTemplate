@@ -22,7 +22,10 @@ class RTSUNITTEMPLATE_API ABossWaveSpawner : public AActor
 public:
 	ABossWaveSpawner();
 
-	/** Bossklassen; die Wellen gehen der Reihe nach durch die Liste und fangen dann von vorn an. */
+	/**
+	 * Bossklassen. Mit bRandomBossOrder kommt jeder Boss einmal pro Durchgang, in zufaelliger
+	 * Reihenfolge (je Durchgang neu gemischt); ohne geht es der Reihe nach durch die Liste.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
 	TArray<TSubclassOf<AUnitBase>> BossClasses;
 
@@ -86,6 +89,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
 	FString WaypointTag;
 
+	/**
+	 * Zufaellige Bossreihenfolge (02.11.2026). Vorher war der erste Boss immer Listeneintrag 0 -
+	 * gemeldet: "bei Minute 10 kam immer der Krakenboss".
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
+	bool bRandomBossOrder = true;
+
 	/** Abschalten, ohne den Aktor zu entfernen. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|BossWave")
 	bool bEnabled = true;
@@ -129,5 +139,11 @@ private:
 	FTimerHandle LevelTimer;
 
 	void SpawnWave();
+
+	/** Naechster Index in BossClasses (Mischbeutel, siehe bRandomBossOrder). */
+	int32 NextBossIndex(int32 Slot);
+	TArray<int32> BossOrder;
+	int32 LastBossIndex = INDEX_NONE;
+
 	void HebeAufStufe(AUnitBase* Einheit, int32 Zielstufe) const;
 };

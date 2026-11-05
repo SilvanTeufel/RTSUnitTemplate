@@ -160,7 +160,13 @@ namespace RTSUnitUtils
                 
 					if (TargetTransform)
 					{
-						TargetRadius = TargetChar->GetRadiusInDirection(-Dir, TargetTransform->GetRotation().Rotator());
+						// Nicht unter dem Kapselradius des Ziels: der traegt bei Gebaeuden den
+						// AdditionalCapsuleRadius, um den die Ausweichsteuerung Angreifer fernhaelt.
+						// Allein ueber die Box endete die Reichweite an einer flachen Seite VOR dieser
+						// Grenze - Nahkaempfer (Kraken am DataCenter, 02.11.2026) standen davor
+						// und griffen nie an.
+						TargetRadius = FMath::Max(TargetChar->GetRadiusInDirection(-Dir, TargetTransform->GetRotation().Rotator()),
+							TargetChar->bUseBoxComponent ? TargetChar->CapsuleRadius : 0.f);
 					}
 				}
 			}

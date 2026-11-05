@@ -110,12 +110,12 @@ void AConstructionUnit::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 
 	// Baustelle weg (fertig oder abgebrochen): der Wirt rechnet seine Bau-Ability neu.
+	// Ohne Blick auf WorkArea: das ist beim Abraeumen oft schon weg (GC nach DestroyAfterBuild,
+	// oder vom Dead-Signal genullt) - dann blieb die Ability fuer immer gesperrt. Ohne
+	// EnergyWallClass tut der Aufruf ohnehin nichts.
 	if (ABuildingBase* Wirt = Cast<ABuildingBase>(Worker))
 	{
-		if (WorkArea && WorkArea->IsExtensionArea)
-		{
-			Wirt->RefreshEnergyWallBuildAbility();
-		}
+		Wirt->RefreshEnergyWallBuildAbility();
 	}
 	Super::EndPlay(EndPlayReason);
 }
