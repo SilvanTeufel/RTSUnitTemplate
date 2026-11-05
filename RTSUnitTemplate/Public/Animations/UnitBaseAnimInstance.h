@@ -293,6 +293,11 @@ public:
 	UFUNCTION()
 	virtual void NativeUpdateAnimation(float Deltaseconds) override;
 
+	// Echte Verschiebung des Aktors seit dem letzten Update - siehe die Idle-Korrektur in
+	// NativeUpdateAnimation. Nur fuer die Laufzeit, nicht im Editor sichtbar.
+	FVector GleitLetzteLage = FVector::ZeroVector;
+	bool bGleitLageGueltig = false;
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	class UDataTable* AnimDataTable;
 

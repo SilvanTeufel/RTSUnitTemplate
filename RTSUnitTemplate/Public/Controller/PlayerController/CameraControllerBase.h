@@ -6,6 +6,7 @@
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Controller/Input/EnhancedInputComponentBase.h"
+#include "Containers/Ticker.h"
 #include "CameraControllerBase.generated.h"
 
 class ULoadingWidget;
@@ -581,6 +582,20 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.1"))
 	float TalentPointFirstDelay = 10.f;
 
+	/**
+	 * Punkte der ERSTEN Vergabe (01.11.2026). 0 = wie jede andere Vergabe (TalentPointsPerInterval).
+	 * Der erste Punkt kann ohnehin nur in die Mitte des Baums - siehe bAutoInvestFirstTalentPoint.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents", meta = (ClampMin = "0"))
+	int32 TalentFirstGrantPoints = 1;
+
+	/**
+	 * Die erste Vergabe gleich selbst in den Wurzelknoten investieren - ohne Talentpause. Greift nur,
+	 * wenn es genau EINEN offenen Wurzelknoten gibt; sonst kommt die Pause wie sonst auch.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	bool bAutoInvestFirstTalentPoint = true;
+
 	/** Wie lange die Einblendung stehen bleibt. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
 	float TalentPointToastSeconds = 4.f;
@@ -598,6 +613,53 @@ public:
 
 	void HideTalentPointToast();
 
+	// --- Talentpause (01.11.2026) ---------------------------------------------------------
+	// Neuer Punkt fuer den Attributbaum: das Spiel haelt an, der Baum geht auf, oben in der Mitte
+	// laeuft ein Countdown. Gewaehlt (alle wartenden Teams) oder Zeit abgelaufen -> Baum zu,
+	// weiter. Oeffnet der Spieler den Baum selbst, gibt es keine Pause.
+	// Koordiniert vom AUpgradeGameState (RequestTalentPause).
+
+	/** Pause bei einem neuen Attributbaum-Punkt. Konsolenschalter: RTS.Talents.PauseOnPoint. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	bool bPauseOnTalentPoint = true;
+
+	/** So lange hat der Spieler Zeit zu waehlen (Echtzeit). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents", meta = (ClampMin = "1.0"))
+	float TalentPauseSeconds = 15.f;
+
+	/**
+	 * Steht die Vergabe eines anderen Spielers in hoechstens so vielen Sekunden an, bekommt er
+	 * seinen Punkt gleich mit - so waehlen alle Teams in DERSELBEN Pause statt nacheinander.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents", meta = (ClampMin = "0.0"))
+	float TalentPauseMergeWindow = 5.f;
+
+	/**
+	 * Musik, die in der Talentpause weiterlaeuft (eine normale Pause haelt sie weiterhin an).
+	 * Klassennamen ohne Praefix, Unterklassen zaehlen mit - so braucht RTSUnitTemplate kein
+	 * GameCassette-Modul.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	TArray<FName> TalentPauseMusicActorClasses = { FName(TEXT("CassetteActor")) };
+
+	/** Abstand des Countdowns von oben. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents")
+	float TalentPauseTimerTopPadding = 140.f;
+
+	/** Pause beginnt (oder laeuft schon): Countdown zeigen; bOpenTree -> Attributbaum oeffnen. */
+	UFUNCTION(Client, Reliable)
+	void Client_BeginTalentPause(float Seconds, bool bOpenTree);
+
+	/** Pause ist vorbei: Countdown weg und - wenn die Pause ihn geoeffnet hat - Baum zu. */
+	UFUNCTION(Client, Reliable)
+	void Client_EndTalentPause();
+
+	/** Serverseitig nach der Vergabe: Pause anstossen, wenn der Spieler etwas waehlen kann. */
+	void MaybeStartTalentPause();
+
+	/** Investiert in den einzigen offenen Wurzelknoten des Teams. true, wenn gebucht wurde. */
+	bool AutoInvestTalentRoot();
+
 	/**
 	 * Oeffentlich, damit die Diagnose RTS.Talents.Status nachsehen kann, ob der Takt ueberhaupt
 	 * laeuft. Genau das war von aussen nicht zu erkennen, als keine Punkte ankamen.
@@ -607,6 +669,21 @@ public:
 private:
 	FTimerHandle TalentPointToastTimerHandle;
 	TSharedPtr<class SWidget> TalentPointToast;
+
+	void HideTalentPauseTimer();
+	TSharedPtr<class SWidget> TalentPauseTimerWidget;
+	double TalentPauseClientEndTime = 0.0;
+	bool bTalentPauseOpenedTree = false;
+	/** Nachfassen, solange der Ladebildschirm noch oben ist. */
+	FTimerHandle TalentPauseRetryHandle;
+
+	/** Erste Vergabe schon gelaufen? (siehe TalentFirstGrantPoints) */
+	bool bTalentFirstGrantDone = false;
+
+	/** Musik der Talentpause: als UI-Sound weiterlaufen lassen bzw. zuruecksetzen. */
+	void SetTalentPauseMusicKeepsPlaying(bool bKeepPlaying);
+	TArray<TWeakObjectPtr<class UAudioComponent>> TalentPauseMusicComponents;
+	FTSTicker::FDelegateHandle TalentPauseClientTicker;
 
 	// Helper functions for scroll zoom logic
 	void HandleScrollZoomIn();

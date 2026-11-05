@@ -59,6 +59,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0.1"))
 	float SummonCastTime = 3.f;
 
+	/** Announced to the owner's team when the auto-cast cannot pay for the unit (missing resources). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (EditCondition = "bAutoCast"))
+	USoundBase* NotEnoughResourcesSound = nullptr;
+
+	/** Announced instead of NotEnoughResourcesSound when EnergyResourceType is among the missing resources. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (EditCondition = "bAutoCast"))
+	USoundBase* NotEnoughEnergySound = nullptr;
+
+	/** The supply-like resource that gets its own announcement (NotEnoughEnergySound). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (EditCondition = "bAutoCast"))
+	EResourceType EnergyResourceType = EResourceType::Rare;
+
+	/** Least time between two of these announcements per team (seconds) - the owner retries every AutoCastInterval. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0", EditCondition = "bAutoCast"))
+	float NotEnoughResourcesSoundInterval = 60.f;
+
 	/** Living logistics units of a team plus those currently being summoned. */
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics", meta = (WorldContext = "WorldContextObject"))
 	static int32 CountLogisticsUnits(const UObject* WorldContextObject, int32 TeamId, bool bIncludePendingSummons = true);
@@ -84,6 +100,9 @@ public:
 
 private:
 	void TryAutoCast();
+
+	/** Plays the missing-resources announcement to the owner's team, at most once per NotEnoughResourcesSoundInterval. */
+	void AnnounceMissingResources(const AUnitBase* Owner, const TArray<EResourceType>& Missing) const;
 
 	/** (Re)starts the auto-cast timer. From OnAvatarSet AND OnGiveAbility: an owner that re-grants its
 	 *  abilities only calls the latter on the new instance, and the old one's timer died in OnRemoveAbility. */

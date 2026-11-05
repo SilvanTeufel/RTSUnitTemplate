@@ -672,6 +672,10 @@ static TAutoConsoleVariable<float> CVarTempoSelbsttest(
 	TEXT("Sekunden nach Spielstart, nach denen RTS.Speed.Test einmal laeuft. 0 = aus."),
 	ECVF_Default);
 #include "EngineUtils.h"
+#include "Characters/Camera/RLAgent.h"
+#include "HAL/PlatformTime.h"
+#include "GameFramework/PlayerState.h"
+#include "Components/AudioComponent.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Text/STextBlock.h"
@@ -1502,7 +1506,15 @@ void ACameraControllerBase::GrantPeriodicTalentPoints()
 
 	// Der Zufluss des Attributbaums: EINMAL je Takt fuer das ganze Team, nicht je Einheit.
 	const int32 CVarPoints = CVarTalentPointsPerInterval.GetValueOnGameThread();
-	const int32 PointsThisInterval = (CVarPoints >= 0) ? CVarPoints : TalentPointsPerInterval;
+	int32 PointsThisInterval = (CVarPoints >= 0) ? CVarPoints : TalentPointsPerInterval;
+
+	// Die erste Vergabe ist klein und geht - wenn gewollt - gleich in die Mitte (siehe unten).
+	const bool bFirstGrant = !bTalentFirstGrantDone;
+	bTalentFirstGrantDone = true;
+	if (bFirstGrant && TalentFirstGrantPoints > 0)
+	{
+		PointsThisInterval = TalentFirstGrantPoints;
+	}
 
 	int32 BestandBaum = 0;
 	if (AUpgradeGameState* GameStateRef = GetWorld() ? GetWorld()->GetGameState<AUpgradeGameState>() : nullptr)
@@ -1582,6 +1594,11 @@ void ACameraControllerBase::GrantPeriodicTalentPoints()
 				TEXT("[Talente] KEINE eigene Einheit hat ein AttributeTreeDataTable - das Attributbaum-Widget bleibt deshalb leer."));
 		}
 		Client_ShowTalentPointToast(PointsThisInterval, Beschenkte);
+		// Der erste Punkt kann nur in die Mitte - dafuer muss niemand das Spiel anhalten.
+		if (!(bFirstGrant && bAutoInvestFirstTalentPoint && AutoInvestTalentRoot()))
+		{
+			MaybeStartTalentPause();
+		}
 	}
 	else
 	{
@@ -1631,6 +1648,267 @@ void ACameraControllerBase::Client_ShowTalentPointToast_Implementation(int32 Poi
 	GetWorldTimerManager().SetTimer(TalentPointToastTimerHandle, this,
 		&ACameraControllerBase::HideTalentPointToast,
 		FMath::Max(0.5f, TalentPointToastSeconds), false);
+}
+
+static TAutoConsoleVariable<int32> CVarTalentPauseOnPoint(
+	TEXT("RTS.Talents.PauseOnPoint"),
+	1,
+	TEXT("1 = bei einem neuen Attributbaum-Punkt das Spiel anhalten und den Baum oeffnen, 0 = aus."),
+	ECVF_Default);
+
+void ACameraControllerBase::MaybeStartTalentPause()
+{
+	UWorld* World = GetWorld();
+	if (!HasAuthority() || !World || !bPauseOnTalentPoint || TalentPauseSeconds <= 0.f
+		|| CVarTalentPauseOnPoint.GetValueOnGameThread() == 0)
+	{
+		return;
+	}
+	// Nur echte Spieler waehlen - kein Bot, kein RL-Agent.
+	if (!PlayerState || PlayerState->IsABot() || (GetPawn() && GetPawn()->IsA(ARLAgent::StaticClass())))
+	{
+		return;
+	}
+	// Die erste Vergabe faellt in den Ladebildschirm (gemessen 01.11.2026: Punkt bei 12 s, Ladebild
+	// noch oben) - der Spieler saehe weder Baum noch Countdown. Erst danach anhalten.
+	if (IsLoadingScreenActive())
+	{
+		World->GetTimerManager().SetTimer(TalentPauseRetryHandle, this, &ACameraControllerBase::MaybeStartTalentPause, 1.f, false);
+		return;
+	}
+	AUpgradeGameState* GameStateRef = World->GetGameState<AUpgradeGameState>();
+	if (!GameStateRef || GameStateRef->GetTeamAttributeTreePoints(SelectableTeamId) <= 0)
+	{
+		return;
+	}
+	// Ist der Baum ausgebaut, gibt es nichts zu waehlen - dann auch keine Pause.
+	bool bInvestable = false;
+	for (TActorIterator<ALevelUnit> It(World); It && !bInvestable; ++It)
+	{
+		bInvestable = IsValid(*It) && It->TeamId == SelectableTeamId && It->HasInvestableAttributeTreeNode();
+	}
+	if (!bInvestable)
+	{
+		return;
+	}
+
+	const bool bWasActive = GameStateRef->IsTalentPauseActive();
+	GameStateRef->RequestTalentPause(this, TalentPauseSeconds);
+	if (bWasActive || !GameStateRef->IsTalentPauseActive())
+	{
+		return;
+	}
+
+	// Steht die Vergabe eines anderen Spielers kurz bevor, gleich mit vergeben: sonst haelt das
+	// Spiel direkt nach dieser Pause ein zweites Mal an (dessen Takt stand ja mit).
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		ACameraControllerBase* Other = Cast<ACameraControllerBase>(It->Get());
+		if (!Other || Other == this || Other->SelectableTeamId == SelectableTeamId
+			|| !World->GetTimerManager().IsTimerActive(Other->TalentPointTimerHandle))
+		{
+			continue;
+		}
+		if (World->GetTimerManager().GetTimerRemaining(Other->TalentPointTimerHandle) <= TalentPauseMergeWindow)
+		{
+			World->GetTimerManager().SetTimer(Other->TalentPointTimerHandle, Other,
+				&ACameraControllerBase::GrantPeriodicTalentPoints, Other->TalentPointInterval, true);
+			Other->GrantPeriodicTalentPoints();
+		}
+	}
+}
+
+bool ACameraControllerBase::AutoInvestTalentRoot()
+{
+	UWorld* World = GetWorld();
+	AUpgradeGameState* GameStateRef = World ? World->GetGameState<AUpgradeGameState>() : nullptr;
+	const UDataTable* Table = GameStateRef ? GameStateRef->FindTeamAttributeTreeTable(SelectableTeamId) : nullptr;
+	AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
+	if (!HasAuthority() || !Table || !Camera)
+	{
+		return false;
+	}
+
+	FName Root = NAME_None;
+	int32 OpenRoots = 0;
+	for (const FName& RowName : Table->GetRowNames())
+	{
+		const FAttributeTreeNodeRow* Row = Table->FindRow<FAttributeTreeNodeRow>(RowName, TEXT("AutoInvestTalentRoot"), false);
+		if (Row && Row->PrevId.IsNone()
+			&& GameStateRef->GetTeamAttributeTreeNodePoints(SelectableTeamId, RowName) < FMath::Max(1, Row->MaxPoints))
+		{
+			Root = RowName;
+			++OpenRoots;
+		}
+	}
+	if (OpenRoots != 1)
+	{
+		return false;
+	}
+
+	// Derselbe Weg wie ein Klick im Baum - auf dem Server laeuft der RPC direkt.
+	const int32 Before = GameStateRef->GetTeamAttributeTreePoints(SelectableTeamId);
+	Camera->Server_InvestTeamAttributeTreeNode(Root);
+	const bool bBooked = GameStateRef->GetTeamAttributeTreePoints(SelectableTeamId) < Before;
+	UE_LOG(LogTemp, Log, TEXT("[Talentpause] Erster Punkt von Team %d automatisch in '%s' %s."),
+		SelectableTeamId, *Root.ToString(), bBooked ? TEXT("investiert") : TEXT("NICHT investiert"));
+	return bBooked;
+}
+
+void ACameraControllerBase::SetTalentPauseMusicKeepsPlaying(bool bKeepPlaying)
+{
+	if (!bKeepPlaying)
+	{
+		for (const TWeakObjectPtr<UAudioComponent>& Audio : TalentPauseMusicComponents)
+		{
+			if (Audio.IsValid())
+			{
+				Audio->SetUISound(false);
+			}
+		}
+		TalentPauseMusicComponents.Reset();
+		return;
+	}
+	if (TalentPauseMusicComponents.Num() > 0 || TalentPauseMusicActorClasses.Num() == 0 || !GetWorld())
+	{
+		return;
+	}
+
+	// Ein UI-Sound laeuft in der Spielpause weiter - genau das, und nur fuer die Musik.
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	{
+		bool bMusic = false;
+		for (const UClass* Class = It->GetClass(); Class && !bMusic; Class = Class->GetSuperClass())
+		{
+			bMusic = TalentPauseMusicActorClasses.Contains(Class->GetFName());
+		}
+		if (!bMusic)
+		{
+			continue;
+		}
+		TArray<UAudioComponent*> AudioComponents;
+		It->GetComponents(AudioComponents);
+		for (UAudioComponent* Audio : AudioComponents)
+		{
+			if (Audio && !Audio->bIsUISound)
+			{
+				Audio->SetUISound(true);
+				TalentPauseMusicComponents.Add(Audio);
+			}
+		}
+	}
+}
+
+void ACameraControllerBase::Client_BeginTalentPause_Implementation(float Seconds, bool bOpenTree)
+{
+	// Nur solange das Spiel noch laeuft: steht es schon, hat die Engine die Musik fest pausiert,
+	// und als UI-Sound liefe dann nur ihre Spielzeit weiter - am Liedende kaeme das naechste Lied.
+	if (GetWorld() && !GetWorld()->IsPaused())
+	{
+		SetTalentPauseMusicKeepsPlaying(true);
+	}
+
+	TalentPauseClientEndTime = FPlatformTime::Seconds() + FMath::Max(0.f, Seconds);
+
+	if (bOpenTree && !bTalentPauseOpenedTree)
+	{
+		AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
+		if (Camera && Camera->AttributeTreeWidget)
+		{
+			const ESlateVisibility Vis = Camera->AttributeTreeWidget->GetVisibility();
+			// Hat der Spieler den Baum schon selbst offen, bleibt er nachher auch offen.
+			if (Vis == ESlateVisibility::Collapsed || Vis == ESlateVisibility::Hidden)
+			{
+				Camera->TabMode = 4;
+				Camera->UpdateTabModeUI();
+				bTalentPauseOpenedTree = true;
+			}
+		}
+	}
+
+	if (TalentPauseTimerWidget.IsValid() || !GEngine || !GEngine->GameViewport)
+	{
+		return;
+	}
+
+	const TWeakObjectPtr<ACameraControllerBase> WeakThis(this);
+	TalentPauseTimerWidget =
+		SNew(SBox)
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Top)
+		.Padding(FMargin(0.f, TalentPauseTimerTopPadding, 0.f, 0.f))
+		.Visibility(EVisibility::HitTestInvisible)
+		[
+			SNew(SBorder)
+			.BorderBackgroundColor(FLinearColor(0.010f, 0.015f, 0.027f, 0.85f))
+			.Padding(FMargin(20.f, 8.f))
+			[
+				SNew(STextBlock)
+				.Text_Lambda([WeakThis]()
+				{
+					const double End = WeakThis.IsValid() ? WeakThis->TalentPauseClientEndTime : 0.0;
+					const int32 Left = FMath::Max(0, FMath::CeilToInt(float(End - FPlatformTime::Seconds())));
+					return FText::Format(NSLOCTEXT("RTSUnitTemplate", "TalentPauseTimer", "Choose an attribute  {0}"),
+						FText::AsNumber(Left));
+				})
+				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 22))
+				.ColorAndOpacity(FSlateColor(FLinearColor(0.209f, 0.644f, 0.694f, 1.f)))
+			]
+		];
+	GEngine->GameViewport->AddViewportWidgetContent(TalentPauseTimerWidget.ToSharedRef(), 21);
+
+	// Sicherung: geht das Ende verloren (Kartenwechsel, Verbindung weg), raeumt sich der
+	// Countdown kurz nach Ablauf selbst weg. Kerntakt, weil der Welt-Timer in der Pause steht.
+	TalentPauseClientTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateLambda(
+		[WeakThis, Widget = TalentPauseTimerWidget](float)
+		{
+			if (WeakThis.IsValid() && FPlatformTime::Seconds() < WeakThis->TalentPauseClientEndTime + 3.0)
+			{
+				return true;
+			}
+			if (WeakThis.IsValid())
+			{
+				WeakThis->TalentPauseClientTicker.Reset();
+				WeakThis->HideTalentPauseTimer();
+			}
+			else if (GEngine && GEngine->GameViewport && Widget.IsValid())
+			{
+				GEngine->GameViewport->RemoveViewportWidgetContent(Widget.ToSharedRef());
+			}
+			return false;
+		}), 0.25f);
+}
+
+void ACameraControllerBase::Client_EndTalentPause_Implementation()
+{
+	HideTalentPauseTimer();
+	SetTalentPauseMusicKeepsPlaying(false);
+
+	if (bTalentPauseOpenedTree)
+	{
+		bTalentPauseOpenedTree = false;
+		AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn());
+		if (Camera && Camera->AttributeTreeWidget && Camera->TabMode == 4
+			&& Camera->AttributeTreeWidget->GetVisibility() != ESlateVisibility::Collapsed
+			&& Camera->AttributeTreeWidget->GetVisibility() != ESlateVisibility::Hidden)
+		{
+			Camera->ShowStartScreen();
+		}
+	}
+}
+
+void ACameraControllerBase::HideTalentPauseTimer()
+{
+	if (TalentPauseClientTicker.IsValid())
+	{
+		FTSTicker::GetCoreTicker().RemoveTicker(TalentPauseClientTicker);
+		TalentPauseClientTicker.Reset();
+	}
+	if (TalentPauseTimerWidget.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(TalentPauseTimerWidget.ToSharedRef());
+	}
+	TalentPauseTimerWidget.Reset();
 }
 
 void ACameraControllerBase::HideTalentPointToast()

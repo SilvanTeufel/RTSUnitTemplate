@@ -42,6 +42,18 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Preview")
 	FVector PreviewModelOffset = FVector::ZeroVector;
 
+	/**
+	 * Enlarges the mouse-hover capsule (UMassUnitHoverProcessor) beyond the collision capsule, for models that
+	 * stick out of it: HoverExtraHeight raises its top, HoverExtraRadius widens it. Hover only - collision,
+	 * ranges and selection boxes keep the real capsule. E.g. the WallTower's turret sits above its capsule, so
+	 * from a tilted camera the cursor on the turret hovered nothing.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Hover", meta = (ClampMin = "0"))
+	float HoverExtraHeight = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Hover", meta = (ClampMin = "0"))
+	float HoverExtraRadius = 0.f;
+
 	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
 	UBoxComponent* BoxCollisionComponent = nullptr;
 
@@ -412,6 +424,12 @@ public:
 	/** Flashes the shield-impact overlay now (local/visual only). */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|ShieldImpact")
 	void TriggerShieldImpact();
+
+	/**
+	 * This unit lost health or shield: raises the minimap attack alert (ACustomControllerBase::ReportUnderAttack)
+	 * for the local players of its team. Investments (ALevelUnit::ActiveInvestments) do not count.
+	 */
+	void NotifyDamageForAttackAlert(float OldValue, float NewValue);
 
 	UPROPERTY(Transient)
 	TObjectPtr<class UMaterialInstanceDynamic> ShieldImpactMID = nullptr;

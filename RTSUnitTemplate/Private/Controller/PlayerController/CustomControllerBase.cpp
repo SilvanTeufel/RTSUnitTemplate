@@ -10,6 +10,7 @@
 
 #include "EngineUtils.h"
 #include "Landscape.h"
+#include "Core/RTSGround.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "MassEntitySubsystem.h"     // Needed for FMassEntityManager, UMassEntitySubsystem
@@ -64,6 +65,8 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
+#include "Widgets/UnitStatsTooltipWidget.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 
 
 void ACustomControllerBase::BeginPlay()
@@ -4271,6 +4274,9 @@ void ACustomControllerBase::LeftClickPressedMass()
     // Vor allem anderen: ein haengengebliebenes Alt wuerde den Klick sonst in den Alt-Zweig lenken.
     HealStaleModifierFlags(TEXT("LeftClickPressedMass"));
 
+    // Every left click closes the enemy stats popup; a click on an enemy opens it again below.
+    HideUnitStatsPopup();
+
     LeftClickIsPressed = true;
     int32 SavedAbilityIndex = AbilityArrayIndex;
     AbilityArrayIndex = 0;
@@ -4497,7 +4503,7 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
     if (HitPawn.bBlockingHit && HUDBase)
     {
         AActor* HitActor = HitPawn.GetActor();
-        if (HitActor && !HitActor->IsA(ALandscape::StaticClass()))
+        if (HitActor && !RTSGround::IsGround(HitActor))
             ClickedActor = HitActor;
         else
             ClickedActor = nullptr;
@@ -4523,8 +4529,10 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
         {
             if (IsCtrlPressed)
             {
-                FGameplayTag Tag = HitUnit->UnitTags.First();
-                SelectUnitsWithTag(Tag, SelectableTeamId);
+                // Strg+Klick waehlt nur die Einheiten dieser Art, die gerade im Bild sind. Strg+Ziffer
+                // (Kontrollgruppe) bleibt bei SelectUnitsWithTag und holt weiter alle auf der Karte.
+                // Rein lokal: die Auswahl lebt im HUD, der Server bekommt die Einheiten mit jedem Befehl.
+                SelectVisibleUnitsWithTag(HitUnit->UnitTags.First(), HitUnit);
             }
             else
             {
@@ -4543,10 +4551,123 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
         }
         else
         {
+            // A unit we cannot select (an enemy): show its stats. The box-select below still starts as before.
+            if (HitUnit && !SUnit && HitUnit->TeamId != SelectableTeamId && HitUnit->GetUnitState() != UnitData::Dead)
+            {
+                ShowUnitStatsPopup(HitUnit);
+            }
             HUDBase->InitialPoint = HUDBase->GetMousePos2D();
             HUDBase->bSelectFriendly = true;
         }
     }
+}
+
+void ACustomControllerBase::SelectVisibleUnitsWithTag(FGameplayTag Tag, AUnitBase* ClickedUnit)
+{
+    if (!HUDBase || !GetWorld())
+    {
+        return;
+    }
+    int32 SizeX = 0, SizeY = 0;
+    GetViewportSize(SizeX, SizeY);
+
+    TArray<AUnitBase*> NewSelection;
+    for (TActorIterator<AUnitBase> It(GetWorld()); It; ++It)
+    {
+        AUnitBase* Unit = *It;
+        if (!IsValid(Unit) || !Unit->CanBeSelected || Unit->GetUnitState() == UnitData::Dead || IsForeignCameraUnit(Unit)
+            || (Unit->TeamId != SelectableTeamId && SelectableTeamId != 0))
+        {
+            continue;
+        }
+        // Ohne Tag gilt die Klasse der angeklickten Einheit als Art.
+        const bool bGleicheArt = Tag.IsValid()
+            ? Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag))
+            : (ClickedUnit && Unit->GetClass() == ClickedUnit->GetClass());
+        if (!bGleicheArt && Unit != ClickedUnit)
+        {
+            continue;
+        }
+        FVector2D Screen;
+        const bool bImBild = ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), Screen)
+            && Screen.X >= 0.f && Screen.Y >= 0.f && Screen.X <= SizeX && Screen.Y <= SizeY;
+        if (bImBild || Unit == ClickedUnit)
+        {
+            NewSelection.Add(Unit);
+        }
+    }
+    NewSelection.Sort([](const AUnitBase& A, const AUnitBase& B) { return A.GetName() < B.GetName(); });
+
+    AbilityArrayIndex = 0;
+    Client_UpdateHUDSelection_Implementation(NewSelection, SelectableTeamId);
+}
+
+void ACustomControllerBase::ShowUnitStatsPopup(AUnitBase* Unit)
+{
+    if (!UnitStatsPopupClass || !IsValid(Unit) || !IsLocalController())
+    {
+        return;
+    }
+    if (!UnitStatsPopup)
+    {
+        UnitStatsPopup = CreateWidget<UUnitStatsTooltipWidget>(this, UnitStatsPopupClass);
+        if (!UnitStatsPopup)
+        {
+            return;
+        }
+    }
+    UnitStatsPopup->RemoveFromParent();
+    UnitStatsPopup->bCloseWhenUnitGone = true;
+    // Before AddToViewport: the Blueprint copies Name / TypeName / Description into its texts on Construct.
+    UnitStatsPopup->SetUnit(Unit, /*bFillHeaderTexts=*/true);
+    UnitStatsPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
+    UnitStatsPopup->AddToViewport(50);
+
+    // Next to the cursor, on the side with more room.
+    const FVector2D Mouse = UWidgetLayoutLibrary::GetMousePositionOnViewport(this);
+    const FVector2D ViewSize = UWidgetLayoutLibrary::GetViewportSize(this) / FMath::Max(UWidgetLayoutLibrary::GetViewportScale(this), 0.01f);
+    const bool bLeft = Mouse.X > ViewSize.X * 0.6f;
+    const bool bUp = Mouse.Y > ViewSize.Y * 0.5f;
+    UnitStatsPopup->SetAlignmentInViewport(FVector2D(bLeft ? 1.f : 0.f, bUp ? 1.f : 0.f));
+    UnitStatsPopup->SetPositionInViewport(Mouse + FVector2D(bLeft ? -24.f : 24.f, bUp ? -24.f : 24.f), /*bRemoveDPIScale=*/false);
+}
+
+void ACustomControllerBase::HideUnitStatsPopup()
+{
+    if (UnitStatsPopup)
+    {
+        UnitStatsPopup->RemoveFromParent();
+    }
+}
+
+void ACustomControllerBase::ReportUnderAttack(const FVector& Location)
+{
+    UWorld* World = GetWorld();
+    if (!bEnableUnderAttackAlerts || !World || !IsLocalController())
+    {
+        return;
+    }
+    const double Now = World->GetTimeSeconds();
+    MinimapAttackAlerts.RemoveAll([&](const FMinimapAttackAlert& A) { return Now - A.StartTime > UnderAttackAlertDuration; });
+    RecentAttackAlerts.RemoveAll([&](const TPair<FVector, double>& A) { return Now - A.Value > UnderAttackAlertCooldown; });
+    for (const TPair<FVector, double>& Recent : RecentAttackAlerts)
+    {
+        if (FVector::DistSquared2D(Recent.Key, Location) < FMath::Square(UnderAttackAlertRadius))
+        {
+            return;
+        }
+    }
+    RecentAttackAlerts.Emplace(Location, Now);
+
+    FMinimapAttackAlert& Alert = MinimapAttackAlerts.AddDefaulted_GetRef();
+    Alert.Location = Location;
+    Alert.StartTime = Now;
+    Alert.Id = NextAttackAlertId++;
+    FVector2D Screen;
+    int32 ViewX = 0, ViewY = 0;
+    GetViewportSize(ViewX, ViewY);
+    Alert.bOnScreen = ProjectWorldLocationToScreen(Location, Screen, true)
+        && Screen.X >= 0.f && Screen.Y >= 0.f && Screen.X <= ViewX && Screen.Y <= ViewY;
 }
 
 void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor)

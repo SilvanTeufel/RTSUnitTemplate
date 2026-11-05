@@ -8,6 +8,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Controller/PlayerController/CustomControllerBase.h" // Change this path to match your file structure
 #include "Engine/Texture2D.h"
+#include "Rendering/DrawElements.h"
+#include "Sound/SoundBase.h"
 
 void UMinimapWidget::InitializeForTeam(int32 TeamId)
 {
@@ -268,6 +270,92 @@ void UMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         // 4. Den Rotationswinkel auf das Bild anwenden.
         MinimapImage->SetRenderTransformAngle(CurrentMapAngle);
     }
+
+    // Angriffsalarm: Ton einmal je neuem Alarm, und solange einer laeuft jedes Bild neu zeichnen.
+    if (const ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetOwningPlayer()))
+    {
+        const TArray<FMinimapAttackAlert>& Alerts = PC->GetMinimapAttackAlerts();
+        const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+        bool bAnyRunning = false;
+        for (const FMinimapAttackAlert& Alert : Alerts)
+        {
+            bAnyRunning |= Now - Alert.StartTime <= PC->UnderAttackAlertDuration;
+            if (Alert.Id <= LastAlertIdHandled)
+            {
+                continue;
+            }
+            LastAlertIdHandled = Alert.Id;
+            if (UnderAttackSound && !(bSilentWhenOnScreen && Alert.bOnScreen) && Now - LastAlertSoundTime >= UnderAttackSoundCooldown)
+            {
+                LastAlertSoundTime = Now;
+                UGameplayStatics::PlaySound2D(this, UnderAttackSound, PC->GetSoundMultiplier());
+            }
+        }
+        if (bAnyRunning)
+        {
+            Invalidate(EInvalidateWidgetReason::Paint);
+        }
+    }
+}
+
+int32 UMinimapWidget::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect,
+    FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const
+{
+    const int32 MaxLayer = Super::NativePaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId, InWidgetStyle, bParentEnabled);
+
+    const ACustomControllerBase* PC = Cast<ACustomControllerBase>(GetOwningPlayer());
+    const UWorld* World = GetWorld();
+    if (!PC || !World || !MinimapImage || !MinimapActorRef || PC->GetMinimapAttackAlerts().Num() == 0)
+    {
+        return MaxLayer;
+    }
+
+    // Im Raum des Bildes zeichnen: seine Paint-Geometrie traegt die Drehung (SetRenderTransformAngle) schon in
+    // sich, die Klammern sitzen damit dort, wo die Einheit auf der gedrehten Karte zu sehen ist.
+    const FGeometry& MapGeometry = MinimapImage->GetPaintSpaceGeometry();
+    const FVector2D Size = MapGeometry.GetLocalSize();
+    const FVector2D& Min = MinimapActorRef->MinimapMinBounds;
+    const FVector2D& Max = MinimapActorRef->MinimapMaxBounds;
+    if (Size.X <= 0.f || Size.Y <= 0.f || Max.X <= Min.X || Max.Y <= Min.Y)
+    {
+        return MaxLayer;
+    }
+
+    const double Now = World->GetTimeSeconds();
+    const int32 AlertLayer = MaxLayer + 1;
+    for (const FMinimapAttackAlert& Alert : PC->GetMinimapAttackAlerts())
+    {
+        const double Age = Now - Alert.StartTime;
+        if (Age < 0.0 || Age > PC->UnderAttackAlertDuration)
+        {
+            continue;
+        }
+        const FVector2D Center((Alert.Location.X - Min.X) / (Max.X - Min.X) * Size.X, (Alert.Location.Y - Min.Y) / (Max.Y - Min.Y) * Size.Y);
+
+        // Zwei eckige Klammern [ ], die sich auf den Punkt zusammenziehen - immer wieder, solange der Alarm laeuft.
+        // Die Versaetze werden gegen die Kartendrehung gedreht: so stehen die Klammern auf dem Bildschirm
+        // immer links und rechts, wie auch immer die Kamera schaut.
+        const float Pulse = FMath::Fmod((float)Age, AttackAlertPulseTime) / AttackAlertPulseTime;
+        const float Ease = 1.f - FMath::Square(1.f - Pulse);
+        const float Half = FMath::Lerp(AttackAlertStartSize, AttackAlertEndSize, Ease) * FMath::Min(Size.X, Size.Y);
+        const float Arm = FMath::Max(Half * 0.45f, 2.f);
+        FLinearColor Color = AttackAlertColor;
+        Color.A *= FMath::Lerp(0.55f, 1.f, Ease);
+
+        const FQuat2D Unrotate(FMath::DegreesToRadians(-CurrentMapAngle));
+        for (const float Side : { -1.f, 1.f })
+        {
+            const float X = Side * Half;
+            TArray<FVector2D> Points;
+            for (const FVector2D& Offset : { FVector2D(X - Side * Arm, -Half), FVector2D(X, -Half), FVector2D(X, Half), FVector2D(X - Side * Arm, Half) })
+            {
+                Points.Add(Center + Unrotate.TransformPoint(Offset));
+            }
+            FSlateDrawElement::MakeLines(OutDrawElements, AlertLayer, MapGeometry.ToPaintGeometry(), Points,
+                ESlateDrawEffect::None, Color, true, AttackAlertThickness);
+        }
+    }
+    return AlertLayer;
 }
 
 void UMinimapWidget::GetMapLocalPosition(const FGeometry& InGeometry, const FVector2D& ScreenPosition, FVector2D& OutLocal, FVector2D& OutSize) const

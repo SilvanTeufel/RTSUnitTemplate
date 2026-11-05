@@ -1545,8 +1545,24 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
         {
              AUnitBase* UnitBase = Cast<AUnitBase>(ActorFragPtr->GetMutable());
              FMassEntityHandle TargetEntity = TargetFrag->TargetEntity;
-             
-             if (UnitBase && IsValid(UnitBase->UnitToChase) && !UnitBase->UseProjectile && EntityManager.IsEntityValid(TargetEntity))
+
+             // Getroffen wird das Ziel, das Mass angreift (TargetEntity), nicht UnitToChase: die
+             // Detection setzt UnitToChase nicht, solange SwitchingState laeuft. Dann bekam das
+             // Fragment des neuen Ziels (z.B. das DataCenter) den Schaden, Aktor und Ability aber das
+             // alte - und der Aktor-Sync stellte die Gesundheit wieder her (02.11.2026, Kraken).
+             AActor* HitActor = UnitBase ? UnitBase->UnitToChase : nullptr;
+             if (EntityManager.IsEntityValid(TargetEntity))
+             {
+                 if (FMassActorFragment* TargetActorFrag = EntityManager.GetFragmentDataPtr<FMassActorFragment>(TargetEntity))
+                 {
+                     if (AActor* EntityActor = TargetActorFrag->GetMutable(); IsValid(EntityActor))
+                     {
+                         HitActor = EntityActor;
+                     }
+                 }
+             }
+
+             if (UnitBase && IsValid(HitActor) && !UnitBase->UseProjectile && EntityManager.IsEntityValid(TargetEntity))
              {
                 // 1. HANDLE MATH & LOGIC HERE (While pointers are valid)
                 TargetStatsFrag = EntityManager.GetFragmentDataPtr<FMassCombatStatsFragment>(TargetEntity);
@@ -1590,7 +1606,7 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
                 // 2. PREPARE ASYNC DATA
                 // We capture VALUES (HealthDamage, ShieldDamage), not pointers to fragments.
                 TWeakObjectPtr<AUnitBase> WeakAttacker(UnitBase);
-                TWeakObjectPtr<AActor> WeakTarget(UnitBase->UnitToChase);
+                TWeakObjectPtr<AActor> WeakTarget(HitActor);
                 int32 TargetTeamId = TargetStatsFrag->TeamId;
                 
                 // Capture Tag requirement logic as a bool or ID, don't pass the StateFragment pointer

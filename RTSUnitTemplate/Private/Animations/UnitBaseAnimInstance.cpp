@@ -273,7 +273,23 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 			// Das AnimBP zeigte trotzdem die Laufanimation - Laufen auf der Stelle. Geaendert wird
 			// nur die an das AnimBP gemeldete Anzeige, der Zustand der Einheit bleibt unberuehrt.
 			bool bAufIdleKorrigiert = false;
-			if (bMassSpeedValid && MassSpeed <= IdleAnimSpeedThreshold)
+
+			// Nur korrigieren, wenn sich der Aktor auch WIRKLICH nicht bewegt.
+			//
+			// Das Geschwindigkeitsfragment steht auf dem Client auch dann auf null, wenn die
+			// Einheit nicht vom eigenen Mover, sondern von der Serverlage gezogen wird (Pfadsuche,
+			// Abstandsbremse). Die Einheit bewegte sich dann in der Idle-Pose - gemeldet
+			// 04.11.2026 als "Einheiten sliden". Ob sie wirklich steht, sagt nur die Verschiebung.
+			// Das Laufen auf der Stelle (Fragment > 0, Einheit zappelt) faengt weiterhin der
+			// UUnitAnimationProcessor ueber sein Nettofenster ab.
+			const FVector GleitLage = UnitBase->GetActorLocation();
+			const float GleitTempo = (bGleitLageGueltig && Deltaseconds > KINDA_SMALL_NUMBER)
+				? FVector::Dist2D(GleitLage, GleitLetzteLage) / Deltaseconds : 0.f;
+			GleitLetzteLage = GleitLage;
+			bGleitLageGueltig = true;
+			constexpr float GleitSchwelle = 40.f;
+
+			if (bMassSpeedValid && MassSpeed <= IdleAnimSpeedThreshold && GleitTempo <= GleitSchwelle)
 			{
 				switch (CharAnimState.GetValue())
 				{

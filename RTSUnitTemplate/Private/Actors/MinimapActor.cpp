@@ -14,6 +14,7 @@
 #include "Materials/MaterialInterface.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "LandscapeProxy.h"
+#include "Core/RTSGround.h"
 #include "Actors/WorkArea.h"
 #include "Actors/Pickup.h"
 #include "GameFramework/PlayerController.h"
@@ -157,7 +158,7 @@ bool AMinimapActor::TryGetMaterialColor(const FHitResult& Hit, FLinearColor& Out
     AActor* HitActor = Hit.GetActor();
     if (HitActor)
     {
-        if (HitActor->IsA<ALandscapeProxy>())
+        if (RTSGround::IsGround(HitActor))
         {
             OutColor = LandscapeColor;
             return true;
@@ -286,7 +287,7 @@ void AMinimapActor::CaptureMapTopography()
                 
                 // Track if this pixel hit a landscape
                 AActor* HitActor = Hit.GetActor();
-                if (HitActor && HitActor->IsA<ALandscapeProxy>())
+                if (RTSGround::IsGround(HitActor))
                 {
                     IsLandscapePixel[PixelIndex] = true;
                 }

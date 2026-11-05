@@ -20,6 +20,7 @@ static TAutoConsoleVariable<float> CVarRTS_WallPreviewInterpSpeed(
 #include "EngineUtils.h"
 #include "GameplayTagsManager.h"
 #include "Landscape.h"
+#include "Core/RTSGround.h"
 #include "MassSignalSubsystem.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "Characters/Camera/RLAgent.h"
@@ -103,21 +104,96 @@ namespace
 		return Cdo ? Cdo->BaseType : EBaseType::None;
 	}
 
-	/**
-	 * Centre distance the dragged area must keep from Neighbor because one is a Converter and the other a
-	 * storing base (AWorkArea::ConverterStockGap between the footprints, radii DragR / NeighborR); 0 = no rule.
-	 */
-	float ConverterStockSpacing(const AWorkArea* Dragged, const AActor* Neighbor, float DragR, float NeighborR)
+	/** A resource place (Primary..Legendary work area). */
+	bool IsResourcePlace(const AActor* Actor)
 	{
-		if (!Dragged || Dragged->ConverterStockGap <= 0.f || !Neighbor)
+		const AWorkArea* Area = Cast<AWorkArea>(Actor);
+		if (!Area)
+		{
+			return false;
+		}
+		const WorkAreaData::WorkAreaType T = Area->Type;
+		return T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary
+			|| T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary;
+	}
+
+	/**
+	 * Half-width an actor occupies on the ground for the spacing rules below: the larger of its snap radius
+	 * (WorkArea mesh / ISM bounds, building box or capsule) and the capsule of the building - for a build
+	 * area the building it will become, whose capsule is often larger than the area's mesh.
+	 */
+	float PlacementFootprintRadius(const AActor* Actor, float SnapRadius)
+	{
+		const ABuildingBase* Bld = Cast<ABuildingBase>(Actor);
+		if (!Bld)
+		{
+			const AWorkArea* Area = Cast<AWorkArea>(Actor);
+			Bld = Area && Area->BuildingClass ? Area->BuildingClass->GetDefaultObject<ABuildingBase>() : nullptr;
+		}
+		float R = SnapRadius;
+		if (const UCapsuleComponent* Capsule = Bld ? Bld->FindComponentByClass<UCapsuleComponent>() : nullptr)
+		{
+			float CapsuleR = Capsule->GetScaledCapsuleRadius();
+			if (Bld->MassActorBindingComponent)
+			{
+				CapsuleR += Bld->MassActorBindingComponent->AdditionalCapsuleRadius;
+			}
+			R = FMath::Max(R, CapsuleR);
+		}
+		return R;
+	}
+
+	/**
+	 * Centre distance the dragged area must keep from a resource place (DenyPlacementCloseToResources):
+	 * AWorkArea::ResourcePlacementDistance between the two footprints. 0 = no rule.
+	 */
+	float ResourceSpacing(const AWorkArea* Dragged, const AActor* Neighbor, float DragR, float NeighborR)
+	{
+		if (!Dragged || !Dragged->DenyPlacementCloseToResources || Dragged->ResourcePlacementDistance <= 0.f || !IsResourcePlace(Neighbor))
 		{
 			return 0.f;
 		}
-		auto IsStock = [](EBaseType T) { return T == EBaseType::StoreOnly || T == EBaseType::CollectAndStore; };
+		return PlacementFootprintRadius(Dragged, DragR) + PlacementFootprintRadius(Neighbor, NeighborR) + Dragged->ResourcePlacementDistance;
+	}
+
+	/**
+	 * Centre distance the dragged area must keep from Neighbor because of a base-type rule (snap radii DragR /
+	 * NeighborR, widened to the footprints by PlacementFootprintRadius); 0 = no rule:
+	 * - a Converter and a storing base: AWorkArea::ConverterStockGap between the footprints,
+	 * - a Store Only base (stock) and a collecting place - Collect Only base, extractor (Collect Only Without
+	 *   Worker), resource place, or the build area of one: AWorkArea::StockCollectorGap.
+	 */
+	float ConverterStockSpacing(const AWorkArea* Dragged, const AActor* Neighbor, float DragR, float NeighborR)
+	{
+		if (!Dragged || !Neighbor)
+		{
+			return 0.f;
+		}
 		const EBaseType Own = PlacementBaseType(Dragged);
 		const EBaseType Other = PlacementBaseType(Neighbor);
-		const bool bApplies = (Own == EBaseType::Converter && IsStock(Other)) || (IsStock(Own) && Other == EBaseType::Converter);
-		return bApplies ? DragR + NeighborR + Dragged->ConverterStockGap : 0.f;
+		DragR = PlacementFootprintRadius(Dragged, DragR);
+		NeighborR = PlacementFootprintRadius(Neighbor, NeighborR);
+		float Spacing = 0.f;
+		if (Dragged->ConverterStockGap > 0.f)
+		{
+			auto IsStock = [](EBaseType T) { return T == EBaseType::StoreOnly || T == EBaseType::CollectAndStore; };
+			if ((Own == EBaseType::Converter && IsStock(Other)) || (IsStock(Own) && Other == EBaseType::Converter))
+			{
+				Spacing = DragR + NeighborR + Dragged->ConverterStockGap;
+			}
+		}
+		if (Dragged->StockCollectorGap > 0.f)
+		{
+			auto IsCollecting = [](const AActor* Actor, EBaseType T)
+			{
+				return T == EBaseType::CollectOnly || T == EBaseType::CollectOnlyWithoutWorker || IsResourcePlace(Actor);
+			};
+			if ((Own == EBaseType::StoreOnly && IsCollecting(Neighbor, Other)) || (Other == EBaseType::StoreOnly && IsCollecting(Dragged, Own)))
+			{
+				Spacing = FMath::Max(Spacing, DragR + NeighborR + Dragged->StockCollectorGap);
+			}
+		}
+		return Spacing;
 	}
 }
 
@@ -1643,7 +1719,7 @@ void AExtendedControllerBase::SetWorkAreaPosition_Implementation(AWorkArea* Drag
         FVector AdjustedLocation = NewActorTransform.GetLocation();
         while (Tries < MaxTries && GetWorld()->LineTraceSingleByChannel(LocalHit, LocalStart, LocalEnd, ECC_Visibility, LocalParams))
         {
-            if (LocalHit.GetActor() && LocalHit.GetActor()->IsA(ALandscape::StaticClass()))
+            if (RTSGround::IsGround(LocalHit.GetActor()))
             {
                 // Setze die neue Z-Position so, dass MeshBottomWorld auf dem Boden liegt
                 float DeltaZ = LocalHit.ImpactPoint.Z - MeshBottomWorld.Z;
@@ -1783,7 +1859,7 @@ FVector AExtendedControllerBase::ComputeGroundedLocation(AWorkArea* DraggedArea,
 		FString ZuletztGetroffen = TEXT("nichts");
 		while (Tries < MaxTries && World->LineTraceSingleByChannel(Hit, LocalStart, LocalEnd, ECC_Visibility, LocalParams))
 		{
-			if (Hit.GetActor() && Hit.GetActor()->IsA(ALandscape::StaticClass()))
+			if (RTSGround::IsGround(Hit.GetActor()))
 			{
 				Result.Z = Hit.ImpactPoint.Z - OffsetActorToBottom;
 				return Result;
@@ -2134,7 +2210,7 @@ void AExtendedControllerBase::SnapToActor(AWorkArea* DraggedActor, AActor* Other
         {
             for (AActor* Overlapped : OverlappingActors)
             {
-                if (!Overlapped || Overlapped == DraggedActor || Overlapped == OtherActor || Overlapped->IsA(ALandscape::StaticClass()))
+                if (!Overlapped || Overlapped == DraggedActor || Overlapped == OtherActor || RTSGround::IsGround(Overlapped))
                 {
                     continue;
                 }
@@ -2246,7 +2322,7 @@ bool AExtendedControllerBase::TraceMouseToLandscape(FVector& OutPoint, FHitResul
 		{
 			return false;
 		}
-		if (Cast<ALandscapeProxy>(Treffer.GetActor()))
+		if (RTSGround::IsGround(Treffer.GetActor()))
 		{
 			OutHit = Treffer;
 			OutPoint = Treffer.Location;
@@ -2288,7 +2364,7 @@ bool AExtendedControllerBase::SnapPointToLandscape(FVector InPoint, FVector& Out
 		{
 			return false;
 		}
-		if (Cast<ALandscapeProxy>(Treffer.GetActor()))
+		if (RTSGround::IsGround(Treffer.GetActor()))
 		{
 			OutPoint = Treffer.Location;
 			return true;
@@ -2612,7 +2688,7 @@ void AExtendedControllerBase::MoveDraggedAreaFreely(AWorkArea* DraggedWorkArea, 
             for (AActor* A : Hits)
             {
                 if (!A || A == DraggedWorkArea) continue;
-                if (A->IsA(ALandscape::StaticClass())) continue;
+                if (RTSGround::IsGround(A)) continue;
                 if (Cast<AWorkArea>(A) || Cast<ABuildingBase>(A))
                 {
                     GroundedPos = DraggedWorkArea->GetActorLocation();
@@ -2787,19 +2863,8 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                 if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                 const float NR = FMath::Max(NE.X, NE.Y);
                 float Required = FMath::Max(DragR + NR + SnapGap, ConverterStockSpacing(DraggedWorkArea, N, DragR, NR));
-                // Enforce resource distance if enabled on dragged WorkArea and neighbor is a resource WorkArea
-                if (DraggedWorkArea->DenyPlacementCloseToResources)
-                {
-                    if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
-                    {
-                        const WorkAreaData::WorkAreaType T = NeighborWA->Type;
-                        const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
-                        if (bIsResourceType)
-                        {
-                            Required = FMath::Max(Required, DraggedWorkArea->ResourcePlacementDistance);
-                        }
-                    }
-                }
+                // Resource distance (DenyPlacementCloseToResources): ResourcePlacementDistance between the footprints.
+                Required = FMath::Max(Required, ResourceSpacing(DraggedWorkArea, N, DragR, NR));
                 const float D = FVector::Dist2D(DragC, NC);
                 if (D < Required)
                 {
@@ -2849,18 +2914,7 @@ bool AExtendedControllerBase::MoveWorkArea_Local_Simplified(float DeltaSeconds)
                     if (!GetActorBoundsForSnap(N, NC, NE)) continue;
                     const float NR = FMath::Max(NE.X, NE.Y);
                     float Required = FMath::Max(DragR2 + NR + SnapGap, ConverterStockSpacing(DraggedWorkArea, N, DragR2, NR));
-                    if (DraggedWorkArea->DenyPlacementCloseToResources)
-                    {
-                        if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
-                        {
-                            const WorkAreaData::WorkAreaType T = NeighborWA->Type;
-                            const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
-                            if (bIsResourceType)
-                            {
-                                Required = FMath::Max(Required, DraggedWorkArea->ResourcePlacementDistance);
-                            }
-                        }
-                    }
+                    Required = FMath::Max(Required, ResourceSpacing(DraggedWorkArea, N, DragR2, NR));
                     const float D = FVector::Dist2D(DragC2, NC);
                     if (D < Required)
                     {
@@ -2983,19 +3037,8 @@ void AExtendedControllerBase::PerformWorkAreaDistanceResolution(AWorkArea* Dragg
             float Required = DragR + NR + (bWorkAreaIsSnapped ? 0.f : SnapGap);
             Required = FMath::Max(Required, ConverterStockSpacing(DraggedWorkArea, N, DragR, NR));
 
-            // Enforce resource distance if enabled on dragged WorkArea and neighbor is a resource WorkArea
-            if (DraggedWorkArea->DenyPlacementCloseToResources)
-            {
-                if (AWorkArea* NeighborWA = Cast<AWorkArea>(N))
-                {
-                    const WorkAreaData::WorkAreaType T = NeighborWA->Type;
-                    const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
-                    if (bIsResourceType)
-                    {
-                        Required = FMath::Max(Required, DraggedWorkArea->ResourcePlacementDistance);
-                    }
-                }
-            }
+            // Resource distance (DenyPlacementCloseToResources): ResourcePlacementDistance between the footprints.
+            Required = FMath::Max(Required, ResourceSpacing(DraggedWorkArea, N, DragR, NR));
             const float D = FVector::Dist2D(DragC, NC);
             if (D < Required)
             {
@@ -4311,7 +4354,7 @@ void AExtendedControllerBase::MoveWorkArea_Local(float DeltaSeconds)
                     for (AActor* A : Hits)
                     {
                         if (!A || A == DraggedWorkArea) continue;
-                        if (A->IsA(ALandscape::StaticClass())) continue; // ignore ground
+                        if (RTSGround::IsGround(A)) continue; // ignore ground
                         if (Cast<AWorkArea>(A) || Cast<ABuildingBase>(A))
                         {
                             // stop movement immediately; keep last safe position
@@ -6095,29 +6138,33 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					}
 				}
 
+				// DIESELBE MESSUNG WIE BEIM ZIEHEN. Hier stand frueher der Abstand der Aktor-Mittelpunkte, beim
+				// Ziehen (und in PerformWorkAreaDistanceResolution) schob dagegen die Mitte der Mesh-Grenzen
+				// frei. Liegen Mesh und Aktorursprung auseinander, war die korrigierte Position fuer die eine
+				// Rechnung gueltig und fuer die andere nicht - die Baustelle wurde beim Loslassen zerstoert,
+				// obwohl der Geist sichtbar an der korrigierten Stelle stand (31.10.2026).
 				if (DraggedWorkArea->DenyPlacementCloseToResources)
 				{
-					for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA; ++ItWA)
+					FVector DragC, DragE;
+					if (GetActorBoundsForSnap(DraggedWorkArea, DragC, DragE))
 					{
-						AWorkArea* ResWA = *ItWA;
-						if (ResWA && ResWA != DraggedWorkArea)
+						const float DragR = FMath::Max(DragE.X, DragE.Y);
+						for (TActorIterator<AWorkArea> ItWA(GetWorld()); ItWA && !bTooCloseToResources; ++ItWA)
 						{
-							const WorkAreaData::WorkAreaType T = ResWA->Type;
-							const bool bIsResourceType = (T == WorkAreaData::Primary || T == WorkAreaData::Secondary || T == WorkAreaData::Tertiary || T == WorkAreaData::Rare || T == WorkAreaData::Epic || T == WorkAreaData::Legendary);
-							if (bIsResourceType)
+							AWorkArea* ResWA = *ItWA;
+							FVector RC, RE;
+							if (!ResWA || ResWA == DraggedWorkArea || !IsResourcePlace(ResWA) || !GetActorBoundsForSnap(ResWA, RC, RE))
 							{
-								if (FVector::Dist2D(DraggedWorkArea->GetActorLocation(), ResWA->GetActorLocation()) < DraggedWorkArea->ResourcePlacementDistance)
-								{
-									bTooCloseToResources = true;
-									break;
-								}
+								continue;
 							}
+							const float Required = ResourceSpacing(DraggedWorkArea, ResWA, DragR, FMath::Max(RE.X, RE.Y));
+							bTooCloseToResources = Required > 0.f && FVector::Dist2D(DragC, RC) < Required - PlacementSpacingTolerance;
 						}
 					}
 				}
 
-				// Converter <-> storing base: AWorkArea::ConverterStockGap between the footprints.
-				if (DraggedWorkArea->ConverterStockGap > 0.f && PlacementBaseType(DraggedWorkArea) != EBaseType::None)
+				// Converter <-> storing base (ConverterStockGap) and stock <-> collecting place (StockCollectorGap).
+				if ((DraggedWorkArea->ConverterStockGap > 0.f || DraggedWorkArea->StockCollectorGap > 0.f) && PlacementBaseType(DraggedWorkArea) != EBaseType::None)
 				{
 					FVector DragC, DragE;
 					if (GetActorBoundsForSnap(DraggedWorkArea, DragC, DragE))
@@ -6131,7 +6178,7 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 								return false;
 							}
 							const float Required = ConverterStockSpacing(DraggedWorkArea, Other, DragR, FMath::Max(OE.X, OE.Y));
-							return Required > 0.f && FVector::Dist2D(DragC, OC) < Required;
+							return Required > 0.f && FVector::Dist2D(DragC, OC) < Required - PlacementSpacingTolerance;
 						};
 						for (TActorIterator<ABuildingBase> It(GetWorld()); It && !bTooCloseToStock; ++It)
 						{
@@ -6891,13 +6938,49 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 					FVector::Dist2D(DiagDropOrigin, Endstand), ZurBasis, bPlacementValid ? 1 : 0);
 			}
 
+			// SPIELER: KORRIGIEREN STATT VERWERFEN (31.10.2026). Scheitert die Ablage nur an Abstaenden -
+			// zu nah an einer Ressource, an einem Lager, an einem Nachbarn -, wird die Flaeche dorthin
+			// geschoben, wo die Regeln erfuellt sind, und dort gesetzt. Frueher verlor der Spieler den
+			// Bauauftrag, wenn die Maus beim Loslassen zu nah an einer Ressource stand, obwohl der Geist
+			// schon an der korrigierten Stelle zu sehen war. No-Build-Zone und Beacon bleiben harte Gruende.
+			if (!bPlacementValid && !bIsAi && !bIsNoBuildZone && !bNeedsBeaconOutOfRange)
+			{
+				const FVector Ausgang = DraggedWorkArea->GetActorLocation();
+				for (int32 Durchgang = 0; Durchgang < 4 && !bPlacementValid; ++Durchgang)
+				{
+					PerformWorkAreaDistanceResolution(DraggedWorkArea, bWorkAreaIsSnapped);
+					DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, DraggedWorkArea->GetActorLocation()));
+					bPlacementValid = EvaluatePlacement();
+				}
+				// Steckt die Flaeche zwischen mehreren Nachbarn fest, den naechsten freien Platz im Umkreis suchen.
+				const FVector Geschoben = DraggedWorkArea->GetActorLocation();
+				static const float Radien[] = { 100.f, 200.f, 350.f, 500.f, 700.f, 1000.f };
+				for (int32 R = 0; R < (int32)UE_ARRAY_COUNT(Radien) && !bPlacementValid; ++R)
+				{
+					for (int32 Step = 0; Step < 12 && !bPlacementValid; ++Step)
+					{
+						const float Angle = FMath::DegreesToRadians(30.f * Step);
+						const FVector Probe = Geschoben + FVector(FMath::Cos(Angle), FMath::Sin(Angle), 0.f) * Radien[R];
+						DraggedWorkArea->SetActorLocation(ComputeGroundedLocation(DraggedWorkArea, Probe));
+						bPlacementValid = EvaluatePlacement();
+					}
+				}
+				UE_LOG(LogTemp, Warning, TEXT("[Drop] %s: Ablage korrigiert um %.0f -> %s"), *DraggedWorkArea->GetName(),
+				       FVector::Dist2D(Ausgang, DraggedWorkArea->GetActorLocation()), bPlacementValid ? TEXT("gesetzt") : TEXT("kein Platz"));
+				if (!bPlacementValid)
+				{
+					DraggedWorkArea->SetActorLocation(Ausgang);
+					EvaluatePlacement(); // Flags fuer die Meldungen unten
+				}
+			}
+
 			if (!bPlacementValid)
 			{
 				if (bIsOverlappingWithValidArea && !bWorkAreaIsSnapped) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because overlapping with valid area and not snapped."));
 				if (bIsNoBuildZone) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because in No-Build Zone."));
 				if (bNeedsBeaconOutOfRange) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because beacon required but out of range."));
 				if (bTooCloseToResources) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because too close to resources."));
-				if (bTooCloseToStock) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because a Converter is too close to a storing base."));
+				if (bTooCloseToStock) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because a Converter is too close to a storing base, or a stock to a collecting place."));
 				if (bOffNavMesh) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because location is off NavMesh."));
 				if (bOnSlope) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because ground is too steep."));
 				if (bTooCloseToCliff) UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: Aborted because too close to a NavMesh edge (cliff)."));
@@ -7416,7 +7499,7 @@ bool AExtendedControllerBase::WallTrace(ABuildingBase* Unit, AActor* TargetActor
 			if (!HitActor) continue;
 
 			// Skip landscape/ground
-			if (HitActor->IsA<ALandscape>() || HitActor->IsA<ALandscapeProxy>()) continue;
+			if (RTSGround::IsGround(HitActor)) continue;
 
 			// Skip ALL WorkAreas to prevent blocking by foundation actors
 			//if (HitActor->IsA<AWorkArea>()) continue;

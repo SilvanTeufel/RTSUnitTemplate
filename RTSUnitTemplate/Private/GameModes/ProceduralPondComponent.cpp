@@ -14,6 +14,7 @@
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
 #include "LandscapeProxy.h"
+#include "Core/RTSGround.h"
 #include "Math/RandomStream.h"
 #include "NavigationData.h"
 #include "NavigationSystem.h"
@@ -44,7 +45,7 @@ namespace
 			return false;
 		}
 		OutHit = Hit.ImpactPoint;
-		bOutLandscape = Hit.GetActor() && Hit.GetActor()->IsA<ALandscapeProxy>();
+		bOutLandscape = RTSGround::IsGround(Hit.GetActor());   // also a generated terrain (RTSGround tag)
 		return true;
 	}
 }

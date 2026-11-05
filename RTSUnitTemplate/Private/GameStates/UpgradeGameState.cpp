@@ -2,6 +2,10 @@
 #include "GameStates/UpgradeGameState.h"
 #include "Net/UnrealNetwork.h"
 #include "EngineUtils.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
+#include "GameFramework/GameModeBase.h"
+#include "HAL/PlatformTime.h"
+#include "Characters/Unit/LevelUnit.h"
 
 AUpgradeGameState::AUpgradeGameState()
 {
@@ -13,6 +17,175 @@ void AUpgradeGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AUpgradeGameState, TeamUpgradesArray);
     DOREPLIFETIME(AUpgradeGameState, TeamAttributeTrees);
+}
+
+void AUpgradeGameState::RequestTalentPause(ACameraControllerBase* Requester, float Seconds)
+{
+    UWorld* World = GetWorld();
+    if (!HasAuthority() || !World || !Requester || Seconds <= 0.f)
+    {
+        return;
+    }
+
+    const int32 TeamId = Requester->SelectableTeamId;
+    if (!bTalentPauseActive)
+    {
+        AGameModeBase* GameMode = World->GetAuthGameMode();
+        // Schon aus dem Menue pausiert: das gehoert dem Spieler, nicht uns.
+        if (!GameMode || World->IsPaused())
+        {
+            return;
+        }
+        if (!GameMode->AllowPausing(Requester))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Talentpause] GameMode erlaubt keine Pause - es geht ohne weiter."));
+            return;
+        }
+        // Angehalten wird erst nach der Vorlaufzeit (TickTalentPause) - siehe TalentPauseAudioLeadSeconds.
+        const double Now = FPlatformTime::Seconds();
+        const double Lead = FMath::Max(0.f, TalentPauseAudioLeadSeconds);
+        bTalentPauseActive = true;
+        bTalentPauseFrozen = false;
+        TalentPauseRequester = Requester;
+        TalentPauseFreezeTime = Now + Lead;
+        TalentPauseEndTime = Now + Lead + Seconds;
+        TalentPauseTicker = FTSTicker::GetCoreTicker().AddTicker(
+            FTickerDelegate::CreateWeakLambda(this, [this](float DeltaTime) { return TickTalentPause(DeltaTime); }), 0.f);
+    }
+
+    TalentPauseWaitingTeams.Add(TeamId);
+    const float Remaining = FMath::Max(0.f, float(TalentPauseEndTime - FPlatformTime::Seconds()));
+
+    // Alle Spieler sehen den Countdown; den Baum oeffnen nur die Teams, die waehlen sollen.
+    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    {
+        if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
+        {
+            PC->Client_BeginTalentPause(Remaining, TalentPauseWaitingTeams.Contains(PC->SelectableTeamId));
+        }
+    }
+    UE_LOG(LogTemp, Log, TEXT("[Talentpause] Team %d waehlt - Spiel haelt an, noch %.1f s (%d Teams warten)."),
+        TeamId, Remaining, TalentPauseWaitingTeams.Num());
+}
+
+void AUpgradeGameState::NotifyTalentPauseChoice(int32 TeamId)
+{
+    if (!bTalentPauseActive || !TalentPauseWaitingTeams.Contains(TeamId))
+    {
+        return;
+    }
+    // Erst wenn alle Punkte vergeben sind (gemeldet 02.11.2026: der Baum ging nach dem ersten
+    // von fuenf Punkten zu).
+    if (TeamCanStillInvest(TeamId))
+    {
+        UE_LOG(LogTemp, Log, TEXT("[Talentpause] Team %d hat noch %d Punkt(e) - Pause laeuft weiter."),
+            TeamId, GetTeamAttributeTreePoints(TeamId));
+        return;
+    }
+    TalentPauseWaitingTeams.Remove(TeamId);
+    if (TalentPauseWaitingTeams.Num() == 0)
+    {
+        EndTalentPause(TEXT("alle haben gewaehlt"));
+    }
+}
+
+void AUpgradeGameState::EndTalentPause(const TCHAR* Reason)
+{
+    if (!bTalentPauseActive)
+    {
+        return;
+    }
+    bTalentPauseActive = false;
+    const bool bWasFrozen = bTalentPauseFrozen;
+    bTalentPauseFrozen = false;
+    TalentPauseRequester.Reset();
+    TalentPauseWaitingTeams.Reset();
+    if (TalentPauseTicker.IsValid())
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(TalentPauseTicker);
+        TalentPauseTicker.Reset();
+    }
+
+    if (UWorld* World = GetWorld())
+    {
+        AGameModeBase* GameMode = World->GetAuthGameMode();
+        if (GameMode && bWasFrozen)
+        {
+            GameMode->ClearPause();
+        }
+        for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+        {
+            if (ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get()))
+            {
+                PC->Client_EndTalentPause();
+            }
+        }
+    }
+    UE_LOG(LogTemp, Log, TEXT("[Talentpause] Ende (%s) - es geht weiter."), Reason);
+}
+
+bool AUpgradeGameState::TickTalentPause(float DeltaTime)
+{
+    if (!bTalentPauseActive)
+    {
+        TalentPauseTicker.Reset();
+        return false;
+    }
+    const double Now = FPlatformTime::Seconds();
+    if (!bTalentPauseFrozen && Now >= TalentPauseFreezeTime)
+    {
+        UWorld* World = GetWorld();
+        AGameModeBase* GameMode = World ? World->GetAuthGameMode() : nullptr;
+        ACameraControllerBase* Requester = TalentPauseRequester.Get();
+        if (!GameMode || !Requester
+            || !GameMode->SetPause(Requester, FCanUnpause::CreateUObject(this, &AUpgradeGameState::CanUnpauseTalentPause)))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[Talentpause] Anhalten fehlgeschlagen - es geht ohne Pause weiter."));
+            EndTalentPause(TEXT("kein SetPause"));
+            return false;
+        }
+        bTalentPauseFrozen = true;
+        UE_LOG(LogTemp, Log, TEXT("[Talentpause] Spiel angehalten."));
+    }
+    if (Now >= TalentPauseEndTime)
+    {
+        EndTalentPause(TEXT("Zeit abgelaufen"));
+        return false;
+    }
+    return true;
+}
+
+bool AUpgradeGameState::TeamCanStillInvest(int32 TeamId) const
+{
+    if (GetTeamAttributeTreePoints(TeamId) <= 0)
+    {
+        return false;
+    }
+    UWorld* World = GetWorld();
+    for (TActorIterator<ALevelUnit> It(World); World && It; ++It)
+    {
+        if (IsValid(*It) && It->TeamId == TeamId && It->HasInvestableAttributeTreeNode())
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AUpgradeGameState::CanUnpauseTalentPause()
+{
+    return !bTalentPauseActive;
+}
+
+void AUpgradeGameState::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    if (TalentPauseTicker.IsValid())
+    {
+        FTSTicker::GetCoreTicker().RemoveTicker(TalentPauseTicker);
+        TalentPauseTicker.Reset();
+    }
+    bTalentPauseActive = false;
+    Super::EndPlay(EndPlayReason);
 }
 
 void AUpgradeGameState::OnRep_TeamUpgrades()

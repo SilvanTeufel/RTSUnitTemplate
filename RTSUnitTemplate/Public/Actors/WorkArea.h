@@ -674,7 +674,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool DenyPlacementCloseToResources = false;
 
-	// Minimum center-to-center distance to resource WorkAreas when PlacementCloseToResources is enabled
+	// Least gap between this area's footprint (mesh, or the planned building's capsule if larger) and a resource
+	// WorkArea's footprint when DenyPlacementCloseToResources is enabled. The area snaps to it while dragged.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	float ResourcePlacementDistance = 1000.f;
 
@@ -682,6 +683,12 @@ public:
 	// Collect And Store) - and a storing base to a Converter. Read from the area being placed; 0 = no rule.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0"))
 	float ConverterStockGap = 700.f;
+
+	// A Store Only base (stock) keeps at least this gap (between the two footprints) to Collect Only bases,
+	// extractors (Collect Only Without Worker), resource places and the build areas of those - and they to it.
+	// While dragged the area snaps to that gap. Read from the area being placed; 0 = no rule.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0"))
+	float StockCollectorGap = 500.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool NeedsBeacon = false;

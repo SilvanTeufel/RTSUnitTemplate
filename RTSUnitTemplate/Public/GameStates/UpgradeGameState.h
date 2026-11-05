@@ -4,6 +4,7 @@
 #include "CoreMinimal.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/Serialization/FastArraySerializer.h"
+#include "Containers/Ticker.h"
 #include "Characters/Unit/LevelUnit.h"  // FAttributeTreeNodeState
 #include "UpgradeGameState.generated.h"
 
@@ -172,7 +173,72 @@ public:
     UFUNCTION(BlueprintPure, Category = "Attribute Tree")
     bool IsTeamAttributeTreeNodeUnlocked(int32 TeamId, FName NodeId) const;
 
+    // ----------------------------------------------------------------------
+    //  Talentpause (01.11.2026): bekommt ein Team einen neuen Punkt, haelt das Spiel an, bis
+    //  jedes wartende Team gewaehlt hat oder die Zeit abgelaufen ist. Nur Server. Die Clients
+    //  erfahren es ueber ACameraControllerBase::Client_BeginTalentPause / Client_EndTalentPause -
+    //  RPCs statt Replikation, weil in der Pause die Weltzeit steht und Properties darum nicht
+    //  zuverlaessig nachkommen.
+    // ----------------------------------------------------------------------
+
+    /**
+     * Haelt das Spiel an (oder verlaengert die Liste der wartenden Teams einer laufenden Pause)
+     * und laesst beim Team des Anfragenden den Attributbaum aufgehen. Eine Pause, die schon aus
+     * dem Menue kommt, bleibt unberuehrt - dann passiert nichts.
+     */
+    void RequestTalentPause(class ACameraControllerBase* Requester, float Seconds);
+
+    /**
+     * Das Team hat einen Punkt investiert. Fertig ist es erst, wenn es keine Punkte mehr hat (oder
+     * nichts mehr investierbar ist) - ist es dann das letzte wartende, geht es weiter.
+     */
+    void NotifyTalentPauseChoice(int32 TeamId);
+
+    /** Beendet die Talentpause sofort (Zeit abgelaufen oder alle haben gewaehlt). */
+    void EndTalentPause(const TCHAR* Reason);
+
+    bool IsTalentPauseActive() const { return bTalentPauseActive; }
+
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+    /**
+     * So lange (Echtzeit) laeuft das Spiel nach der Ankuendigung noch weiter, bevor es steht.
+     * Die Clients stellen die Musik in der Zeit auf UI-Sound um: haelt die Engine zuerst an,
+     * pausiert sie die Musik fest bis zum Ende der Pause - und deren Spielzeit laeuft als UI-Sound
+     * trotzdem weiter, so dass am Liedende das naechste Lied kam (gemeldet 02.11.2026).
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree")
+    float TalentPauseAudioLeadSeconds = 0.3f;
+
 private:
+    bool bTalentPauseActive = false;
+
+    /** Steht das Spiel schon (SetPause erfolgt)? Davor laeuft nur die Vorlaufzeit. */
+    bool bTalentPauseFrozen = false;
+
+    /** Echtzeit, zu der das Spiel angehalten wird. */
+    double TalentPauseFreezeTime = 0.0;
+
+    /** Wer die Pause angestossen hat (fuer SetPause). */
+    TWeakObjectPtr<class ACameraControllerBase> TalentPauseRequester;
+
+    /** Hat das Team noch Punkte und etwas, worin es sie stecken kann? */
+    bool TeamCanStillInvest(int32 TeamId) const;
+
+    /** Ende der Pause in Echtzeit (FPlatformTime) - die Weltzeit steht ja. */
+    double TalentPauseEndTime = 0.0;
+
+    /** Teams, die noch waehlen sollen. */
+    TSet<int32> TalentPauseWaitingTeams;
+
+    /** Laeuft auch in der Pause (anders als der TimerManager der Welt). */
+    FTSTicker::FDelegateHandle TalentPauseTicker;
+
+    bool TickTalentPause(float DeltaTime);
+
+    /** CanUnpause der Pause: so hebt das Pausemenue die Talentpause nicht vorzeitig auf. */
+    bool CanUnpauseTalentPause();
+
     /** Sorgt dafuer, dass es den Eintrag gibt, und gibt ihn zurueck. Nur Server. */
     FTeamAttributeTree* FindOrAddTeamAttributeTree(int32 TeamId);
 

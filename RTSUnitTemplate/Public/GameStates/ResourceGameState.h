@@ -6,6 +6,7 @@
 #include "GameFramework/GameState.h"
 #include "Core/WorkerData.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "GameModes/FullProceduralMapComponent.h"
 #include "ResourceGameState.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnKillCountChanged, int32, NewCount);
@@ -46,6 +47,26 @@ public:
 
 	UFUNCTION()
 	void OnRep_LoadingWidgetConfig();
+
+	/**
+	 * Full procedural map (UFullProceduralMapComponent): the terrain seed and every actor the server moved.
+	 * A client builds the same terrain from the seed (IRTSProceduralTerrain) and moves its copies of the
+	 * placed actors - those do not replicate their movement.
+	 */
+	UPROPERTY(ReplicatedUsing = OnRep_ProceduralMap, VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Procedural")
+	FRTSProceduralMapState ProceduralMap;
+
+	UFUNCTION()
+	void OnRep_ProceduralMap();
+
+	/** The terrain of ProceduralMap.Seed stands on this machine. */
+	bool bProceduralTerrainBuilt = false;
+
+	/** Clients: the decoration of the terrain starts this long after the map came in (s). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Procedural")
+	float ProceduralDecorationDelay = 3.f;
+
+	FTimerHandle ProceduralDecorationTimer;
 
 	/**
 	 * Gefallene Einheiten je Team - Index ist die TeamId.

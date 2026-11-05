@@ -869,8 +869,12 @@ int32 ABuildingBase::GetPendingExtensionBuildCount() const
 	for (TActorIterator<AConstructionUnit> It(GetWorld()); It; ++It)
 	{
 		const AConstructionUnit* Baustelle = *It;
+		// Nur LAUFENDE Baustellen: eine fertige Drohnen-Baustelle lebt noch 4 s weiter (SetLifeSpan),
+		// ihr WorkArea zeigt dann aber nicht mehr auf sie. Ohne diese Pruefung zaehlte sie zusammen
+		// mit der neuen Wand doppelt und sperrte die Ability schon bei EINER Wand (gemeldet 02.11.2026).
 		if (IsValid(Baustelle) && !Baustelle->IsActorBeingDestroyed() && Baustelle->Worker == this
 			&& Baustelle->WorkArea && Baustelle->WorkArea->IsExtensionArea
+			&& Baustelle->WorkArea->ConstructionUnit == Baustelle
 			&& Baustelle->GetUnitState() != UnitData::Dead)
 		{
 			++Anzahl;

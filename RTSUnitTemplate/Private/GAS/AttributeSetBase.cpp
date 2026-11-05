@@ -231,6 +231,12 @@ void UAttributeSetBase::SetAttributeHealth(float NewHealth)
 	// Mit dem GEKLEMMTEN Wert melden, nicht mit dem gewuenschten: wer auf 120 % heilt, hat die
 	// 50-%-Schwelle einmal ueberschritten, nicht anderthalbmal.
 	FireHealthThresholdEvents(OldHealth, GetHealth());
+
+	// Angriffsalarm der Minimap: Kampfschaden schreibt hier direkt und loest den ASC-Delegaten nicht aus.
+	if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor()))
+	{
+		UnitBase->NotifyDamageForAttackAlert(OldHealth, GetHealth());
+	}
 }
 
 void UAttributeSetBase::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
@@ -240,6 +246,13 @@ void UAttributeSetBase::PostAttributeChange(const FGameplayAttribute& Attribute,
 	if (Attribute == GetHealthAttribute())
 	{
 		FireHealthThresholdEvents(OldValue, NewValue);
+	}
+	if (Attribute == GetHealthAttribute() || Attribute == GetShieldAttribute())
+	{
+		if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor()))
+		{
+			UnitBase->NotifyDamageForAttackAlert(OldValue, NewValue);
+		}
 	}
 }
 

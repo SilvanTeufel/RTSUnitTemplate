@@ -2488,7 +2488,28 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 				DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct()) ||
 				DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct())  ||
 				DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct());
-			if (!bAlreadyStable && !bPredicting)
+			// Idle -> Run, sobald der Server faehrt.
+			//
+			// Run hat kein Bit. Stand die Einheit auf dem Client schon in Idle, galt sie oben als
+			// "stabil" und blieb Idle, waehrend der Server sie laufen liess - sie glitt dann in der
+			// Idle-Pose ueber die Karte (gemessen 04.11.2026, Listen Server + Client: EdgeDancer
+			// auf dem Server Run mit 230 uu/s, auf dem Client durchgehend Idle). Betrifft jede
+			// Einheit, die der Server ohne Vorhersage des Clients losschickt: KI, Einheiten anderer
+			// Spieler, Ruecklauf aus Idle. Dieselbe Entscheidung wie unten fuer die tagfreie
+			// Einheit - nach dem REPLIZIERTEN Tempo, nicht nach der lokalen Geschwindigkeit.
+			constexpr float ServerFaehrtSchwelle = 10.f;
+			if (!bPredicting
+				&& ReplicatedDesiredSpeed > ServerFaehrtSchwelle
+				&& DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct())
+				&& !DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct())
+				&& !DoesEntityHaveTag(EntityManager, Entity, FMassStateChaseTag::StaticStruct())
+				&& !DoesEntityHaveTag(EntityManager, Entity, FMassStateAttackTag::StaticStruct())
+				&& !DoesEntityHaveTag(EntityManager, Entity, FMassStatePauseTag::StaticStruct()))
+			{
+				EntityManager.Defer().RemoveTag<FMassStateIdleTag>(Entity);
+				EntityManager.Defer().AddTag<FMassStateRunTag>(Entity);
+			}
+			else if (!bAlreadyStable && !bPredicting)
 			{
 				// Idle is the wrong guess while the server is moving: it makes bIsStationaryAttack true
 				// in UClientReplicationProcessor (Velocity *= 0.05f, Force/Steering zeroed, Kp pinned),

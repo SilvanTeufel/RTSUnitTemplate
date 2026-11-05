@@ -1211,6 +1211,9 @@ void AExtendedCameraBase::Server_InvestTeamAttributeTreeNode_Implementation(FNam
 		TeamId, *NodeId.ToString(), Applied, Considered,
 		GameStateRef->GetTeamAttributeTreePoints(TeamId),
 		GameStateRef->GetTeamUsedAttributeTreePoints(TeamId));
+
+	// Laeuft eine Talentpause, hat dieses Team jetzt gewaehlt.
+	GameStateRef->NotifyTalentPauseChoice(TeamId);
 }
 
 void AExtendedCameraBase::Server_ResetTeamAttributeTree_Implementation()

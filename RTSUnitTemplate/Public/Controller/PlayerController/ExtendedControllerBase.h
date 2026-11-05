@@ -71,6 +71,13 @@ public:
 	float WorkAreaBlockRadius = 120.f;
 
 	/**
+	 * Slack for the spacing rules at the drop (resource, converter / stock distances): the drag pushes the area
+	 * to exactly the required distance, so float noise must not turn that spot into a rejection.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|Building", meta = (ClampMin = "0"))
+	float PlacementSpacingTolerance = 5.f;
+
+	/**
 	 * Floor for the distance a WorkArea must keep from an existing BUILDING. The actual reach is the
 	 * larger of this and the building's own bounds - 120 was far too small, areas landed visually on top
 	 * of buildings (reported for enemy buildings and extension sites).

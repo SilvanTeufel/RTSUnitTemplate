@@ -23,6 +23,28 @@ class AMinimapActor;
 
 #include "CustomControllerBase.generated.h"
 
+/** "You are under attack here" - drawn on the minimap (UMinimapWidget) for a few seconds. */
+USTRUCT(BlueprintType)
+struct FMinimapAttackAlert
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	FVector Location = FVector::ZeroVector;
+
+	/** World time (GetTimeSeconds) the alert was raised. */
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	double StartTime = 0.0;
+
+	/** Counts up per controller - lets the minimap play the alarm once per new alert. */
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	int32 Id = 0;
+
+	/** The spot was inside the player's view when the alert was raised. */
+	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bOnScreen = false;
+};
+
 /**
  * 
  */
@@ -32,6 +54,10 @@ UCLASS()
 class RTSUNITTEMPLATE_API ACustomControllerBase : public AExtendedControllerBase
 {
 	GENERATED_BODY()
+
+public:
+	/** Strg+Linksklick: selects the clicked unit's kind, but only the units currently on screen. */
+	void SelectVisibleUnitsWithTag(FGameplayTag Tag, AUnitBase* ClickedUnit);
 
 protected:
 	// /** If true, the formation will be recalculated on the next move command, even if the selection hasn't changed. */
@@ -142,6 +168,54 @@ public:
 
 	/** Vom Hover-Processor gerufen. Nullptr loescht den Eintrag. */
 	void SetHoveredUnit(AUnitBase* InUnit) { HoveredUnit = InUnit; }
+
+	/** Popup with a unit's live stats, shown on a plain left click on a unit the player cannot select (an enemy). None = off. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TSubclassOf<class UUnitStatsTooltipWidget> UnitStatsPopupClass;
+
+	/** Shows UnitStatsPopupClass for Unit next to the mouse; the popup closes on the next left click or when the unit dies. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ShowUnitStatsPopup(AUnitBase* Unit);
+
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void HideUnitStatsPopup();
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UUnitStatsTooltipWidget> UnitStatsPopup;
+
+	/** Raises a minimap attack alert, unless one was raised nearby lately (UnderAttackAlertRadius / Cooldown). */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|AttackAlert")
+	void ReportUnderAttack(const FVector& Location);
+
+	/** Alerts still showing (younger than UnderAttackAlertDuration). */
+	const TArray<FMinimapAttackAlert>& GetMinimapAttackAlerts() const { return MinimapAttackAlerts; }
+
+	/** Off = no attack alerts for this controller. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackAlert")
+	bool bEnableUnderAttackAlerts = true;
+
+	/** How long an alert shows on the minimap (seconds). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackAlert", meta = (ClampMin = "0.1"))
+	float UnderAttackAlertDuration = 3.f;
+
+	/** A fight within this distance of a recent alert raises no new one (uu). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackAlert", meta = (ClampMin = "0"))
+	float UnderAttackAlertRadius = 2500.f;
+
+	/** Seconds until the same area may raise an alert again. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackAlert", meta = (ClampMin = "0"))
+	float UnderAttackAlertCooldown = 20.f;
+
+protected:
+	UPROPERTY(Transient)
+	TArray<FMinimapAttackAlert> MinimapAttackAlerts;
+
+	/** Recent alert spots and times, kept for UnderAttackAlertCooldown (longer than the drawing). */
+	TArray<TPair<FVector, double>> RecentAttackAlerts;
+
+	int32 NextAttackAlertId = 1;
+
+public:
 
 	/**
 	 * Spur unter dem Cursor, die auf eine anklickbare Einheit fuehrt - ueber alle drei Kanaele,
