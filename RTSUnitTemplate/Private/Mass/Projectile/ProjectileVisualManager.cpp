@@ -15,6 +15,7 @@
 #include "UObject/UObjectIterator.h"
 #include "LandscapeProxy.h"
 #include "Landscape.h"
+#include "Core/RTSGround.h"
 #include "DrawDebugHelpers.h"
 #include "Controller/PlayerController/CustomControllerBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
@@ -504,7 +505,7 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		{
 			for (const FHitResult& Hit : HitResults)
 			{
-				if (Hit.GetActor() && (Hit.GetActor()->IsA<ALandscapeProxy>() || Hit.GetActor()->IsA<ALandscape>()))
+				if (RTSGround::IsGround(Hit.GetActor()))
 				{
 					ProjectileFragment.bHasLandscapeImpact = true;
 					ProjectileFragment.LandscapeImpactLocation = Hit.ImpactPoint;

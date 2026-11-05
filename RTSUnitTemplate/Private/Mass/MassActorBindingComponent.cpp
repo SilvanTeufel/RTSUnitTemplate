@@ -1310,9 +1310,12 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 					};
 
 					// (1) Kapsel
-					const float CapsuleRadiusReal = HoverCapsule->GetScaledCapsuleRadius();
-					const float CapsuleHalfHeightReal = HoverCapsule->GetScaledCapsuleHalfHeight();
-					const FVector CapsuleCenterLocal = ActorFrame.InverseTransformPosition(HoverCapsule->GetComponentLocation());
+					// Plus the unit's HoverExtraHeight (added on top) and HoverExtraRadius - see AUnitBase.
+					const float HoverExtraHeight = FMath::Max(0.f, UnitOwner->HoverExtraHeight);
+					const float CapsuleRadiusReal = HoverCapsule->GetScaledCapsuleRadius() + FMath::Max(0.f, UnitOwner->HoverExtraRadius);
+					const float CapsuleHalfHeightReal = HoverCapsule->GetScaledCapsuleHalfHeight() + 0.5f * HoverExtraHeight;
+					const FVector CapsuleCenterLocal = ActorFrame.InverseTransformPosition(HoverCapsule->GetComponentLocation())
+						+ FVector(0.f, 0.f, 0.5f * HoverExtraHeight);
 					CharFrag->HoverCapsuleRadius = CapsuleRadiusReal;
 					CharFrag->HoverCapsuleHalfHeight = CapsuleHalfHeightReal;
 					CharFrag->HoverCapsuleCenter = FVector3f(CapsuleCenterLocal);

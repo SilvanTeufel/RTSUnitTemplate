@@ -17,6 +17,7 @@
 #include "Async/Async.h"
 #include "NavigationSystem.h"
 #include "LandscapeProxy.h"
+#include "Core/RTSGround.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
 #include "ProfilingDebugging/CsvProfiler.h"
@@ -551,7 +552,7 @@ void UActorTransformSyncProcessor::HandleGroundAndHeight(const AUnitBase* UnitBa
             const bool bBodenDarunter = GetWorld()->LineTraceSingleByObjectType(
                 BodenDarunter, AbwaertsStart, AbwaertsEnde, ObjectParams, Params);
 
-            if (IsValid(HitActor) && HitActor->IsA(ALandscapeProxy::StaticClass()) && Hit.ImpactPoint.Z > CurrentZ)
+            if (IsValid(HitActor) && RTSGround::IsGround(HitActor) && Hit.ImpactPoint.Z > CurrentZ)
             {
                 if (!bBodenDarunter)
                 {

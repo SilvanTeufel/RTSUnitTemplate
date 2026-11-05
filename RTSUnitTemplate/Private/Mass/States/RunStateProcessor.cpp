@@ -100,6 +100,19 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
 
 }
 
+namespace
+{
+    // Wie lange nach einem Laufbefehl die Regel "nah am Ziel UND Geschwindigkeit null -> Idle" NICHT
+    // greift. Im ersten Takt eines Befehls steht jede Einheit noch (sie beschleunigt erst) - bei einem
+    // Ziel unter VelocityDistanceCheck schaltete Run dann sofort auf Idle, die Bewegung lief aber
+    // weiter: die Einheit glitt ohne Laufanimation ans Ziel (gemessen 04.11.2026 am EdgeDancer,
+    // Befehl ueber 150 uu: Zustand Idle bei bis zu 360 uu/s). Fuer wirklich festhaengende Einheiten
+    // greift die Regel nach der Frist weiter, dazu der Fortschrittswaechter (RunStallTimeout).
+    // 1 s statt knapp: die Pfadsuche laeuft asynchron, bei niedriger Bildrate stand die Einheit
+    // nach 0,7 s noch und fiel trotz Frist auf Idle.
+    constexpr float RunVelocityIdleGraceSeconds = 1.0f;
+}
+
 void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassExecutionContext& Context)
 {
     UWorld* World = Context.GetWorld();
@@ -252,8 +265,11 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
             // Only arrival check on client (skip if following a unit)
             const bool bHasFriendly = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity);
          
+            // Anlauf: kurz nach dem Befehl gilt "steht" nicht als "angekommen" (RunVelocityIdleGraceSeconds).
+            const bool bAnlaufVorbei = !bHasPredList || PredictionList[i].CommandPredictTime < 0.f
+                || (World->GetTimeSeconds() - PredictionList[i].CommandPredictTime) >= RunVelocityIdleGraceSeconds;
             if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius || 
-                (FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
+                (bAnlaufVorbei && FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -503,8 +519,22 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 continue;
             }
             else if (FVector::Dist2D(CurrentLocation, FinalDestination) <= AcceptanceRadius || 
-                     (FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
+                     ((World->GetTimeSeconds() - MoveTarget.GetCurrentActionStartTime()) >= RunVelocityIdleGraceSeconds
+                      // Waehrend einer Pfadsuche lenkt der Mover bewusst auf null (FIX A im
+                      // UnitMovementProcessor) - "steht" heisst dann "wartet auf den Pfad", nicht
+                      // "angekommen". Sonst fiel die Einheit hier auf Idle und lief mit dem
+                      // eintreffenden Pfad ohne Laufanimation weiter.
+                      && !(bHasNavPathFrag && NavPathList[i].bIsPathfindingInProgress)
+                      && FVector::Dist2D(CurrentLocation, FinalDestination) <= VelocityDistanceCheck && VelocityList[i].Value.IsNearlyZero(VelocityToIdle)))
             {
+                // Idle heisst STEHEN - das Marschziel muss mit weg.
+                //
+                // Vorher blieb das MoveTarget mit vollem Tempo stehen. Der UnitMovementProcessor
+                // bewegt auch Einheiten im Zustand Idle, solange ihr MoveTarget ein Tempo traegt -
+                // die Einheit glitt also im Idle-Zustand weiter ans Ziel, ohne Laufanimation
+                // (gemeldet 04.11.2026: "Einheiten sliden"). Die Zweige fuer Stillstand und
+                // Neusuche weiter oben halten die Einheit hier ebenfalls an.
+                StopMovement(MoveTarget, World);
                 VelocityList[i].Value = FVector::ZeroVector;
                 SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 continue;

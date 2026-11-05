@@ -11,6 +11,7 @@
 #include "MassEntityView.h"
 #include "Kismet/GameplayStatics.h"
 #include "Landscape.h"
+#include "Core/RTSGround.h"
 #include "Engine/World.h"
 #include "CollisionQueryParams.h"
 #include "Engine/HitResult.h"
@@ -398,7 +399,7 @@ void UMassEffectAreaDuplicateProcessor::SignalEntities(FMassEntityManager& Entit
 				if (World->LineTraceSingleByChannel(HitResult, TraceStart, TraceEnd, ECC_WorldStatic, TraceParams))
 				{
 					AActor* HitActor = HitResult.GetActor();
-					if (HitActor && HitActor->IsA(ALandscape::StaticClass()))
+					if (RTSGround::IsGround(HitActor))
 					{
 						SpawnLocation.Z = HitResult.ImpactPoint.Z;
 

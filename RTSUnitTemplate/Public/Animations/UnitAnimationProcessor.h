@@ -229,6 +229,11 @@ protected:
         // die Einheit lief 0,5 bis 1,2 s in der Idle-Pose los (gemeldet 19.10.2026).
         uint8    LetzterZustand = 0xFF;
         float    LetzteBefehlszeit = -1000.f;
+
+        // GLEITEN: Einheit im Stillstandszustand (Idle/PatrolIdle), die sich trotzdem sichtbar
+        // fortbewegt. Siehe AnimGleitTempo.
+        float    SekundenOhneVerschiebung = 0.f;
+        bool     bSichtbarUnterwegs = false;
     };
     TMap<FMassEntityHandle, FAnimStandWatch> AnimStandWatches;
 
@@ -279,7 +284,28 @@ protected:
      * sie es nicht.
      *
      * Ein echter Laeufer erreicht ueber ein halbes Sekundenfenster nahezu 100 Prozent, selbst in
-     * einer Kurve deutlich ueber die Haelfte. 25 Prozent liegt weit von beiden Seiten entfernt.
+     * einer Kurve deutlich ueber die Haelfte.
+     *
+     * 15 statt 25 Prozent (04.11.2026): beim Anlaufen und beim langsamen Laufen (Bremsen am Ziel,
+     * Gedraenge) fiel eine echt laufende Einheit zeitweise unter 25 Prozent und zeigte die
+     * Stillstandspose. 15 liegt weiter ueber den gemessenen 5 bis 12 Prozent des Zappelns.
      */
-    float AnimStandFortschrittsAnteil = 0.25f;
+    float AnimStandFortschrittsAnteil = 0.15f;
+
+    /**
+     * Gegenstueck zur Stillstandserkennung: eine Einheit im Zustand Idle oder PatrolIdle, die
+     * sich ueber ein Fenster netto mindestens so schnell fortbewegt, zeigt die Laufanimation.
+     *
+     * Gemeldet 04.11.2026: "Einheiten sliden" - Bewegung ohne Laufanimation, besonders beim
+     * Anlaufen und bei langsamer Bewegung. Gemessen am EdgeDancer: Zustand Idle, die Einheit
+     * glitt aber noch Sekunden lang zum Ziel (der Server hatte auf Idle geschaltet, das
+     * Marschziel aber stehen lassen). Diese Ursache ist im RunStateProcessor behoben; das hier
+     * faengt jede weitere Quelle ab, ohne sie einzeln kennen zu muessen.
+     *
+     * Hoch genug, dass Anrempeln im Gedraenge (kurz, wenige uu) nicht als Laufen zaehlt.
+     */
+    float AnimGleitTempo = 70.f;
+
+    /** So lange ohne messbare Verschiebung, und die Laufanimation des Gleitens endet wieder. */
+    float AnimGleitAusSekunden = 0.15f;
 };

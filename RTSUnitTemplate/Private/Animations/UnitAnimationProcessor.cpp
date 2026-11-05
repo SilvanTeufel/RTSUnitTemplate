@@ -240,6 +240,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                     || RealState == UnitData::GoToResourceExtraction;
 
                 bool bStandingStill = false;
+                bool bGleitet = false;
                 float MeasuredSpeed = -1.f;
                 {
                     const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
@@ -368,6 +369,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                     ? FensterStrecke / Watch.FensterZeit : 0.f;
                                 Watch.FensterWunschTempo = Watch.FensterZeit > KINDA_SMALL_NUMBER
                                     ? Watch.FensterWunschSumme / Watch.FensterZeit : 0.f;
+                                Watch.bSichtbarUnterwegs = Watch.FensterNettoTempo >= AnimGleitTempo;
                                 Watch.FensterStart = Location;
                                 Watch.FensterZeit = 0.f;
                                 Watch.FensterWunschSumme = 0.f;
@@ -397,6 +399,7 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                         < AnimStandFortschrittsAnteil * Watch.FensterWunschTempo);
 
                                 Watch.bFensterStill = bAbsolutStill || bKeinFortschritt;
+                                Watch.bSichtbarUnterwegs = Watch.FensterNettoTempo >= AnimGleitTempo;
                                 Watch.FensterStart = Location;
                                 Watch.FensterZeit = 0.f;
                                 Watch.FensterWunschSumme = 0.f;
@@ -409,8 +412,31 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             // verschiedene Fehlbilder ab: SecondsStanding faengt die wirklich
                             // eingefrorene Einheit sofort, das Nettofenster die zappelnde, bei der
                             // jedes Einzelbild volle Geschwindigkeit meldet.
+                            // Sichtbar unterwegs = netto ueber AnimGleitTempo im letzten Fenster und
+                            // gerade jetzt nicht stehend. Endet nach AnimGleitAusSekunden ohne
+                            // Verschiebung.
+                            if (MeasuredSpeed <= AnimStandSpeedThreshold)
+                            {
+                                Watch.SekundenOhneVerschiebung += ChunkDeltaTime;
+                            }
+                            else
+                            {
+                                Watch.SekundenOhneVerschiebung = 0.f;
+                            }
+                            if (Watch.SekundenOhneVerschiebung >= AnimGleitAusSekunden)
+                            {
+                                Watch.bSichtbarUnterwegs = false;
+                            }
+
+                            // SecondsStanding zaehlt nach dem MINIMUM aus Verschiebung und Fragment.
+                            // Auf dem Client steht das Fragment aber auch dann auf null, wenn die
+                            // Einheit von der Serverlage gezogen wird - sie lief dann nach 0,5 s in
+                            // der Stillstandspose weiter (gemeldet 04.11.2026, "sliden"). Wer netto
+                            // sichtbar vorankommt, steht nicht. Das Zappeln auf der Stelle bleibt
+                            // erfasst: es kommt netto nie auf AnimGleitTempo (bFensterStill).
                             const bool bGemessenStill =
-                                (Watch.SecondsStanding >= AnimStandMinSeconds) || Watch.bFensterStill;
+                                (Watch.SecondsStanding >= AnimStandMinSeconds && !Watch.bSichtbarUnterwegs)
+                                || Watch.bFensterStill;
                             bNurNetto = Watch.bFensterStill
                                 && (Watch.SecondsStanding < AnimStandMinSeconds);
 
@@ -436,6 +462,11 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                 const UWorld* DiagWelt = UnitBase->GetWorld();
                                 const TCHAR* Seite = (DiagWelt && DiagWelt->GetNetMode() == NM_Client)
                                     ? TEXT("CLIENT") : TEXT("SERVER");
+                                UE_LOG(LogTemp, Warning,
+                                    TEXT("[StandDiag] %s %s Zustand=%d Gemessen=%.0f Fragment=%.0f Steht=%.2f FensterStill=%d Netto=%.0f Wunsch=%.0f Fenster=%.2f/%.0f -> Still=%d"),
+                                    Seite, *GetNameSafe(UnitBase), (int32)RealState.GetValue(), MeasuredSpeed, FragmentTempo,
+                                    Watch.SecondsStanding, Watch.bFensterStill ? 1 : 0, Watch.FensterNettoTempo, Watch.FensterWunschTempo,
+                                    Watch.FensterZeit, FensterStrecke, bGemessenStill ? 1 : 0);
                             }
 
                             // Das EINSCHNAPPEN der Mischpunkte haengt dagegen NICHT am Zustand.
@@ -451,12 +482,28 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             // Wer STEHT, soll sofort stehend aussehen. Aus welchem Zustand heraus,
                             // ist dafuer egal.
                             bStehtStill = bGemessenStill;
+
+                            // ---- Gleiten im Stillstandszustand -------------------------------
+                            //
+                            // Die Umkehrung des Falls oben: Zustand Idle, aber die Einheit bewegt
+                            // sich sichtbar fort - sie gleitet ohne Laufanimation. Gemessen wird
+                            // nur die echte Verschiebung (das Fragment steht in Idle oft auf null,
+                            // waehrend die Einheit vom Server oder einem alten Marschziel gezogen
+                            // wird). Endet sofort, sobald die Einheit wirklich steht.
+                            const bool bStillstandsZustand =
+                                RealState == UnitData::Idle || RealState == UnitData::PatrolIdle;
+                            if (bAnimStandFix && bStillstandsZustand && Watch.bSichtbarUnterwegs)
+                            {
+                                bGleitet = true;
+                                bStehtStill = false;
+                            }
                         }
                     }
                 }
 
                 const TEnumAsByte<UnitData::EState> CurrentState =
-                    (bAnimStandFix && bStandingStill) ? TEnumAsByte<UnitData::EState>(UnitData::Idle) : RealState;
+                    bGleitet ? TEnumAsByte<UnitData::EState>(UnitData::Run)
+                    : (bAnimStandFix && bStandingStill) ? TEnumAsByte<UnitData::EState>(UnitData::Idle) : RealState;
 
                 // ---- end standing-still handling --------------------------------------------
 
