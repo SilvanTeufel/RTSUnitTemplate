@@ -5,6 +5,8 @@
 #include "Net/UnrealNetwork.h"
 #include "Widgets/LoadingWidget.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "GameModes/RTSProceduralTerrain.h"
+#include "TimerManager.h"
 
 void AResourceGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -12,6 +14,7 @@ void AResourceGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AResourceGameState, TeamResources);
 	DOREPLIFETIME(AResourceGameState, IsSupplyLike);
 	DOREPLIFETIME(AResourceGameState, LoadingWidgetConfig);
+	DOREPLIFETIME(AResourceGameState, ProceduralMap);
 	DOREPLIFETIME(AResourceGameState, MatchStartTime);
 	DOREPLIFETIME(AResourceGameState, bStartupFreezeReleased);
 	DOREPLIFETIME(AResourceGameState, TeamUnitsLost);
@@ -80,6 +83,43 @@ void AResourceGameState::OnRep_TeamUnitsLost()
 			OnKillCountChanged.Broadcast(Jetzt);
 		}
 		return;
+	}
+}
+
+void AResourceGameState::OnRep_ProceduralMap()
+{
+	if (HasAuthority() || ProceduralMap.Seed == 0)
+	{
+		return;
+	}
+	if (!bProceduralTerrainBuilt)
+	{
+		bProceduralTerrainBuilt = true;
+		TArray<AActor*> Providers;
+		UFullProceduralMapComponent::FindTerrainProviders(GetWorld(), Providers);
+		for (AActor* Provider : Providers)
+		{
+			IRTSProceduralTerrain::Execute_GenerateProceduralTerrain(Provider, ProceduralMap.Seed, false);
+		}
+		// The decoration a moment later: by then the server's resources and buildings have come in (PCG keeps clear of them).
+		TWeakObjectPtr<AResourceGameState> WeakThis(this);
+		GetWorldTimerManager().SetTimer(ProceduralDecorationTimer, FTimerDelegate::CreateLambda([WeakThis]()
+		{
+			if (!WeakThis.IsValid()) return;
+			TArray<AActor*> Ready;
+			UFullProceduralMapComponent::FindTerrainProviders(WeakThis->GetWorld(), Ready);
+			for (AActor* Provider : Ready)
+			{
+				IRTSProceduralTerrain::Execute_OnProceduralMapReady(Provider);
+			}
+		}), FMath::Max(0.01f, ProceduralDecorationDelay), false);
+	}
+	for (const FRTSProceduralRelocation& Relocation : ProceduralMap.Relocations)
+	{
+		if (IsValid(Relocation.Actor) && !Relocation.Actor->GetActorLocation().Equals(Relocation.Location, 1.f))
+		{
+			UFullProceduralMapComponent::MoveActor(Relocation.Actor, Relocation.Location);
+		}
 	}
 }
 

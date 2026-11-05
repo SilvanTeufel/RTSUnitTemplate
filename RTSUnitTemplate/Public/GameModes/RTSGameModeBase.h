@@ -64,6 +64,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Procedural")
 	TObjectPtr<class UProceduralPondComponent> ProceduralPonds;
 
+	/**
+	 * Full procedural map: terrain, main bases, spawn points and waypoints at random at every match start.
+	 * Off by default - bEnabled. Needs a level actor with IRTSProceduralTerrain (the terrain comes from the game).
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Procedural")
+	TObjectPtr<class UFullProceduralMapComponent> FullProcedural;
+
 	/** Places the procedural ponds - after the procedural resources (AResourceGameMode::StartPlay), before any BeginPlay. */
 	virtual void StartPlay() override;
 

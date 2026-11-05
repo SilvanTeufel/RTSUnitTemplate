@@ -327,10 +327,12 @@ namespace RTSUnitGeometry
 		if (const UCapsuleComponent* Capsule = Unit->GetCapsuleComponent())
 		{
 			Out.bCapsule = Capsule->GetScaledCapsuleRadius() > KINDA_SMALL_NUMBER;
-			Out.CapsuleCenter = Capsule->GetComponentLocation();
+			// Same enlargement as the captured shapes (AUnitBase::HoverExtraHeight / HoverExtraRadius).
+			const float ExtraHeight = FMath::Max(0.f, Unit->HoverExtraHeight);
+			Out.CapsuleCenter = Capsule->GetComponentLocation() + FVector(0.f, 0.f, 0.5f * ExtraHeight);
 			Out.CapsuleRotation = Unit->GetActorQuat();
-			Out.CapsuleRadius = Capsule->GetScaledCapsuleRadius();
-			Out.CapsuleHalfHeight = FMath::Max(Capsule->GetScaledCapsuleHalfHeight(), Out.CapsuleRadius);
+			Out.CapsuleRadius = Capsule->GetScaledCapsuleRadius() + FMath::Max(0.f, Unit->HoverExtraRadius);
+			Out.CapsuleHalfHeight = FMath::Max(Capsule->GetScaledCapsuleHalfHeight() + 0.5f * ExtraHeight, Out.CapsuleRadius);
 		}
 		if (const UBoxComponent* Box = Unit->BoxCollisionComponent)
 		{

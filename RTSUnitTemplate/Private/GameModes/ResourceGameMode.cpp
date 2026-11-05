@@ -9,6 +9,7 @@
 #include "Actors/WinLoseConfigActor.h"
 #include "Actors/LogisticsRoad.h"
 #include "Actors/ResourceClusterMarker.h"
+#include "GameModes/FullProceduralMapComponent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "GameStates/ResourceGameState.h"
@@ -73,6 +74,11 @@ void AResourceGameMode::StartPlay()
 {
 	if (HasAuthority())
 	{
+		// Full procedural map: terrain, navmesh and the moved main bases first - the resources go round the new bases.
+		if (FullProcedural)
+		{
+			FullProcedural->PrepareMap();
+		}
 		if (ProceduralSettings.Procedural)
 		{
 			SpawnProceduralResources(false);
@@ -97,6 +103,10 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 		return;
 	}
 	const FProceduralSettings& S = ProceduralSettings;
+
+	// Full procedural map: only spots a path leads to from the human main base (no cut-off plateau).
+	const UFullProceduralMapComponent* FullMap = FullProcedural && FullProcedural->IsMapActive() ? FullProcedural.Get() : nullptr;
+	auto IsReachable = [FullMap](const FVector& P) { return !FullMap || FullMap->IsReachable(P); };
 
 	// 1) Remove the map's resource places (not with bMarkersOnly); remember their classes (and scale) as the
 	//    defaults per type.
@@ -203,7 +213,9 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 	const FBox Bounds = NavData->GetBounds();
 	const FVector Size = Bounds.GetSize();
 	const float Area100m = Bounds.IsValid ? float(Size.X * Size.Y) / (10000.f * 10000.f) : 0.f;
-	const int32 Wanted = bMarkersOnly ? 0 : FMath::Min(S.MaxClusters, FMath::RoundToInt(Area100m * S.ClusterDensity));
+	// Full procedural map: only the reachable part of the navmesh counts (else the clusters crowd into it).
+	const float ReachShare = FullMap ? FMath::Clamp(FullMap->GetReachableShare(), 0.05f, 1.f) : 1.f;
+	const int32 Wanted = bMarkersOnly ? 0 : FMath::Min(S.MaxClusters, FMath::RoundToInt(Area100m * ReachShare * S.ClusterDensity));
 
 	// Seed 0: a new layout every start - clock and CPU cycles, so two starts never share it. Everything
 	// random below comes from this stream (also the candidate spots), so a fixed Seed repeats the layout.
@@ -247,12 +259,17 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 
 	auto GroundBelow = [&](const FVector& P) -> FVector
 	{
-		FHitResult Hit;
+		TArray<FHitResult> Hits;
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(ProceduralResourceGround), false);
 		FCollisionObjectQueryParams Objects(ECC_WorldStatic);
-		if (World->LineTraceSingleByObjectType(Hit, P + FVector(0.f, 0.f, 200.f), P - FVector(0.f, 0.f, 600.f), Objects, Params))
+		World->LineTraceMultiByObjectType(Hits, P + FVector(0.f, 0.f, 200.f), P - FVector(0.f, 0.f, 600.f), Objects, Params);
+		for (const FHitResult& Hit : Hits)
 		{
-			return Hit.Location;
+			// Hidden actors are not ground (a full procedural map hides the old landscape).
+			if (!Hit.GetActor() || !Hit.GetActor()->IsHidden())
+			{
+				return Hit.Location;
+			}
 		}
 		return P;
 	};
@@ -586,6 +603,11 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 		{
 			C = OnNav.Location;
 		}
+		FVector Reachable;
+		if (!IsReachable(C) && FullMap && FullMap->FindReachableNavPoint(C, Reachable))
+		{
+			C = Reachable;
+		}
 		if (!SpawnCluster(C, Plan, 0.f, nullptr, S.MinEdgeDistance)
 			&& !SpawnCluster(C, Plan, 0.f, nullptr, 0.5f * S.MinEdgeDistance))
 		{
@@ -650,7 +672,7 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 					{
 						bFree = FVector::DistSquared2D(Centres[i], C) >= FMath::Square(Plan.Radius + CentreRadii[i] + 600.f);
 					}
-					if (!bFree || (Pass == 0 && !IsOpenGround(C, Plan.Radius))
+					if (!bFree || (Pass == 0 && !IsOpenGround(C, Plan.Radius)) || !IsReachable(C)
 						|| !SpawnCluster(C, Plan, S.StartClusterClearance, &Start,
 							Pass == 0 ? S.MinEdgeDistance : 0.5f * S.MinEdgeDistance))
 					{
@@ -693,7 +715,7 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 		}
 
 		const FClusterPlan Plan = MakePlan(PickMix(), EResourceClusterShape::Random, Random.RandRange(MinPlaces, MaxPlaces));
-		if (IsOpenGround(C, Plan.Radius))
+		if (IsOpenGround(C, Plan.Radius) && IsReachable(C))
 		{
 			SpawnCluster(C, Plan, 0.f, nullptr, S.MinEdgeDistance);
 		}

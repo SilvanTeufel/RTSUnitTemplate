@@ -29,6 +29,7 @@
 #include "Net/UnrealNetwork.h"
 #include "System/PlayerTeamSubsystem.h"
 #include "GameModes/ProceduralPondComponent.h"
+#include "GameModes/FullProceduralMapComponent.h"
 #include "Characters/Camera/BehaviorTree/RTSBTController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 
@@ -57,13 +58,25 @@ static void SeedSpawnStoredLocationFromWaypoint(AUnitBase* UnitBase);
 ARTSGameModeBase::ARTSGameModeBase()
 {
 	ProceduralPonds = CreateDefaultSubobject<UProceduralPondComponent>(TEXT("ProceduralPonds"));
+	FullProcedural = CreateDefaultSubobject<UFullProceduralMapComponent>(TEXT("FullProcedural"));
 }
 
 void ARTSGameModeBase::StartPlay()
 {
+	// Full procedural map first (AResourceGameMode::StartPlay has already done it before its resources; then this
+	// does nothing). Everything below and every BeginPlay sees the new terrain and the moved bases.
+	const bool bFullProcedural = HasAuthority() && FullProcedural && FullProcedural->PrepareMap();
+
+	// The ponds are drawn by the landscape material (MPC + Static Switch "ProceduralPonds") by world position - that
+	// works on a generated terrain as well, as long as its material has the switch on. After the moved bases and
+	// the resources, so they keep clear of them.
 	if (HasAuthority() && ProceduralPonds && ProceduralPonds->bEnabled)
 	{
 		ProceduralPonds->GeneratePonds();
+	}
+	if (bFullProcedural)
+	{
+		FullProcedural->FinishMap();
 	}
 	Super::StartPlay();
 }
@@ -2091,6 +2104,13 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	}
 
 	int UnitCount = CheckAndRemoveDeadUnits(SpawnParameter.Id);
+
+	// Full procedural map: the table's positions belong to the old map - each one becomes one of the random
+	// spawn points (UFullProceduralMapComponent::RemapSpawnOffset; the same position always the same point).
+	if (Location.IsNearlyZero() && !SpawnParameter.SpawnAtWaypoint && FullProcedural && FullProcedural->IsMapActive())
+	{
+		SpawnParameter.UnitOffset = FullProcedural->RemapSpawnOffset(SpawnParameter.UnitOffset);
+	}
 
 	// Adaptive reinforcement. Returns exactly 1.0 when the row has bAdaptiveSpawn off, so
 	// the effective values below are identical to the raw ones for every existing table.
