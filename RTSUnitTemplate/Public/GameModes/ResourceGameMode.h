@@ -181,6 +181,44 @@ struct FProceduralSettings
 	/** Random seed (0 = a new layout every game). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Procedural)
 	int32 Seed = 0;
+
+	/**
+	 * Full amount of a spawned resource place: random between MinAmount and MaxAmount (every place its own).
+	 * MaxAmount 0 = the class's own AvailableResourceAmount.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Amount", meta = (ClampMin = "0"))
+	float MinAmount = 0.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Amount", meta = (ClampMin = "0"))
+	float MaxAmount = 0.f;
+
+	/**
+	 * Growing resources: the places grow back up to their full amount and never go away - an empty place turns
+	 * invisible (no collision, no workers) and shows up again once it has grown.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Growth")
+	bool bGrowingResources = false;
+
+	/** Share of the places that start empty (0..1) - invisible until they have grown. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Growth", meta = (ClampMin = "0", ClampMax = "1"))
+	float EmptyStartShare = 0.5f;
+
+	/** The start clusters at the main bases may start empty too (off: they start full). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Growth")
+	bool bEmptyStartAtBases = false;
+
+	/** Every GrowthInterval seconds each place that is not full grows with GrowthChance by GrowthMin..GrowthMax. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Growth", meta = (ClampMin = "0.5"))
+	float GrowthInterval = 5.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Growth", meta = (ClampMin = "0", ClampMax = "1"))
+	float GrowthChance = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Growth", meta = (ClampMin = "0"))
+	float GrowthMin = 5.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Procedural|Growth", meta = (ClampMin = "0"))
+	float GrowthMax = 20.f;
 };
 
 /**
@@ -272,6 +310,15 @@ protected:
 	 * AResourceClusterMarker first). bMarkersOnly: only the markers' clusters, the map's places stay.
 	 */
 	void SpawnProceduralResources(bool bMarkersOnly = false);
+
+	/** Growing resources (FProceduralSettings::bGrowingResources): one growth step of every growing place. */
+	void GrowResources();
+
+	/** The places that grow back (procedural, bGrowingResources). */
+	UPROPERTY(Transient)
+	TArray<TWeakObjectPtr<class AWorkArea>> GrowingAreas;
+
+	FTimerHandle GrowthTimer;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorkers();
@@ -294,6 +341,12 @@ public:
 
 	/** The road class of TeamId's links: its TeamLogisticsSettings entry, else LogisticsRoadClass. Never null. */
 	UClass* GetLogisticsRoadClass(int32 TeamId) const;
+
+	/**
+	 * The road class of the link Source -> Sink: the team's TeamLogisticsSettings entry, else the building's own
+	 * LogisticsRoadClass (source, then sink - the faction's choice), else LogisticsRoadClass. Never null.
+	 */
+	UClass* GetLogisticsRoadClassFor(const ABuildingBase* Source, const ABuildingBase* Sink) const;
 
 	/** How often the dispatcher looks at the logistics units (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0.05"))
@@ -420,8 +473,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AssignWorkAreasToWorker(AWorkingUnitBase* Worker);
 
+	/**
+	 * OwnType: the type the asking worker gathers now (MAX = none). It already counts in CurrentWorkers of that
+	 * type - without taking it out, a quota that is exactly met (all workers on Primary) reads as full for the
+	 * workers that fill it, and they wandered off to another type at the next delivery.
+	 */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	AWorkArea* GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas);
+	AWorkArea* GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas, EResourceType OwnType = EResourceType::MAX);
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	TArray<AWorkArea*> GetClosestResourcePlaces(AWorkingUnitBase* Worker);
@@ -448,6 +506,21 @@ public:
 	// ResourcePlace assignment.
 	void FilterResourcePlacesForWorker(AWorkingUnitBase* Worker, TArray<AWorkArea*>& InOutAreas) const;
 
+	/**
+	 * Per team: automatic assignments only pick resource places within this 2D distance (uu) of one of the
+	 * team's delivery bases. Nothing in range -> the worker goes Idle instead of walking across the map.
+	 * No entry / <= 0 = no limit (AI teams). Set by the player's resource widget (Server_SetMaxResourceDistance).
+	 * A place the player ordered the worker to by hand is kept - only the automatic choice is limited.
+	 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Work")
+	TMap<int32, float> TeamMaxResourceDistance;
+
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Work")
+	void SetTeamMaxResourceDistance(int32 TeamId, float Distance);
+
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Work")
+	float GetTeamMaxResourceDistance(int32 TeamId) const;
+
 	// Nearest (to the worker) non-depleted resource of the given WorkArea type that still has a free
 	// worker slot and is within Radius, excluding the worker's current ResourcePlace. Returns null if
 	// none qualify -> the caller sends the worker Idle. Used for the "resource full -> switch / idle" rule.
@@ -468,6 +541,45 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	bool IsWorkerDistributionSet(int TeamId) const;
+
+	// --- Worker distribution of the player teams (resource widget) ---------------------------------
+
+	/**
+	 * Teams of human players always have a worker distribution: every worker starts on Primary, new workers
+	 * join Primary, and the sum never exceeds the team's worker count (dead workers are taken from the type
+	 * with the most). "+" on a type moves one worker there from the type with the most (ShiftWorkerToResourceType).
+	 * AI teams are left alone. Off = the old behaviour (no distribution until the player sets one).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Work")
+	bool bAutoWorkerDistribution = true;
+
+	/**
+	 * "+" of the resource widget: one more worker on ResourceType. With every worker assigned, it is taken from
+	 * the other type with the most workers - the player does not have to press "-" somewhere first.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Work")
+	void ShiftWorkerToResourceType(int TeamId, EResourceType ResourceType);
+
+	/** Living workers of the team. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Work")
+	int32 CountTeamWorkers(int TeamId) const;
+
+	/** Sum of MaxWorkers over all types. */
+	int32 GetTotalMaxWorkers(int TeamId) const;
+
+	/** Server: new workers onto Primary, never more assigned than workers (bAutoWorkerDistribution, player teams). */
+	void ReconcileWorkerDistribution(int TeamId);
+
+	/** True for a team a human player (local or remote, not a spectator) plays. */
+	bool IsHumanPlayerTeam(int TeamId) const;
+
+	/**
+	 * Extra distance (uu) a worker counts for a base that only collects (CollectOnly: IngestHub, Collector) when
+	 * it picks where to deliver. What it drops there a logistics unit has to haul on - so a base that stores
+	 * (CollectAndStore: DataCenter) wins unless the collector is clearly closer.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Work", meta = (ClampMin = "0"))
+	float CollectOnlyDeliveryPenalty = 400.f;
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SetCurrentWorkersForResourceType(int TeamId, EResourceType ResourceType, float Amount);
@@ -479,4 +591,13 @@ public:
 
 private:
 	void CheckWinLoseConditionTimer();
+
+	/** Timer: ReconcileWorkerDistribution for every player team. */
+	void ReconcileAllWorkerDistributions();
+	FTimerHandle WorkerDistributionTimer;
+
+	/** Worker count per team at the last reconcile - growth goes onto Primary. */
+	TMap<int32, int32> DistributionWorkerCount;
+
+	bool SetMaxWorkersRaw(int TeamId, EResourceType ResourceType, int32 Value);
 };

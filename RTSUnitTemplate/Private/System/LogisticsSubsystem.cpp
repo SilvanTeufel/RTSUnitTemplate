@@ -849,7 +849,7 @@ ALogisticsRoad* ULogisticsSubsystem::UpdateRoad(TMap<TWeakObjectPtr<ABuildingBas
 	ABuildingBase* Source, ABuildingBase* Sink, const FLogisticsRouteCache& Route, bool bSupplyRoad, AResourceGameMode* GameMode)
 {
 	ALogisticsRoad* Existing = Map.FindRef(Key).Get();
-	UClass* RoadClass = GameMode->GetLogisticsRoadClass(Source->TeamId);
+	UClass* RoadClass = GameMode->GetLogisticsRoadClassFor(Source, Sink);
 	const bool bUnchanged = IsValid(Existing)
 		&& Existing->GetClass() == RoadClass
 		&& Existing->SourceBase == Source

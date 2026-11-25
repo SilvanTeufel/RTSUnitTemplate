@@ -341,6 +341,29 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool ShrinkResource = true;
 
+	/**
+	 * Grows back (procedural growing resources): when it runs empty it is not destroyed but turns invisible
+	 * (bDepleted) and comes back once it has grown (AResourceGameMode::GrowResources). Server sets it.
+	 */
+	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Growth")
+	bool bRegrows = false;
+
+	/** Empty and invisible (no collision) - a growing place waiting to grow. */
+	UPROPERTY(ReplicatedUsing = OnRep_Depleted, BlueprintReadOnly, Category = "RTSUnitTemplate|Growth")
+	bool bDepleted = false;
+
+	UFUNCTION()
+	void OnRep_Depleted();
+
+	/** Server: hides (true) or shows the place. */
+	void SetDepleted(bool bInDepleted);
+
+	/** Server: the place ran empty - a growing place hides, any other one is destroyed. */
+	void HandleDepleted();
+
+	/** Server: more resource (growth), up to MaxAvailableResourceAmount; shows an empty place again. */
+	void AddResourceAmount(float Amount);
+
 	UPROPERTY()
 	FVector OriginalActorScale = FVector(1.f);
 	

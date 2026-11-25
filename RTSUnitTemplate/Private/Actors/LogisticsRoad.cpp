@@ -1,6 +1,7 @@
 // Copyright 2022 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 
 #include "Actors/LogisticsRoad.h"
+#include "Actors/FogActor.h"
 
 #include "Characters/Unit/BuildingBase.h"
 #include "Components/SplineMeshComponent.h"
@@ -135,10 +136,22 @@ void ALogisticsRoad::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ALogisticsRoad::BeginPlay()
 {
+	// Enemies see the road through their fog (the visuals are masked piece by piece) instead of not at all -
+	// the team hiding would hide the whole actor.
+	if (bRevealToEnemiesByFog)
+	{
+		bOnlyVisibleToOwnTeam = false;
+	}
 	Super::BeginPlay();
 	if (GroundPoints.Num() >= 2)
 	{
 		RebuildVisuals();
+	}
+
+	if (bRevealToEnemiesByFog && !bReplayRoad && GetNetMode() != NM_DedicatedServer)
+	{
+		GetWorldTimerManager().SetTimer(FogRevealTimer, this, &ALogisticsRoad::UpdateFogReveal,
+			FMath::Max(0.05f, FogRevealInterval), true, FMath::FRandRange(0.f, FogRevealInterval));
 	}
 
 	// The local team id replicates on its own schedule (and can change in the lobby / spectator
@@ -323,11 +336,20 @@ void ALogisticsRoad::ApplyRoadReveal(int32 Piece, float From, float To)
 	{
 		RVTPieceReveal[Piece] = Reveal;
 		const int32 Count = Writer->GetInstanceCount();
+		const TArray<FVector3f>* Fog = RVTInstanceFog.IsValidIndex(Piece) ? &RVTInstanceFog[Piece] : nullptr;
 		for (int32 Index = 0; Index < Count; ++Index)
 		{
-			Writer->SetCustomDataValue(Index, RVTCustomData::VisibleFrom, Reveal.X);
-			Writer->SetCustomDataValue(Index, RVTCustomData::VisibleTo, Reveal.Y);
-			Writer->SetCustomDataValue(Index, RVTCustomData::RevealSoftness, Reveal.Z, Index == Count - 1);
+			// The fog of war's soft edge, where it limits this quad more than the growth does.
+			FVector3f Value = Reveal;
+			if (Fog && Fog->IsValidIndex(Index) && (*Fog)[Index].Z > 0.f)
+			{
+				const FVector3f& FogRange = (*Fog)[Index];
+				if (FogRange.X > Value.X) { Value.X = FogRange.X; Value.Z = FMath::Max(Value.Z, FogRange.Z); }
+				if (FogRange.Y < Value.Y) { Value.Y = FogRange.Y; Value.Z = FMath::Max(Value.Z, FogRange.Z); }
+			}
+			Writer->SetCustomDataValue(Index, RVTCustomData::VisibleFrom, Value.X);
+			Writer->SetCustomDataValue(Index, RVTCustomData::VisibleTo, Value.Y);
+			Writer->SetCustomDataValue(Index, RVTCustomData::RevealSoftness, Value.Z, Index == Count - 1);
 		}
 	}
 	const bool bVisible = bShown && bTeamVisible;
@@ -397,6 +419,10 @@ void ALogisticsRoad::ClearVisuals()
 	DecalComponents.Reset();
 
 	ClearRVTWriters();
+	FogSamplePoints.Reset();
+	FogSampleCells.Reset();
+	DecalFogPoints.Reset();
+	SegmentFogPoints.Reset();
 	RVTPath.Reset();
 	RVTDrawPath.Reset();
 	RVTVisible.Reset();
@@ -434,6 +460,7 @@ void ALogisticsRoad::AddRVTPolyline(const TArray<FVector>& InPoints, UMaterialIn
 	}
 
 	RVTPath = MoveTemp(Points);
+	AddFogSamples(RVTPath);
 	RVTPathMaterial = Material;
 	RVTFadeInLength = FadeInLength;
 	RVTFadeOutLength = FadeOutLength;
@@ -459,6 +486,7 @@ void ALogisticsRoad::ClearRVTWriters()
 	RVTComponents.Reset();
 	RVTPieceRanges.Reset();
 	RVTPieceReveal.Reset();
+	RVTInstanceFog.Reset();
 	RVTTotalLength = 0.f;
 	if (const UWorld* World = GetWorld())
 	{
@@ -534,6 +562,7 @@ void ALogisticsRoad::DrawRVT()
 	// when it registers. Adding them afterwards left just a stub at the first quad painted.
 	UInstancedStaticMeshComponent* Writer = nullptr;
 	float PieceStartV = 0.f;
+	TArray<FVector3f> WriterFog;
 	auto FinishWriter = [&](float PieceEndV)
 	{
 		if (!Writer)
@@ -543,6 +572,8 @@ void ALogisticsRoad::DrawRVT()
 		RVTComponents.Add(Writer);
 		RVTPieceRanges.Add(FVector2f(PieceStartV, PieceEndV));
 		RVTPieceReveal.Add(FVector3f(0.f, 0.f, -1.f));
+		RVTInstanceFog.Add(MoveTemp(WriterFog));
+		WriterFog.Reset();
 		ApplyRoadReveal(RVTComponents.Num() - 1, RevealFrom, RevealTo);
 		Writer->RegisterComponent();
 		Writer = nullptr;
@@ -578,6 +609,78 @@ void ALogisticsRoad::DrawRVT()
 	}
 	auto IsDrawn = [&](int32 s) { return IsShown(Segments[s].From) && IsShown(Segments[s].From + 1); };
 
+	// Fog of war: an enemy road only gets the quads whose cells the local team has seen. Shorter quads then,
+	// so the road appears in small steps.
+	TSet<FIntPoint> FogRevealed;
+	const bool bFogMask = GetMaskingFog() != nullptr;
+	if (bFogMask)
+	{
+		GatherTeamRevealedCells(FogRevealed);
+	}
+	const float Step = bFogMask
+		? FMath::Min(FMath::Max(10.f, RVTPieceLength), FMath::Max(50.f, FogRevealCellSize * 2.f))
+		: FMath::Max(10.f, RVTPieceLength);
+	auto PieceCountOf = [&](int32 s) { return FMath::Max(1, FMath::CeilToInt(Segments[s].Length / Step)); };
+	auto PieceFogShown = [&](int32 s, int32 Piece) -> bool
+	{
+		if (!bFogMask)
+		{
+			return true;
+		}
+		const FSegment& G = Segments[s];
+		const float L = G.Length / PieceCountOf(s);
+		const FVector2D A = G.Start + G.Dir * (Piece * L);
+		const FVector2D B = A + G.Dir * L;
+		return IsFogShown(&FogRevealed, FVector(A, 0.f), FVector((A + B) * 0.5f, 0.f), FVector(B, 0.f));
+	};
+
+	// Fog of war, soft edges: every drawn quad gets the V range of its run of revealed quads. Where the run ends at
+	// the fog (not at the road's end or a merge), the material fades the road out over FogEdgeFadeLength inside it.
+	struct FFogPiece { float V0; float V1; bool bDrawn; bool bShown; };
+	TArray<FFogPiece> FogPieces;
+	TArray<FVector3f> FogRanges;   // per entry of FogPieces
+	if (bFogMask)
+	{
+		float RunV = 0.f;
+		for (int32 s = 0; s < Segments.Num(); ++s)
+		{
+			const int32 Count = PieceCountOf(s);
+			const float L = Segments[s].Length / Count;
+			for (int32 Piece = 0; Piece < Count; ++Piece)
+			{
+				const bool bDrawn = IsDrawn(s);
+				FogPieces.Add({ RunV, RunV + L, bDrawn, bDrawn && PieceFogShown(s, Piece) });
+				RunV += L;
+			}
+		}
+		const float Soft = FMath::Max(1.f, FogEdgeFadeLength);
+		FogRanges.Init(FVector3f(RoadReveal::WholeFrom, RoadReveal::WholeTo, 0.f), FogPieces.Num());
+		for (int32 i = 0; i < FogPieces.Num();)
+		{
+			if (!FogPieces[i].bShown)
+			{
+				++i;
+				continue;
+			}
+			int32 End = i;
+			while (End + 1 < FogPieces.Num() && FogPieces[End + 1].bShown)
+			{
+				++End;
+			}
+			// A hidden-by-fog neighbour (drawn, but not seen) makes that end soft.
+			const bool bSoftStart = i > 0 && FogPieces[i - 1].bDrawn && !FogPieces[i - 1].bShown;
+			const bool bSoftEnd = End + 1 < FogPieces.Num() && FogPieces[End + 1].bDrawn && !FogPieces[End + 1].bShown;
+			const FVector3f Range(bSoftStart ? FogPieces[i].V0 : RoadReveal::WholeFrom, bSoftEnd ? FogPieces[End].V1 : RoadReveal::WholeTo,
+				(bSoftStart || bSoftEnd) ? Soft : 0.f);
+			for (int32 k = i; k <= End; ++k)
+			{
+				FogRanges[k] = Range;
+			}
+			i = End + 1;
+		}
+	}
+	int32 FogPieceIndex = 0;
+
 	// Half the turn at a corner, signed: positive turns towards +Y (right). Clamped so a hairpin cannot
 	// blow the miter up to infinity.
 	auto HalfTurnTan = [&Segments](int32 From, int32 To) -> float
@@ -592,7 +695,6 @@ void ALogisticsRoad::DrawRVT()
 	const float FadeScale = FMath::Min(1.f, Total / FMath::Max(RVTFadeInLength + RVTFadeOutLength, KINDA_SMALL_NUMBER));
 	const float FadeIn = FMath::Max(0.f, RVTFadeInLength) * FadeScale;
 	const float FadeOut = FMath::Max(0.f, RVTFadeOutLength) * FadeScale;
-	const float Step = FMath::Max(10.f, RVTPieceLength);
 	float V = 0.f;
 	for (int32 s = 0; s < Segments.Num(); ++s)
 	{
@@ -603,17 +705,23 @@ void ALogisticsRoad::DrawRVT()
 			V += Seg.Length;
 			continue;
 		}
-		const int32 PieceCount = FMath::Max(1, FMath::CeilToInt(Seg.Length / Step));
+		const int32 PieceCount = PieceCountOf(s);
 		const float PieceLength = Seg.Length / PieceCount;
-		// Square cut where the neighbour is not drawn (the junction).
-		const float SegmentStartTan = s > 0 && IsDrawn(s - 1) ? HalfTurnTan(s - 1, s) : 0.f;
-		const float SegmentEndTan = s + 1 < Segments.Num() && IsDrawn(s + 1) ? HalfTurnTan(s, s + 1) : 0.f;
+		// Square cut where the neighbour is not drawn (the junction, or still in the fog).
+		const float SegmentStartTan = s > 0 && IsDrawn(s - 1) && PieceFogShown(s - 1, PieceCountOf(s - 1) - 1) ? HalfTurnTan(s - 1, s) : 0.f;
+		const float SegmentEndTan = s + 1 < Segments.Num() && IsDrawn(s + 1) && PieceFogShown(s + 1, 0) ? HalfTurnTan(s, s + 1) : 0.f;
 		const float Z = FMath::Lerp(Points[Seg.From].Z, Points[Seg.From + 1].Z, 0.5f);
 		const float HalfWidth0 = HalfWidthAt(Seg.From);
 		const float HalfWidth1 = HalfWidthAt(Seg.From + 1);
 
 		for (int32 Piece = 0; Piece < PieceCount; ++Piece)
 		{
+			const int32 ThisFogPiece = FogPieceIndex++;
+			if (!PieceFogShown(s, Piece))
+			{
+				V += PieceLength;
+				continue;
+			}
 			const float StartTan = Piece == 0 ? SegmentStartTan : 0.f;
 			const float EndTan = Piece == PieceCount - 1 ? SegmentEndTan : 0.f;
 			const float PieceHalfWidthStart = FMath::Lerp(HalfWidth0, HalfWidth1, float(Piece) / PieceCount);
@@ -653,9 +761,11 @@ void ALogisticsRoad::DrawRVT()
 			Data[RVTCustomData::TotalLength] = Total;
 			Data[RVTCustomData::FadeInLength] = FadeIn;
 			Data[RVTCustomData::FadeOutLength] = FadeOut;
-			Data[RVTCustomData::VisibleFrom] = RoadReveal::WholeFrom;
-			Data[RVTCustomData::VisibleTo] = RoadReveal::WholeTo;
-			Data[RVTCustomData::RevealSoftness] = 1.f;
+			const FVector3f QuadFog = FogRanges.IsValidIndex(ThisFogPiece) ? FogRanges[ThisFogPiece] : FVector3f(RoadReveal::WholeFrom, RoadReveal::WholeTo, 0.f);
+			WriterFog.Add(QuadFog);
+			Data[RVTCustomData::VisibleFrom] = QuadFog.X;
+			Data[RVTCustomData::VisibleTo] = QuadFog.Y;
+			Data[RVTCustomData::RevealSoftness] = QuadFog.Z > 0.f ? QuadFog.Z : 1.f;
 			Data[RVTCustomData::HalfWidthStart] = PieceHalfWidthStart;
 			Data[RVTCustomData::HalfWidthEnd] = PieceHalfWidthEnd;
 			Writer->SetCustomData(Index, Data);
@@ -946,6 +1056,7 @@ void ALogisticsRoad::AddDecalPolyline(const TArray<FVector>& Points, UMaterialIn
 	{
 		return;
 	}
+	AddFogSamples(Points);
 
 	float Total = 0.f;
 	for (int32 i = 1; i < Points.Num(); ++i)
@@ -999,6 +1110,9 @@ void ALogisticsRoad::AddDecalPolyline(const TArray<FVector>& Points, UMaterialIn
 		Decal->SetFadeScreenSize(0.f);   // stay visible when zoomed out
 		Decal->MarkRenderStateDirty();
 		DecalComponents.Add(Decal);
+		DecalFogPoints.Add(From);
+		DecalFogPoints.Add((From + To) * 0.5f);
+		DecalFogPoints.Add(To);
 
 		From = To;
 	}
@@ -1035,6 +1149,9 @@ void ALogisticsRoad::AddSegment(const FVector& Start, const FVector& End, UStati
 	Segment->SetEndScale(Scale, true);
 
 	SegmentComponents.Add(Segment);
+	SegmentFogPoints.Add(Start);
+	SegmentFogPoints.Add((Start + End) * 0.5f);
+	SegmentFogPoints.Add(End);
 }
 
 void ALogisticsRoad::AddDashedPolyline(const TArray<FVector>& Points, float Dash, float Gap, UStaticMesh* Mesh, UMaterialInterface* Material, const FVector2D& Scale)
@@ -1043,6 +1160,7 @@ void ALogisticsRoad::AddDashedPolyline(const TArray<FVector>& Points, float Dash
 	{
 		return;
 	}
+	AddFogSamples(Points);
 
 	// Solid: one piece per polyline segment.
 	if (Gap <= 0.f)
@@ -1203,6 +1321,25 @@ void ALogisticsRoad::RebuildVisuals()
 		}
 	}
 
+	// Fog of war: take in what the local team sees right now, then mask (redraws the RVT when masked).
+	bBuiltFogMasked = false;
+	if (AFogActor* Fog = GetMaskingFog())
+	{
+		for (const FVector& P : FogSamplePoints)
+		{
+			const FIntPoint Cell = FogCell(P);
+			if (!FogRevealedCells.Contains(Cell) && Fog->IsWorldPositionRevealed(P))
+			{
+				FogRevealedCells.Add(Cell);
+			}
+		}
+		bBuiltFogMasked = true;
+		if (bRVTDrawn && RVTPath.Num() >= 2)
+		{
+			DrawRVT();
+		}
+	}
+
 	UpdateTeamVisibility();
 	UpdateRoadReveal();
 	OnRoadVisualsRebuilt();
@@ -1232,12 +1369,155 @@ void ALogisticsRoad::UpdateTeamVisibility()
 			ApplyRoadReveal(Piece, From, To);
 		}
 	}
-	// Decals are not primitives - hide them explicitly.
-	for (UDecalComponent* Decal : DecalComponents)
+	// Fog of war: an enemy road shows only its revealed pieces.
+	TSet<FIntPoint> FogRevealed;
+	const TSet<FIntPoint>* Revealed = nullptr;
+	if (GetMaskingFog())
 	{
-		if (IsValid(Decal))
+		GatherTeamRevealedCells(FogRevealed);
+		Revealed = &FogRevealed;
+	}
+	// Decals are not primitives - hide them explicitly.
+	for (int32 i = 0; i < DecalComponents.Num(); ++i)
+	{
+		if (UDecalComponent* Decal = DecalComponents[i]; IsValid(Decal))
 		{
-			Decal->SetVisibility(bVisible);
+			const bool bFogShown = !Revealed || !DecalFogPoints.IsValidIndex(i * 3 + 2)
+				|| IsFogShown(Revealed, DecalFogPoints[i * 3], DecalFogPoints[i * 3 + 1], DecalFogPoints[i * 3 + 2]);
+			Decal->SetVisibility(bVisible && bFogShown);
+		}
+	}
+	for (int32 i = 0; i < SegmentComponents.Num(); ++i)
+	{
+		if (USplineMeshComponent* Segment = SegmentComponents[i]; IsValid(Segment))
+		{
+			const bool bFogShown = !Revealed || !SegmentFogPoints.IsValidIndex(i * 3 + 2)
+				|| IsFogShown(Revealed, SegmentFogPoints[i * 3], SegmentFogPoints[i * 3 + 1], SegmentFogPoints[i * 3 + 2]);
+			if (Segment->IsVisible() != bFogShown)
+			{
+				Segment->SetVisibility(bFogShown);
+			}
+		}
+	}
+}
+
+// --- Fog of war ------------------------------------------------------------------------------------------
+
+AFogActor* ALogisticsRoad::GetMaskingFog()
+{
+	if (!bRevealToEnemiesByFog || bReplayRoad || GetNetMode() == NM_DedicatedServer)
+	{
+		return nullptr;
+	}
+	return AFogActor::FindMaskingFogFor(GetWorld(), TeamId, CachedFogActor);
+}
+
+FIntPoint ALogisticsRoad::FogCell(const FVector& P) const
+{
+	const float Size = FMath::Max(25.f, FogRevealCellSize);
+	return FIntPoint(FMath::FloorToInt(P.X / Size), FMath::FloorToInt(P.Y / Size));
+}
+
+void ALogisticsRoad::AddFogSamples(const TArray<FVector>& Points)
+{
+	if (!bRevealToEnemiesByFog || GetNetMode() == NM_DedicatedServer || Points.Num() == 0)
+	{
+		return;
+	}
+	const float Spacing = FMath::Max(25.f, FogRevealCellSize) * 0.5f;
+	auto Add = [this](const FVector& P)
+	{
+		FogSamplePoints.Add(P);
+		FogSampleCells.Add(FogCell(P));
+	};
+	Add(Points[0]);
+	for (int32 i = 1; i < Points.Num(); ++i)
+	{
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt(FVector::Dist2D(Points[i - 1], Points[i]) / Spacing));
+		for (int32 Step = 1; Step <= Steps; ++Step)
+		{
+			Add(FMath::Lerp(Points[i - 1], Points[i], float(Step) / float(Steps)));
+		}
+	}
+}
+
+void ALogisticsRoad::GatherTeamRevealedCells(TSet<FIntPoint>& OutCells) const
+{
+	OutCells.Append(FogRevealedCells);
+	// Merged roads draw each other's stretches - what was seen of one counts for the team's others there too.
+	for (TActorIterator<ALogisticsRoad> It(GetWorld()); It; ++It)
+	{
+		const ALogisticsRoad* Other = *It;
+		if (Other != this && Other->TeamId == TeamId && Other->bReplayRoad == bReplayRoad
+			&& Other->UsesCarriers() == UsesCarriers() && !Other->IsActorBeingDestroyed())
+		{
+			OutCells.Append(Other->FogRevealedCells);
+		}
+	}
+}
+
+bool ALogisticsRoad::IsFogShown(const TSet<FIntPoint>* Revealed, const FVector& A, const FVector& B, const FVector& C) const
+{
+	return !Revealed || Revealed->Contains(FogCell(A)) || Revealed->Contains(FogCell(B)) || Revealed->Contains(FogCell(C));
+}
+
+void ALogisticsRoad::RefreshFogVisuals()
+{
+	const bool bMasked = GetMaskingFog() != nullptr;
+	const bool bRedrawRVT = (bMasked || bBuiltFogMasked) && bRVTDrawn && RVTPath.Num() >= 2;
+	bBuiltFogMasked = bMasked;
+	if (bRedrawRVT)
+	{
+		DrawRVT();
+	}
+	UpdateTeamVisibility();
+}
+
+void ALogisticsRoad::UpdateFogReveal()
+{
+	if (FogSamplePoints.Num() == 0 || IsActorBeingDestroyed())
+	{
+		return;
+	}
+	AFogActor* Fog = GetMaskingFog();
+	TSet<FIntPoint> NewCells;
+	if (Fog)
+	{
+		for (const FVector& P : FogSamplePoints)
+		{
+			const FIntPoint Cell = FogCell(P);
+			if (!FogRevealedCells.Contains(Cell) && Fog->IsWorldPositionRevealed(P))
+			{
+				FogRevealedCells.Add(Cell);
+				NewCells.Add(Cell);
+			}
+		}
+	}
+	// Masked and more of it seen, or masked before but not any more (team known now, alliance, no fog).
+	if ((Fog && (NewCells.Num() > 0 || !bBuiltFogMasked)) || (!Fog && bBuiltFogMasked))
+	{
+		RefreshFogVisuals();
+	}
+	if (NewCells.Num() == 0)
+	{
+		return;
+	}
+	// The team's other roads drawn over these cells (merging) show them now as well.
+	for (TActorIterator<ALogisticsRoad> It(GetWorld()); It; ++It)
+	{
+		ALogisticsRoad* Other = *It;
+		if (Other == this || Other->TeamId != TeamId || Other->bReplayRoad != bReplayRoad || !Other->bBuiltFogMasked
+			|| Other->UsesCarriers() != UsesCarriers() || Other->IsActorBeingDestroyed())
+		{
+			continue;
+		}
+		for (const FIntPoint& Cell : NewCells)
+		{
+			if (Other->FogSampleCells.Contains(Cell))
+			{
+				Other->RefreshFogVisuals();
+				break;
+			}
 		}
 	}
 }

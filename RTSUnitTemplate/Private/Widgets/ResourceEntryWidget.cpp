@@ -1,6 +1,8 @@
 // Copyright 2026 Silvan Teufel / Teufel-Engineering.com All Rights Reserved.
 // ResourceEntryWidget.cpp
 #include "Widgets/ResourceEntryWidget.h"
+#include "Widgets/ResourceWidget.h"
+#include "TimerManager.h"
 #include "Components/TextBlock.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
@@ -25,6 +27,21 @@ void UResourceEntryWidget::UpdateWorkerCount(int32 AmountToAdd)
 	// 4. Set the new number back on the text block.
 	// int32 -> FText
 	WorkerCountText->SetText(FText::AsNumber(NewWorkerCount));
+
+	// The server may answer differently than this guess: "+" with every worker assigned takes one from the
+	// type with the most, and the count never exceeds the workers. Read the real numbers once the answer is
+	// back instead of waiting for the widget's next one-second refresh.
+	if (UResourceWidget* Owner = GetTypedOuter<UResourceWidget>())
+	{
+		if (UWorld* World = GetWorld())
+		{
+			for (const float Delay : { 0.15f, 0.5f })
+			{
+				FTimerHandle Handle;
+				World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateWeakLambda(Owner, [Owner]() { Owner->UpdateWidget(); }), Delay, false);
+			}
+		}
+	}
 }
 
 void UResourceEntryWidget::SetResourceData(EResourceType InResourceType, const FText& InResourceName, float InResourceAmount, int32 InWorkerCount, int32 PlayerTeamId, UTexture2D* InIconTexture, float InMaxResourceAmount, bool bInIsSupplyLike, bool bInCollapseWorkerUI)
