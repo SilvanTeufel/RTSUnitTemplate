@@ -20,6 +20,13 @@
 #include "Net/UnrealNetwork.h"
 #include "Engine/ActorChannel.h"
 #include "GameModes/ResourceGameMode.h"
+#include "GAS/AutoSummonToggleAbility.h"
+#include "HAL/IConsoleManager.h"
+
+static TAutoConsoleVariable<int32> CVarRTS_AbilitySlotLog(
+	TEXT("RTS.AbilitySlotLog"), 0,
+	TEXT("[AbilitySlot] logs which ability takes and frees a unit's ability slot (ActivatedAbilityInstance) and the queue size."),
+	ECVF_Default);
 
 
 // Called when the game starts or when spawned
@@ -66,6 +73,7 @@ void AGASUnit::Tick(float DeltaTime)
 		{
 			QueueFallbackTimer = 0.f;
 			ClearStaleActivatedAbility();
+			ReleaseStrandedStartAbility(!AbilityQueue.IsEmpty());
 			if (!ActivatedAbilityInstance && !AbilityQueue.IsEmpty())
 			{
 				ActivateNextQueuedAbility();
@@ -211,8 +219,25 @@ void AGASUnit::SetupAbilitySystemDelegates()
 // This is your handler for when an ability is activated
 void AGASUnit::OnAbilityActivated(UGameplayAbility* ActivatedAbility)
 {
+	if (CVarRTS_AbilitySlotLog.GetValueOnGameThread() != 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[AbilitySlot] %s %s TAKE %s (previous %s, startAbility=%d, queue=%d)"),
+			HasAuthority() ? TEXT("SERVER") : TEXT("CLIENT"), *GetName(), *GetNameSafe(ActivatedAbility),
+			*GetNameSafe(ActivatedAbilityInstance), bActivatingStartAbility ? 1 : 0, AbilityQueueSize);
+	}
+	// Abilities that run beside the slot (unlocks, extension placement) must not take it: the unlock otherwise sat
+	// there as the current ability (power icon) and the production queue waited behind it.
+	if (UGameplayAbilityBase* Side = Cast<UGameplayAbilityBase>(ActivatedAbility); Side && Side->bRunsBesideAbilitySlot)
+	{
+		SideAbilityInstance = Side;
+		Side->ClickCount = 0;
+		return;
+	}
+
 	ActivatedAbilityInstance = Cast<UGameplayAbilityBase>(ActivatedAbility);
 	LastAbilitySafetyWindowTime = 0.f;
+	bActivatedAbilityIsStartAbility = bActivatingStartAbility && ActivatedAbilityInstance;
+	ActivatedAbilityRegisteredTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 
 	if (ActivatedAbilityInstance)
 	{
@@ -416,7 +441,39 @@ void AGASUnit::ClearStaleActivatedAbility()
 	if (ActivatedAbilityInstance && !ActivatedAbilityInstance->IsActive())
 	{
 		ActivatedAbilityInstance = nullptr;
+		bActivatedAbilityIsStartAbility = false;
 	}
+	// The HUD shows CurrentSnapshot as the running ability: without an instance it is a leftover (an ability that
+	// ended during its own activation), and it stood there as a frozen icon.
+	if (HasAuthority() && !ActivatedAbilityInstance && CurrentSnapshot.AbilityClass)
+	{
+		CurrentSnapshot = FQueuedAbility();
+		CurrentInstigatorPC = nullptr;
+	}
+}
+
+bool AGASUnit::ReleaseStrandedStartAbility(bool bPlayerWaiting)
+{
+	if (!HasAuthority() || !bPlayerWaiting || !ActivatedAbilityInstance || !bActivatedAbilityIsStartAbility)
+	{
+		return false;
+	}
+	const UWorld* World = GetWorld();
+	const float Held = World ? World->GetTimeSeconds() - ActivatedAbilityRegisteredTime : 0.f;
+	if (Held < StartAbilityQueueHoldSeconds)
+	{
+		return false;
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[AbilityQueue] %s: start ability '%s' held the production slot for %.1f s - released (it keeps running)."),
+		*GetName(), *GetNameSafe(ActivatedAbilityInstance), Held);
+	if (CurrentSnapshot.AbilityClass == ActivatedAbilityInstance->GetClass())
+	{
+		CurrentSnapshot = FQueuedAbility();
+		CurrentInstigatorPC = nullptr;
+	}
+	ActivatedAbilityInstance = nullptr;
+	bActivatedAbilityIsStartAbility = false;
+	return true;
 }
 
 bool AGASUnit::ActivateAbilityByInputID(
@@ -439,6 +496,7 @@ bool AGASUnit::ActivateAbilityByInputID(
 	}
 
 	ClearStaleActivatedAbility();
+	ReleaseStrandedStartAbility(true);
 
 	TSubclassOf<UGameplayAbility> AbilityToActivate = GetAbilityForInputID(InputID, AbilitiesArray);
 
@@ -460,7 +518,40 @@ bool AGASUnit::ActivateAbilityByInputID(
 			*GetName(), TeamId, (int32)InputID, *GetNameSafe(AbilityToActivate));
 		return false;
 	}
+
+	// An instant switch, outside GAS: it has to work while the building casts its summon.
+	if (const UAutoSummonToggleAbility* Toggle = Cast<UAutoSummonToggleAbility>(Ability))
+	{
+		return Toggle->ApplyToggle(Cast<AUnitBase>(this));
+	}
 	
+	// Beside the slot: activate now, whatever the unit is producing, and never queue. The mouse hit comes with the
+	// press (extension placement spawns its preview from it and ends at once).
+	if (Ability->bRunsBesideAbilitySlot)
+	{
+		// Still active from an earlier press without a hit: hand it this one instead of failing the activation.
+		if (SideAbilityInstance && SideAbilityInstance->GetClass() == AbilityToActivate && SideAbilityInstance->IsActive())
+		{
+			if (HitResult.IsValidBlockingHit())
+			{
+				SideAbilityInstance->ClickCount++;
+				SideAbilityInstance->OnAbilityMouseHit(HitResult);
+			}
+			return true;
+		}
+		const bool bSideActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityToActivate);
+		UE_LOG(LogTemp, Log, TEXT("[AbilityAktivierung] %s (Team %d) InputID=%d %s beside the slot: %s (slot %s)"),
+			*GetName(), TeamId, (int32)InputID, bSideActivated ? TEXT("AKTIVIERT") : TEXT("ABGELEHNT"),
+			*GetNameSafe(AbilityToActivate), *GetNameSafe(ActivatedAbilityInstance));
+		if (bSideActivated && SideAbilityInstance && SideAbilityInstance->IsActive() && HitResult.IsValidBlockingHit())
+		{
+			SideAbilityInstance->AbilityInputID = InputID;
+			SideAbilityInstance->ClickCount++;
+			SideAbilityInstance->OnAbilityMouseHit(HitResult);
+		}
+		return bSideActivated;
+	}
+
 	if (ActivatedAbilityInstance)
 	{
 		if (Ability->UseAbilityQue && AbilityQueueSize < MaxAbilityQueueSize)
@@ -571,9 +662,23 @@ bool AGASUnit::ActivateAbilityByInputID(
 
 void AGASUnit::OnAbilityEnded(UGameplayAbility* EndedAbility)
 {
+	if (CVarRTS_AbilitySlotLog.GetValueOnGameThread() != 0)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("[AbilitySlot] %s %s END %s (slot %s, queue=%d)"),
+			HasAuthority() ? TEXT("SERVER") : TEXT("CLIENT"), *GetName(), *GetNameSafe(EndedAbility),
+			*GetNameSafe(ActivatedAbilityInstance), AbilityQueueSize);
+	}
+	if (EndedAbility && SideAbilityInstance == EndedAbility)
+	{
+		SideAbilityInstance->ClickCount = 0;
+		SideAbilityInstance = nullptr;
+		return;
+	}
+
 	if (ActivatedAbilityInstance == EndedAbility)
 	{
 		ActivatedAbilityInstance = nullptr;
+		bActivatedAbilityIsStartAbility = false;
 	}
 
 	if (CurrentSnapshot.AbilityClass == EndedAbility->GetClass())
@@ -910,6 +1015,7 @@ void AGASUnit::CancelCurrentAbility()
 			ActivatedAbilityInstance->ClickCount = 0;
 			ActivatedAbilityInstance->K2_CancelAbility();
 			ActivatedAbilityInstance = nullptr;
+			bActivatedAbilityIsStartAbility = false;
 		}
 	}
 	CurrentSnapshot = FQueuedAbility();

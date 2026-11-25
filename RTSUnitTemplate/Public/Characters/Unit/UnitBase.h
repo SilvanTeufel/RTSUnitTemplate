@@ -29,6 +29,10 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	AUnitBase* FollowUnit = nullptr;
 
+	// Folgt mit Angriffsbefehl: greift Gegner nahe dem Anfuehrer an (FMassAITargetFragment::bFollowEngagesEnemies).
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = RTSUnitTemplate)
+	bool bFollowAttacks = false;
+
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int64 AlliedTeamsMask = 0;
 	
@@ -53,6 +57,35 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Hover", meta = (ClampMin = "0"))
 	float HoverExtraRadius = 0.f;
+
+	/** Written into custom data slot 0 while the mouse is over this unit (per-instance data on ISMs,
+	 *  custom primitive data on skeletal/static meshes); 0 when not hovered. The hover outline material
+	 *  function picks its colour from it: 1 = primary (e.g. Singularian), 2 = secondary (e.g. Xeno). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Hover", meta = (ClampMin = "0"))
+	float HoverCustomDataValue = 1.f;
+
+	// --- Auto summon (ULogisticsSummonAbility with bAutoCast) ---------------------------------------
+
+	/** Off = the unit's auto-casting summon abilities (workers, logistics units) stop producing.
+	 *  Switched by a UAutoSummonToggleAbility button. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|AutoSummon")
+	bool bAutoSummonEnabled = true;
+
+	/** Living units of the auto summon ("2/3" over the building, AHUDBase). Written by the server. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|AutoSummon")
+	int32 AutoSummonAlive = 0;
+
+	/** The auto summon's limit (MaxSummonsPerOwner); 0 = this unit has none, nothing is drawn. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|AutoSummon")
+	int32 AutoSummonMax = 0;
+
+	/** Icon of the summon ability, drawn next to the count. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|AutoSummon")
+	TObjectPtr<UTexture2D> AutoSummonIcon = nullptr;
+
+	/** True when the summoned units are logistics units (count colour), false for workers. */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "RTSUnitTemplate|AutoSummon")
+	bool bAutoSummonIsLogistics = false;
 
 	UPROPERTY(BlueprintReadOnly, Category = RTSUnitTemplate)
 	UBoxComponent* BoxCollisionComponent = nullptr;
@@ -371,6 +404,15 @@ public:
 	float PendingSpawnHealthFraction = -1.f;
 	float PendingSpawnShieldFraction = -1.f;
 
+	/**
+	 * Server: runs Fn once the Mass entity has initialised the attributes - at once if it already has. That setup
+	 * applies DefaultAttributeEffect again and resets health, damage, range ... to the class values, so anything a
+	 * freshly spawned unit gets on top (e.g. a start loadout bonus) has to wait for it.
+	 */
+	void RunAfterAttributeInit(TFunction<void()> Fn);
+
+	TArray<TFunction<void()>> PendingAfterAttributeInit;
+
 	// Fires when health crosses 25% or 50% thresholds either upwards or downwards.
 	// DidIncrease: true if health rose above the threshold, false if it dropped below it.
 	// LowThreshold: true if 25% threshold is concerned.
@@ -427,7 +469,8 @@ public:
 
 	/**
 	 * This unit lost health or shield: raises the minimap attack alert (ACustomControllerBase::ReportUnderAttack)
-	 * for the local players of its team. Investments (ALevelUnit::ActiveInvestments) do not count.
+	 * for the local players of its team. Investments (ALevelUnit::ActiveInvestments) do not count, nor do combat
+	 * units that are already attacking or chasing (the player's own push).
 	 */
 	void NotifyDamageForAttackAlert(float OldValue, float NewValue);
 
@@ -511,6 +554,86 @@ private:
 
 	/** AttackDuration before the loaded units set the timing. */
 	float OwnAttackDuration = -1.f;
+
+public:
+	/**
+	 * Faster attacks for Duration seconds (e.g. Overclock): one attack cycle (AttackDuration + PauseDuration)
+	 * becomes SpeedMultiplier times shorter. Server only, the durations replicate.
+	 *  - Vertex-animated units (no skeletal movement, PlayRateRunTimeCalculation on): attack and pause both
+	 *    shrink, the attack clip is played faster to fill the shorter AttackDuration.
+	 *  - Skeletal units: only the pause shrinks (at least MinPauseFractionUnderAttackSpeedBuff of it is kept),
+	 *    the swing keeps its length so the animation is never cut off.
+	 * A second buff while one runs refreshes the time; the stronger multiplier wins, nothing stacks.
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void ApplyAttackSpeedBuff(float SpeedMultiplier, float Duration);
+
+	/**
+	 * Shows Niagara_A while the unit attacks (a flamethrower's flame at the muzzle) and hides it again
+	 * AttackNiagaraHoldSeconds after the last attack. Niagara_A follows the unit while it is visible (AMassUnitBase);
+	 * an effect spawned at a location (a projectile's SpawnVFX) stays where it was spawned.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackVFX")
+	bool bShowNiagaraAWhileAttacking = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackVFX", meta = (ClampMin = "0.05"))
+	float AttackNiagaraHoldSeconds = 0.8f;
+
+	FTimerHandle AttackNiagaraTimer;
+
+	/** Ends an attack speed buff early and restores the unbuffed timing. */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void EndAttackSpeedBuff();
+
+	/** Skeletal units under an attack speed buff keep at least this fraction of their PauseDuration. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float MinPauseFractionUnderAttackSpeedBuff = 0.2f;
+
+	/** Never gets automatic abilities (cards, tree, level milestones), even when a card targets one of its tags. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AutoAbility")
+	bool bNoAutoAbilities = false;
+
+	// --- Movement loop sound (engines, tracks, footsteps) ------------------------------------------------
+
+	/**
+	 * Looping sound played (locally, never on a dedicated server) while the unit moves: thrusters, tracks,
+	 * footsteps. Faded in when the unit starts moving and out when it stops; silent while the local player
+	 * cannot see the unit (fog of war). Use a looping SoundCue with concurrency + attenuation - many units share it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Audio")
+	USoundBase* MovementLoopSound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Audio", meta = (ClampMin = "0.0"))
+	float MovementLoopVolume = 1.f;
+
+	/** Ground speed (uu/s) above which the unit counts as moving. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Audio", meta = (ClampMin = "0.0"))
+	float MovementSoundMinSpeed = 40.f;
+
+	/**
+	 * Instead of the speed: play while Niagara_A or Niagara_B is shown (spaceships whose Blueprint shows the
+	 * engine flame while they move).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Audio")
+	bool bMovementSoundFollowsNiagara = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Audio", meta = (ClampMin = "0.0"))
+	float MovementSoundFadeSeconds = 0.4f;
+
+private:
+	float AttackSpeedBuffBaseAttack = -1.f;
+	float AttackSpeedBuffBasePause = -1.f;
+	float AttackSpeedBuffMultiplier = 1.f;
+	FTimerHandle AttackSpeedBuffTimer;
+
+	UPROPERTY(Transient)
+	class UAudioComponent* MovementAudio = nullptr;
+	FTimerHandle MovementSoundTimer;
+	FVector MovementSoundLastLocation = FVector::ZeroVector;
+	bool bMovementSoundOn = false;
+	static constexpr float MovementSoundInterval = 0.2f;
+	void UpdateMovementSound();
+	void SetMovementSoundOn(bool bOn);
 
 public:
 

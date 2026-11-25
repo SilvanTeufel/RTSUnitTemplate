@@ -7,6 +7,8 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "Misc/ScopeExit.h"   // ON_SCOPE_EXIT in ApplyInvestmentEffect
+#include "GameplayEffect.h"
+#include "GAS/AttributeSetBase.h"
 
 void ALevelUnit::Tick(float DeltaTime)
 {
@@ -19,7 +21,7 @@ void ALevelUnit::Tick(float DeltaTime)
 		RegenerationTimer = 0.f; // Always reset timer to prevent spam
 
 		// ONLY regenerate on the server
-		if(HasAuthority() && Attributes->GetHealth() > 0)
+		if(HasAuthority() && Attributes && Attributes->GetHealth() > 0)
 		{
 			Attributes->SetAttributeHealth(Attributes->GetHealth()+Attributes->GetHealthRegeneration());
 			Attributes->SetAttributeShield(Attributes->GetShield()+Attributes->GetShieldRegeneration());
@@ -496,8 +498,9 @@ bool ALevelUnit::ApplyAttributeTreeNodeFromTeam(FName NodeId)
 
 	const FAttributeTreeNodeRow* Row = AttributeTreeDataTable->FindRow<FAttributeTreeNodeRow>(
 		NodeId, TEXT("ApplyAttributeTreeNodeFromTeam"), /*bWarnIfMissing=*/false);
-	if (!Row)
+	if (!Row || Row->bAutoAbilitySlot)
 	{
+		// An auto ability node has no attribute - the team's auto abilities (UAutoAbilitySubsystem) carry it.
 		return false;
 	}
 
@@ -615,6 +618,24 @@ void ALevelUnit::ApplyInvestmentEffect(const TSubclassOf<UGameplayEffect>& Inves
 		AbilitySystemComponent->ApplyGameplayEffectToSelf(InvestmentEffect.GetDefaultObject(), 1, AbilitySystemComponent->MakeEffectContext());
 
 	}
+}
+
+void ALevelUnit::ApplyDamageAsEffect(float Amount)
+{
+	if (!AbilitySystemComponent || !HasAuthority() || Amount <= 0.f)
+	{
+		return;
+	}
+	// Same instant effect a GE_DmgEffect_* asset carries: EffectDamage is a meta attribute, negative = damage.
+	// UAttributeSetBase::PostGameplayEffectExecute takes it from shield, then health, and spawns the indicator.
+	UGameplayEffect* Effect = NewObject<UGameplayEffect>(GetTransientPackage(), NAME_None, RF_Transient);
+	Effect->DurationPolicy = EGameplayEffectDurationType::Instant;
+	FGameplayModifierInfo Modifier;
+	Modifier.Attribute = UAttributeSetBase::GetEffectDamageAttribute();
+	Modifier.ModifierOp = EGameplayModOp::Additive;
+	Modifier.ModifierMagnitude = FScalableFloat(-Amount);
+	Effect->Modifiers.Add(Modifier);
+	AbilitySystemComponent->ApplyGameplayEffectToSelf(Effect, 1.f, AbilitySystemComponent->MakeEffectContext());
 }
 
 

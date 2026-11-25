@@ -68,12 +68,101 @@ struct FTeamAttributeTree
     TArray<FAttributeTreeNodeState> Nodes;
 };
 
+class UAutoAbility;
+
+/** An automatic ability a team has switched on for one unit type - by card, in the attribute tree, or both. */
+USTRUCT(BlueprintType)
+struct FTeamAutoAbilityGrant
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    int32 TeamId = 0;
+
+    /** Units.Tier.N - every unit carrying it gets the ability. */
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    FGameplayTag UnitTag;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    TSubclassOf<UAutoAbility> Ability;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    bool bFromCard = false;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    bool bFromTree = false;
+};
+
+/** The ability drawn for an auto ability node of a team's attribute tree (FAttributeTreeNodeRow::bAutoAbilitySlot). */
+USTRUCT(BlueprintType)
+struct FTreeAutoAbilityPick
+{
+    GENERATED_BODY()
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    int32 TeamId = 0;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    FName NodeId;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    FGameplayTag UnitTag;
+
+    UPROPERTY(BlueprintReadOnly, Category = "Auto Abilities")
+    TSubclassOf<UAutoAbility> Ability;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AUpgradeGameState : public AResourceGameState
 {
     GENERATED_BODY()
 
 public:
+    // ----------------------------------------------------------------------
+    //  Automatische Faehigkeiten je Team (14.11.2026). Karten (UStartLoadoutComponent::
+    //  AutoAbilityCardSets) und Auto-Knoten des Attributbaums schalten eine UAutoAbility fuer
+    //  einen Einheitentyp frei; UAutoAbilitySubsystem verteilt sie an die Einheiten. Repliziert,
+    //  weil Baum-Tooltips und Karten auf dem Client zeigen, was gezogen wurde.
+    // ----------------------------------------------------------------------
+
+    UPROPERTY(ReplicatedUsing = OnRep_AutoAbilities, VisibleAnywhere, BlueprintReadOnly, Category = "Auto Abilities")
+    TArray<FTeamAutoAbilityGrant> TeamAutoAbilityGrants;
+
+    UPROPERTY(ReplicatedUsing = OnRep_AutoAbilities, VisibleAnywhere, BlueprintReadOnly, Category = "Auto Abilities")
+    TArray<FTreeAutoAbilityPick> TreeAutoAbilityPicks;
+
+    UFUNCTION()
+    void OnRep_AutoAbilities();
+
+    /** Grants or picks changed (server and clients) - the tree widget redraws its auto ability nodes. */
+    FSimpleMulticastDelegate OnAutoAbilitiesChanged;
+
+    /** Server: counts every change - the subsystem re-syncs the units when it moves. */
+    int32 AutoAbilityVersion = 0;
+
+    /** Server: switches the ability on for every unit of the team with UnitTag (bFromCard = card, else tree). */
+    UFUNCTION(BlueprintCallable, Category = "Auto Abilities")
+    void GrantTeamAutoAbility(int32 TeamId, FGameplayTag UnitTag, TSubclassOf<UAutoAbility> Ability, bool bFromCard);
+
+    /** Server: the tree's share goes (tree reset); card grants stay. */
+    void RemoveTreeAutoAbilities(int32 TeamId);
+
+    /** 0.5 when the team has the ability by card AND from the tree (any unit type), else 1. */
+    UFUNCTION(BlueprintPure, Category = "Auto Abilities")
+    float GetAutoAbilityCooldownMultiplier(int32 TeamId, TSubclassOf<UAutoAbility> Ability) const;
+
+    /** Does the team have the ability by card (bCard) / from the tree? */
+    UFUNCTION(BlueprintPure, Category = "Auto Abilities")
+    bool HasAutoAbilityFrom(int32 TeamId, TSubclassOf<UAutoAbility> Ability, bool bCard) const;
+
+    const FTreeAutoAbilityPick* FindTreeAutoAbilityPick(int32 TeamId, FName NodeId) const;
+
+    /** Server: draws the abilities of the team's auto ability tree nodes (once per team). */
+    void EnsureTreeAutoAbilityPicks(int32 TeamId);
+
+    /** Server: the team invested in an auto ability node - grants its drawn ability. */
+    bool ApplyTreeAutoAbilityNode(int32 TeamId, FName NodeId);
+
     AUpgradeGameState();
 
     // Array of team upgrades
@@ -221,6 +310,11 @@ private:
 
     /** Wer die Pause angestossen hat (fuer SetPause). */
     TWeakObjectPtr<class ACameraControllerBase> TalentPauseRequester;
+
+    /** Teams whose tree auto abilities were drawn. */
+    TSet<int32> TreePicksRolled;
+
+    void AutoAbilitiesChanged();
 
     /** Hat das Team noch Punkte und etwas, worin es sie stecken kann? */
     bool TeamCanStillInvest(int32 TeamId) const;

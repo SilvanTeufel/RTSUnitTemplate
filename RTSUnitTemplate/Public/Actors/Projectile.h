@@ -66,6 +66,12 @@ public:
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile")
 	float TwinProjectileDistance = 0.f;
 
+	/** Climbing shots (air units, tall buildings): the weapon cannot pitch up, so the trail behind a fresh
+	 *  projectile would hang below the barrel. The projectile starts this far further along its flight
+	 *  direction, scaled from 0 (level shot) to 1 (about 20 degrees up or steeper). Mass projectiles only. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile", meta = (ClampMin = "0"))
+	float ClimbSpawnAdvance = 80.f;
+
 	UPROPERTY(EditAnywhere, Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile")
 	int32 HomingMissleCount = 0;
 
@@ -142,6 +148,14 @@ public:
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	bool UseAttributeDamage = true;
 
+	/**
+	 * The hit damage goes in as an instant GameplayEffect on the EffectDamage attribute (negative) instead of
+	 * setting Health/Shield directly: same numbers, but the damage indicator shows and invulnerability counts.
+	 * For ability projectiles (Railgun, ...); autoattacks keep the cheap direct path.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bDamageAsGameplayEffect = false;
+
 	UPROPERTY(Replicated)
 	TArray<TObjectPtr<AActor>> PiercedActors;
 	
@@ -212,6 +226,19 @@ public:
 	float ScaleImpactSound = 1.f;
 
 	/**
+	 * Piercing projectiles (MaxPiercedTargets > 1) fire ImpactVFX/ImpactSound on EVERY unit they pass through. A
+	 * cluster rocket falling through a blob of 30 units then covered the whole screen in explosions. True: only the
+	 * first hit shows the impact effect; damage is unaffected.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bImpactEffectsOnlyOnce = false;
+
+	/** ImpactVFX for this hit - null after the first hit when bImpactEffectsOnlyOnce. */
+	UNiagaraSystem* ImpactVFXForHit() const { return (bImpactEffectsOnlyOnce && bImpactEffectsShown) ? nullptr : ImpactVFX; }
+	USoundBase* ImpactSoundForHit() const { return (bImpactEffectsOnlyOnce && bImpactEffectsShown) ? nullptr : ImpactSound; }
+	bool bImpactEffectsShown = false;
+
+	/**
 	 * Spawn (creation-time) effects, fired once at the projectile's spawn transform the moment the
 	 * Mass entity is created - on the host and on every remote client, with no RPC.
 	 * In Mass mode no AProjectile actor exists, so BeginPlay never runs; UProjectileVisualManager
@@ -235,6 +262,21 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	FRotator RotateSpawnVFX = FRotator::ZeroRotator;
 
+	/** Beam-style SpawnVFX: name of a float user parameter (e.g. "BeamLength") that receives the distance from
+	 *  the muzzle to the target when the shot fires, so the beam reaches the target. None = not set. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile")
+	FName SpawnVFXLengthParameter = NAME_None;
+
+	/** Multiplier on that distance (the beam's own length unit, e.g. 0.01 if the system counts in metres). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile", meta = (EditCondition = "SpawnVFXLengthParameter != None"))
+	float SpawnVFXLengthScale = 1.f;
+
+	/** For beams that grow along their local Z from an impact at their origin (e.g. BeamsPack NS_Beam_*): the
+	 *  SpawnVFX is placed on the target with Z pointing back to the muzzle - impact on the target, beam up to
+	 *  the muzzle (length through SpawnVFXLengthParameter). RotateSpawnVFX is not used then. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Projectile")
+	bool bSpawnVFXFromTargetAlongZ = false;
+
 	/**
 	 * Seconds after which the spawned SpawnVFX/SpawnSound components are force-destroyed.
 	 * One-shot systems already self-destroy; this is the backstop that stops a LOOPING system
@@ -245,6 +287,14 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere,BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float Damage;
+
+	/**
+	 * Only for shots fired by an ability (SpawnProjectileFromClassWithAim). Above 0 the shot additionally deals
+	 * the shooter's AttackDamage attribute times this value - Damage 0 and 3 here is "triple damage", and it
+	 * keeps scaling with every damage upgrade. 0 (default): only the flat Damage counts.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate", meta = (ClampMin = "0.0"))
+	float AttackDamageMultiplier = 0.f;
 
 	UPROPERTY(Replicated, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float LifeTime = 0.f;

@@ -22,6 +22,9 @@ class AUnitBase;
  *   MaxLogisticsUnits  - every living logistics unit of the team plus summons being cast.
  *
  * Pays ConstructionCost when it starts; a cancelled cast is refunded (bRefundOnCancel).
+ *
+ * The owner's AUnitBase::bAutoSummonEnabled (UAutoSummonToggleAbility) pauses the auto-cast; the
+ * count of living summons is mirrored to the owner (AutoSummonAlive/Max) for the HUD.
  */
 UCLASS(Blueprintable)
 class RTSUNITTEMPLATE_API ULogisticsSummonAbility : public UGameplayAbilityBase
@@ -38,6 +41,17 @@ public:
 	/** Living logistics units this owner keeps on the field; it summons again when one dies. 0 = no limit. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
 	int32 MaxSummonsPerOwner = 1;
+
+	/**
+	 * When set, MaxSummonsPerOwner counts PER living building of these classes of the owner's team
+	 * (e.g. Data Center: one logistics unit per Ingest Hub). The limit rises and falls with that count;
+	 * no such building = no summons. Empty = MaxSummonsPerOwner as it is.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics")
+	TArray<TSubclassOf<AUnitBase>> PerBuildingClasses;
+
+	/** The limit for this owner right now: MaxSummonsPerOwner, times the PerBuildingClasses count when set. */
+	int32 GetEffectiveMaxSummons(const AUnitBase* Owner) const;
 
 	/** Team-wide cap on logistics units (built, plus being built). 0 = no limit. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0"))
@@ -71,6 +85,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (EditCondition = "bAutoCast"))
 	EResourceType EnergyResourceType = EResourceType::Rare;
 
+	/** Shown on the screen of the owner's team (red) when the auto-cast lacks EnergyResourceType. Empty = no text. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (EditCondition = "bAutoCast"))
+	FText NotEnoughEnergyText = NSLOCTEXT("RTSUnitTemplate", "NotEnoughEnergy", "Not enough Energy");
+
+	/** Least time between two of these texts per team (seconds). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0", EditCondition = "bAutoCast"))
+	float NotEnoughEnergyTextInterval = 15.f;
+
 	/** Least time between two of these announcements per team (seconds) - the owner retries every AutoCastInterval. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics", meta = (ClampMin = "0", EditCondition = "bAutoCast"))
 	float NotEnoughResourcesSoundInterval = 60.f;
@@ -82,6 +104,12 @@ public:
 	/** Living logistics units in the owner's SummonedUnitsDataSet - what MaxSummonsPerOwner counts. */
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
 	static int32 CountOwnerSummons(const AUnitBase* Owner);
+
+	/** Living units of LogisticsUnitClass in the owner's SummonedUnitsDataSet (MaxSummonsPerOwner counts these). */
+	int32 CountOwnClassSummons(const AUnitBase* Owner) const;
+
+	/** Server: writes the count, limit and icon to the owner's replicated AutoSummon* fields. */
+	void UpdateOwnerSummonDisplay(AUnitBase* Owner) const;
 
 	/** True while both limits leave room. bThisCastPending: the running cast of this ability counts too. */
 	bool HasRoomForAnother(const AUnitBase* Owner, bool bThisCastPending) const;

@@ -7,6 +7,7 @@
 #include "EngineUtils.h"
 #include "GameModes/ResourceGameMode.h"
 #include "Controller/PlayerController/ExtendedControllerBase.h"
+#include "Controller/PlayerController/CameraControllerBase.h"
 #include "Characters/Camera/RLAgent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
@@ -86,6 +87,65 @@ int32 ULogisticsSummonAbility::CountOwnerSummons(const AUnitBase* Owner)
 	return Count;
 }
 
+int32 ULogisticsSummonAbility::CountOwnClassSummons(const AUnitBase* Owner) const
+{
+	// Count by class, not by logistics role: the ability may also summon a worker (e.g. a Collector
+	// that keeps one builder), which IsLogisticsUnit() would never count - it would summon forever.
+	int32 OwnSummons = 0;
+	if (Owner && LogisticsUnitClass)
+	{
+		for (const FUnitSpawnData& Data : Owner->SummonedUnitsDataSet)
+		{
+			if (IsValid(Data.UnitBase) && Data.UnitBase->GetUnitState() != UnitData::Dead && Data.UnitBase->IsA(LogisticsUnitClass))
+			{
+				++OwnSummons;
+			}
+		}
+	}
+	return OwnSummons;
+}
+
+int32 ULogisticsSummonAbility::GetEffectiveMaxSummons(const AUnitBase* Owner) const
+{
+	if (PerBuildingClasses.Num() == 0 || !Owner || MaxSummonsPerOwner <= 0)
+	{
+		return MaxSummonsPerOwner;
+	}
+	int32 Buildings = 0;
+	for (TActorIterator<AUnitBase> It(Owner->GetWorld()); It; ++It)
+	{
+		const AUnitBase* Unit = *It;
+		if (!IsValid(Unit) || Unit->TeamId != Owner->TeamId || Unit->GetUnitState() == UnitData::Dead)
+		{
+			continue;
+		}
+		for (const TSubclassOf<AUnitBase>& Class : PerBuildingClasses)
+		{
+			if (Class && Unit->IsA(Class))
+			{
+				++Buildings;
+				break;
+			}
+		}
+	}
+	return Buildings * MaxSummonsPerOwner;
+}
+
+void ULogisticsSummonAbility::UpdateOwnerSummonDisplay(AUnitBase* Owner) const
+{
+	if (!Owner || !Owner->HasAuthority() || MaxSummonsPerOwner <= 0)
+	{
+		return;
+	}
+	const int32 EffectiveMax = GetEffectiveMaxSummons(Owner);
+	// Above the limit after a hub was lost: show it (e.g. 3/2) - the extra ones stay, none are replaced.
+	Owner->AutoSummonAlive = CountOwnClassSummons(Owner);
+	Owner->AutoSummonMax = EffectiveMax;
+	Owner->AutoSummonIcon = AbilityIcon;
+	const AUnitBase* UnitCDO = LogisticsUnitClass ? LogisticsUnitClass->GetDefaultObject<AUnitBase>() : nullptr;
+	Owner->bAutoSummonIsLogistics = UnitCDO && UnitCDO->IsLogisticsUnit();
+}
+
 bool ULogisticsSummonAbility::HasRoomForAnother(const AUnitBase* Owner, bool bThisCastPending) const
 {
 	if (!Owner)
@@ -96,18 +156,7 @@ bool ULogisticsSummonAbility::HasRoomForAnother(const AUnitBase* Owner, bool bTh
 	// set, so it always adds one.
 	if (MaxSummonsPerOwner > 0)
 	{
-		// Count by class, not by logistics role: the ability may also summon a worker (e.g. a Collector
-		// that keeps one builder), which IsLogisticsUnit() would never count - it would summon forever.
-		int32 OwnSummons = 0;
-		for (const FUnitSpawnData& Data : Owner->SummonedUnitsDataSet)
-		{
-			if (IsValid(Data.UnitBase) && Data.UnitBase->GetUnitState() != UnitData::Dead
-				&& LogisticsUnitClass && Data.UnitBase->IsA(LogisticsUnitClass))
-			{
-				++OwnSummons;
-			}
-		}
-		if (OwnSummons + 1 > MaxSummonsPerOwner)
+		if (CountOwnClassSummons(Owner) + 1 > GetEffectiveMaxSummons(Owner))
 		{
 			return false;
 		}
@@ -193,6 +242,7 @@ void ULogisticsSummonAbility::HandleCastComplete(const FHitResult& InHitResult)
 	Owner->SpawnUnitsFromParameters(LogisticsUnitClass, nullptr, nullptr, MeshRotation, Owner->GetMassActorLocation(),
 		UnitData::Idle, UnitData::Idle, Owner->TeamId, ConstructionCost, /*Waypoint=*/nullptr, /*UnitCount=*/1,
 		/*SummonContinuously=*/false, /*SpawnAsSquad=*/false, /*UseSummonDataSet=*/true, /*bSelectable=*/true);
+	UpdateOwnerSummonDisplay(Owner);
 
 	if (LogisticsLogEnabled())
 	{
@@ -261,7 +311,32 @@ void ULogisticsSummonAbility::AnnounceMissingResources(const AUnitBase* Owner, c
 	const bool bEnergy = Missing.Contains(EnergyResourceType);
 	USoundBase* Sound = bEnergy && NotEnoughEnergySound ? NotEnoughEnergySound : NotEnoughResourcesSound;
 	UWorld* World = Owner ? Owner->GetWorld() : nullptr;
-	if (!Sound || !World)
+	if (!World)
+	{
+		return;
+	}
+
+	// The red text: the player sees why no workers or haulers come (every few seconds, the sound only now and then).
+	if (bEnergy && !NotEnoughEnergyText.IsEmpty())
+	{
+		static TMap<TPair<TWeakObjectPtr<UWorld>, int32>, double> LastShown;
+		const TPair<TWeakObjectPtr<UWorld>, int32> TextKey(World, Owner->TeamId);
+		const double TextNow = World->GetTimeSeconds();
+		const double* LastText = LastShown.Find(TextKey);
+		if (!LastText || TextNow < *LastText || TextNow - *LastText >= NotEnoughEnergyTextInterval)
+		{
+			LastShown.Add(TextKey, TextNow);
+			for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+			{
+				ACameraControllerBase* PC = Cast<ACameraControllerBase>(It->Get());
+				if (PC && PC->SelectableTeamId == Owner->TeamId && !PC->bIsAi && !(PC->GetPawn() && PC->GetPawn()->IsA(ARLAgent::StaticClass())))
+				{
+					PC->Client_ShowWarningToast(NotEnoughEnergyText);
+				}
+			}
+		}
+	}
+	if (!Sound)
 	{
 		return;
 	}
@@ -319,6 +394,15 @@ void ULogisticsSummonAbility::TryAutoCast()
 			UE_LOG(LogTemp, Log, TEXT("[LogisticsSummon] %s skips auto-cast: %s"), *Owner->GetName(), Reason);
 		}
 	};
+
+	// Every timer tick, also while switched off or busy: a dead summon leaves the HUD count within one interval.
+	UpdateOwnerSummonDisplay(Owner);
+
+	if (!Owner->bAutoSummonEnabled)
+	{
+		Skip(TEXT("auto summon switched off"));
+		return;
+	}
 
 	if (IsActive())
 	{

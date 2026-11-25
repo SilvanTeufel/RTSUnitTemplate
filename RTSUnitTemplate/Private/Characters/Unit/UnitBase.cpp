@@ -39,6 +39,8 @@
 #include "Widgets/SquadHealthBar.h"
 #include "EngineUtils.h"
 #include "System/PlayerTeamSubsystem.h"
+#include "Components/AudioComponent.h"
+#include "NiagaraComponent.h"
 #include <climits>
 // Mass includes for follow application and spawn return adjustments
 #include "Mass/Projectile/ProjectileVisualManager.h"
@@ -54,6 +56,7 @@
 #include "Mass/MassUnitVisualFragments.h"
 #include "Mass/Replication/ReplicationSettings.h"
 #include "MassReplicationFragments.h"
+#include "System/AutoAbilitySubsystem.h"
 
 // ------------------------------------------------------------------------------------------------
 // Schalter fuer die Spawn-Absicherung. 1 = an (Vorgabe), 0 = aus wie vor dem 29.08.2026.
@@ -316,6 +319,20 @@ void AUnitBase::Destroyed()
 
 void AUnitBase::BeginPlay()
 {
+	// Movement loop sound: local only, polled - a few hundred cheap timer calls instead of a per-frame tick.
+	if (MovementLoopSound && GetNetMode() != NM_DedicatedServer)
+	{
+		MovementSoundLastLocation = GetActorLocation();
+		GetWorldTimerManager().SetTimer(MovementSoundTimer, this, &AUnitBase::UpdateMovementSound,
+			MovementSoundInterval, true, FMath::FRandRange(0.05f, MovementSoundInterval));
+	}
+	// The attack flame starts hidden (shown by MultiCastStartAttackEvent).
+	if (bShowNiagaraAWhileAttacking && Niagara_A)
+	{
+		Niagara_A->SetAutoActivate(false);
+		Niagara_A->Deactivate();
+		Niagara_A->SetHiddenInGame(true);
+	}
 	// Den Takt HIER setzen und nicht nur im Konstruktor.
 	//
 	// WARUM: der Konstruktor schreibt PrimaryActorTick.TickInterval aus dem C++-Wert (0,25 s).
@@ -543,6 +560,11 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	
 	DOREPLIFETIME(AUnitBase, bSuppressDeathEffects);
+	DOREPLIFETIME(AUnitBase, bAutoSummonEnabled);
+	DOREPLIFETIME(AUnitBase, AutoSummonAlive);
+	DOREPLIFETIME(AUnitBase, AutoSummonMax);
+	DOREPLIFETIME(AUnitBase, AutoSummonIcon);
+	DOREPLIFETIME(AUnitBase, bAutoSummonIsLogistics);
 	DOREPLIFETIME(AUnitBase, ToggleUnitDetection);
 	DOREPLIFETIME(AUnitBase, RunLocation);
 	DOREPLIFETIME(AUnitBase, MeshAssetPath);
@@ -561,6 +583,7 @@ void AUnitBase::GetLifetimeReplicatedProps(TArray< FLifetimeProperty > & OutLife
 	DOREPLIFETIME(AUnitBase, ReduceRootedTime); // Added for Build
 	DOREPLIFETIME(AUnitBase, UnitToChase);
 	DOREPLIFETIME(AUnitBase, FollowUnit);
+	DOREPLIFETIME(AUnitBase, bFollowAttacks);
 	DOREPLIFETIME(AUnitBase, AlliedTeamsMask);
 	DOREPLIFETIME(AUnitBase, NextWaypoint);
 	
@@ -711,6 +734,23 @@ bool AUnitBase::ServerStartAttackEvent_Validate()
 
 void AUnitBase::MultiCastStartAttackEvent_Implementation()
 {
+	// The attack flame (bShowNiagaraAWhileAttacking): on while attacking, off again after the hold time.
+	if (bShowNiagaraAWhileAttacking && Niagara_A && GetNetMode() != NM_DedicatedServer && CanLocalPlayerPerceiveEffect(GetMassActorLocation()))
+	{
+		Niagara_A->SetHiddenInGame(false);
+		if (!Niagara_A->IsActive())
+		{
+			Niagara_A->Activate(true);
+		}
+		GetWorldTimerManager().SetTimer(AttackNiagaraTimer, FTimerDelegate::CreateWeakLambda(this, [this]()
+		{
+			if (Niagara_A)
+			{
+				Niagara_A->Deactivate();
+				Niagara_A->SetHiddenInGame(true);
+			}
+		}), AttackNiagaraHoldSeconds, false);
+	}
 	StartAttackEvent();
 }
 
@@ -968,6 +1008,19 @@ void AUnitBase::ApplySpawnHealthFraction(float HealthFraction, float ShieldFract
 	PendingSpawnShieldFraction = bLinked ? -1.f : ShieldFraction;
 }
 
+void AUnitBase::RunAfterAttributeInit(TFunction<void()> Fn)
+{
+	const bool bLinked = MassActorBindingComponent && MassActorBindingComponent->GetMassEntityHandle().IsValid();
+	if (bLinked)
+	{
+		Fn();
+	}
+	else
+	{
+		PendingAfterAttributeInit.Add(MoveTemp(Fn));
+	}
+}
+
 void AUnitBase::SetHealth_Implementation(float NewHealth)
 {
 	float OldHealth = Attributes->GetHealth();
@@ -1144,6 +1197,13 @@ void AUnitBase::DeadEffectsAndEvents()
 	{
 		if (HasAuthority())
 		{
+			// Combat damage kills through the attribute set (PostGameplayEffectExecute), which never calls SetHealth -
+			// so the supply refund there was missed for every unit killed in a fight. Both calls run only once.
+			ReleaseUnitSupply();
+			if (ABuildingBase* Building = Cast<ABuildingBase>(this))
+			{
+				Building->ReleaseSupplyCapacity();
+			}
 			if (ARTSGameModeBase* GM = Cast<ARTSGameModeBase>(GetWorld()->GetAuthGameMode()))
 			{
 				GM->CheckWinLoseCondition(this);
@@ -1194,6 +1254,11 @@ void AUnitBase::SetMana_Implementation(float NewMana)
 
 void AUnitBase::OnAttributeChanged(const FOnAttributeChangeData& Data)
 {
+	// Classes without an attribute set still get the delegate from InitializeAttributes.
+	if (!Attributes)
+	{
+		return;
+	}
 
 	// 1. Sync local Mass fragment immediately
 	UpdateEntityHealth(Attributes->GetHealth(), Attributes->GetShield());
@@ -1246,6 +1311,17 @@ void AUnitBase::NotifyDamageForAttackAlert(float OldValue, float NewValue)
 	if (!World || NewValue >= OldValue - 1.0f || OldValue <= 0.5f || IsInvestmentActive() || GetGameTimeSinceCreation() < 3.f)
 	{
 		return;
+	}
+	// Only raids count: a combat unit that is already fighting (attacking / chasing a target) is the player's
+	// own push taking return fire - no alert. Buildings and workers always alert; an idle or moving combat
+	// unit alerts on the first hit, before it turns to fight back.
+	if (!bIsBuilding && !IsWorker)
+	{
+		const UnitData::EState State = GetUnitState();
+		if (State == UnitData::Attack || State == UnitData::Chase || State == UnitData::ContinousAttack || State == UnitData::Aim)
+		{
+			return;
+		}
 	}
 	// Each machine only tells its own local controllers; a remote client gets the replicated value.
 	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
@@ -1363,6 +1439,62 @@ float AUnitBase::GetLoadedShotRate(const ATransportUnit* Loaded)
 		return 0.f;
 	}
 	return 1.f / FMath::Max(Unit->PauseDuration + Unit->AttackDuration, 0.05f);
+}
+
+void AUnitBase::ApplyAttackSpeedBuff(float SpeedMultiplier, float Duration)
+{
+	if (!HasAuthority() || SpeedMultiplier <= 1.f || Duration <= 0.f)
+	{
+		return;
+	}
+
+	// The unbuffed timing is remembered once; a second buff while one runs only refreshes it (the stronger
+	// multiplier wins), it never stacks on the already shortened values.
+	if (AttackSpeedBuffBaseAttack < 0.f)
+	{
+		AttackSpeedBuffBaseAttack = AttackDuration;
+		AttackSpeedBuffBasePause = PauseDuration;
+		AttackSpeedBuffMultiplier = SpeedMultiplier;
+	}
+	else
+	{
+		AttackSpeedBuffMultiplier = FMath::Max(AttackSpeedBuffMultiplier, SpeedMultiplier);
+	}
+
+	const float BaseAttack = AttackSpeedBuffBaseAttack;
+	const float BasePause = AttackSpeedBuffBasePause;
+	const float Cycle = (BaseAttack + BasePause) / AttackSpeedBuffMultiplier;
+
+	if (!bUseSkeletalMovement && PlayRateRunTimeCalculation)
+	{
+		// Vertex animation: the attack clip is stretched to AttackDuration by the UnitAnimationProcessor,
+		// so attack and pause can both be shortened and the clip still plays completely, just faster.
+		AttackDuration = BaseAttack / AttackSpeedBuffMultiplier;
+		PauseDuration = BasePause / AttackSpeedBuffMultiplier;
+	}
+	else
+	{
+		// Skeletal animation plays at its own speed - a shorter AttackDuration would cut the swing off.
+		// So only the pause between two attacks gets shorter; the attack itself keeps its length.
+		AttackDuration = BaseAttack;
+		PauseDuration = FMath::Max(Cycle - BaseAttack, BasePause * FMath::Clamp(MinPauseFractionUnderAttackSpeedBuff, 0.f, 1.f));
+	}
+
+	GetWorldTimerManager().SetTimer(AttackSpeedBuffTimer, this, &AUnitBase::EndAttackSpeedBuff, Duration, false);
+}
+
+void AUnitBase::EndAttackSpeedBuff()
+{
+	GetWorldTimerManager().ClearTimer(AttackSpeedBuffTimer);
+	if (AttackSpeedBuffBaseAttack < 0.f)
+	{
+		return;
+	}
+	AttackDuration = AttackSpeedBuffBaseAttack;
+	PauseDuration = AttackSpeedBuffBasePause;
+	AttackSpeedBuffBaseAttack = -1.f;
+	AttackSpeedBuffBasePause = -1.f;
+	AttackSpeedBuffMultiplier = 1.f;
 }
 
 void AUnitBase::OnLoadedUnitsChanged()
@@ -1583,7 +1715,11 @@ FVector AUnitBase::GetProjectileSpawnLocation(const FVector& AdditionalOffset) c
 					FinalPos.Z = FinalZ;
 
 					// KORREKTUR: Berücksichtige AttributeOffset auf dem Server
-					float AttributeOffset = bIsClient ? 0.f : (Attributes ? Attributes->GetProjectileScaleActorDirectionOffset() : 0.f);
+					// A "ProjectileSpawn"-tagged component IS the muzzle: the attribute offset is the fallback for
+					// units without one. Adding it on top pushed shot and muzzle flash ahead of the barrel
+					// (Vector/Parallax: 200 uu) - and only on the server, the client used 0.
+					const bool bHasTaggedMuzzle = Comps.Num() > 0 && Comps[0] != nullptr;
+					float AttributeOffset = (bIsClient || bHasTaggedMuzzle) ? 0.f : (Attributes ? Attributes->GetProjectileScaleActorDirectionOffset() : 0.f);
 					if (AttributeOffset != 0.f)
 					{
 						FVector ShootingUnitForward = TF->GetTransform().GetRotation().Vector();
@@ -2030,6 +2166,10 @@ void AUnitBase::SpawnProjectileFromClassWithAim_Implementation(
 
     int32 BaseCount = (HomingCount > 0) ? HomingCount : ProjectileCount;
     float FinalDamage = ProjectileCDO->Damage + ExtraDamage;
+    if (ProjectileCDO->AttackDamageMultiplier > 0.f && Attributes)
+    {
+        FinalDamage += Attributes->GetAttackDamage() * ProjectileCDO->AttackDamageMultiplier;
+    }
 
 	// --- ADD THIS SECTION to determine spawner's location for Aim Direction ---
 	FVector SpawnerLocationForAimDir = GetMassActorLocation(); // Default to actor's root location
@@ -2879,7 +3019,9 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
     else
     {
         UAttributeSetBase* CurrentAttributes = Attributes;
-        if (CurrentAttributes && CurrentAttributes->GetShield() <= 0)
+        if (CDO->bDamageAsGameplayEffect)
+            ApplyDamageAsEffect(NewDamage);
+        else if (CurrentAttributes && CurrentAttributes->GetShield() <= 0)
             SetHealth_Implementation(CurrentAttributes->GetHealth() - NewDamage);
         else if (CurrentAttributes)
             SetShield_Implementation(CurrentAttributes->GetShield() - NewDamage);
@@ -2888,6 +3030,8 @@ void AUnitBase::HandleProjectileImpact_Implementation(AActor* Shooter, const FVe
         if (ShootingUnit && (ShootingUnit->TeamId != TeamId))
         {
             ShootingUnit->IncreaseExperience();
+            // Automatic abilities of the unit that was hit (Mass projectiles land here, not in AProjectile::Impact).
+            UAutoAbilitySubsystem::NotifyTrigger(this, EAutoAbilityTrigger::OnHit, ShootingUnit);
         }
     }
 
@@ -3389,5 +3533,69 @@ void AUnitBase::Multicast_UnregisterObstacle_Implementation()
 				NavSys->AddDirtyArea(BoundsToDirty, ENavigationDirtyFlag::All);
 			}
 		}
+	}
+}
+
+void AUnitBase::UpdateMovementSound()
+{
+	if (!MovementLoopSound || GetUnitState() == UnitData::Dead)
+	{
+		SetMovementSoundOn(false);
+		if (GetUnitState() == UnitData::Dead)
+		{
+			GetWorldTimerManager().ClearTimer(MovementSoundTimer);
+		}
+		return;
+	}
+
+	const FVector Location = GetMassActorLocation();
+	const float Speed = FVector::Dist2D(Location, MovementSoundLastLocation) / MovementSoundInterval;
+	MovementSoundLastLocation = Location;
+
+	bool bWant = false;
+	if (bMovementSoundFollowsNiagara)
+	{
+		auto Shown = [](const UNiagaraComponent* N)
+		{
+			return N && N->GetAsset() && !N->bHiddenInGame && N->IsVisible();
+		};
+		bWant = Shown(Niagara_A) || Shown(Niagara_B);
+	}
+	else
+	{
+		bWant = Speed > MovementSoundMinSpeed;
+	}
+	if (bWant && !CanLocalPlayerPerceiveEffect(Location))
+	{
+		bWant = false;
+	}
+	SetMovementSoundOn(bWant);
+}
+
+void AUnitBase::SetMovementSoundOn(bool bOn)
+{
+	if (bOn == bMovementSoundOn)
+	{
+		return;
+	}
+	bMovementSoundOn = bOn;
+	if (bOn)
+	{
+		if (!MovementAudio)
+		{
+			MovementAudio = UGameplayStatics::SpawnSoundAttached(MovementLoopSound, GetRootComponent(), NAME_None,
+				FVector::ZeroVector, EAttachLocation::KeepRelativeOffset, /*bStopWhenAttachedToDestroyed*/ true,
+				MovementLoopVolume, 1.f, 0.f, nullptr, nullptr, /*bAutoDestroy*/ false);
+			if (!MovementAudio)
+			{
+				return;
+			}
+			MovementAudio->Stop();
+		}
+		MovementAudio->FadeIn(MovementSoundFadeSeconds, MovementLoopVolume, FMath::FRandRange(0.f, 2.f));
+	}
+	else if (MovementAudio && MovementAudio->IsPlaying())
+	{
+		MovementAudio->FadeOut(MovementSoundFadeSeconds, 0.f);
 	}
 }

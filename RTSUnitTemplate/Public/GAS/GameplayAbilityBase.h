@@ -9,6 +9,7 @@
 class AUnitBase;
 class AGASUnit;
 class USoundBase;
+class UNiagaraSystem;
 #include "GameplayAbilityBase.generated.h"
 
 /**
@@ -183,6 +184,24 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	bool UseAbilityQue = true;
 
+	/**
+	 * Runs BESIDE the unit's ability slot (AGASUnit::ActivatedAbilityInstance): it is never queued, never waits for the
+	 * running ability (a building's production) and never blocks it or shows up as the current ability. Only for
+	 * abilities that finish at once - research unlocks (GA_ActivateAbilities_*) and extension placement, whose mouse hit
+	 * comes with the activating press. Before this, the unlock took the production slot (power icon, queue stuck) and
+	 * an extension could not be placed while the building produced.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	bool bRunsBesideAbilitySlot = false;
+
+	/**
+	 * Watchdog: > 0 = the ability cancels itself when it is still active this many seconds after activation and its
+	 * unit has not started casting (e.g. it waits for the unit to reach a spot it never reaches). While the unit
+	 * casts, it checks again later. 0 = off.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate, meta = (ClampMin = "0"))
+	float AutoCancelAfterSeconds = 0.f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bRotateUnitsToMouse = false;
 
@@ -333,6 +352,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddCastingFallback();
 
+	/**
+	 * Charging up while the cast runs: AddCastingFallback plays CastChargeVFX / CastChargeSound at the caster's
+	 * projectile spawn point (the muzzle, the blade) for the unit's CastTime, for every player. Both optional.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Casting")
+	UNiagaraSystem* CastChargeVFX = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Casting")
+	FVector CastChargeVFXScale = FVector(1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Casting")
+	USoundBase* CastChargeSound = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Casting")
+	float CastChargeSoundScale = 1.f;
+
 	/** Gegenstueck zu AddCastingFallback - der Cast dieser Ability laeuft nicht mehr. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveCastingFallback();
@@ -422,6 +457,12 @@ public:
 	 
 protected:
 	float ActivationStartTime = 0.f;
+
+	/** Timer of the AutoCancelAfterSeconds watchdog. */
+	FTimerHandle AutoCancelTimer;
+
+	/** AutoCancelAfterSeconds is up: cancel, unless the unit is casting (then check again later). */
+	void CheckAutoCancel();
 
 private:
 	FText CreateTooltipText() const;

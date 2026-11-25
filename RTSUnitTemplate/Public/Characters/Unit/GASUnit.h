@@ -218,6 +218,10 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly, Category=Ability)
 	UGameplayAbilityBase* ActivatedAbilityInstance;
 
+	/** A running ability with bRunsBesideAbilitySlot (never in ActivatedAbilityInstance). */
+	UPROPERTY(Transient)
+	TObjectPtr<UGameplayAbilityBase> SideAbilityInstance;
+
 	UPROPERTY(ReplicatedUsing = OnRep_CurrentSnapshot, BlueprintReadWrite, Category=Ability)
 	FQueuedAbility CurrentSnapshot;
 
@@ -226,6 +230,22 @@ public:
 
 	UPROPERTY()
 	float QueueFallbackTimer = 0.f;
+
+	/**
+	 * Set while AAbilityUnit::ActivateStartAbilitiesOnSpawn activates its StartAbilities. An ability the unit
+	 * starts by itself (an unlock like GA_ActivateAbilities_*) must never hold the production queue: if it is
+	 * still registered as ActivatedAbilityInstance after StartAbilityQueueHoldSeconds while the player wants
+	 * something, the slot is released (the ability itself keeps running - its unlock is not lost).
+	 */
+	bool bActivatingStartAbility = false;
+	bool bActivatedAbilityIsStartAbility = false;
+	float ActivatedAbilityRegisteredTime = 0.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Abilities", meta = (ClampMin = "0"))
+	float StartAbilityQueueHoldSeconds = 2.f;
+
+	/** See bActivatingStartAbility. Returns true when the slot was released. */
+	bool ReleaseStrandedStartAbility(bool bPlayerWaiting);
 
 	// Taktgeber und Ausdauerzaehler fuer EnforceCastingInvariant.
 	float CastInvariantTimer = 0.f;

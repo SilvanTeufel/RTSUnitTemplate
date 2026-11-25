@@ -13,6 +13,8 @@ class UMaterialInstanceDynamic;
 class URuntimeVirtualTexture;
 class UStaticMeshComponent;
 class UStaticMesh;
+class UTexture2D;
+class AFogActor;
 
 UCLASS(Blueprintable, meta=(BlueprintSpawnableComponent))
 class RTSUNITTEMPLATE_API UAreaDecalComponent : public UDecalComponent
@@ -24,6 +26,7 @@ public:
 
 	TSubclassOf<UGameplayEffect> GetFriendlyEffect() const { return FriendlyEffect; }
 	TSubclassOf<UGameplayEffect> GetEnemyEffect() const { return EnemyEffect; }
+	bool AffectsFlyingUnits() const { return bAffectFlyingUnits; }
 
 	// Required function to register replicated properties.
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -36,6 +39,10 @@ protected:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	TSubclassOf<UGameplayEffect> EnemyEffect;
+
+	/** False: flying units inside the area get neither FriendlyEffect nor EnemyEffect (a ground field). Server side. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	bool bAffectFlyingUnits = true;
 	
 	// The current material being used for the decal. Replicated.
 	UPROPERTY(Transient, ReplicatedUsing = OnRep_CurrentMaterial)
@@ -204,7 +211,68 @@ public:
 	/** Aktueller Radius - gebraucht vom ReplayModule, das ihn Bild fuer Bild mitschreibt. */
 	float GetCurrentDecalRadius() const { return CurrentDecalRadius; }
 
+	// --- Fog of war (RVT mode, e.g. the Xeno creep) ---------------------------------------------------
+
+	/**
+	 * Other teams see the area only where their fog of war has revealed it at least once - like a building it
+	 * stays visible after that, piece by piece; it is forgotten when the area goes away completely (radius 0 /
+	 * deactivated). Growth into the fog stays hidden until seen. Per machine, each client with its own fog.
+	 * Needs the writer material's FogMask parameters (FogMask, FogMaskOrigin, FogMaskSize, FogMaskStrength).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT|FogOfWar")
+	bool bRevealToEnemiesByFog = true;
+
+	/** Seconds between two fog checks of an enemy area. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT|FogOfWar", meta = (ClampMin = "0.05"))
+	float FogRevealInterval = 0.4f;
+
+	/** Size of a remembered revealed cell (uu) - also the texel size of the mask. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RVT|FogOfWar", meta = (ClampMin = "25"))
+	float FogRevealCellSize = 100.f;
+
+	/** The writer is masked for the local viewer (enemy area under fog of war). */
+	bool IsFogMasked() const { return bFogMasked; }
+
+	/** Number of remembered revealed cells (tests). */
+	UFUNCTION(BlueprintPure, Category = "RVT|FogOfWar")
+	int32 GetFogRevealedCellCount() const { return FogRevealedCells.Num(); }
+
 protected:
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	/** Cells (FogRevealCellSize, world grid) of the area the local team has seen. */
+	TSet<FIntPoint> FogRevealedCells;
+
+	bool bFogMasked = false;
+
+	FTimerHandle FogRevealTimer;
+
+	TWeakObjectPtr<AFogActor> CachedFogActor;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UTexture2D> FogMaskTexture;
+
+	/** Where the mask texture was centred and how wide it is (world). */
+	FVector2D FogMaskOrigin = FVector2D::ZeroVector;
+	float FogMaskSize = 0.f;
+	int32 FogMaskTexels = 0;
+
+	/** Team of the owning unit / effect area; INDEX_NONE = unknown (never masked). */
+	int32 GetOwnerTeamId() const;
+
+	AFogActor* GetMaskingFog();
+
+	FIntPoint FogCell(const FVector2D& P) const;
+
+	/** Timer: remembers newly seen cells inside the area and updates the mask. */
+	void UpdateFogReveal();
+
+	/** Writes the revealed cells into the mask texture around the writer. */
+	void RebuildFogMaskTexture();
+
+	/** Sets the FogMask parameters on the writer material (strength 0 = unmasked). */
+	void ApplyFogMaskParameters();
+
 	/** Merkt, ob der Writer vor einem SetVirtualTextureWritingEnabled(false) ueberhaupt aktiv war. */
 	bool bVirtualTextureWritingWasEnabled = false;
 

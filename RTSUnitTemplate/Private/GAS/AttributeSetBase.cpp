@@ -247,6 +247,16 @@ void UAttributeSetBase::PostAttributeChange(const FGameplayAttribute& Attribute,
 	{
 		FireHealthThresholdEvents(OldValue, NewValue);
 	}
+	// A timed MaxShield bonus ran out (e.g. the MenderMatrix shield): the shield it allowed goes with it.
+	if (Attribute == GetMaxShieldAttribute() && NewValue < OldValue && GetShield() > NewValue)
+	{
+		Shield = FMath::Max(0.f, NewValue);
+		if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor()))
+		{
+			UnitBase->UpdateEntityHealth(GetHealth(), GetShield());
+			UnitBase->UpdateWidget();
+		}
+	}
 	if (Attribute == GetHealthAttribute() || Attribute == GetShieldAttribute())
 	{
 		if (AUnitBase* UnitBase = Cast<AUnitBase>(GetOwningActor()))

@@ -127,6 +127,7 @@ void UMassEffectAreaImpactProcessor::ConfigureQueries(const TSharedRef<FMassEnti
 	UnitQuery.AddRequirement<FTransformFragment>(EMassFragmentAccess::ReadOnly);
 	UnitQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
 	UnitQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadOnly);
+	UnitQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	UnitQuery.AddTagRequirement<FUnitMassTag>(EMassFragmentPresence::All);
 	UnitQuery.RegisterWithProcessor(*this);
 }
@@ -139,6 +140,7 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 
 	TArray<FMassEntityHandle> UnitEntities;
 	TArray<FVector> UnitLocations;
+	TArray<float> UnitHalfHeights;
 	TArray<int32> UnitTeams;
 
 	// UnitQuery.ForEachEntityChunk removed early return
@@ -147,11 +149,13 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 		const int32 NumEntities = UnitContext.GetNumEntities();
 		TConstArrayView<FTransformFragment> TransformList = UnitContext.GetFragmentView<FTransformFragment>();
 		TConstArrayView<FMassCombatStatsFragment> StatsList = UnitContext.GetFragmentView<FMassCombatStatsFragment>();
+		TConstArrayView<FMassAgentCharacteristicsFragment> CharList = UnitContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
 		for (int32 i = 0; i < NumEntities; ++i)
 		{
 			UnitEntities.Add(UnitContext.GetEntity(i));
 			UnitLocations.Add(TransformList[i].GetTransform().GetLocation());
+			UnitHalfHeights.Add(CharList.Num() > 0 ? FMath::Max(0.f, CharList[i].CapsuleHeight) : 88.f);
 			UnitTeams.Add(StatsList[i].TeamId);
 		}
 	});
@@ -379,7 +383,14 @@ void UMassEffectAreaImpactProcessor::Execute(FMassEntityManager& EntityManager, 
 					// horizontal reach, and none at all until it had scaled past 38. Flying units are still
 					// excluded, by the tolerance rather than by the radius: they sit at ground + FlyHeight
 					// (500), i.e. ~450cm up, far beyond the 150 default.
-					const float DeltaZ = FMath::Abs(AreaLocation.Z - UnitLocation.Z);
+					//
+					// The height is measured to the unit's vertical extent (center +- CapsuleHeight), not to
+					// its center: a large Xeno or a building has its center 150-300cm above the ground and
+					// was never hit by any area (BroodHive / BroodColossus untouched by a Nuke). A ground
+					// unit's extent reaches the ground, so it gets DeltaZ ~0; a flyer's bottom is still
+					// ~400cm up and stays out.
+					const float HalfHeight = UnitHalfHeights[j];
+					const float DeltaZ = FMath::Max(0.f, FMath::Abs(AreaLocation.Z - UnitLocation.Z) - HalfHeight);
 					if (FVector::DistSquared2D(AreaLocation, UnitLocation) <= RadiusSq
 						&& DeltaZ <= Impact.VerticalTolerance)
 					{
