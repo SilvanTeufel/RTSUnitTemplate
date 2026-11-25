@@ -12,6 +12,16 @@
 #include "Engine/DataTable.h"
 #include "EngineUtils.h"
 #include "Core/UnitData.h"
+#include "Actors/WinLoseConfigActor.h"
+
+namespace
+{
+	// Which row sequences of EnqueueStoryRows already ran, per world (weak: a restart shows them again).
+	TMap<TWeakObjectPtr<UWorld>, TSet<FString>> GespielteFolgen;
+
+	// Last game time a CooldownGroup spoke, per world.
+	TMap<TWeakObjectPtr<UWorld>, TMap<FName, double>> GroupLastFiredTimes;
+}
 
 AStoryTriggerActor::AStoryTriggerActor()
 {
@@ -119,12 +129,47 @@ bool AStoryTriggerActor::LocalPlayerMatchesTeam() const
     return LocalRTSController && LocalRTSController->SelectableTeamId == TeamId;
 }
 
+bool AStoryTriggerActor::PassesPacing() const
+{
+    const UWorld* World = GetWorld();
+    if (!World)
+    {
+        return false;
+    }
+    const double Now = World->GetTimeSeconds();
+    if (Now < MinGameTimeSeconds)
+    {
+        return false;
+    }
+    if (!CooldownGroup.IsNone())
+    {
+        if (const TMap<FName, double>* Groups = GroupLastFiredTimes.Find(World))
+        {
+            if (const double* Last = Groups->Find(CooldownGroup))
+            {
+                return Now - *Last >= GroupCooldownSeconds;
+            }
+        }
+    }
+    return true;
+}
+
+void AStoryTriggerActor::MarkPacingFired()
+{
+    UWorld* World = GetWorld();
+    if (World && !CooldownGroup.IsNone())
+    {
+        GroupLastFiredTimes.FindOrAdd(World).Add(CooldownGroup, World->GetTimeSeconds());
+    }
+}
+
 void AStoryTriggerActor::HandleRepeat()
 {
-    if (!LocalPlayerMatchesTeam())
+    if (!LocalPlayerMatchesTeam() || !PassesPacing())
     {
         return;
     }
+    MarkPacingFired();
     LoadRow(true);
     StoryEinreihen();
 }
@@ -136,7 +181,7 @@ void AStoryTriggerActor::CheckProximity()
         GetWorldTimerManager().ClearTimer(ProximityTimer);
         return;
     }
-    if (!LocalPlayerMatchesTeam())
+    if (!LocalPlayerMatchesTeam() || !PassesPacing())
     {
         return;
     }
@@ -157,6 +202,7 @@ void AStoryTriggerActor::CheckProximity()
         if (FVector::DistSquared2D(Unit->GetMassActorLocation(), Here) <= RadiusSq)
         {
             bHasTriggered = true;
+            MarkPacingFired();
             if (bTriggerOnce)
             {
                 GetWorldTimerManager().ClearTimer(ProximityTimer);
@@ -200,7 +246,14 @@ void AStoryTriggerActor::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, AAc
         return;
     }
 
+    // Too early or the group just spoke: stay armed (the next overlap may fire it).
+    if (!PassesPacing())
+    {
+        return;
+    }
+
     bHasTriggered = true;
+    MarkPacingFired();
 
     // Disable further overlaps to save resources
     if (TriggerBox && bTriggerOnce)
@@ -324,6 +377,51 @@ void AStoryTriggerActor::EnqueueStoryRows(UObject* WorldContextObject, UDataTabl
 	UStoryTriggerQueueSubsystem* Queue = GI ? GI->GetSubsystem<UStoryTriggerQueueSubsystem>() : nullptr;
 	if (!Queue)
 	{
+		return;
+	}
+
+	// EINE Zeilenfolge laeuft je Partie nur einmal. Die Bosse rufen das in IsDead auf - im Endlos-Survival kommt aber
+	// Welle um Welle ein neuer Boss (dazu die kleinen Kraken), und der Dialog Cog-9 / Vael lief in Dauerschleife.
+	FString Folge = StoryTable->GetPathName();
+	for (const FName& ZeilenId : RowIds)
+	{
+		Folge += TEXT("|") + ZeilenId.ToString();
+	}
+	for (auto It = GespielteFolgen.CreateIterator(); It; ++It)
+	{
+		if (!It.Key().IsValid())
+		{
+			It.RemoveCurrent();
+		}
+	}
+	TSet<FString>& Gespielt = GespielteFolgen.FindOrAdd(World);
+	if (Gespielt.Contains(Folge))
+	{
+		return;
+	}
+	Gespielt.Add(Folge);
+
+	// Im Endlos-Survival (die Zeit kommt in die Bestenliste) kein Story-Dialog: dort spricht stattdessen Vael einen
+	// ihrer Philosophie-Saetze - ueber den Aktor, der sie ohnehin im Level zufaellig zieht.
+	bool bSurvival = false;
+	for (TActorIterator<AWinLoseConfigActor> It(World); It && !bSurvival; ++It)
+	{
+		bSurvival = It->bReportSurvivalScore;
+	}
+	if (bSurvival)
+	{
+		AStoryTriggerActor* Spruch = nullptr;
+		for (TActorIterator<AStoryTriggerActor> It(World); It; ++It)
+		{
+			if (It->UseRandomRow && It->StoryDataTable && It->StoryDataTable != StoryTable && (!Spruch || It->RepeatIntervalSeconds > 0.f))
+			{
+				Spruch = *It;
+			}
+		}
+		if (Spruch)
+		{
+			Spruch->HandleRepeat();
+		}
 		return;
 	}
 

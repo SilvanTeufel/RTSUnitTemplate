@@ -71,6 +71,13 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|Procedural")
 	TObjectPtr<class UFullProceduralMapComponent> FullProcedural;
 
+	/**
+	 * Start loadout: at match start every player picks a card set (workers, army, tech and production building) from
+	 * a data table, AI players at random. Off by default - bEnabled. See UStartLoadoutComponent.
+	 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|StartLoadout")
+	TObjectPtr<class UStartLoadoutComponent> StartLoadout;
+
 	/** Places the procedural ponds - after the procedural resources (AResourceGameMode::StartPlay), before any BeginPlay. */
 	virtual void StartPlay() override;
 
@@ -158,6 +165,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|WinLose")
 	AWinLoseConfigActor* WinLoseConfigActor; // Primary or first found config actor
+
+	/** True once the match was decided (won or lost) - nothing new (card offers, ...) should start after that. */
+	bool IsWinLoseTriggered() const { return bWinLoseTriggered; }
 
 	bool bWinLoseTriggered = false;
 	bool bInitialSpawnFinished = false;
@@ -358,6 +368,102 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	float GetAdaptiveSpawnMultiplier(const FUnitSpawnParameter& SpawnParameter) const;
 
+	// --- Player pressure (survival): enemy waves follow how well the player is doing ---------------------
+
+	/**
+	 * Enemy spawn rows (TeamId != PressureTeamId) get PlayerPressureMultiplier on their wave size and cap:
+	 * down to -PressureMaxReduction while the pressured team loses many units (optionally up to +PressureMaxBonus
+	 * with a high income and few losses, see bPressureIncomeRaisesWaves). Measured over PressureWindowSeconds every
+	 * PressureUpdateInterval from two counters (worker deliveries, unit losses) - nothing scans per frame.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure")
+	bool bUsePlayerPressureSpawns = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns"))
+	int32 PressureTeamId = 2;
+
+	/** Off (default): only lost units change the waves (they can only get easier). On: a high income with few losses adds up to PressureMaxBonus. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns"))
+	bool bPressureIncomeRaisesWaves = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "0"))
+	float PressureMaxBonus = 0.5f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "0", ClampMax = "0.95"))
+	float PressureMaxReduction = 0.5f;
+
+	/** Gathered resources per minute (all types) at which the bonus starts ... */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "0"))
+	float PressureIncomeNeutralPerMinute = 800.f;
+
+	/** ... and at which it is full (when the team also loses nothing). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "1"))
+	float PressureIncomeHighPerMinute = 2000.f;
+
+	/** Share of the team's units lost within the window that means the full reduction (0.2 = a fifth). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "0.01"))
+	float PressureLossShareForFullReduction = 0.2f;
+
+	/** Seconds from match start in which the waves can only get easier, never harder: the opening economy is no proof of a good defence. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "0"))
+	float PressureGraceSeconds = 300.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "10"))
+	float PressureWindowSeconds = 120.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "1"))
+	float PressureUpdateInterval = 5.f;
+
+	/** The multiplier rises at most this much per update, so waves never jump up... */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "0.01"))
+	float PressureMaxStep = 0.01f;
+
+	/** ... and falls at most this much per update: relief after losses comes quickly. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Pressure", meta = (EditCondition = "bUsePlayerPressureSpawns", ClampMin = "0.01"))
+	float PressureMaxStepDown = 0.15f;
+
+	/** Current factor on enemy waves (1 = neutral). */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Pressure")
+	float PlayerPressureMultiplier = 1.f;
+
+	/** Server: a worker delivered mined resources for TeamId (the income the pressure measures). */
+	void NoteGatheredResources(int32 InTeamId, float Amount);
+
+	/** Factor for a spawn row: PlayerPressureMultiplier for enemy rows, else 1. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Pressure")
+	float GetPressureSpawnMultiplier(const FUnitSpawnParameter& SpawnParameter) const;
+
+	/**
+	 * Late-game enemy levels: from EnemyLevelBonusStartSeconds of match time on, every unit the spawn system
+	 * spawns for a team without a human player gets +EnemyLevelBonusPerStep levels, and EnemyLevelBonusPerStep
+	 * more every EnemyLevelBonusIntervalSeconds (20:00 +3, 23:00 +6, ...). Their level cap is lifted to
+	 * EnemyLevelBonusMaxLevel (normal units stop at LevelUpData.MaxCharacterLevel).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|EnemyLevelBonus")
+	bool bUseEnemyLevelBonus = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|EnemyLevelBonus", meta = (EditCondition = "bUseEnemyLevelBonus", ClampMin = "0"))
+	float EnemyLevelBonusStartSeconds = 1200.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|EnemyLevelBonus", meta = (EditCondition = "bUseEnemyLevelBonus", ClampMin = "1"))
+	float EnemyLevelBonusIntervalSeconds = 180.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|EnemyLevelBonus", meta = (EditCondition = "bUseEnemyLevelBonus", ClampMin = "1"))
+	int32 EnemyLevelBonusPerStep = 3;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|EnemyLevelBonus", meta = (EditCondition = "bUseEnemyLevelBonus", ClampMin = "1"))
+	int32 EnemyLevelBonusMaxLevel = 25;
+
+	/** Extra levels for an enemy unit spawned now (0 before EnemyLevelBonusStartSeconds or when disabled). */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|EnemyLevelBonus")
+	int32 GetEnemyLevelBonus() const;
+
+	/** Whether a human player controls TeamId (their units never get the enemy level bonus). */
+	bool IsHumanPlayerTeam(int32 InTeamId) const;
+
+	/** Server: raises a freshly spawned enemy unit by GetEnemyLevelBonus() (after its attribute setup). */
+	void ApplyEnemyLevelBonus(class AUnitBase* Unit, int32 EarnedLevel);
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	TArray<FUnitSpawnData> UnitSpawnDataSets;
 
@@ -389,4 +495,20 @@ public:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	
+
+private:
+	/** Total resources delivered by workers, per team id. */
+	TArray<float> TeamGatheredTotal;
+
+	struct FPressureSample
+	{
+		double Time = 0.0;
+		float Gathered = 0.f;
+		int32 Lost = 0;
+	};
+	TArray<FPressureSample> PressureSamples;
+	FTimerHandle PressureTimer;
+	double LastPressureLogTime = -1000.0;
+
+	void UpdatePlayerPressure();
 };

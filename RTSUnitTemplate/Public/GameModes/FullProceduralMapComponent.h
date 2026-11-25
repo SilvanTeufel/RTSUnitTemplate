@@ -96,6 +96,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Full Procedural|Bases", meta = (ClampMin = "1"))
 	float BaseMaxHeightDifference = 60.f;
 
+	/**
+	 * Buildings and units that move along with a main base stay on its level: a spot whose ground differs from the
+	 * base's by more than this (another plateau, even one reachable over a ramp) is pulled towards the base instead
+	 * (uu). Plateau steps on the procedural maps are ~170 uu. Resources, expansion sites etc. keep their spot.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Full Procedural|Bases", meta = (ClampMin = "1"))
+	float SameLevelMaxHeightDifference = 100.f;
+
 	/** Placed actors up to this distance from a main base move along with it, keeping their offset (uu). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Full Procedural|Bases", meta = (ClampMin = "0"))
 	float RelocateRadius = 6000.f;
@@ -118,6 +126,17 @@ public:
 	/** Least distance between two spawn points (uu). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Full Procedural|Spawn", meta = (ClampMin = "0"))
 	float SpawnPointSpacing = 5000.f;
+
+	/**
+	 * Spawn points on the direct way to the human main base: of the candidates the ones whose path is the least
+	 * detour (path length / straight distance) win - the waves come up the base's ramp instead of walking round
+	 * its plateau. 0 = off (random order as before).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Full Procedural|Spawn", meta = (ClampMin = "0"))
+	float MaxSpawnPathDetour = 1.4f;
+
+	/** Path length from the human main base to P / straight distance (99 = no path). */
+	float PathDetour(const FVector& P) const;
 
 	/** Spawned units start this high above a spawn point (uu) - the spawn tables' UnitOffset.Z is replaced. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Full Procedural|Spawn")

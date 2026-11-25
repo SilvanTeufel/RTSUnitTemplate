@@ -200,6 +200,10 @@ struct RTSUNITTEMPLATE_API FMainMenuTheme
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MainMenu|Theme")
 	FText Name;
 
+	/** Subtitle while this theme is active, e.g. DATACENTER / BROODHIVE. Empty = FMainMenuConfig::Subtitle. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MainMenu|Theme")
+	FText Subtitle;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MainMenu|Theme")
 	FSlateBrush Panel;
 
@@ -263,6 +267,11 @@ struct RTSUNITTEMPLATE_API FMainMenuConfig
 	FString SaveSlotName = TEXT("QuickSave");
 };
 
+class UMainMenuWidget;
+
+/** The menu (re)applied its look - on setup and on every theme switch. */
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMainMenuStyleApplied, UMainMenuWidget* /*Menu*/, const FMainMenuStyle& /*Style*/);
+
 /**
  * Classic main menu as a widget: background picture, title and a column of buttons - the same
  * choices the walk-in menu map offers with its switch actors (maps, replay, save/load, store page).
@@ -296,6 +305,15 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "MainMenu")
 	int32 GetTheme() const { return ThemeIndex; }
+
+	/** Config.Style with the active theme laid over it - what the menu draws right now. */
+	const FMainMenuStyle& GetActiveStyle() const { return ActiveStyle; }
+
+	/**
+	 * Other widgets that should look like the menu (e.g. an online panel next to it) follow this:
+	 * fires whenever a menu applies its style, including every theme switch.
+	 */
+	static FOnMainMenuStyleApplied OnStyleApplied;
 
 	/** Z order of windows opened from the menu (save/load, replay browser) and of the loading screen. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "MainMenu")

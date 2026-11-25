@@ -6,6 +6,86 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/ButtonSlot.h"
+#include "Components/PanelWidget.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/HorizontalBoxSlot.h"
+
+void UMapMenuWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	// Vor dem Slate-Aufbau einfuegen, damit die Reihenfolge in der Liste stimmt.
+	UButton* KeyLayoutButton = Cast<UButton>(GetWidgetFromName(KeyLayoutButtonName));
+	if (!KeyLayoutButton && WidgetTree)
+	{
+		UButton* Template = Cast<UButton>(GetWidgetFromName(KeyLayoutTemplateButtonName));
+		if (!Template)
+		{
+			Template = ExitButton;
+		}
+		UPanelWidget* Parent = Template ? Template->GetParent() : nullptr;
+		if (Parent)
+		{
+			KeyLayoutButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), KeyLayoutButtonName);
+			KeyLayoutButton->SetStyle(Template->GetStyle());
+			KeyLayoutButton->SetColorAndOpacity(Template->GetColorAndOpacity());
+			KeyLayoutButton->SetBackgroundColor(Template->GetBackgroundColor());
+
+			// Die Beschriftung als Kopie der Vorlage: Schrift, Farbe, Ausrichtung und vor allem die
+			// Mindestbreite - ueber sie sind alle Knoepfe im Menue gleich breit.
+			UTextBlock* TemplateLabel = Template->GetChildrenCount() > 0 ? Cast<UTextBlock>(Template->GetChildAt(0)) : nullptr;
+			UTextBlock* Label = TemplateLabel ? DuplicateObject<UTextBlock>(TemplateLabel, WidgetTree) : WidgetTree->ConstructWidget<UTextBlock>();
+			Label->Slot = nullptr;
+			Label->SetText(KeyLayoutButtonLabel);
+			UButtonSlot* LabelSlot = Cast<UButtonSlot>(KeyLayoutButton->AddChild(Label));
+			if (const UButtonSlot* TemplateLabelSlot = TemplateLabel ? Cast<UButtonSlot>(TemplateLabel->Slot) : nullptr)
+			{
+				if (LabelSlot)
+				{
+					LabelSlot->SetPadding(TemplateLabelSlot->GetPadding());
+					LabelSlot->SetHorizontalAlignment(TemplateLabelSlot->GetHorizontalAlignment());
+					LabelSlot->SetVerticalAlignment(TemplateLabelSlot->GetVerticalAlignment());
+				}
+			}
+
+			UPanelSlot* NewSlot = Parent->InsertChildAt(Parent->GetChildIndex(Template) + 1, KeyLayoutButton);
+			if (const UVerticalBoxSlot* From = Cast<UVerticalBoxSlot>(Template->Slot))
+			{
+				if (UVerticalBoxSlot* To = Cast<UVerticalBoxSlot>(NewSlot))
+				{
+					To->SetPadding(From->GetPadding());
+					To->SetSize(From->GetSize());
+					To->SetHorizontalAlignment(From->GetHorizontalAlignment());
+					To->SetVerticalAlignment(From->GetVerticalAlignment());
+				}
+			}
+			else if (const UHorizontalBoxSlot* FromH = Cast<UHorizontalBoxSlot>(Template->Slot))
+			{
+				if (UHorizontalBoxSlot* ToH = Cast<UHorizontalBoxSlot>(NewSlot))
+				{
+					ToH->SetPadding(FromH->GetPadding());
+					ToH->SetSize(FromH->GetSize());
+					ToH->SetHorizontalAlignment(FromH->GetHorizontalAlignment());
+					ToH->SetVerticalAlignment(FromH->GetVerticalAlignment());
+				}
+			}
+		}
+	}
+	if (KeyLayoutButton)
+	{
+		KeyLayoutButton->OnClicked.AddUniqueDynamic(this, &UMapMenuWidget::OnKeyLayoutClicked);
+	}
+}
+
+void UMapMenuWidget::OnKeyLayoutClicked()
+{
+	if (AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetOwningPlayerPawn()))
+	{
+		Camera->OpenKeyLayoutChoice();
+	}
+}
 
 void UMapMenuWidget::NativeConstruct()
 {
@@ -58,6 +138,23 @@ void UMapMenuWidget::NativeConstruct()
 	}
 
 	AktualisiereNachAufgabe();
+}
+
+bool UMapMenuWidget::CloseSubPage()
+{
+	UWidget* SubPage = SubPageWidgetName.IsNone() ? nullptr : GetWidgetFromName(SubPageWidgetName);
+	UWidget* MainPage = MainPageWidgetName.IsNone() ? nullptr : GetWidgetFromName(MainPageWidgetName);
+	if (!SubPage)
+	{
+		return false;
+	}
+	const bool bWasOpen = SubPage->GetVisibility() != ESlateVisibility::Collapsed && SubPage->GetVisibility() != ESlateVisibility::Hidden;
+	SubPage->SetVisibility(ESlateVisibility::Collapsed);
+	if (MainPage)
+	{
+		MainPage->SetVisibility(ESlateVisibility::Visible);
+	}
+	return bWasOpen;
 }
 
 void UMapMenuWidget::AktualisiereNachAufgabe()

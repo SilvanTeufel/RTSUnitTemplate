@@ -233,6 +233,23 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Proximity", meta = (ClampMin = "0.1"))
 	float ProximityCheckInterval = 0.5f;
 
+	/**
+	 * Automatic triggers (box, proximity, repeat) stay silent before this many seconds of game time.
+	 * Keeps the start of a match free of chatter. TriggerStory (by hand) ignores it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Pacing", meta = (ClampMin = "0.0"))
+	float MinGameTimeSeconds = 0.f;
+
+	/**
+	 * Triggers sharing this group keep a common pause: after one of them spoke, the others of the group
+	 * wait GroupCooldownSeconds. A blocked proximity / box trigger stays armed and fires later. None = no group.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Pacing")
+	FName CooldownGroup;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Story|Pacing", meta = (ClampMin = "0.0", EditCondition = "CooldownGroup != NAME_None"))
+	float GroupCooldownSeconds = 120.f;
+
 private:
 	// Track the spawned widget to allow timed removal
 	UPROPERTY(Transient)
@@ -250,6 +267,12 @@ private:
 
 	void HandleRepeat();
 	void CheckProximity();
+
+	/** MinGameTimeSeconds and the group pause allow an automatic trigger now. */
+	bool PassesPacing() const;
+
+	/** Remembers the moment for the group pause. */
+	void MarkPacingFired();
 
 	/** Last random row, so a repeat does not play the same line twice in a row. */
 	FName LastRandomRow;

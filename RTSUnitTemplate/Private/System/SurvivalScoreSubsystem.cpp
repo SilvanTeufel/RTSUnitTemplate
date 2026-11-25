@@ -98,9 +98,43 @@ void USurvivalScoreSubsystem::SpeichereListe(const FString& MapName,
 	UGameplayStatics::SaveGameToSlot(Save, SlotName(), 0);
 }
 
+bool USurvivalScoreSubsystem::GetLastRun(FString& OutMap, float& OutSeconds, int32& OutWaves, bool& bOutRanked) const
+{
+	if (LastRunMap.IsEmpty())
+	{
+		return false;
+	}
+	OutMap = LastRunMap;
+	OutSeconds = LastRunSeconds;
+	OutWaves = LastRunWaves;
+	bOutRanked = bLastRunRanked;
+	return true;
+}
+
+void USurvivalScoreSubsystem::SetUnrankedRun(const FString& MapName, float Seconds, int32 Waves, const FText& Difficulty)
+{
+	UnrankedMap = MapName;
+	HighscoreMap.Reset();
+	UnrankedSeconds = Seconds;
+	UnrankedWaves = Waves;
+	UnrankedDifficulty = Difficulty;
+	LastRunMap = MapName;
+	LastRunSeconds = Seconds;
+	LastRunWaves = Waves;
+	bLastRunRanked = false;
+	UE_LOG(LogTemp, Log, TEXT("[Survival-Rangliste] %s: %s auf '%s' - nicht gewertet"),
+		*MapName, *FormatSeconds(Seconds), *Difficulty.ToString());
+}
+
 bool USurvivalScoreSubsystem::SubmitScore(const FString& MapName, const FString& PlayerName,
                                           float Seconds, int32 Waves)
 {
+	UnrankedMap.Reset();
+	HighscoreMap.Reset();
+	LastRunMap = MapName;
+	LastRunSeconds = Seconds;
+	LastRunWaves = Waves;
+	bLastRunRanked = true;
 	TArray<FSurvivalScoreEntry> Liste = LadeListe(MapName);
 	const float Bisher = Liste.Num() > 0 ? Liste[0].Seconds : 0.f;
 
@@ -122,6 +156,13 @@ bool USurvivalScoreSubsystem::SubmitScore(const FString& MapName, const FString&
 	SpeichereListe(MapName, Liste);
 
 	const bool bNeueBestzeit = Seconds > Bisher;
+	if (bNeueBestzeit)
+	{
+		HighscoreMap = MapName;
+		HighscoreSeconds = Seconds;
+		HighscorePrevious = Bisher;
+		HighscoreWaves = Waves;
+	}
 	UE_LOG(LogTemp, Log, TEXT("[Survival-Rangliste] %s: %s nach %s (Welle %d)%s"),
 		*MapName, *Neu.PlayerName, *FormatSeconds(Seconds), Waves,
 		bNeueBestzeit ? TEXT(" - neue Bestzeit") : TEXT(""));
@@ -158,6 +199,29 @@ FString USurvivalScoreSubsystem::FormatSeconds(float Seconds)
 	return FString::Printf(TEXT("%dm %02ds"), Minuten, Rest);
 }
 
+bool USurvivalScoreSubsystem::WasNewHighscore(const UObject* WorldContextObject, float& OutSeconds, float& OutPreviousBest, int32& OutWaves)
+{
+	OutSeconds = 0.f;
+	OutPreviousBest = 0.f;
+	OutWaves = 0;
+	UWorld* Welt = GEngine ? GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull) : nullptr;
+	USurvivalScoreSubsystem* Rangliste = Welt && Welt->GetGameInstance() ? Welt->GetGameInstance()->GetSubsystem<USurvivalScoreSubsystem>() : nullptr;
+	if (!Rangliste || Rangliste->HighscoreMap.IsEmpty())
+	{
+		return false;
+	}
+	FString Karte = Welt->GetMapName();
+	Karte.RemoveFromStart(Welt->StreamingLevelsPrefix);
+	if (Rangliste->HighscoreMap != Karte)
+	{
+		return false;
+	}
+	OutSeconds = Rangliste->HighscoreSeconds;
+	OutPreviousBest = Rangliste->HighscorePrevious;
+	OutWaves = Rangliste->HighscoreWaves;
+	return true;
+}
+
 FString USurvivalScoreSubsystem::GetScoreboardText(const UObject* WorldContextObject, int32 MaxEntries)
 {
 	UWorld* Welt = GEngine ? GEngine->GetWorldFromContextObject(
@@ -176,13 +240,25 @@ FString USurvivalScoreSubsystem::GetScoreboardText(const UObject* WorldContextOb
 	FString Karte = Welt->GetMapName();
 	Karte.RemoveFromStart(Welt->StreamingLevelsPrefix);
 
+	// Leichter Schwierigkeitsgrad: nur die eigene Zeit, keine Bestenliste.
+	if (!Rangliste->UnrankedMap.IsEmpty() && Rangliste->UnrankedMap == Karte)
+	{
+		return FString::Printf(TEXT("You survived %s (wave %d)\n%s - only Competitive games count for the best times.\n"),
+			*FormatSeconds(Rangliste->UnrankedSeconds), Rangliste->UnrankedWaves, *Rangliste->UnrankedDifficulty.ToString());
+	}
+
 	const TArray<FSurvivalScoreEntry> Liste = Rangliste->GetScores(Karte, MaxEntries);
 	if (Liste.Num() == 0)
 	{
 		return FString();
 	}
 
-	FString Text = TEXT("Best times\n");
+	FString Text;
+	if (!Rangliste->HighscoreMap.IsEmpty() && Rangliste->HighscoreMap == Karte)
+	{
+		Text += TEXT("!!!! NEW HIGHSCORE !!!!\n\n");
+	}
+	Text += TEXT("Best times\n");
 	for (int32 i = 0; i < Liste.Num(); ++i)
 	{
 		Text += FString::Printf(TEXT("%d. %s - %s (wave %d)\n"), i + 1, *Liste[i].PlayerName,

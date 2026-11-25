@@ -16,6 +16,7 @@
 #include "Actors/BossWaveSpawner.h"
 #include "GameFramework/PlayerStart.h"
 #include "Engine/DataTable.h"
+#include "NavigationPath.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "NavigationSystem.h"
@@ -107,6 +108,23 @@ bool UFullProceduralMapComponent::PathExists(const FVector& From, const FVector&
 	FPathFindingQuery Query(GetOwner(), *NavData, A.Location, B.Location);
 	Query.bAllowPartialPaths = false;
 	return NavSys->TestPathSync(Query, EPathFindingMode::Regular);
+}
+
+float UFullProceduralMapComponent::PathDetour(const FVector& P) const
+{
+	UWorld* World = GetWorld();
+	UNavigationSystemV1* NavSys = World ? FNavigationSystem::GetCurrent<UNavigationSystemV1>(World) : nullptr;
+	if (!NavSys || HumanBases.Num() == 0)
+	{
+		return 1.f;
+	}
+	const float Straight = FVector::Dist2D(HumanBases[0], P);
+	UNavigationPath* Path = UNavigationSystemV1::FindPathToLocationSynchronously(World, HumanBases[0], P);
+	if (!Path || !Path->IsValid() || Straight < 1.f)
+	{
+		return 99.f;
+	}
+	return Path->GetPathLength() / Straight;
 }
 
 bool UFullProceduralMapComponent::IsReachable(const FVector& P) const
@@ -514,7 +532,30 @@ bool UFullProceduralMapComponent::PrepareMap()
 				FNavLocation OnNav;
 				const bool bOnNav = NavSys->ProjectPointToNavigation(Target, OnNav, FVector(120.f, 120.f, M.Above + 400.f))
 					&& FVector::Dist2D(OnNav.Location, Target) < 100.f;
-				if (!bOnNav || !PathExists(G.NewPos, OnNav.Location))
+				// Only the base's own buildings and units: resources, expansion sites and triggers may lie lower.
+				const bool bKeepLevel = Actor->IsA<AUnitBase>();
+				const bool bSameLevel = bOnNav && FMath::Abs(OnNav.Location.Z - G.NewPos.Z) <= SameLevelMaxHeightDifference;
+				bool bPulled = false;
+				if (bKeepLevel && bOnNav && !bSameLevel)
+				{
+					// Another plateau (often reachable over a ramp): pull the offset towards the base until the spot
+					// is on the base's level, so a start base never stands split over two heights.
+					for (float Scale = 0.85f; Scale >= 0.1f && !bPulled; Scale -= 0.15f)
+					{
+						const FVector2D TryXY = FVector2D(G.NewPos) + M.Offset * Scale;
+						FNavLocation Pulled;
+						if (NavSys->ProjectPointToNavigation(FVector(TryXY, G.NewPos.Z), Pulled, FVector(120.f, 120.f, SameLevelMaxHeightDifference))
+							&& FMath::Abs(Pulled.Location.Z - G.NewPos.Z) <= SameLevelMaxHeightDifference
+							&& PathExists(G.NewPos, Pulled.Location))
+						{
+							Target = FVector(Pulled.Location.X, Pulled.Location.Y, GroundAt(FVector2D(Pulled.Location), Pulled.Location.Z) + M.Above);
+							bPulled = true;
+						}
+					}
+					UE_LOG(LogTemp, Log, TEXT("[FullProcedural] %s was on another level (dz %.0f) - %s."), *Actor->GetName(),
+						OnNav.Location.Z - G.NewPos.Z, bPulled ? TEXT("pulled to the base's level") : TEXT("no spot on the base's level"));
+				}
+				if (!bPulled && (!bOnNav || !PathExists(G.NewPos, OnNav.Location)))
 				{
 					FVector Free;
 					const float Open = Actor->IsA<ABuildingBase>() ? 400.f : (Actor->IsA<AAIExpansionSite>() ? 500.f : 0.f);
@@ -562,17 +603,40 @@ bool UFullProceduralMapComponent::PrepareMap()
 		const float MinDist = SpawnMinDistance * FMath::Pow(0.8f, float(Round));
 		const float Spacing = SpawnPointSpacing * FMath::Pow(0.8f, float(Round));
 		int32 Tests = 0;
+		// Candidates with their detour (path length / straight distance to the human main base); the most direct
+		// ones first (MaxSpawnPathDetour), so the waves come up the base's ramp instead of round the plateau.
+		TArray<TPair<float, FVector>> SpawnCandidates;
 		for (const FVector& C : Samples)
 		{
-			if (SpawnPoints.Num() >= WantedPoints) break;
 			bool bOk = true;
 			for (const FVector& H : HumanBases) bOk &= FVector::DistSquared2D(H, C) >= FMath::Square(MinDist);
 			for (const FVector& O : SpawnPoints) bOk &= FVector::DistSquared2D(O, C) >= FMath::Square(Spacing);
 			for (const FVector& O : Placed) bOk &= FVector::DistSquared2D(O, C) >= FMath::Square(2500.f);
 			if (!bOk || !IsOpenGround(C, 600.f, 150.f)) continue;
-			if (++Tests > 80) break;
+			if (++Tests > (MaxSpawnPathDetour > 0.f ? 160 : 80)) break;
 			if (!IsReachable(C)) continue;
-			SpawnPoints.Add(C);
+			SpawnCandidates.Emplace(MaxSpawnPathDetour > 0.f ? PathDetour(C) : float(SpawnCandidates.Num()), C);
+			if (MaxSpawnPathDetour <= 0.f && SpawnCandidates.Num() >= WantedPoints) break;
+		}
+		if (MaxSpawnPathDetour > 0.f)
+		{
+			SpawnCandidates.Sort([](const TPair<float, FVector>& A, const TPair<float, FVector>& B) { return A.Key < B.Key; });
+		}
+		for (int32 Pass = 0; Pass < 2; ++Pass)
+		{
+			for (const TPair<float, FVector>& Cand : SpawnCandidates)
+			{
+				if (SpawnPoints.Num() >= WantedPoints) break;
+				// First pass: only direct ways; second pass fills up with the rest.
+				if (Pass == 0 && MaxSpawnPathDetour > 0.f && Cand.Key > MaxSpawnPathDetour) continue;
+				bool bApart = !SpawnPoints.Contains(Cand.Value);
+				for (const FVector& O : SpawnPoints) bApart &= FVector::DistSquared2D(O, Cand.Value) >= FMath::Square(Spacing);
+				if (bApart)
+				{
+					SpawnPoints.Add(Cand.Value);
+					UE_LOG(LogTemp, Log, TEXT("[FullProcedural] spawn point %s, detour %.2f."), *Cand.Value.ToCompactString(), Cand.Key);
+				}
+			}
 		}
 	}
 	if (bMoveBossSpawners && SpawnPoints.Num() > 0)

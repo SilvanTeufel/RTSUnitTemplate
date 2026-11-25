@@ -24,6 +24,24 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Teams")
 	void ClearAll();
 
+	/**
+	 * Lobby: slots played by the AI - one entry per AI player, the value is its team (twice the same team = two AI
+	 * players in it). The host sets it before the travel; the game mode spawns an AI player for each at a start of
+	 * that team (ARTSGameModeBase::SetTeamIdsAndWaypoints).
+	 */
+	UFUNCTION(BlueprintCallable, Category="Teams")
+	void SetAISlots(const TArray<int32>& TeamIds);
+
+	UFUNCTION(BlueprintPure, Category="Teams")
+	TArray<int32> GetAISlots() const { return AISlots; }
+
+	/** Adds (or with bAI = false removes) one AI player of a team. */
+	UFUNCTION(BlueprintCallable, Category="Teams")
+	void SetAISlot(int32 TeamId, bool bAI);
+
+	/** The AI slots, emptied (the game mode takes them once). */
+	TArray<int32> ConsumeAISlots();
+
 	UFUNCTION(BlueprintCallable, Category="Teams")
 	void SetTeamsAllied(int32 TeamA, int32 TeamB, bool bAllied);
 
@@ -48,6 +66,9 @@ private:
 
 	// TeamId -> Set of allied TeamIds
 	TMap<int32, TArray<int32>> AlliedTeamsMap;
+
+	UPROPERTY()
+	TArray<int32> AISlots;
 
 	void UpdateAllUnitsAlliedMask(int32 TeamId);
 };

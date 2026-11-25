@@ -61,6 +61,14 @@ struct FTutorialStep
 		meta = (EditCondition = "Condition == ETutorialStepCondition::SelectUnits", EditConditionHides))
 	FGameplayTag UnitTag;
 
+	/**
+	 * Units of ANY tier group count: a unit carrying one of the controller's KeyTagCtrl1..KeyTagCtrl4 tags
+	 * (what Ctrl+1..Ctrl+4 select). Replaces UnitTag - the player may have robots but no infantry.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial",
+		meta = (EditCondition = "Condition == ETutorialStepCondition::SelectUnits", EditConditionHides))
+	bool bAnyTierGroup = false;
+
 	/** Only workers count. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Tutorial",
 		meta = (EditCondition = "Condition == ETutorialStepCondition::SelectUnits", EditConditionHides))
@@ -185,6 +193,14 @@ private:
 	void HandleWidgetClosed();
 	/** Step.Text with {Name} / {AName} filled in. */
 	static FText MakeStepText(const FTutorialStep& Step);
+	/**
+	 * MakeStepText with the keys of the active key layout: the texts are written for the Modern
+	 * layout ("press 1", "Ctrl+1"); in Classic that becomes "press Q", "1". {Key:Ability1} works too.
+	 */
+	FText MakeLocalizedStepText(const FTutorialStep& Step) const;
+	/** The layout changed while a step is shown: show its text with the new keys. */
+	UFUNCTION()
+	void HandleKeyBindingsChanged();
 	bool IsStepDone(const FTutorialStep& Step) const;
 	bool KeyPressed(const FTutorialStep& Step) const;
 	/** Buildings of Step.UnitClasses of the player's team: placed sites + buildings (bFinishedOnly: buildings). */
@@ -197,6 +213,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UTutorialWidget> Widget;
+
+	/** The panel is hidden while a card selection (UStartLoadoutWidget) is on the screen. */
+	bool bHiddenForSelection = false;
 
 	/** Per step: CountBuildings at the tutorial start, so that only what the player builds counts. */
 	TArray<int32> BuildingBaseline;

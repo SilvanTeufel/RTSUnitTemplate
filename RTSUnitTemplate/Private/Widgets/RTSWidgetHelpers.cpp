@@ -7,6 +7,8 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/ComboBoxString.h"
 #include "Engine/DataTable.h"
+#include "Widgets/LobbyAISlotsWidget.h"
+#include "UObject/UObjectIterator.h"
 
 int32 URTSWidgetHelpers::SetComboBoxOptions(UComboBoxString* Box,
                                             const TArray<FString>& Options,
@@ -207,6 +209,14 @@ int32 URTSWidgetHelpers::ApplyAllowedTeamsFromTable(UComboBoxString* TeamBox,
 
 		UE_LOG(LogTemp, Log, TEXT("[Teamauswahl] Karte '%s' erlaubt %d Team(s)."),
 			*SelectedMapName, Teams.Num());
+		// The AI player setting of the same lobby offers the same teams.
+		for (TObjectIterator<ULobbyAISlotsWidget> It; It; ++It)
+		{
+			if (It->GetWorld() == TeamBox->GetWorld() && !It->HasAnyFlags(RF_ClassDefaultObject))
+			{
+				It->SetTeams(Teams);
+			}
+		}
 		return SetTeamComboOptions(TeamBox, Teams, bSelectFirst);
 	}
 

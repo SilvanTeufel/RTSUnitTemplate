@@ -82,6 +82,8 @@ FMainMenuTheme::FMainMenuTheme()
 	ButtonDisabled = Defaults.ButtonDisabled;
 }
 
+FOnMainMenuStyleApplied UMainMenuWidget::OnStyleApplied;
+
 void UMainMenuWidget::SetupMenu(const FMainMenuConfig& InConfig)
 {
 	Config = InConfig;
@@ -126,6 +128,7 @@ void UMainMenuWidget::ApplyTheme()
 	ActiveStyle = Config.Style;
 	if (!Config.Themes.IsValidIndex(ThemeIndex))
 	{
+		OnStyleApplied.Broadcast(this, ActiveStyle);
 		return;
 	}
 
@@ -137,6 +140,7 @@ void UMainMenuWidget::ApplyTheme()
 	ActiveStyle.ButtonDisabled = Theme.ButtonDisabled;
 	ActiveStyle.TitleColor = Theme.TitleColor;
 	ActiveStyle.AccentColor = Theme.AccentColor;
+	OnStyleApplied.Broadcast(this, ActiveStyle);
 }
 
 void UMainMenuWidget::RefreshMenu()
@@ -302,7 +306,10 @@ TSharedRef<SWidget> UMainMenuWidget::BuildPanel()
 		];
 	}
 
-	if (!Config.Subtitle.IsEmpty())
+	// The theme may bring its own subtitle (Singularian DATACENTER, Xeno BROODHIVE).
+	const FText ShownSubtitle = (Config.Themes.IsValidIndex(ThemeIndex) && !Config.Themes[ThemeIndex].Subtitle.IsEmpty())
+		? Config.Themes[ThemeIndex].Subtitle : Config.Subtitle;
+	if (!ShownSubtitle.IsEmpty())
 	{
 		Column->AddSlot()
 		.AutoHeight()
@@ -310,7 +317,7 @@ TSharedRef<SWidget> UMainMenuWidget::BuildPanel()
 		.Padding(FMargin(0.f, 2.f, 0.f, 0.f))
 		[
 			SNew(STextBlock)
-			.Text(Config.Subtitle)
+			.Text(ShownSubtitle)
 			.Font(Style.SubtitleFont)
 			.Justification(ETextJustify::Center)
 			.ColorAndOpacity(FSlateColor(Style.AccentColor))
