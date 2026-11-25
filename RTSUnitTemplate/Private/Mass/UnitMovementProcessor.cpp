@@ -167,7 +167,9 @@ static TAutoConsoleVariable<float> CVarRTS_ClientAuthStillToleranz(
 #include "NavFilters/NavigationQueryFilter.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "NavAreas/NavArea_EnergyWall.h"
+#include "NavMesh/RecastNavMesh.h"
 #include "Async/Async.h"
+#include "Misc/ScopeLock.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/PlayerState.h"
 #include "Characters/Unit/UnitBase.h"
@@ -726,9 +728,13 @@ void UUnitMovementProcessor::ExecuteClient(FMassEntityManager& EntityManager, FM
 
             if (CharFrag.bIsFlying)
             {
-                if (FVector::DistSquared(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadiusUsed))
+            // Flieger lenken in der EBENE (10.11.2026). Die Zielhoehe ist oft die Bodenhoehe des Ziels (Chase
+            // setzt LastGroundLocation), die Einheit fliegt aber FlyHeight darueber. Mit 3D-Richtung schrumpfte
+            // der waagrechte Anteil (nur der wird angewendet) nahe am Ziel und vor Plateaus fast auf null, und die
+            // 3D-Ankunft wurde nie erreicht - der Flieger "hing" vor Klippen. Die Hoehe regelt der Hover-Prozessor.
+                if (FVector::DistSquared2D(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadiusUsed))
                 {
-                    FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
+                    FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal2D();
                     Steering.DesiredVelocity = MoveDir * DesiredSpeedUsed;
                 }
                 continue;
@@ -954,9 +960,10 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
 
             if (CharFrag.bIsFlying)
             {
-                if (FVector::DistSquared(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadius))
+                // Ebene statt 3D - siehe Client-Zweig oben.
+                if (FVector::DistSquared2D(CurrentLocation, FinalDestination) > FMath::Square(AcceptanceRadius))
                 {
-                    FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal();
+                    FVector MoveDir = (FinalDestination - CurrentLocation).GetSafeNormal2D();
                     Steering.DesiredVelocity = MoveDir * DesiredSpeed;
                 }
                 continue; 
@@ -1100,6 +1107,239 @@ void UUnitMovementProcessor::ExecuteServer(FMassEntityManager& EntityManager, FM
 }
 
 
+/**
+ * Zugangspunkt fuer ein Ziel, das von hier aus nur als Teilpfad erreichbar ist.
+ *
+ * WARUM (08.11.): Schliessen Wandtuerme und Energiewaende eine Basis zu einer Netzinsel ab, ist der
+ * Turm-Mittelpunkt von draussen nicht mehr erreichbar. Detour liefert dann einen Teilpfad zu dem
+ * Polygon, das dem Ziel LUFTLINIE am naechsten liegt - bei einer Basis auf einem Plateau ist das der
+ * Fuss der Klippe unter dem Turm. Die Xenos liefen dort gegen die Klippe, statt den Hang hinauf auf
+ * die Aussenseite der Wand zu gehen; angegriffen wurde nur, wer zufaellig auf der richtigen Seite
+ * erschien.
+ *
+ * Abhilfe: Ringe um das Ziel abtasten und den naechstgelegenen Ring nehmen, auf dem ein Punkt
+ * VOLL erreichbar ist (kein Teilpfad); auf diesem Ring gewinnt der kuerzeste Weg. Das Ergebnis wird
+ * je Ziel- und Startzelle einige Sekunden gemerkt - ein Angriffstrupp fragt sonst fuer jede
+ * Einheit dieselben bis zu 48 Pfade ab. Gefunden wird auch "nichts" gemerkt (kurz), damit ein
+ * wirklich unerreichbares Ziel nicht bei jeder Neuplanung die volle Suche kostet.
+ */
+static TAutoConsoleVariable<int32> CVarRTS_PathApproachSearch(
+    TEXT("RTS.Path.ApproachSearch"),
+    1,
+    TEXT("1 = a partial path that ends far from its target (target on a nav island behind a cliff or wall) is replaced by ")
+    TEXT("a full path to the nearest reachable point around the target (RTS_FindApproachPath). 0 = off (plain partial path)."),
+    ECVF_Default);
+
+/**
+ * Ziel hinter einer EnergyWall (10.11.2026): Halbinsel, deren Hals ein Spieler mit Waenden geschlossen hat.
+ *
+ * Der strenge Filter schliesst die Wandflaeche aus, das Ziel liegt dann auf einer Netzinsel. Der Teilpfad
+ * endete am luftliniennaechsten Ufer - oft auf der anderen Seite des Wassers, weit weg von der Wand - und
+ * RTS_FindApproachPath sucht nur bis 1000 uu um das Ziel. Die Xenos standen am falschen Ufer, statt die
+ * Wand und ihre Tuerme anzugreifen.
+ *
+ * Abhilfe: Erreicht der Pfad MIT Wanddurchgang (Standardfilter) das Ziel voll, liegt die Sperre an einer
+ * Wand. Dieser Pfad wird am ersten Wandeintritt gekappt (Raycast je Abschnitt mit dem strengen Filter,
+ * Treffer per Flaechenklasse bestaetigt) - die Einheit laeuft bis vor die Wand, wo sie Wand-Tuerme sieht.
+ */
+static TAutoConsoleVariable<int32> CVarRTS_PathWallApproach(
+    TEXT("RTS.Path.WallApproach"),
+    1,
+    TEXT("1 = a target that is only blocked by an EnergyWall is approached up to the wall (path through the wall, ")
+    TEXT("cut in front of it) instead of the nearest shore. 0 = off."),
+    ECVF_Default);
+
+/** Liegt um P (Ring bis Radius) Wandflaeche? Fuer die Frage, ob ein Teilpfad ohnehin schon an einer Wand endet. */
+static bool RTS_IsNearEnergyWall(const ANavigationData* NavData, const FVector& P, float Radius)
+{
+    const ARecastNavMesh* Recast = Cast<const ARecastNavMesh>(NavData);
+    if (!Recast)
+    {
+        return false;
+    }
+    FSharedConstNavQueryFilter OpenFilter = NavData->GetDefaultQueryFilter();
+    for (const float R : { Radius * 0.5f, Radius })
+    {
+        for (int32 A = 0; A < 8; ++A)
+        {
+            const float Ang = A * (PI / 4.f);
+            FNavLocation Proj;
+            if (NavData->ProjectPoint(P + FVector(FMath::Cos(Ang) * R, FMath::Sin(Ang) * R, 0.f), Proj, FVector(40.f, 40.f, 300.f), OpenFilter)
+                && Proj.NodeRef != INVALID_NAVNODEREF)
+            {
+                const UClass* Area = NavData->GetAreaClass(static_cast<int32>(Recast->GetPolyAreaID(Proj.NodeRef)));
+                if (Area && Area->IsChildOf(UNavArea_EnergyWall::StaticClass()))
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+static FNavPathSharedPtr RTS_FindWallApproachPath(UNavigationSystemV1* NavSystem, const ANavigationData* NavData,
+    const FSharedConstNavQueryFilter& StrictFilter, const FVector& Start, const FVector& Target)
+{
+    const ARecastNavMesh* Recast = Cast<const ARecastNavMesh>(NavData);
+    if (!Recast)
+    {
+        return nullptr;
+    }
+    FSharedConstNavQueryFilter OpenFilter = NavData->GetDefaultQueryFilter();
+    FPathFindingQuery Q(nullptr, *NavData, Start, Target, OpenFilter);
+    Q.SetAllowPartialPaths(false);
+    FPathFindingResult R = NavSystem->FindPathSync(Q, EPathFindingMode::Regular);
+    if (!R.IsSuccessful() || !R.Path.IsValid() || R.Path->IsPartial() || R.Path->GetPathPoints().Num() < 2)
+    {
+        return nullptr;
+    }
+
+    auto IsWallAt = [&](const FVector& P) -> bool
+    {
+        FNavLocation Proj;
+        if (!NavData->ProjectPoint(P, Proj, FVector(40.f, 40.f, 300.f), OpenFilter) || Proj.NodeRef == INVALID_NAVNODEREF)
+        {
+            return false;
+        }
+        const UClass* Area = NavData->GetAreaClass(static_cast<int32>(Recast->GetPolyAreaID(Proj.NodeRef)));
+        return Area && Area->IsChildOf(UNavArea_EnergyWall::StaticClass());
+    };
+
+    TArray<FNavPathPoint>& Points = R.Path->GetPathPoints();
+    for (int32 i = 0; i + 1 < Points.Num(); ++i)
+    {
+        const FVector A = Points[i].Location;
+        const FVector B = Points[i + 1].Location;
+        FVector Hit;
+        if (!NavData->Raycast(A, B, Hit, StrictFilter))
+        {
+            continue;
+        }
+        const FVector Dir = (B - A).GetSafeNormal2D();
+        // Treffer bestaetigen: knapp dahinter muss Wandflaeche liegen, sonst war es eine Kante.
+        if (!IsWallAt(Hit + Dir * 40.f) && !IsWallAt(Hit + Dir * 90.f))
+        {
+            continue;
+        }
+        // Etwas vor der Wand enden - nicht auf ihrer Flaeche, die der strenge Filter ausschliesst.
+        FVector End = Hit - Dir * 60.f;
+        if (FVector::DistSquared2D(End, A) > FVector::DistSquared2D(Hit, A))
+        {
+            End = A;
+        }
+        Points.SetNum(i + 2);
+        Points[i + 1].Location = End;
+        if (FVector::Dist2D(End, A) < 1.f)
+        {
+            Points.SetNum(i + 1);
+        }
+        if (Points.Num() < 2)
+        {
+            // Schon an der Wand: ein Zweipunktpfad auf der Stelle, damit die Einheit nicht neu plant.
+            const FNavPathPoint Stand = Points[0];
+            Points.SetNum(1);
+            Points.Add(Stand);
+        }
+        R.Path->SetIsPartial(true);
+        R.Path->MarkReady();
+        return R.Path;
+    }
+    return nullptr;
+}
+
+static FNavPathSharedPtr RTS_FindApproachPath(UNavigationSystemV1* NavSystem, const ANavigationData* NavData,
+    const FSharedConstNavQueryFilter& Filter, const FVector& Start, const FVector& Target)
+{
+    struct FApproachEntry { FVector Point; double Time; bool bFound; };
+    static FCriticalSection CacheLock;
+    static TMap<FIntVector, FApproachEntry> Cache;
+
+    const double Now = FPlatformTime::Seconds();
+    const FIntVector Key((int32)FMath::FloorToInt(Target.X / 200.f), (int32)FMath::FloorToInt(Target.Y / 200.f),
+        (int32)FMath::FloorToInt(Start.X / 3000.f) * 1000 + (int32)FMath::FloorToInt(Start.Y / 3000.f));
+
+    auto FullPath = [&](const FVector& To) -> FNavPathSharedPtr
+    {
+        FPathFindingQuery Q(nullptr, *NavData, Start, To, Filter);
+        Q.SetAllowPartialPaths(false);
+        const FPathFindingResult R = NavSystem->FindPathSync(Q, EPathFindingMode::Regular);
+        if (R.IsSuccessful() && R.Path.IsValid() && !R.Path->IsPartial() && R.Path->GetPathPoints().Num() > 1)
+        {
+            return R.Path;
+        }
+        return nullptr;
+    };
+
+    {
+        FScopeLock Lock(&CacheLock);
+        if (Cache.Num() > 512)
+        {
+            for (auto It = Cache.CreateIterator(); It; ++It)
+            {
+                if (Now - It->Value.Time > 10.0) It.RemoveCurrent();
+            }
+        }
+        if (const FApproachEntry* E = Cache.Find(Key))
+        {
+            if (!E->bFound && Now - E->Time < 3.0)
+            {
+                return nullptr;
+            }
+            if (E->bFound && Now - E->Time < 8.0)
+            {
+                const FVector P = E->Point;
+                Lock.Unlock();
+                if (FNavPathSharedPtr Cached = FullPath(P))
+                {
+                    return Cached;
+                }
+            }
+        }
+    }
+
+    static const float Radii[] = { 250.f, 450.f, 700.f, 1000.f };
+    const int32 NumAngles = 12;
+    FNavPathSharedPtr Best;
+    FVector BestPoint = FVector::ZeroVector;
+    for (const float Radius : Radii)
+    {
+        float BestLen = TNumericLimits<float>::Max();
+        for (int32 A = 0; A < NumAngles; ++A)
+        {
+            const float Ang = (A + 0.5f * (Radius > 300.f && Radius < 800.f)) * (2.f * PI / NumAngles);
+            const FVector Probe = Target + FVector(FMath::Cos(Ang) * Radius, FMath::Sin(Ang) * Radius, 0.f);
+            FNavLocation Proj;
+            if (!NavSystem->ProjectPointToNavigation(Probe, Proj, FVector(120.f, 120.f, 600.f), NavData, Filter))
+            {
+                continue;
+            }
+            if (FVector::Dist2D(Proj.Location, Target) > Radius + 150.f)
+            {
+                continue;
+            }
+            if (FNavPathSharedPtr P = FullPath(Proj.Location))
+            {
+                const float Len = P->GetLength();
+                if (Len < BestLen)
+                {
+                    BestLen = Len;
+                    Best = P;
+                    BestPoint = Proj.Location;
+                }
+            }
+        }
+        if (Best.IsValid())
+        {
+            break;
+        }
+    }
+
+    FScopeLock Lock(&CacheLock);
+    Cache.Add(Key, FApproachEntry{ BestPoint, Now, Best.IsValid() });
+    return Best;
+}
+
 void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, FVector StartLocation, FVector EndLocation, bool bAutoRepath)
 {
     UWorld* World = GetWorld();
@@ -1176,6 +1416,51 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         Query.SetAllowPartialPaths(true); 
 
         FPathFindingResult PathResult = NavSystem->FindPathSync(Query, EPathFindingMode::Regular);
+        bool bZugang = false;
+
+        // Teilpfad, der weit vor dem Ziel endet (Ziel auf einer Netzinsel hinter Klippe oder Wand):
+        // statt am luftliniennaechsten Ufer zu enden, den naechsten voll erreichbaren Punkt um das Ziel
+        // ansteuern - siehe RTS_FindApproachPath.
+        if (PathResult.IsSuccessful() && PathResult.Path.IsValid() && PathResult.Path->IsPartial()
+            && FVector::Dist2D(PathResult.Path->GetEndLocation(), ZielFuerSuche) > 200.f
+            && CVarRTS_PathApproachSearch.GetValueOnAnyThread() > 0)
+        {
+            const FVector TeilEnde = PathResult.Path->GetEndLocation();
+            // Endet der Teilpfad schon an einer Wand (Ziel direkt dahinter, z.B. Verfolgung ueber die
+            // Wand), bleibt er: das ist der wandnaechste Punkt zum Ziel, gut fuer Fernkaempfer. Nur ein
+            // Ende fern jeder Wand - das Ufer gegenueber der Halbinsel - wird durch den Wandweg ersetzt.
+            FNavPathSharedPtr WandZugang = (CVarRTS_PathWallApproach.GetValueOnAnyThread() > 0
+                    && !RTS_IsNearEnergyWall(NavData, TeilEnde, 350.f))
+                ? RTS_FindWallApproachPath(NavSystem, NavData, StrictFilter, StartLocation, ZielFuerSuche)
+                : nullptr;
+            if (WandZugang.IsValid())
+            {
+                static FThreadSafeCounter WandMeldungen;
+                if (WandMeldungen.Increment() % 50 == 1)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[WandZugang] Ziel (%.0f, %.0f) nur hinter EnergyWall erreichbar - Pfad endet vor der Wand bei (%.0f, %.0f) statt am Ufer (%.0f, %.0f)"),
+                        ZielFuerSuche.X, ZielFuerSuche.Y, WandZugang->GetEndLocation().X, WandZugang->GetEndLocation().Y, TeilEnde.X, TeilEnde.Y);
+                }
+                PathResult.Path = WandZugang;
+                PathResult.Result = ENavigationQueryResult::Success;
+                bZugang = true;
+            }
+            else if (FNavPathSharedPtr Zugang = RTS_FindApproachPath(NavSystem, NavData, StrictFilter, StartLocation, ZielFuerSuche))
+            {
+                // Selten melden: Teilpfad-Ende gegen Zugangspunkt, beide als Abstand zum Ziel.
+                static FThreadSafeCounter ZugangMeldungen;
+                if (ZugangMeldungen.Increment() % 50 == 1)
+                {
+                    UE_LOG(LogTemp, Log, TEXT("[Zugang] Teilpfad endete %.0f vom Ziel bei (%.0f, %.0f), Zugangspunkt %.0f vom Ziel bei (%.0f, %.0f), Ziel (%.0f, %.0f)"),
+                        FVector::Dist2D(TeilEnde, ZielFuerSuche), TeilEnde.X, TeilEnde.Y,
+                        FVector::Dist2D(Zugang->GetEndLocation(), ZielFuerSuche), Zugang->GetEndLocation().X, Zugang->GetEndLocation().Y,
+                        ZielFuerSuche.X, ZielFuerSuche.Y);
+                }
+                PathResult.Path = Zugang;
+                PathResult.Result = ENavigationQueryResult::Success;
+                bZugang = true;
+            }
+        }
 
         // --- 2. ESCAPE MODE FALLBACK ---
         if (PathResult.Result == ENavigationQueryResult::Fail)
@@ -1263,7 +1548,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
         }
         
         AsyncTask(ENamedThreads::GameThread,
-            [Entity, PathResult, World, EndLocation, bClientWorld, bAutoRepath, Zaehler, ZielProjOk, ZielVersatz]() mutable
+            [Entity, PathResult, World, EndLocation, bClientWorld, bAutoRepath, bZugang, Zaehler, ZielProjOk, ZielVersatz]() mutable
         {
             if (!World) return;
 
@@ -1275,7 +1560,7 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
             if (!EntityManager.IsEntityValid(Entity)) return;
 
             EntityManager.Defer().PushCommand<FMassDeferredSetCommand>(
-                [Entity, PathResult, EndLocation, bClientWorld, bAutoRepath, World, Zaehler, ZielProjOk, ZielVersatz](FMassEntityManager& System)
+                [Entity, PathResult, EndLocation, bClientWorld, bAutoRepath, bZugang, World, Zaehler, ZielProjOk, ZielVersatz](FMassEntityManager& System)
                 {
                     if (FUnitNavigationPathFragment* PathFrag = System.GetFragmentDataPtr<FUnitNavigationPathFragment>(Entity))
                     {
@@ -1399,8 +1684,11 @@ void UUnitMovementProcessor::RequestPathfindingAsync(FMassEntityHandle Entity, F
                             PathFrag->bStrictAdvance = bAutoRepath;
 
                             const FVector PathEndLoc = PathResult.Path->GetEndLocation();
-                            if (bAutoRepath && FVector::DistSquared(PathEndLoc, EndLocation) > FMath::Square(10.0f))
+                            if ((bAutoRepath || bZugang) && FVector::DistSquared(PathEndLoc, EndLocation) > FMath::Square(10.0f))
                             {
+                                // Zugangspfad (RTS_FindApproachPath) ebenso: das Ziel bleibt der Gegner. Wuerde
+                                // MoveTarget.Center auf den Zugangspunkt gekuerzt, setzte Chase ihn im naechsten
+                                // Takt zurueck auf den Gegner und loeste jedes Mal eine neue Suche samt Bremse aus.
                                 // Automatische Neusuche (Navmesh-Kante): das Ziel des Befehls bleibt, wie es ist.
                                 // Vorher wurde auch hier MoveTarget.Center auf das Ende eines Teilpfads gekuerzt -
                                 // startete die Suche auf einer falschen Netzinsel (Einheit an der Klippe), lag das

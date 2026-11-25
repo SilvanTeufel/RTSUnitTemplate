@@ -63,6 +63,13 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = RTSUnitTemplate)
 	bool IsWorldPositionRevealed(const FVector& WorldPosition) const;
+
+	/**
+	 * The fog that hides things of OwnerTeamId from the local viewer on this machine, or null when nothing is
+	 * hidden: dedicated server, no local player, team not known yet, spectator, own team or an ally, level
+	 * without fog. Cache keeps the found actor between calls (per caller).
+	 */
+	static AFogActor* FindMaskingFogFor(const UWorld* World, int32 OwnerTeamId, TWeakObjectPtr<AFogActor>& Cache);
 	
 	UFUNCTION(NetMulticast, Unreliable, Category = RTSUnitTemplate)
 	void Multicast_UpdateFogMaskWithCircles(

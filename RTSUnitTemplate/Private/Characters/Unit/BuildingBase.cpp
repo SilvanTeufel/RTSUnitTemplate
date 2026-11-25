@@ -18,6 +18,8 @@
 #include "System/LogisticsSubsystem.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Characters/Unit/ConstructionUnit.h"
+#include "Subsystems/UnitVisualManager.h"
+#include "Mass/MassActorBindingComponent.h"
 
 
 ABuildingBase::ABuildingBase(const FObjectInitializer& ObjectInitializer)
@@ -46,11 +48,90 @@ void ABuildingBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 	DOREPLIFETIME(ABuildingBase, StoredResources);
 	DOREPLIFETIME(ABuildingBase, ExtractionResourcePlace);
 	DOREPLIFETIME(ABuildingBase, bIsExtracting);
+	DOREPLIFETIME(ABuildingBase, SupplyBoostCount);
 	DOREPLIFETIME(ABuildingBase, bHasConversion);
 	DOREPLIFETIME(ABuildingBase, ConversionInput);
 	DOREPLIFETIME(ABuildingBase, ConversionOutput);
 	DOREPLIFETIME(ABuildingBase, ConversionInputStock);
 	DOREPLIFETIME(ABuildingBase, ConversionState);
+	DOREPLIFETIME(ABuildingBase, bToggleVFXActive);
+}
+
+void ABuildingBase::SetToggleVFXActive(bool bActive)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	bToggleVFXActive = bActive;
+	ApplyToggleVFX();
+	ForceNetUpdate();
+}
+
+void ABuildingBase::OnRep_ToggleVFXActive()
+{
+	ApplyToggleVFX();
+}
+
+bool ABuildingBase::HasActiveAttachedEffect() const
+{
+	return Super::HasActiveAttachedEffect() || (bToggleVFXActive && ToggleVFXComponentNames.Num() > 0);
+}
+
+void ABuildingBase::UpdateFlightVFX()
+{
+	const UWorld* World = GetWorld();
+	if (!World || !HasAuthority())
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	bool bWant = IsFlying && GetUnitState() != UnitData::Dead;
+	if (IsFlying)
+	{
+		FlightVFXLandingSince = -1.0;
+	}
+	else if (bToggleVFXActive && GetUnitState() != UnitData::Dead)
+	{
+		// IsFlying goes false when the landing STARTS - the building is still sinking, keep the jets burning.
+		if (FlightVFXLandingSince < 0.0)
+		{
+			FlightVFXLandingSince = Now;
+		}
+		bWant = (Now - FlightVFXLandingSince) < FlightVFXLandingHoldSeconds;
+	}
+	if (bWant != bToggleVFXActive)
+	{
+		SetToggleVFXActive(bWant);
+	}
+}
+
+void ABuildingBase::ApplyToggleVFX()
+{
+	if (ToggleVFXComponentNames.Num() == 0)
+	{
+		return;
+	}
+	TInlineComponentArray<USceneComponent*> Components(this);
+	for (USceneComponent* Component : Components)
+	{
+		if (!Component || !ToggleVFXComponentNames.Contains(Component->GetFName()))
+		{
+			continue;
+		}
+		Component->SetHiddenInGame(!bToggleVFXActive, true);
+		if (UNiagaraComponent* Niagara = Cast<UNiagaraComponent>(Component))
+		{
+			if (bToggleVFXActive)
+			{
+				Niagara->Activate(true);
+			}
+			else
+			{
+				Niagara->Deactivate();
+			}
+		}
+	}
 }
 
 bool ABuildingBase::CanProvideResource(EResourceType ResourceType) const
@@ -292,8 +373,9 @@ void ABuildingBase::ExtractionTick()
 	Place->AvailableResourceAmount = FMath::Max(0.f, Place->AvailableResourceAmount - Amount * DepletionFactor);
 	if (Place->AvailableResourceAmount <= KINDA_SMALL_NUMBER)
 	{
-		// Depleted, as when workers empty it: the place goes away (its EndPlay clears our pointer).
-		Place->Destroy();
+		// Depleted, as when workers empty it: the place goes away (its EndPlay clears our pointer) - or, if it
+		// grows back, it hides until it has grown and the extractor goes on then.
+		Place->HandleDepleted();
 		if (bDieWhenResourceDepleted)
 		{
 			DieFromDepletedResource();
@@ -625,6 +707,65 @@ void ABuildingBase::ReleaseSupplyCapacity()
 	bSupplyCapacityApplied = false;
 }
 
+bool ABuildingBase::AddSupplyCapacityBonus(const FBuildingCost& Bonus)
+{
+	// Only on top of a capacity that is really granted: ReleaseSupplyCapacity gives back SupplyCapacityGain
+	// as a whole, so the bonus must be in it exactly when it was added to the team's maximum.
+	if (!HasAuthority() || !bSupplyCapacityApplied)
+	{
+		return false;
+	}
+	AResourceGameMode* ResourceGameMode = Cast<AResourceGameMode>(GetWorld() ? GetWorld()->GetAuthGameMode() : nullptr);
+	if (!ResourceGameMode || ResourceGameMode->GetMaxResource(EResourceType::Rare, TeamId) >= SupplyCapacityLimit)
+	{
+		return false;
+	}
+
+	ResourceGameMode->IncreaseMaxResources(Bonus, TeamId);
+	SupplyCapacityGain.PrimaryCost += Bonus.PrimaryCost;
+	SupplyCapacityGain.SecondaryCost += Bonus.SecondaryCost;
+	SupplyCapacityGain.TertiaryCost += Bonus.TertiaryCost;
+	SupplyCapacityGain.RareCost += Bonus.RareCost;
+	SupplyCapacityGain.EpicCost += Bonus.EpicCost;
+	SupplyCapacityGain.LegendaryCost += Bonus.LegendaryCost;
+
+	++SupplyBoostCount;
+	OnSupplyBoostChanged();
+	return true;
+}
+
+void ABuildingBase::OnRep_SupplyBoostCount()
+{
+	OnSupplyBoostChanged();
+}
+
+void ABuildingBase::OnSupplyBoostChanged_Implementation()
+{
+	if (SupplyBoostCount <= 0 || !SupplyBoostMaterial || SupplyBoostMeshName.IsNone())
+	{
+		return;
+	}
+	TInlineComponentArray<UStaticMeshComponent*> BoostMeshes(this);
+	for (UStaticMeshComponent* BoostMesh : BoostMeshes)
+	{
+		if (BoostMesh && BoostMesh->GetFName() == SupplyBoostMeshName)
+		{
+			for (int32 Slot = 0; Slot < FMath::Max(1, BoostMesh->GetNumMaterials()); ++Slot)
+			{
+				BoostMesh->SetMaterial(Slot, SupplyBoostMaterial);
+			}
+			// An ISM part (the reactor's "Sphere") is drawn by the UnitVisualManager pool, not by itself - the
+			// pooled instance has to move to the pool of the new material, otherwise nothing changes on screen.
+			UInstancedStaticMeshComponent* BoostISM = Cast<UInstancedStaticMeshComponent>(BoostMesh);
+			UUnitVisualManager* VisualManager = GetWorld() ? GetWorld()->GetSubsystem<UUnitVisualManager>() : nullptr;
+			if (BoostISM && VisualManager && MassActorBindingComponent)
+			{
+				VisualManager->RefreshUnitVisualMaterial(MassActorBindingComponent->GetMassEntityHandle(), BoostISM, this);
+			}
+		}
+	}
+}
+
 void ABuildingBase::BeginPlay()
 {
 	Super::BeginPlay();
@@ -639,6 +780,13 @@ void ABuildingBase::BeginPlay()
 				PC->OnBuildingAppeared(this);
 			}
 		}
+	}
+
+	// Effects that are only shown while switched on start hidden (or as replicated, for a late joiner).
+	ApplyToggleVFX();
+	if (bToggleVFXWhileFlying && HasAuthority())
+	{
+		GetWorldTimerManager().SetTimer(FlightVFXTimerHandle, this, &ABuildingBase::UpdateFlightVFX, 0.1f, true, 0.1f);
 	}
 
 	// Gebaeude sperren Einheiten nicht mehr physisch - das Umlaufen regelt das Navigationsnetz.
@@ -1194,7 +1342,8 @@ void ABuildingBase::SwitchResourceArea(AUnitBase* UnitBase, AResourceGameMode* R
 	TArray<AWorkArea*> WorkPlacesForDistribution = bWorkerDistributionSet ? AllWorkPlaces : CloseWorkPlaces;
 	
 	// Get suitable work area considering worker distribution
-	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlacesForDistribution);
+	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(UnitBase->TeamId, WorkPlacesForDistribution,
+		IsValid(UnitBase->ResourcePlace) ? ConvertToResourceType(UnitBase->ResourcePlace->Type) : EResourceType::MAX);
 
 	// Check if worker should switch to a closer resource area with fewer workers
 	// This ensures even distribution within the threshold

@@ -38,6 +38,11 @@
 #include "Styling/CoreStyle.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/Engine.h"
+#include "Controller/Input/RTSKeyBindings.h"
+#include "Widgets/ControlWidget.h"
+#include "Widgets/KeyLayoutWidgets.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputMappingContext.h"
 
 AExtendedCameraBase::AExtendedCameraBase(const FObjectInitializer& ObjectInitializer) :Super(ObjectInitializer)
 {
@@ -107,6 +112,11 @@ void AExtendedCameraBase::BeginPlay()
 		{
 			OnTeamIdChanged_Internal(MyPC->SelectableTeamId);
 		}
+	}
+
+	if (URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this))
+	{
+		Bindings->OnBindingsChanged.AddUniqueDynamic(this, &AExtendedCameraBase::OnKeyBindingsChanged);
 	}
 }
 
@@ -561,11 +571,23 @@ void AExtendedCameraBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	}
 	TabHintSlateWidget.Reset();
 
+	if (URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this))
+	{
+		Bindings->OnBindingsChanged.RemoveDynamic(this, &AExtendedCameraBase::OnKeyBindingsChanged);
+	}
+	CloseKeyLayoutWindows();
+
 	Super::EndPlay(EndPlayReason);
 }
 
 void AExtendedCameraBase::ShowStartScreen()
 {
+	// The talent pause waits for this player's choice: the tree stays (see IsTalentPauseHoldingTree).
+	const ACameraControllerBase* HoldingPC = Cast<ACameraControllerBase>(GetController());
+	if (HoldingPC && TabMode == 4 && HoldingPC->IsTalentPauseHoldingTree())
+	{
+		return;
+	}
 	TabMode = 1;
 	UpdateTabModeUI();
 }
@@ -618,12 +640,19 @@ void AExtendedCameraBase::UpdateTabHint()
 
 	TSharedRef<STextBlock> HintText =
 		SNew(STextBlock)
-		.Text(TabHintText)
+		// "PRESS TAB" folgt der Belegung: liegt die Uebersicht auf einer anderen Taste, steht die da.
+		.Text(URTSKeyBindingSubsystem::Get(this) ? URTSKeyBindingSubsystem::Get(this)->LocalizeKeyHints(TabHintText) : TabHintText)
 		.Font(HintFont)
 		.ColorAndOpacity(FSlateColor(TabHintColor));
 
-	// Der Text schluckt keine Klicks, der Knopf darunter schon.
-	HintText->SetVisibility(EVisibility::HitTestInvisible);
+	// Der Text schluckt keine Klicks, der Knopf darunter schon. Waehrend die Talentpause den Baum
+	// festhaelt, fuehrt Tab nirgendwohin - dann kein Hinweis.
+	HintText->SetVisibility(TAttribute<EVisibility>::CreateLambda([WeakSelf]()
+	{
+		const AExtendedCameraBase* Camera = WeakSelf.Get();
+		const ACameraControllerBase* PC = Camera ? Cast<ACameraControllerBase>(Camera->GetController()) : nullptr;
+		return PC && Camera->TabMode == 4 && PC->IsTalentPauseHoldingTree() ? EVisibility::Collapsed : EVisibility::HitTestInvisible;
+	}));
 
 	TSharedRef<SWidget> HintBlock =
 		SNew(SBox)
@@ -642,6 +671,12 @@ void AExtendedCameraBase::UpdateTabHint()
 				SNew(SButton)
 				.ContentPadding(FMargin(14.f, 5.f))
 				.ButtonColorAndOpacity(FLinearColor(0.010f, 0.015f, 0.027f, 0.85f))
+				.Visibility_Lambda([WeakSelf]()
+				{
+					const AExtendedCameraBase* Camera = WeakSelf.Get();
+					const ACameraControllerBase* PC = Camera ? Cast<ACameraControllerBase>(Camera->GetController()) : nullptr;
+					return PC && Camera->TabMode == 4 && PC->IsTalentPauseHoldingTree() ? EVisibility::Collapsed : EVisibility::Visible;
+				})
 				.OnClicked_Lambda([WeakSelf]() -> FReply
 				{
 					if (AExtendedCameraBase* Camera = WeakSelf.Get())
@@ -959,6 +994,17 @@ void AExtendedCameraBase::Tick(float DeltaTime)
 				}
 			}
 		}
+
+		// Die Lebensbalken bleiben sichtbar, solange die Taste gehalten wird - wie frueher, als die
+		// V-Aktion ohne Trigger jedes Bild feuerte.
+		for (const TPair<FKey, ERTSKeyAction>& Held : HeldLayoutKeys)
+		{
+			if (Held.Value == ERTSKeyAction::ShowHealthbars)
+			{
+				CameraControllerBase->ShowFriendlyHealthbars();
+				break;
+			}
+		}
 	}
 }
 
@@ -1182,11 +1228,28 @@ void AExtendedCameraBase::Server_InvestTeamAttributeTreeNode_Implementation(FNam
 	{
 		return;
 	}
+	if (Row->bAutoAbilitySlot)
+	{
+		// Auto ability node: without a drawn ability there is nothing to buy.
+		GameStateRef->EnsureTreeAutoAbilityPicks(TeamId);
+		if (!GameStateRef->FindTreeAutoAbilityPick(TeamId, NodeId))
+		{
+			return;
+		}
+	}
 
 	// Erst buchen, dann anwenden. Schlaegt das Buchen fehl (kein Punkt im Topf oder Knoten voll),
 	// darf keine einzige Einheit die Aufwertung bekommen.
 	if (!GameStateRef->InvestTeamAttributeTreeNode(TeamId, NodeId, Row->MaxPoints))
 	{
+		return;
+	}
+
+	if (Row->bAutoAbilitySlot)
+	{
+		// No attribute on the units: the team gets the node's automatic ability for its unit type.
+		GameStateRef->ApplyTreeAutoAbilityNode(TeamId, NodeId);
+		GameStateRef->NotifyTalentPauseChoice(TeamId);
 		return;
 	}
 
@@ -1574,6 +1637,12 @@ void AExtendedCameraBase::Input_Tab_Pressed(const FInputActionValue& InputAction
 
 	if(BlockControls) return;
 
+	const ACameraControllerBase* HoldingPC = Cast<ACameraControllerBase>(GetController());
+	if (HoldingPC && TabMode == 4 && HoldingPC->IsTalentPauseHoldingTree())
+	{
+		return;
+	}
+
 	TabMode = (TabMode + 1) % 5; // 0 = off, 1 = Resource, 2 = Control, 3 = WinCondition, 4 = AttributeTree
 
 	UpdateTabModeUI();
@@ -1625,10 +1694,22 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 {
 	ApplyGameAndUiInputMode();
 
+	// Tastatur-Fenster (Layoutwahl, Tastatur) liegen ueber dem Menue - Esc schliesst zuerst sie.
+	if (CloseKeyLayoutWindows())
+	{
+		return;
+	}
+
 	if (MapMenuWidget)
 	{
 		if (MapMenuWidget->GetVisibility() == ESlateVisibility::Visible)
 		{
+			// An open sub page (graphics settings) goes back to the menu first; reported 09.11.2026: closed
+			// together with the menu, it was still open the next time Esc opened the menu.
+			if (MapMenuWidget->CloseSubPage())
+			{
+				return;
+			}
 			MapMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 			BlockControls = false;
 			UpdateViewportBlur(TabToggled);
@@ -1724,6 +1805,7 @@ void AExtendedCameraBase::Input_Esc_Pressed(const FInputActionValue& InputAction
 				}
 			}
 
+			MapMenuWidget->CloseSubPage();
 			MapMenuWidget->SetVisibility(ESlateVisibility::Visible);
 			if (AExtendedControllerBase* ExtPC = Cast<AExtendedControllerBase>(CameraControllerBase))
 			{
@@ -2428,3 +2510,351 @@ void AExtendedCameraBase::HandleState_AbilitySix(ACameraControllerBase* CameraCo
     ExecuteOnAbilityInputDetected(EGASAbilityInputID::AbilitySix, CameraControllerBase);
 }
 
+// ================================================================================================
+// Tastaturbelegung (09.11.2026)
+// ================================================================================================
+
+namespace
+{
+	EGASAbilityInputID AbilityInputFor(ERTSKeyAction Action)
+	{
+		switch (Action)
+		{
+		case ERTSKeyAction::Ability2: return EGASAbilityInputID::AbilityTwo;
+		case ERTSKeyAction::Ability3: return EGASAbilityInputID::AbilityThree;
+		case ERTSKeyAction::Ability4: return EGASAbilityInputID::AbilityFour;
+		case ERTSKeyAction::Ability5: return EGASAbilityInputID::AbilityFive;
+		case ERTSKeyAction::Ability6: return EGASAbilityInputID::AbilitySix;
+		default: return EGASAbilityInputID::AbilityOne;
+		}
+	}
+
+	int32 IndexIn(ERTSKeyAction Action, ERTSKeyAction First)
+	{
+		return static_cast<int32>(Action) - static_cast<int32>(First);
+	}
+}
+
+bool AExtendedCameraBase::HandleBoundKey(const FKey& Key, EInputEvent Event)
+{
+	if (!bUseKeyLayout || !IsOwnedByLocalPlayer())
+	{
+		return false;
+	}
+
+	// Loslassen geht an die Aktion, die beim Druecken lief - auch wenn Strg inzwischen los ist
+	// oder die Belegung dazwischen geaendert wurde. Sonst faehrt die Kamera endlos weiter.
+	if (Event == IE_Released)
+	{
+		ERTSKeyAction Held = ERTSKeyAction::None;
+		if (HeldLayoutKeys.RemoveAndCopyValue(Key, Held))
+		{
+			ExecuteKeyAction(Held, false);
+			return true;
+		}
+		return false;
+	}
+	if (Event != IE_Pressed || !URTSKeyBindingSubsystem::CanBindKey(Key))
+	{
+		return false;
+	}
+
+	const URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this);
+	const APlayerController* PC = Cast<APlayerController>(GetController());
+	if (!Bindings || !PC)
+	{
+		return false;
+	}
+	const bool bCtrl = PC->IsInputKeyDown(EKeys::LeftControl) || PC->IsInputKeyDown(EKeys::RightControl);
+	const bool bAlt = PC->IsInputKeyDown(EKeys::LeftAlt) || PC->IsInputKeyDown(EKeys::RightAlt);
+
+	ERTSKeyAction Action = Bindings->FindAction(FRTSKeyChord(Key, bCtrl, bAlt));
+	if (Action == ERTSKeyAction::None && (bCtrl || bAlt))
+	{
+		// Kamera schwenken mit gehaltenem Strg ging schon immer - solange Strg + Taste selbst nichts ist.
+		const ERTSKeyAction Plain = Bindings->FindAction(FRTSKeyChord(Key));
+		if (URTSKeyBindingSubsystem::IsModifierTolerant(Plain))
+		{
+			Action = Plain;
+		}
+	}
+	if (Action == ERTSKeyAction::None)
+	{
+		return false;
+	}
+
+	HeldLayoutKeys.Add(Key, Action);
+	ExecuteKeyAction(Action, true);
+	return true;
+}
+
+void AExtendedCameraBase::ExecuteKeyAction(ERTSKeyAction Action, bool bPressed)
+{
+	ACameraControllerBase* CC = Cast<ACameraControllerBase>(GetController());
+	if (!CC)
+	{
+		return;
+	}
+
+	if (!bPressed)
+	{
+		// Loslassen laeuft auch bei gesperrter Steuerung: ein Menue, das bei gedrueckter Taste
+		// aufgeht, darf weder die Kamera weiterfahren lassen noch HeldAbilityInputs klemmen.
+		switch (Action)
+		{
+		case ERTSKeyAction::Ability1:
+		case ERTSKeyAction::Ability2:
+		case ERTSKeyAction::Ability3:
+		case ERTSKeyAction::Ability4:
+		case ERTSKeyAction::Ability5:
+		case ERTSKeyAction::Ability6:
+			CC->SetAbilityInputHeld(AbilityInputFor(Action), false);
+			break;
+		case ERTSKeyAction::CameraForward: HandleState_StopMoveW_NoStrg(CC); break;
+		case ERTSKeyAction::CameraBack: HandleState_StopMoveS_NoStrg(CC); break;
+		case ERTSKeyAction::CameraLeft: HandleState_StopMoveA_NoStrg(CC); break;
+		case ERTSKeyAction::CameraRight: HandleState_StopMoveD_NoStrg(CC); break;
+		case ERTSKeyAction::CameraRotateLeft: HandleState_StopRotateLeft_NoStrg(CC); break;
+		case ERTSKeyAction::CameraRotateRight: HandleState_StopRotateRight_NoStrg(CC); break;
+		case ERTSKeyAction::CameraZoomIn: HandleState_StopZoomIn_NoStrg(CC); break;
+		case ERTSKeyAction::CameraZoomOut: HandleState_StopZoomOut_NoStrg(CC); break;
+		case ERTSKeyAction::CameraJump:
+			CC->SpaceReleased();
+			if (GetCameraState() != CameraData::LockOnCharacterWithTag)
+			{
+				SetCameraState(CameraData::ZoomInPosition);
+			}
+			break;
+		case ERTSKeyAction::FKeyGroup1:
+		case ERTSKeyAction::FKeyGroup2:
+		case ERTSKeyAction::FKeyGroup3:
+		case ERTSKeyAction::FKeyGroup4:
+		case ERTSKeyAction::FKeyGroup5:
+		case ERTSKeyAction::FKeyGroup6:
+		{
+			const int32 i = IndexIn(Action, ERTSKeyAction::FKeyGroup1);
+			if (bFKeyPressed[i])
+			{
+				bFKeyPressed[i] = false;
+				// Lange gehalten = Gruppe zugewiesen (Tick); kurz getippt = Gruppe waehlen.
+				if (!bFKeyTagAssigned[i])
+				{
+					const FGameplayTag GroupTags[6] = { CC->KeyTagF1, CC->KeyTagF2, CC->KeyTagF3, CC->KeyTagF4, CC->KeyTagF5, CC->KeyTagF6 };
+					CC->SelectUnitsWithTag(GroupTags[i], CC->SelectableTeamId);
+				}
+			}
+			break;
+		}
+		case ERTSKeyAction::ToggleOverview:
+			Input_Tab_Released(FInputActionValue(), 0);
+			break;
+		default:
+			break;
+		}
+		return;
+	}
+
+	// Diese drei pruefen BlockControls selbst bzw. muessen auch im Menue gehen (Menue zu, Tab).
+	switch (Action)
+	{
+	case ERTSKeyAction::ToggleOverview: Input_Tab_Pressed(FInputActionValue(), 0); return;
+	case ERTSKeyAction::OpenMenu: Input_Esc_Pressed(FInputActionValue(), 0); return;
+	case ERTSKeyAction::ShowHealthbars: Input_V_Pressed(FInputActionValue(), 0); return;
+	default: break;
+	}
+
+	if (BlockControls)
+	{
+		return;
+	}
+	CC->HealStaleModifierFlags(TEXT("ExecuteKeyAction"), /*bRequireFocus*/ false);
+	const bool bCtrl = CC->IsCtrlPressed;
+
+	switch (Action)
+	{
+	case ERTSKeyAction::CameraForward: bCtrl ? HandleState_MoveW(CC) : HandleState_MoveW_NoStrg(CC); break;
+	case ERTSKeyAction::CameraBack: bCtrl ? HandleState_MoveS(CC) : HandleState_MoveS_NoStrg(CC); break;
+	case ERTSKeyAction::CameraLeft: bCtrl ? HandleState_MoveA(CC) : HandleState_MoveA_NoStrg(CC); break;
+	case ERTSKeyAction::CameraRight: bCtrl ? HandleState_MoveD(CC) : HandleState_MoveD_NoStrg(CC); break;
+	case ERTSKeyAction::CameraRotateLeft: bCtrl ? HandleState_RotateLeft(CC) : HandleState_RotateLeft_NoStrg(CC); break;
+	case ERTSKeyAction::CameraRotateRight: bCtrl ? HandleState_RotateRight(CC) : HandleState_RotateRight_NoStrg(CC); break;
+	case ERTSKeyAction::CameraZoomIn: bCtrl ? HandleState_ZoomIn(CC) : HandleState_ZoomIn_NoStrg(CC); break;
+	case ERTSKeyAction::CameraZoomOut: bCtrl ? HandleState_ZoomOut(CC) : HandleState_ZoomOut_NoStrg(CC); break;
+	case ERTSKeyAction::CameraJump:
+		CC->SpacePressed();
+		if (bCtrl && GetCameraState() != CameraData::LockOnCharacterWithTag)
+		{
+			SetCameraState(CameraData::ZoomOutPosition);
+		}
+		break;
+	case ERTSKeyAction::CameraLockUnit: Input_G_Pressed(FInputActionValue(), 0); break;
+	case ERTSKeyAction::CameraOrbit: HandleState_OrbitAndMove(); break;
+	case ERTSKeyAction::SpawnEffects: HandleState_SpawnEffects(CC); break;
+	case ERTSKeyAction::Ability1:
+	case ERTSKeyAction::Ability2:
+	case ERTSKeyAction::Ability3:
+	case ERTSKeyAction::Ability4:
+	case ERTSKeyAction::Ability5:
+	case ERTSKeyAction::Ability6:
+		ExecuteOnAbilityInputDetected(AbilityInputFor(Action), CC);
+		break;
+	case ERTSKeyAction::SelectGroup1:
+	case ERTSKeyAction::SelectGroup2:
+	case ERTSKeyAction::SelectGroup3:
+	case ERTSKeyAction::SelectGroup4:
+	case ERTSKeyAction::SelectGroup5:
+	case ERTSKeyAction::SelectGroup6:
+	{
+		const FGameplayTag GroupTags[6] = { CC->KeyTagCtrl1, CC->KeyTagCtrl2, CC->KeyTagCtrl3, CC->KeyTagCtrl4, CC->KeyTagCtrl5, CC->KeyTagCtrl6 };
+		CC->SelectUnitsWithTag(GroupTags[IndexIn(Action, ERTSKeyAction::SelectGroup1)], CC->SelectableTeamId);
+		break;
+	}
+	case ERTSKeyAction::SelectAltGroup1:
+	case ERTSKeyAction::SelectAltGroup2:
+	case ERTSKeyAction::SelectAltGroup3:
+	case ERTSKeyAction::SelectAltGroup4:
+	case ERTSKeyAction::SelectAltGroup5:
+	case ERTSKeyAction::SelectAltGroup6:
+	{
+		const FGameplayTag GroupTags[6] = { CC->KeyTagAlt1, CC->KeyTagAlt2, CC->KeyTagAlt3, CC->KeyTagAlt4, CC->KeyTagAlt5, CC->KeyTagAlt6 };
+		CC->SelectUnitsWithTag(GroupTags[IndexIn(Action, ERTSKeyAction::SelectAltGroup1)], CC->SelectableTeamId);
+		break;
+	}
+	case ERTSKeyAction::SelectGroupQ: CC->SelectUnitsWithTag(CC->KeyTagCtrlQ, CC->SelectableTeamId); break;
+	case ERTSKeyAction::SelectGroupW: CC->SelectUnitsWithTag(CC->KeyTagCtrlW, CC->SelectableTeamId); break;
+	case ERTSKeyAction::SelectGroupE: CC->SelectUnitsWithTag(CC->KeyTagCtrlE, CC->SelectableTeamId); break;
+	case ERTSKeyAction::SelectGroupR: CC->SelectUnitsWithTag(CC->KeyTagCtrlR, CC->SelectableTeamId); break;
+	case ERTSKeyAction::FKeyGroup1:
+	case ERTSKeyAction::FKeyGroup2:
+	case ERTSKeyAction::FKeyGroup3:
+	case ERTSKeyAction::FKeyGroup4:
+	case ERTSKeyAction::FKeyGroup5:
+	case ERTSKeyAction::FKeyGroup6:
+	{
+		const int32 i = IndexIn(Action, ERTSKeyAction::FKeyGroup1);
+		bFKeyPressed[i] = true;
+		FKeyHoldTimes[i] = 0.f;
+		bFKeyTagAssigned[i] = false;
+		break;
+	}
+	case ERTSKeyAction::HoldPosition: CC->SetHoldPositionOnSelectedUnits(); break;
+	case ERTSKeyAction::DetectEnemies: HandleState_TPressed(CC); break;
+	case ERTSKeyAction::CycleFormation: Input_C_Pressed(FInputActionValue(), 0); break;
+	default: break;
+	}
+}
+
+FText AExtendedCameraBase::GetKeyBindingText(ERTSKeyAction Action) const
+{
+	const URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this);
+	return Bindings ? Bindings->GetChordText(Action) : FText::GetEmpty();
+}
+
+void AExtendedCameraBase::ApplyInputMappingContext()
+{
+	APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = PlayerController && PlayerController->GetLocalPlayer()
+		? ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()) : nullptr;
+	const URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this);
+	if (!bUseKeyLayout || !MappingContext || !Subsystem || !Bindings)
+	{
+		Super::ApplyInputMappingContext();
+		return;
+	}
+
+	// Eine Kopie des IMC ohne die Tasten der Belegung: sonst loeste W neben "Kamera vor" (aus der
+	// Belegung) weiterhin W_Pressed aus dem IMC aus - doppelt im Modern-, falsch im Classic-Layout.
+	// Modifikatoren, Maus und Escape bleiben im IMC.
+	TSet<FKey> LayoutKeys;
+	for (uint8 i = static_cast<uint8>(ERTSKeyAction::None) + 1; i < static_cast<uint8>(ERTSKeyAction::Count); ++i)
+	{
+		const FRTSKeyChord Chord = Bindings->GetChord(static_cast<ERTSKeyAction>(i));
+		if (Chord.IsValid())
+		{
+			LayoutKeys.Add(Chord.Key);
+		}
+	}
+
+	if (FilteredMappingContext)
+	{
+		Subsystem->RemoveMappingContext(FilteredMappingContext);
+	}
+	Subsystem->RemoveMappingContext(MappingContext);
+
+	FilteredMappingContext = DuplicateObject<UInputMappingContext>(MappingContext, this);
+	TArray<TPair<const UInputAction*, FKey>> ToRemove;
+	for (const FEnhancedActionKeyMapping& Mapping : FilteredMappingContext->GetMappings())
+	{
+		if (URTSKeyBindingSubsystem::CanBindKey(Mapping.Key)
+			&& (URTSKeyBindingSubsystem::IsManagedKey(Mapping.Key) || LayoutKeys.Contains(Mapping.Key)))
+		{
+			ToRemove.Emplace(Mapping.Action.Get(), Mapping.Key);
+		}
+	}
+	for (const TPair<const UInputAction*, FKey>& Pair : ToRemove)
+	{
+		FilteredMappingContext->UnmapKey(Pair.Key, Pair.Value);
+	}
+	Subsystem->AddMappingContext(FilteredMappingContext, MappingPriority);
+	UE_LOG(LogTemp, Log, TEXT("[Tastatur] IMC '%s' ohne %d Tastenzeilen der Belegung aktiv."),
+		*GetNameSafe(MappingContext), ToRemove.Num());
+}
+
+void AExtendedCameraBase::OnKeyBindingsChanged()
+{
+	if (!IsOwnedByLocalPlayer())
+	{
+		return;
+	}
+	ApplyInputMappingContext();
+
+	// Gehaltene Tasten der alten Belegung loslassen, damit nichts weiterlaeuft.
+	TMap<FKey, ERTSKeyAction> Held = MoveTemp(HeldLayoutKeys);
+	HeldLayoutKeys.Reset();
+	for (const TPair<FKey, ERTSKeyAction>& Pair : Held)
+	{
+		ExecuteKeyAction(Pair.Value, false);
+	}
+
+	// Tab-Hinweis mit dem neuen Tastennamen neu aufbauen.
+	if (TabHintSlateWidget.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(TabHintSlateWidget.ToSharedRef());
+		TabHintSlateWidget.Reset();
+	}
+	UpdateTabHint();
+	UUnitWidgetSelector::RefreshOpenTooltip();
+}
+
+TSubclassOf<UControlWidget> AExtendedCameraBase::GetKeyboardWidgetClass() const
+{
+	return UControlWidget::ResolveKeyboardClass(ControlWidget ? ControlWidget->GetClass() : nullptr);
+}
+
+void AExtendedCameraBase::OpenKeyLayoutChoice()
+{
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		URTSKeyLayoutChoiceWidget::Open(PC, GetKeyboardWidgetClass(), nullptr, false, nullptr);
+	}
+}
+
+void AExtendedCameraBase::OpenKeyboardEditor(FKey FocusKey)
+{
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	// The HUD instance (what Esc -> Controls shows), the class default only without one.
+	const UControlWidget* Keyboard = Cast<UControlWidget>(ControlWidget);
+	if (!Keyboard)
+	{
+		Keyboard = GetKeyboardWidgetClass() ? GetKeyboardWidgetClass()->GetDefaultObject<UControlWidget>() : nullptr;
+	}
+	if (PC && Keyboard)
+	{
+		URTSKeyBindingListWidget::Open(PC, Keyboard->Style, FocusKey, nullptr);
+	}
+}
+
+bool AExtendedCameraBase::CloseKeyLayoutWindows()
+{
+	return URTSKeyLayoutChoiceWidget::CloseTopmostWindow(GetWorld());
+}

@@ -77,6 +77,21 @@ public:
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = Construction)
 	AWorkArea* WorkArea = nullptr;
 
+	/**
+	 * What this site builds and where - copied from the WorkArea at spawn (SeedIndicatorFootprint) and replicated,
+	 * so a selected site can hand the selection to its building even when the WorkArea is already gone or never
+	 * reached this client (AControllerBase::RememberFinishedConstruction).
+	 */
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = Construction)
+	TSubclassOf<class ABuildingBase> SiteBuildingClass;
+
+	UPROPERTY(Replicated, VisibleAnywhere, BlueprintReadOnly, Category = Construction)
+	FVector SiteLocation = FVector::ZeroVector;
+
+	/** SiteBuildingClass/SiteLocation, or the WorkArea's values for a site spawned without them. */
+	UClass* GetSiteBuildingClass() const;
+	FVector GetSiteLocation() const;
+
 	// --- Selection-indicator footprint override (HUD-ONLY) ---
 	// Seeded on the server at spawn (SeedIndicatorFootprint) from the finished building's
 	// (WorkArea->BuildingClass) collision, so this construction site's HUD selection indicator

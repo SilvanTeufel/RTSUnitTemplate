@@ -115,7 +115,12 @@ void AWorkArea::BeginPlay()
 	{
 		DiagGeburtszeit = W->GetTimeSeconds();
 	}
-	MaxAvailableResourceAmount = AvailableResourceAmount;
+	// A growing place keeps the full amount its spawner gave it - it may start empty (AResourceGameMode spawns
+	// the procedural places before the world's BeginPlay, so this runs after that).
+	if (!bRegrows)
+	{
+		MaxAvailableResourceAmount = AvailableResourceAmount;
+	}
 	OriginalActorScale = GetActorScale3D();
 	SetReplicateMovement(false);
 
@@ -771,6 +776,8 @@ void AWorkArea::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetim
 	DOREPLIFETIME(AWorkArea, BuildTime);
 	DOREPLIFETIME(AWorkArea, CurrentBuildTime);
 	DOREPLIFETIME(AWorkArea, AvailableResourceAmount);
+	DOREPLIFETIME(AWorkArea, bRegrows);
+	DOREPLIFETIME(AWorkArea, bDepleted);
 	DOREPLIFETIME(AWorkArea, MaxAvailableResourceAmount);
 	DOREPLIFETIME(AWorkArea, ShrinkResource);
 	DOREPLIFETIME(AWorkArea, AreaDropped);
@@ -934,7 +941,8 @@ void AWorkArea::SwitchResourceArea(AWorkingUnitBase* Worker, AUnitBase* UnitBase
 
 	TArray<AWorkArea*> WorkPlacesForDistribution = bWorkerDistributionSet ? AllWorkPlaces : CloseWorkPlaces;
 
-	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlacesForDistribution);
+	AWorkArea* NewResourcePlace = ResourceGameMode->GetSuitableWorkAreaToWorker(Worker->TeamId, WorkPlacesForDistribution,
+		IsValid(UnitBase->ResourcePlace) ? ConvertToResourceType(UnitBase->ResourcePlace->Type) : EResourceType::MAX);
 
 	if (NewResourcePlace)
 	{
@@ -1228,6 +1236,60 @@ void AWorkArea::DespawnWorkResource(AWorkResource* WorkResource)
 void AWorkArea::Multicast_SetScale_Implementation(FVector NewScale)
 {
 	SetActorScale3D(OriginalActorScale * NewScale);
+}
+
+void AWorkArea::OnRep_Depleted()
+{
+	SetActorHiddenInGame(bDepleted);
+	SetActorEnableCollision(!bDepleted);
+}
+
+void AWorkArea::SetDepleted(bool bInDepleted)
+{
+	bDepleted = bInDepleted;
+	OnRep_Depleted();
+	ForceNetUpdate();
+}
+
+void AWorkArea::HandleDepleted()
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+	if (!bRegrows)
+	{
+		Destroy();
+		return;
+	}
+	// The workers on it look for another place; the place itself waits, invisible, until it has grown.
+	for (int32 i = Workers.Num() - 1; i >= 0; --i)
+	{
+		if (AWorkingUnitBase* Worker = Workers[i])
+		{
+			RemoveWorkerFromArray(Worker);
+		}
+	}
+	AvailableResourceAmount = 0.f;
+	SetDepleted(true);
+}
+
+void AWorkArea::AddResourceAmount(float Amount)
+{
+	if (!HasAuthority() || Amount <= 0.f)
+	{
+		return;
+	}
+	AvailableResourceAmount = FMath::Min(MaxAvailableResourceAmount, AvailableResourceAmount + Amount);
+	if (bDepleted && AvailableResourceAmount > 0.f)
+	{
+		SetDepleted(false);
+	}
+	if (ShrinkResource)
+	{
+		const float Ratio = MaxAvailableResourceAmount > KINDA_SMALL_NUMBER ? AvailableResourceAmount / MaxAvailableResourceAmount : 0.f;
+		Multicast_SetScale(FVector(FMath::Lerp(0.4f, 1.0f, FMath::Clamp(Ratio, 0.f, 1.f))));
+	}
 }
 
 void AWorkArea::TemporarilyChangeMaterial()

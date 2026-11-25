@@ -803,6 +803,11 @@ void ACameraBase::JumpCamera(FHitResult Hit)
 
 void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 {
+	MoveInDirectionScaled(Direction, DeltaTime, 1.f);
+}
+
+void ACameraBase::MoveInDirectionScaled(FVector Direction, float DeltaTime, float SpeedScale)
+{
 	const bool bHasInput = !Direction.IsNearlyZero();
 
 	// CurrentCamSpeed.X/Y carries the world-space pan velocity between frames (Z belongs to the zoom).
@@ -837,7 +842,7 @@ void ACameraBase::MoveInDirection(FVector Direction, float DeltaTime)
 		WorldDirection.Y = Direction.X * SinYaw + Direction.Y * CosYaw;
 		WorldDirection.Z = 0.f;
 
-		DesiredVelocity = WorldDirection * CamSpeed;
+		DesiredVelocity = WorldDirection * CamSpeed * FMath::Max(SpeedScale, 0.05f);
 	}
 
 	// Ramp towards the desired velocity (units/s^2): AccelerationRate while a key is held,

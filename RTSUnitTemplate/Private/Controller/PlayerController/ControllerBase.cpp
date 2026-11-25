@@ -2,6 +2,8 @@
 
 
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/Input/RTSKeyBindings.h"
+#include "UnrealClient.h"
 #include "NavigationSystem.h" // Include this for navigation functions
 #include "Controller/PlayerController/CameraControllerBase.h"
 #include "Core/UnitData.h"
@@ -40,6 +42,14 @@
 #include "Characters/Unit/GASUnit.h"
 #include "Widgets/RTSMouseCursorWidget.h"
 #include "Blueprint/UserWidget.h"
+#include "Engine/GameViewportClient.h"
+#include "HAL/FileManager.h"
+#include "Misc/Paths.h"
+
+// The material cursor is a Slate widget drawn into the frame - it trails the real mouse by the whole render latency.
+// A hardware cursor (Windows draws it) has none. 1 = use Content/Slate/Cursors/<cursor asset name>.png where it exists.
+static TAutoConsoleVariable<int32> CVarHardwareCursor(TEXT("rts.cursor.hardware"), 1,
+	TEXT("1 = hardware mouse cursor from Content/Slate/Cursors/<CursorMaterial or CursorIcon name>.png (no lag), 0 = the software widget cursor."));
 
 
 AControllerBase::AControllerBase() {
@@ -71,6 +81,51 @@ void AControllerBase::ApplyCustomMouseCursor()
 		return;
 	}
 
+	// The same picture as a hardware cursor, if it was exported next to the content (name of the material or icon;
+	// "@1.5x" / "@2x" files are picked by the monitor's DPI). Centred like the widget cursor.
+	// Viewport resizes (window mode, resolution change) re-apply the cursor at the new scale.
+	if (!ViewportResizedHandle.IsValid())
+	{
+		ViewportResizedHandle = FViewport::ViewportResizedEvent.AddUObject(this, &AControllerBase::HandleViewportResized);
+	}
+	const float Scale = GetEffectiveCursorScale();
+	LastAppliedCursorScale = Scale;
+
+	if (CVarHardwareCursor.GetValueOnGameThread() > 0)
+	{
+		const FString CursorName = CursorMaterial ? CursorMaterial->GetName() : CursorIcon->GetName();
+		const FString BasePath = FString::Printf(TEXT("Slate/Cursors/%s"), *CursorName);
+		auto Exists = [](const FString& Relative)
+		{
+			return IFileManager::Get().FileExists(*(FPaths::ProjectContentDir() / Relative + TEXT(".png")));
+		};
+
+		// Sized variants <Name>_<px>.png: the one closest to the wanted pixel size. Without them the
+		// unsuffixed file (and the engine's own "@1.5x"/"@2x" pick by monitor DPI) as before.
+		FString RelativePath = BasePath;
+		const float WantedPixels = HardwareCursorBasePixels * Scale;
+		static const int32 SizedVariants[] = { 32, 48, 64, 80, 96, 128, 160, 192 };
+		float BestError = TNumericLimits<float>::Max();
+		for (const int32 Pixels : SizedVariants)
+		{
+			const FString Candidate = FString::Printf(TEXT("%s_%d"), *BasePath, Pixels);
+			const float Error = FMath::Abs(static_cast<float>(Pixels) - WantedPixels);
+			if (Error < BestError && Exists(Candidate))
+			{
+				BestError = Error;
+				RelativePath = Candidate;
+			}
+		}
+
+		UGameViewportClient* ViewportClient = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+		if (ViewportClient && Exists(RelativePath)
+			&& ViewportClient->SetHardwareCursor(MouseCursorType, FName(*RelativePath), FVector2D(0.5f, 0.5f)))
+		{
+			UE_LOG(LogTemp, Log, TEXT("[Cursor] Hardware cursor %s (scale %.2f, wanted %.0f px)."), *RelativePath, Scale, WantedPixels);
+			return;
+		}
+	}
+
 	if (!MouseCursorWidgetClass)
 	{
 		MouseCursorWidgetClass = URTSMouseCursorWidget::StaticClass();
@@ -82,11 +137,54 @@ void AControllerBase::ApplyCustomMouseCursor()
 	}
 	if (MouseCursorWidgetInstance)
 	{
-		MouseCursorWidgetInstance->SetCursorImage(CursorMaterial, CursorIcon, CursorSize);
+		MouseCursorWidgetInstance->SetCursorImage(CursorMaterial, CursorIcon, CursorSize * Scale);
 		SetMouseCursorWidget(MouseCursorType, MouseCursorWidgetInstance);
 	}
 }
 
+
+
+float AControllerBase::GetEffectiveCursorScale() const
+{
+	float Scale = 1.f;
+	if (CursorReferenceHeight > 0.f)
+	{
+		int32 SizeX = 0;
+		int32 SizeY = 0;
+		GetViewportSize(SizeX, SizeY);
+		if (SizeY > 0)
+		{
+			Scale = FMath::Max(1.f, static_cast<float>(SizeY) / CursorReferenceHeight);
+		}
+	}
+	if (const URTSKeyBindingSubsystem* Settings = URTSKeyBindingSubsystem::Get(this))
+	{
+		Scale *= Settings->GetCursorScale();
+	}
+	return Scale;
+}
+
+void AControllerBase::HandleViewportResized(FViewport* Viewport, uint32 /*Unused*/)
+{
+	if (!IsLocalController())
+	{
+		return;
+	}
+	if (!FMath::IsNearlyEqual(GetEffectiveCursorScale(), LastAppliedCursorScale, 0.01f))
+	{
+		ApplyCustomMouseCursor();
+	}
+}
+
+void AControllerBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (ViewportResizedHandle.IsValid())
+	{
+		FViewport::ViewportResizedEvent.Remove(ViewportResizedHandle);
+		ViewportResizedHandle.Reset();
+	}
+	Super::EndPlay(EndPlayReason);
+}
 
 bool AControllerBase::IsForeignCameraUnit(const AUnitBase* Unit) const
 {
@@ -274,9 +372,6 @@ void AControllerBase::Tick(float DeltaSeconds)
 
 	if(HUDBase) SelectedUnitCount = HUDBase->SelectedUnits.Num();
 	
-	FHitResult Hit;
-	GetHitResultUnderCursor(ECollisionChannel::ECC_Visibility, false, Hit);
-
 	TArray<FPathPoint> PathPoints;
 
 	if(HUDBase && !HUDBase->DisablePathFindingOnEnemy)
@@ -371,19 +466,25 @@ namespace
 
 void AControllerBase::RememberFinishedConstruction(const AConstructionUnit* Site)
 {
-	if (!Site || !HUDBase || !IsLocalController() || !HUDBase->SelectedUnits.Contains(Site)
-		|| !IsValid(Site->WorkArea) || !Site->WorkArea->BuildingClass)
+	if (!Site || !HUDBase || !IsLocalController() || !HUDBase->SelectedUnits.Contains(Site))
 	{
 		return;
 	}
+	// The site's own replicated key, not its WorkArea: that may be gone already (DestroyAfterBuild, a drone site
+	// outlives it) or never have reached this client.
+	UClass* BuildingClass = Site->GetSiteBuildingClass();
+	const FVector Location = Site->GetSiteLocation();
 	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
-	PendingBuildSelections.Add({ Site->WorkArea->GetActorLocation(), Site->WorkArea->BuildingClass.Get(), Now });
-	// The building may already stand (the server spawned it before the site went): then it takes over here.
+	UE_LOG(LogTemp, Log, TEXT("[SelHandover] site %s left (net %d, work area %d, building class %s) at (%.0f, %.0f)."), *Site->GetName(),
+		int32(GetNetMode()), IsValid(Site->WorkArea) ? 1 : 0, *GetNameSafe(BuildingClass), Location.X, Location.Y);
 	RemoveUnitFromSelection(const_cast<AConstructionUnit*>(Site));
-	if (IsValid(Site->WorkArea->Building))
+	if (!BuildingClass)
 	{
-		OnBuildingAppeared(Site->WorkArea->Building);
+		return;
 	}
+	PendingBuildSelections.Add({ Location, BuildingClass, Now });
+	// The building may already stand (the server spawned it before the site went, or it replicated first).
+	TryResolvePendingBuildSelections();
 }
 
 void AControllerBase::OnBuildingAppeared(ABuildingBase* Building)
@@ -396,28 +497,60 @@ void AControllerBase::OnBuildingAppeared(ABuildingBase* Building)
 	for (AUnitBase* Selected : TArray<AUnitBase*>(HUDBase->SelectedUnits))
 	{
 		const AConstructionUnit* Site = Cast<AConstructionUnit>(Selected);
-		if (IsValid(Site) && IsValid(Site->WorkArea) && IsBuildingOfSite(Building, Site->WorkArea->GetActorLocation(), Site->WorkArea->BuildingClass.Get()))
+		if (IsValid(Site) && IsBuildingOfSite(Building, Site->GetSiteLocation(), Site->GetSiteBuildingClass()))
 		{
-			PendingBuildSelections.RemoveAll([&](const FPendingBuildSelection& P) { return FVector::Dist2D(P.Location, Site->WorkArea->GetActorLocation()) < 1.f; });
+			const FVector SiteLocation = Site->GetSiteLocation();
+			PendingBuildSelections.RemoveAll([&](const FPendingBuildSelection& P) { return FVector::Dist2D(P.Location, SiteLocation) < 1.f; });
+			UE_LOG(LogTemp, Log, TEXT("[SelHandover] %s replaces its selected site %s."), *Building->GetName(), *Site->GetName());
 			ReplaceSelectedUnit(const_cast<AConstructionUnit*>(Site), Building);
 			return;
 		}
 	}
 	// The site already left the selection when it was removed.
-	const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+	TryResolvePendingBuildSelections();
+}
+
+void AControllerBase::TryResolvePendingBuildSelections()
+{
+	UWorld* World = GetWorld();
+	if (!World || !HUDBase)
+	{
+		PendingBuildSelections.Reset();
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
 	for (int32 i = PendingBuildSelections.Num() - 1; i >= 0; --i)
 	{
-		const FPendingBuildSelection& Pending = PendingBuildSelections[i];
-		if (Now - Pending.Time > 5.0)
+		const FPendingBuildSelection Pending = PendingBuildSelections[i];
+		ABuildingBase* Found = nullptr;
+		for (TActorIterator<ABuildingBase> It(World); It && !Found; ++It)
 		{
-			PendingBuildSelections.RemoveAt(i);
+			if (IsValid(*It) && It->GetUnitState() != UnitData::Dead && IsBuildingOfSite(*It, Pending.Location, Pending.BuildingClass.Get()))
+			{
+				Found = *It;
+			}
 		}
-		else if (IsBuildingOfSite(Building, Pending.Location, Pending.BuildingClass.Get()))
+		if (!Found && Now - Pending.Time <= 15.0)
 		{
-			PendingBuildSelections.RemoveAt(i);
-			ReplaceSelectedUnit(nullptr, Building);
-			return;
+			continue;
 		}
+		PendingBuildSelections.RemoveAt(i);
+		// Only into an empty selection: what the player selected in the meantime stays.
+		const bool bSelect = Found && HUDBase->SelectedUnits.Num() == 0;
+		UE_LOG(LogTemp, Log, TEXT("[SelHandover] %s after %.2f s%s."), Found ? *FString::Printf(TEXT("found %s"), *Found->GetName()) : TEXT("no building"),
+			Now - Pending.Time, bSelect ? TEXT(" - selected") : (Found ? TEXT(" - selection not empty, left as it is") : TEXT("")));
+		if (bSelect)
+		{
+			ReplaceSelectedUnit(nullptr, Found);
+		}
+	}
+	if (PendingBuildSelections.Num() == 0)
+	{
+		GetWorldTimerManager().ClearTimer(PendingSelectionTimer);
+	}
+	else if (!GetWorldTimerManager().IsTimerActive(PendingSelectionTimer))
+	{
+		GetWorldTimerManager().SetTimer(PendingSelectionTimer, this, &AControllerBase::TryResolvePendingBuildSelections, 0.2f, true);
 	}
 }
 
@@ -439,6 +572,7 @@ void AControllerBase::RemoveUnitFromSelection(AUnitBase* Unit)
 
 	const int32 UnitIndex = HUDBase->SelectedUnits.Find(Unit);
 	HUDBase->SelectedUnits.Remove(Unit);
+	HUDBase->SelectedUnitsSet.Remove(Unit);
 	SelectedUnits = HUDBase->SelectedUnits;
 
 	if (Nachfolger && UnitIndex != INDEX_NONE && !HUDBase->SelectedUnits.Contains(Nachfolger))

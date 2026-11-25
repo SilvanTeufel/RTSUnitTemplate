@@ -15,6 +15,7 @@ struct FCasterData
 	int32 TeamId = -1;
 	TSubclassOf<UGameplayEffect> FriendlyEffect = nullptr;
 	TSubclassOf<UGameplayEffect> EnemyEffect = nullptr;
+	bool bAffectFlying = true;
 };
 /**
  * 

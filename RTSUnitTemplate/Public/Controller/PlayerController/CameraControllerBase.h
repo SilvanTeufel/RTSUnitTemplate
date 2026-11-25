@@ -145,6 +145,9 @@ public:
 	virtual void SetupInputComponent() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** Hands every key to the camera's key layout (AExtendedCameraBase::HandleBoundKey) after the normal input ran. */
+	virtual bool InputKey(const FInputKeyEventArgs& Params) override;
+
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 		void SetCameraUnitWithTag(FGameplayTag Tag, int TeamId);
 
@@ -171,6 +174,13 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector GetCameraPanDirection();
+
+	// Randscrollen und HUD-Knoepfe (GetCameraPanDirection): wann lag die Maus zuletzt ueber einem
+	// Knopf, wann kam sie in die Randzone, und das Ergebnis des letzten Slate-Tests je Mausposition.
+	double EdgeLastOverButtonTime = -1.0;
+	double EdgeZoneEnterTime = -1.0;
+	FVector2D EdgeLastTestedMouse = FVector2D(-1.0, -1.0);
+	bool bEdgeLastOverButton = false;
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	FVector CalculateUnitsAverage(float DeltaTime);
@@ -613,6 +623,29 @@ public:
 
 	void HideTalentPointToast();
 
+	/** Red warning in the middle of the screen (e.g. "Not enough Energy"), WarningToastSeconds long. */
+	UFUNCTION(Client, Reliable, BlueprintCallable, Category = "RTSUnitTemplate|Warning")
+	void Client_ShowWarningToast(const FText& Text);
+
+	void HideWarningToast();
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Warning")
+	float WarningToastSeconds = 3.5f;
+
+	/** Distance from the top of the screen. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Warning")
+	float WarningToastTopPadding = 150.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Warning")
+	FLinearColor WarningToastColor = FLinearColor(1.f, 0.12f, 0.08f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Warning")
+	int32 WarningToastFontSize = 26;
+
+	/** Missing font = engine default font. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Warning")
+	FSoftObjectPath WarningToastFontPath = FSoftObjectPath(TEXT("/Game/AIGenerated/Fonts/ChakraPetch-SemiBold_Font.ChakraPetch-SemiBold_Font"));
+
 	// --- Talentpause (01.11.2026) ---------------------------------------------------------
 	// Neuer Punkt fuer den Attributbaum: das Spiel haelt an, der Baum geht auf, oben in der Mitte
 	// laeuft ein Countdown. Gewaehlt (alle wartenden Teams) oder Zeit abgelaufen -> Baum zu,
@@ -625,7 +658,7 @@ public:
 
 	/** So lange hat der Spieler Zeit zu waehlen (Echtzeit). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Talents", meta = (ClampMin = "1.0"))
-	float TalentPauseSeconds = 15.f;
+	float TalentPauseSeconds = 30.f;
 
 	/**
 	 * Steht die Vergabe eines anderen Spielers in hoechstens so vielen Sekunden an, bekommt er
@@ -654,8 +687,18 @@ public:
 	UFUNCTION(Client, Reliable)
 	void Client_EndTalentPause();
 
+	/** Other pauses that keep the music running (start loadout selection): call BEFORE the game pauses. */
+	UFUNCTION(Client, Reliable)
+	void Client_SetPauseMusicKeepsPlaying(bool bKeepPlaying);
+
 	/** Serverseitig nach der Vergabe: Pause anstossen, wenn der Spieler etwas waehlen kann. */
 	void MaybeStartTalentPause();
+
+	/**
+	 * True while the talent pause waits for this player's choice: the attribute tree cannot be closed then (no
+	 * close button, no Tab) - leaving it early left the game paused, blurred and counting down.
+	 */
+	bool IsTalentPauseHoldingTree() const;
 
 	/** Investiert in den einzigen offenen Wurzelknoten des Teams. true, wenn gebucht wurde. */
 	bool AutoInvestTalentRoot();
@@ -670,9 +713,14 @@ private:
 	FTimerHandle TalentPointToastTimerHandle;
 	TSharedPtr<class SWidget> TalentPointToast;
 
+	FTimerHandle WarningToastTimerHandle;
+	TSharedPtr<class SWidget> WarningToast;
+
 	void HideTalentPauseTimer();
 	TSharedPtr<class SWidget> TalentPauseTimerWidget;
 	double TalentPauseClientEndTime = 0.0;
+	/** This client's team has to choose in the running talent pause (Client_BeginTalentPause bOpenTree). */
+	bool bTalentPauseChoosing = false;
 	bool bTalentPauseOpenedTree = false;
 	/** Nachfassen, solange der Ladebildschirm noch oben ist. */
 	FTimerHandle TalentPauseRetryHandle;

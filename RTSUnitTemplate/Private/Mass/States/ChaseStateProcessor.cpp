@@ -197,7 +197,7 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
             bool bIsTargetActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.TargetEntity);
             const bool bIsFriendlyActive = RTSUnitUtils::IsEntityUsable(EntityManager, TargetFrag.FriendlyTargetEntity);
 
-            if (bIsFriendlyActive)
+            if (bIsFriendlyActive && !RTSUnitUtils::FollowerMayEngage(EntityManager, TargetFrag, Transform.GetLocation()))
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -234,7 +234,9 @@ void UChaseStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMas
                 const float EffectiveAttackRange = Stats.AttackRange + CombinedRadii;
                 const float AttackRangeSq = FMath::Square(EffectiveAttackRange + Tolerance);
 
-                if (DistSq <= AttackRangeSq)
+                // In 2D-Reichweite, aber Gelaende dazwischen (Ziel oben auf der Klippe): weiter verfolgen.
+                if (DistSq <= AttackRangeSq
+                    && !RTSUnitUtils::IsTargetBehindTerrain(World, CharFrag, Transform.GetLocation(), TargetFrag.LastKnownLocation, TargetCharFrag))
                 {
                     if (!StateFrag.SwitchingStateClient)
                     {
@@ -463,7 +465,8 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
                 }
             }
 
-            if (bIsFriendlyActive)
+            // Folgen mit Angriffsbefehl darf weiter jagen, bis die Leine zum Anfuehrer reisst.
+            if (bIsFriendlyActive && !RTSUnitUtils::FollowerMayEngage(EntityManager, TargetFrag, Transform.GetLocation()))
             {
                 StateFrag.StoredLocation = Transform.GetLocation();
                 StateFrag.SwitchingState = true;
@@ -542,7 +545,10 @@ void UChaseStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMas
             const float AttackRangeSq = FMath::Square(ArrivalRange);
 
             // --- In Attack Range ---
-            if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState)
+            // In 2D-Reichweite, aber Gelaende dazwischen (Ziel oben auf der Klippe): weiter verfolgen, der Pfad fuehrt
+            // ueber den Hang hinauf - siehe RTSUnitUtils::IsTargetBehindTerrain.
+            if (DistSq <= AttackRangeSq && !StateFrag.SwitchingState
+                && !RTSUnitUtils::IsTargetBehindTerrain(World, CharFrag, Transform.GetLocation(), TargetFrag.LastKnownLocation, TargetCharFrag))
             {
                 if (bHasMoveTarget)
                 {

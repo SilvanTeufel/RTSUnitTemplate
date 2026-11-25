@@ -41,6 +41,26 @@ void AConstructionUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationOffsetB);
 	DOREPLIFETIME(AConstructionUnit, Rep_VE_OscillationCyclesPerSecond);
 	DOREPLIFETIME(AConstructionUnit, DroneBehavior);
+	DOREPLIFETIME(AConstructionUnit, SiteBuildingClass);
+	DOREPLIFETIME(AConstructionUnit, SiteLocation);
+}
+
+UClass* AConstructionUnit::GetSiteBuildingClass() const
+{
+	if (SiteBuildingClass)
+	{
+		return SiteBuildingClass.Get();
+	}
+	return IsValid(WorkArea) ? WorkArea->BuildingClass.Get() : nullptr;
+}
+
+FVector AConstructionUnit::GetSiteLocation() const
+{
+	if (SiteBuildingClass)
+	{
+		return SiteLocation;
+	}
+	return IsValid(WorkArea) ? WorkArea->GetActorLocation() : GetActorLocation();
 }
 
 void AConstructionUnit::BeginPlay()
@@ -143,6 +163,8 @@ void AConstructionUnit::SeedIndicatorFootprint(const AWorkArea* InWorkArea)
 	{
 		return;
 	}
+	SiteBuildingClass = InWorkArea->BuildingClass;
+	SiteLocation = InWorkArea->GetActorLocation();
 
 	// The HUD rotates the indicator by THIS unit's actor rotation, so all extents are stored
 	// in this site's local frame. The site may spawn at a different yaw than the finished
@@ -270,7 +292,12 @@ FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit, const FTransf
 	const bool bMesseKomponenten = Unit->IsA(ABuildingBase::StaticClass());
 	const float AktorZ = Unit->GetActorLocation().Z;
 
-	Unit->ForEachComponent<UMeshComponent>(false, [&VisualBox, bSkeletal, bMesseKomponenten, AktorZ, Unit, InFrame](const UMeshComponent* MeshComp)
+	// A flying ISM unit (Mender Matrix) is drawn by the Mass visual manager; its own ISM component may hold no
+	// instance. Its mesh still is the model - measure it, otherwise a flyer gets no mesh box and hover only
+	// sees the small capsule.
+	const bool bFlyingUnit = Unit->IsFlying;
+
+	Unit->ForEachComponent<UMeshComponent>(false, [&VisualBox, bSkeletal, bMesseKomponenten, AktorZ, Unit, InFrame, bFlyingUnit](const UMeshComponent* MeshComp)
 	{
 		if (!IsValid(MeshComp) || !MeshComp->IsRegistered())
 		{
@@ -292,8 +319,19 @@ FBox AConstructionUnit::ComputeVisualBounds(const AUnitBase* Unit, const FTransf
 		// Order matters: ISM derives from UStaticMeshComponent.
 		if (const UInstancedStaticMeshComponent* ISM = Cast<UInstancedStaticMeshComponent>(MeshComp))
 		{
-			if (!ISM->GetStaticMesh() || ISM->GetInstanceCount() == 0)
+			if (!ISM->GetStaticMesh())
 			{
+				return;
+			}
+			if (ISM->GetInstanceCount() == 0)
+			{
+				if (bFlyingUnit)
+				{
+					const FTransform MeshFrame = InFrame
+						? ISM->GetComponentTransform().GetRelativeTransform(*InFrame)
+						: ISM->GetComponentTransform();
+					VisualBox += ISM->GetStaticMesh()->GetBounds().GetBox().TransformBy(MeshFrame);
+				}
 				return;
 			}
 		}

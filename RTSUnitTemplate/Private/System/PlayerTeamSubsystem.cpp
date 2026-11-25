@@ -4,6 +4,7 @@
 #include "GameFramework/PlayerState.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
+#include "HAL/IConsoleManager.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
 
@@ -90,8 +91,49 @@ bool UPlayerTeamSubsystem::GetTeamForPlayer(APlayerController* PlayerController,
 	return false;
 }
 
+void UPlayerTeamSubsystem::SetAISlots(const TArray<int32>& TeamIds)
+{
+	AISlots = TeamIds;
+}
+
+void UPlayerTeamSubsystem::SetAISlot(int32 TeamId, bool bAI)
+{
+	if (bAI)
+	{
+		AISlots.Add(TeamId);
+	}
+	else
+	{
+		AISlots.RemoveSingle(TeamId);
+	}
+}
+
+// Without a lobby (dedicated server, tests): AI players per team from the command line / console.
+static TAutoConsoleVariable<FString> CVarLobbyAISlots(TEXT("RTS.Lobby.AISlots"), TEXT(""),
+	TEXT("AI players when no lobby set any: team ids, comma separated (\"3\" or \"2,3,3\")."));
+
+TArray<int32> UPlayerTeamSubsystem::ConsumeAISlots()
+{
+	TArray<int32> Out = MoveTemp(AISlots);
+	AISlots.Reset();
+	if (Out.Num() == 0)
+	{
+		TArray<FString> Parts;
+		CVarLobbyAISlots.GetValueOnGameThread().ParseIntoArray(Parts, TEXT(","));
+		for (const FString& Part : Parts)
+		{
+			if (Part.TrimStartAndEnd().IsNumeric())
+			{
+				Out.Add(FCString::Atoi(*Part.TrimStartAndEnd()));
+			}
+		}
+	}
+	return Out;
+}
+
 void UPlayerTeamSubsystem::ClearAll()
 {
+	AISlots.Empty();
 	PendingTeams.Empty();
 	PendingTeamsByName.Empty();
 	PendingTeamsByNetworkAddress.Empty();

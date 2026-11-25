@@ -9,6 +9,7 @@
 #include "Engine/GameInstance.h"
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
+#include "EngineUtils.h"
 
 // Sets default values
 AFogActor::AFogActor()
@@ -195,6 +196,53 @@ void AFogActor::SetFogBounds(const FVector2D& Min, const FVector2D& Max)
 {
 	FogMinBounds = Min;
 	FogMaxBounds = Max;
+}
+
+AFogActor* AFogActor::FindMaskingFogFor(const UWorld* World, int32 OwnerTeamId, TWeakObjectPtr<AFogActor>& Cache)
+{
+	if (!World || World->GetNetMode() == NM_DedicatedServer)
+	{
+		return nullptr;
+	}
+	const ACustomControllerBase* LocalPC = nullptr;
+	for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+	{
+		const APlayerController* PC = It->Get();
+		if (PC && PC->IsLocalController())
+		{
+			LocalPC = Cast<ACustomControllerBase>(PC);
+			break;
+		}
+	}
+	// No local view (or team not known yet) - judge nothing, show it. A spectator (team 0) sees everything,
+	// the own alliance too.
+	if (!LocalPC || LocalPC->SelectableTeamId <= 0 || LocalPC->SelectableTeamId == OwnerTeamId)
+	{
+		return nullptr;
+	}
+	if (OwnerTeamId >= 0 && OwnerTeamId < 64 && (LocalPC->AlliedTeamsMask & (1LL << OwnerTeamId)) != 0)
+	{
+		return nullptr;
+	}
+
+	AFogActor* Fog = Cache.Get();
+	if (!Fog || (Fog->TeamId != LocalPC->SelectableTeamId && Fog->TeamId != -1))
+	{
+		Fog = nullptr;
+		AFogActor* AnyFog = nullptr;
+		for (TActorIterator<AFogActor> It(const_cast<UWorld*>(World)); It; ++It)
+		{
+			AnyFog = *It;
+			if (AnyFog->TeamId == LocalPC->SelectableTeamId)
+			{
+				Fog = AnyFog;
+				break;
+			}
+		}
+		if (!Fog) Fog = AnyFog;   // single-fog levels do not tag a team
+		Cache = Fog;
+	}
+	return Fog;   // null = level without fog of war: everything shows
 }
 
 bool AFogActor::IsWorldPositionRevealed(const FVector& WorldPosition) const

@@ -36,6 +36,52 @@ public:
 	// Sets the position of the indicator
 	void SetIndicatorLocation(const FVector& NewLocation);
 
+	/**
+	 * Aim line for projectile abilities: a flat strip from the casting unit (first of AssociatedUnits) to the
+	 * indicator, so the direction of the shot is obvious. Shown together with IndicatorMesh. AimLineMesh is laid
+	 * along X (a 100 x 100 plane like /Engine/BasicShapes/Plane), stretched to the distance and AimLineWidth.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AimLine")
+	bool bShowAimLine = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AimLine")
+	UStaticMesh* AimLineMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AimLine")
+	UMaterialInterface* AimLineMaterial = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AimLine", meta = (ClampMin = "1"))
+	float AimLineWidth = 60.f;
+
+	/** Height above the indicator's ground point, against z-fighting with the terrain. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AimLine")
+	float AimLineHeight = 12.f;
+
+	/** The line starts this far in front of the unit instead of in its middle. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AimLine", meta = (ClampMin = "0"))
+	float AimLineStartOffset = 60.f;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "RTSUnitTemplate|AimLine")
+	UStaticMeshComponent* AimLine = nullptr;
+
+	/** Lays AimLine from the casting unit to the indicator (called every tick). */
+	void UpdateAimLine();
+
+	/**
+	 * For abilities that act around the caster (e.g. a frontal slash): IndicatorMesh stands on the casting unit
+	 * instead of the mouse point and turns towards the mouse (yaw). The actor itself keeps following the mouse,
+	 * so aiming and the click work as before. The mesh points along +X from its pivot.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Anchor")
+	bool bAnchorMeshAtCaster = false;
+
+	/** Height of the anchored mesh above the mouse point's ground height, against z-fighting. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Anchor")
+	float AnchorHeight = 12.f;
+
+	/** Places IndicatorMesh on the caster (called every tick). */
+	void UpdateAnchoredMesh();
+
 	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate")
 	int TeamId = 1;
 

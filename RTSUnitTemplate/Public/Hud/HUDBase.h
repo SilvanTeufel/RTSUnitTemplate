@@ -208,6 +208,22 @@ struct FClickIndicator
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> MID = nullptr;
 };
 
+/** Which units a drag-selection keeps when the rectangle catches different kinds of units. */
+UENUM(BlueprintType)
+enum class ESelectionRectangleFilter : uint8
+{
+	/** Everything inside the rectangle (old behaviour). */
+	None,
+	/** Units and buildings caught together: keep only the units. */
+	PreferMoveable,
+	/** Units and buildings caught together: keep only the buildings. */
+	PreferStatic,
+	/** Combat units first: if any non-worker unit is caught, drop workers and buildings. */
+	PreferCombat,
+	/** Keep only the unit type caught most often (ties: the type selected first). */
+	PreferMostCommonType
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AHUDBase : public AHUD
 {
@@ -319,9 +335,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage Numbers")
 	TObjectPtr<UFont> DamageNumberFont;
 
-	/** Ab dieser Einheitenzahl werden keine Schadenszahlen mehr gezeichnet. Wie vorher im Widget. */
+	/**
+	 * Above this unit count no damage numbers are drawn at all. Was 200, a limit from the old widget actor per
+	 * number; a Level_6 survival game passes it within minutes and then every number vanished (Nuke, Cluster,
+	 * Fallout looked like they did no damage). The numbers are now one canvas pass over a 256-entry ring buffer.
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Damage Numbers")
-	int32 DamageNumberMaxUnitCount = 200;
+	int32 DamageNumberMaxUnitCount = 3000;
 
 protected:
 	void HandleSelectionRectangle();
@@ -332,6 +352,13 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Selection")
 	FSelectionRectangleSettings SelectionRectSettings;
+
+	/** Applied to every drag-selection after the rectangle has been evaluated. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Selection")
+	ESelectionRectangleFilter SelectionRectangleFilter = ESelectionRectangleFilter::PreferMoveable;
+
+	/** Drops the units SelectionRectangleFilter does not want from SelectedUnits (and deselects them). */
+	void ApplySelectionRectangleFilter();
 	
 	UFUNCTION(BlueprintCallable, Category = "RTS|HUD")
 	void RegisterUnit(class AUnitBase* Unit);
@@ -446,6 +473,28 @@ public:
 
 	// Draws store and cargo amounts (called from DrawHUD).
 	void DrawLogisticsAmounts();
+
+	// --- Auto summon count -----------------------------------------------------------------------
+	// "[icon] 2/3" over own buildings that summon workers / logistics units on their own
+	// (AUnitBase::AutoSummonAlive/Max), on the line above the store amount. Grey with a crossed icon
+	// while the auto summon is switched off.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	bool bShowAutoSummonCounts = true;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	FColor AutoSummonWorkerColor = FColor(255, 205, 70, 255);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	FColor AutoSummonLogisticsColor = FColor(110, 215, 255, 255);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	FColor AutoSummonOffColor = FColor(150, 150, 150, 255);
+
+	// Icon edge length in pixels at text scale 1.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTS|HUD|Logistics")
+	float AutoSummonIconSize = 18.f;
+
+	void DrawAutoSummonCounts();
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
 	float ClickIndicatorRadius = 15.f;

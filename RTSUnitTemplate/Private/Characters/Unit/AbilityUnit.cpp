@@ -26,6 +26,9 @@
 #include "Subsystems/ResourceVisualManager.h"
 #include "MassActorSubsystem.h"
 #include "Actors/WorkArea.h"
+#include "System/AutoAbilitySubsystem.h"
+#include "GAS/AutoAbility.h"
+#include "Characters/Unit/UnitBase.h"
 
 void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
@@ -37,6 +40,12 @@ void AAbilityUnit::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 	DOREPLIFETIME(AAbilityUnit, LogisticsCargo);
 	DOREPLIFETIME(AAbilityUnit, LogisticsJobState);
 	DOREPLIFETIME(AAbilityUnit, CarryingResourceType);
+	DOREPLIFETIME(AAbilityUnit, AutoAbilityStatus);
+}
+
+bool FAutoAbilityStatus::operator==(const FAutoAbilityStatus& O) const
+{
+	return Ability.Get() == O.Ability.Get() && ReadyAt == O.ReadyAt && CooldownMultiplier == O.CooldownMultiplier;
 }
 
 void AAbilityUnit::OnRep_CarryingResourceType()
@@ -162,7 +171,10 @@ void AAbilityUnit::LevelUp_Implementation()
 		Super::LevelUp_Implementation();
 
 		if(HasAuthority())
+		{
 			AddAbilityPoint();
+			SyncAutoAbilityLevels();
+		}
 	}
 }
 
@@ -925,6 +937,13 @@ int32 AAbilityUnit::DetermineAbilityID(int32 Level)
 
 void AAbilityUnit::AutoAbility()
 {
+	// Seit 14.11.2026: die automatischen Faehigkeiten kommen aus UAutoAbilitySubsystem (SyncAutoAbilityLevels).
+	// Die alten Slots (Offensive ...) nur noch, wenn es fuer sie keinen Vorrat gibt (kein AutoAbilityCardSets).
+	if (SyncAutoAbilityLevels())
+	{
+		return;
+	}
+
 	if((LevelData.CharacterLevel % LevelUpData.AbilityPointsEveryXLevel) == 0) // Every 5 levels
 	{
 		int Ability = DetermineAbilityID(LevelData.CharacterLevel);
@@ -933,6 +952,20 @@ void AAbilityUnit::AutoAbility()
 }
 
 
+
+bool AAbilityUnit::SyncAutoAbilityLevels()
+{
+	// An jedem AutoAbilityEveryXLevels-ten Level (5, 10, 15, 20) eine weitere zufaellige automatische
+	// Faehigkeit des eigenen Typs. Laeuft beim Erschaffen (AutoAbility) und bei jedem Aufstieg - der Tick-Weg
+	// in AAbilityUnit::Tick kommt nie an, ALevelUnit::Tick setzt den gemeinsamen Takt vorher zurueck.
+	if (!HasAuthority() || AutoAbilityEveryXLevels <= 0)
+	{
+		return false;
+	}
+	AUnitBase* AsUnit = Cast<AUnitBase>(this);
+	UAutoAbilitySubsystem* AutoAbilities = GetWorld() ? GetWorld()->GetSubsystem<UAutoAbilitySubsystem>() : nullptr;
+	return AsUnit && AutoAbilities && AutoAbilities->SyncLevelAbilities(AsUnit, LevelData.CharacterLevel / AutoAbilityEveryXLevels);
+}
 
 void AAbilityUnit::AddAbilityPoint()
 {
@@ -1059,8 +1092,19 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 		return;
 	}
 
-	// Check if the unit is currently busy with another ability
-	if (ActivatedAbilityInstance != nullptr)
+	// Check if the unit is currently busy with another ability. Start abilities that run beside the slot
+	// (bRunsBesideAbilitySlot, e.g. the research unlocks) do not need it, so they do not wait for production either.
+	bool bAllBesideSlot = StartAbilities.Num() > 0;
+	for (const TSubclassOf<UGameplayAbilityBase>& StartClass : StartAbilities)
+	{
+		const UGameplayAbilityBase* StartCDO = StartClass ? StartClass->GetDefaultObject<UGameplayAbilityBase>() : nullptr;
+		if (StartCDO && !StartCDO->bRunsBesideAbilitySlot)
+		{
+			bAllBesideSlot = false;
+			break;
+		}
+	}
+	if (ActivatedAbilityInstance != nullptr && !bAllBesideSlot)
 	{
 		// Reschedule the activation to try again after a delay
 		if (UWorld* World = GetWorld())
@@ -1091,7 +1135,9 @@ void AAbilityUnit::ActivateStartAbilitiesOnSpawn()
 		}
 
 		Attempts++;
+		bActivatingStartAbility = true;
 		const bool bActivated = AbilitySystemComponent->TryActivateAbilityByClass(AbilityClass);
+		bActivatingStartAbility = false;
 
 		if (bActivated)
 		{

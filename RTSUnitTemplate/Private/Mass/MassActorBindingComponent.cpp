@@ -1095,6 +1095,7 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
 				{
 					GameplayEffectFrag->FriendlyEffect = DecalComp->GetFriendlyEffect();
 					GameplayEffectFrag->EnemyEffect = DecalComp->GetEnemyEffect();
+					GameplayEffectFrag->bAffectFlyingUnits = DecalComp->AffectsFlyingUnits();
 				}
 			}
 		}
@@ -1126,6 +1127,16 @@ void UMassActorBindingComponent::InitializeMassEntityStatsFromOwner(FMassEntityM
     			{
     				UnitOwner->Attributes->SetAttributeShield(UnitOwner->Attributes->GetMaxShield() * FMath::Min(ShieldFraction, 1.f));
     			}
+    		}
+    	}
+    	// Waiting for this reset (AUnitBase::RunAfterAttributeInit), e.g. start loadout bonuses.
+    	if (UnitOwner->PendingAfterAttributeInit.Num() > 0)
+    	{
+    		TArray<TFunction<void()>> Pending = MoveTemp(UnitOwner->PendingAfterAttributeInit);
+    		UnitOwner->PendingAfterAttributeInit.Reset();
+    		for (TFunction<void()>& Fn : Pending)
+    		{
+    			Fn();
     		}
     	}
     	UnitOwner->GiveAbilities();

@@ -2,6 +2,7 @@
 
 
 #include "Widgets/UnitWidgetSelector.h"
+#include "Controller/Input/RTSKeyBindings.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Containers/Set.h"
 #include "GAS/GameplayAbilityBase.h"
@@ -11,6 +12,20 @@
 #include "Actors/UnitPreviewStage.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Materials/MaterialInterface.h"
+#include "GAS/AutoAbility.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/HorizontalBox.h"
+#include "Components/HorizontalBoxSlot.h"
+#include "Components/VerticalBox.h"
+#include "Components/VerticalBoxSlot.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
+#include "Components/SizeBox.h"
+#include "Components/Border.h"
+#include "Components/Image.h"
+#include "Components/TextBlock.h"
+#include "GameFramework/GameStateBase.h"
+#include "Styling/CoreStyle.h"
 
 
 
@@ -28,6 +43,187 @@ void UUnitWidgetSelector::NativeConstruct()
 		UnitPreviewImage->SetBrushFromMaterial(UnitPreviewMaterial);
 	}
 	UpdateUnitPreview(nullptr);
+	BuildAutoAbilityRow();
+	BuildAbilityCooldownViews();
+}
+
+void UUnitWidgetSelector::BuildAbilityCooldownViews()
+{
+	AbilityCooldownViews.Reset();
+	if (!bShowAbilityCooldownShade)
+	{
+		return;
+	}
+	for (int32 i = 0; i < AbilityButtons.Num(); ++i)
+	{
+		FAbilityCooldownView& View = AbilityCooldownViews.AddDefaulted_GetRef();
+		UButton* Button = AbilityButtons[i];
+		UUserWidget* Owner = AbilityButtonWidgets.IsValidIndex(i) ? AbilityButtonWidgets[i] : nullptr;
+		USizeBox* Box = Button ? Cast<USizeBox>(Button->GetParent()) : nullptr;
+		if (!Owner || !Owner->WidgetTree || !Box)
+		{
+			continue;
+		}
+		// SizeBox > Button  becomes  SizeBox > Overlay > [Button, shade, seconds].
+		View.Height = Box->GetHeightOverride() > 0.f ? Box->GetHeightOverride() : 70.f;
+		Box->RemoveChild(Button);
+		UOverlay* Overlay = Owner->WidgetTree->ConstructWidget<UOverlay>();
+		if (UOverlaySlot* S = Overlay->AddChildToOverlay(Button)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+		USizeBox* ShadeBox = Owner->WidgetTree->ConstructWidget<USizeBox>();
+		UBorder* Shade = Owner->WidgetTree->ConstructWidget<UBorder>();
+		Shade->SetBrushColor(FLinearColor(0.f, 0.f, 0.f, 0.6f));
+		ShadeBox->AddChild(Shade);
+		ShadeBox->SetVisibility(ESlateVisibility::Collapsed);
+		if (UOverlaySlot* S = Overlay->AddChildToOverlay(ShadeBox)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Bottom); S->SetPadding(FMargin(5.f)); }
+		UTextBlock* Text = Owner->WidgetTree->ConstructWidget<UTextBlock>();
+		FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Bold", 20);
+		Font.OutlineSettings.OutlineSize = 2;
+		Text->SetFont(Font);
+		Text->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		Text->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UOverlaySlot* S = Overlay->AddChildToOverlay(Text)) { S->SetHorizontalAlignment(HAlign_Center); S->SetVerticalAlignment(VAlign_Center); }
+		Box->AddChild(Overlay);
+		View.Shade = ShadeBox;
+		View.Seconds = Text;
+	}
+}
+
+void UUnitWidgetSelector::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+	Super::NativeTick(MyGeometry, InDeltaTime);
+	AutoAbilityRefresh -= InDeltaTime;
+	if (AutoAbilityRefresh <= 0.f)
+	{
+		AutoAbilityRefresh = 0.2f;
+		UpdateAutoAbilityRow();
+	}
+}
+
+void UUnitWidgetSelector::BuildAutoAbilityRow()
+{
+	if (AutoAbilityRow || !WidgetTree)
+	{
+		return;
+	}
+	// Right above the row of the ability buttons: walk up from AbilityButtonWidget_0 to the vertical box that
+	// stacks the rows and put a new row in front of it.
+	UWidget* Row = AbilityButtonWidgets.Num() > 0 ? AbilityButtonWidgets[0] : nullptr;
+	while (Row && Row->GetParent() && !Row->GetParent()->IsA<UVerticalBox>())
+	{
+		Row = Row->GetParent();
+	}
+	UVerticalBox* Stack = Row ? Cast<UVerticalBox>(Row->GetParent()) : nullptr;
+	if (!Stack)
+	{
+		return;
+	}
+	AutoAbilityRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("AutoAbilityRowRuntime"));
+	const int32 Index = Stack->GetChildIndex(Row);
+	if (UVerticalBoxSlot* VSlot = Cast<UVerticalBoxSlot>(Stack->InsertChildAt(Index, AutoAbilityRow)))
+	{
+		VSlot->SetPadding(AutoAbilityRowPadding);
+		VSlot->SetHorizontalAlignment(HAlign_Left);
+	}
+	AutoAbilityRow->SetVisibility(ESlateVisibility::Collapsed);
+}
+
+void UUnitWidgetSelector::UpdateAutoAbilityRow()
+{
+	if (!AutoAbilityRow || !WidgetTree)
+	{
+		return;
+	}
+	const AUnitBase* Unit = ControllerBase && ControllerBase->SelectedUnits.IsValidIndex(ControllerBase->CurrentUnitWidgetIndex)
+		? ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex] : nullptr;
+	const TArray<FAutoAbilityStatus>* Status = IsValid(Unit) ? &Unit->AutoAbilityStatus : nullptr;
+	const int32 Count = Status ? Status->Num() : 0;
+	AutoAbilityRow->SetVisibility(Count > 0 ? ESlateVisibility::SelfHitTestInvisible : ESlateVisibility::Collapsed);
+	if (Count == 0)
+	{
+		return;
+	}
+	// Tiles: frame (accent colour) > overlay > icon, a dark shade growing from the bottom with the cooldown left,
+	// the seconds.
+	while (AutoAbilityTiles.Num() < Count)
+	{
+		FAutoAbilityTile Tile;
+		USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>();
+		Box->SetWidthOverride(AutoAbilityIconSize);
+		Box->SetHeightOverride(AutoAbilityIconSize);
+		UOverlay* Overlay = WidgetTree->ConstructWidget<UOverlay>();
+		Box->AddChild(Overlay);
+		// The frame of the ability buttons (the faction's button material), else a plain accent border.
+		UImage* FrameImage = WidgetTree->ConstructWidget<UImage>();
+		const UButton* Template = AbilityButtons.Num() > 0 ? AbilityButtons[0] : nullptr;
+		if (Template && Template->GetStyle().Normal.GetResourceObject())
+		{
+			FrameImage->SetBrush(Template->GetStyle().Normal);
+		}
+		else
+		{
+			FrameImage->SetColorAndOpacity(AutoAbilityFrameColor);
+		}
+		if (UOverlaySlot* S = Overlay->AddChildToOverlay(FrameImage)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+		UImage* Icon = WidgetTree->ConstructWidget<UImage>();
+		if (UOverlaySlot* S = Overlay->AddChildToOverlay(Icon)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(AutoAbilityIconSize * 0.08f)); }
+		USizeBox* ShadeBox = WidgetTree->ConstructWidget<USizeBox>();
+		UBorder* Shade = WidgetTree->ConstructWidget<UBorder>();
+		Shade->SetBrushColor(FLinearColor(0.f, 0.f, 0.f, 0.65f));
+		ShadeBox->AddChild(Shade);
+		if (UOverlaySlot* S = Overlay->AddChildToOverlay(ShadeBox)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Bottom); S->SetPadding(FMargin(AutoAbilityIconSize * 0.08f)); }
+		UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>();
+		Text->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 10));
+		Text->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+		Text->SetShadowOffset(FVector2D(1.f, 1.f));
+		if (UOverlaySlot* S = Overlay->AddChildToOverlay(Text)) { S->SetHorizontalAlignment(HAlign_Center); S->SetVerticalAlignment(VAlign_Center); }
+		if (UHorizontalBoxSlot* S = AutoAbilityRow->AddChildToHorizontalBox(Box)) { S->SetPadding(FMargin(0.f, 0.f, 4.f, 0.f)); }
+		Tile.Root = Box; Tile.Icon = Icon; Tile.Shade = ShadeBox; Tile.Seconds = Text;
+		AutoAbilityTiles.Add(Tile);
+	}
+	const AGameStateBase* GameState = GetWorld() ? GetWorld()->GetGameState() : nullptr;
+	const float Now = GameState ? (float)GameState->GetServerWorldTimeSeconds() : 0.f;
+	for (int32 i = 0; i < AutoAbilityTiles.Num(); ++i)
+	{
+		FAutoAbilityTile& Tile = AutoAbilityTiles[i];
+		if (!Tile.Root.IsValid())
+		{
+			continue;
+		}
+		if (i >= Count)
+		{
+			Tile.Root->SetVisibility(ESlateVisibility::Collapsed);
+			continue;
+		}
+		const FAutoAbilityStatus& S = (*Status)[i];
+		const UAutoAbility* Ability = S.Ability ? S.Ability->GetDefaultObject<UAutoAbility>() : nullptr;
+		Tile.Root->SetVisibility(Ability ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+		if (!Ability)
+		{
+			continue;
+		}
+		if (Tile.Shown != S.Ability.Get() || !FMath::IsNearlyEqual(Tile.ShownMultiplier, S.CooldownMultiplier))
+		{
+			Tile.Shown = S.Ability.Get();
+			Tile.ShownMultiplier = S.CooldownMultiplier;
+			if (Tile.Icon.IsValid())
+			{
+				Tile.Icon->SetBrushFromTexture(Ability->AbilityIcon, false);
+			}
+			Tile.Root->SetToolTipText(FText::Format(NSLOCTEXT("UnitWidgetSelector", "AutoAbilityTip", "{0} (automatic)\n{1}"),
+				Ability->GetAutoName(), Ability->GetAutoDescription(S.CooldownMultiplier)));
+		}
+		const float Full = FMath::Max(0.1f, Ability->Cooldown * S.CooldownMultiplier);
+		const float Left = FMath::Max(0.f, S.ReadyAt - Now);
+		if (Tile.Shade.IsValid())
+		{
+			Tile.Shade->SetHeightOverride(Left > 0.f ? AutoAbilityIconSize * 0.84f * FMath::Clamp(Left / Full, 0.f, 1.f) : 0.f);
+			Tile.Shade->SetVisibility(Left > 0.f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		}
+		if (Tile.Seconds.IsValid())
+		{
+			Tile.Seconds->SetText(Left > 0.f ? FText::AsNumber(FMath::CeilToInt(Left)) : FText::GetEmpty());
+		}
+	}
 }
 
 void UUnitWidgetSelector::NativeDestruct()
@@ -69,6 +265,37 @@ FText UUnitWidgetSelector::ReplaceRarityKeywords(
 	return FText::FromString(TextString);
 }
 
+void UUnitWidgetSelector::UpdateAbilityKeyTooltips()
+{
+	const URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this);
+	if (!Bindings)
+	{
+		return;
+	}
+	for (int32 i = 0; i < FMath::Min(AbilityButtons.Num(), 6); ++i)
+	{
+		UButton* Button = AbilityButtons[i];
+		// Buttons mit eigenem Tooltip-Widget (Astra Helix: BP_ToolTip_Ability, Taste in [ ] per AppendAbilityKey)
+		// nie anfassen: SetToolTipText ersetzt das Widget durch einen Standard-Texttooltip. Ihr Tooltip-Text ist
+		// trotzdem "Keyboard 1" (Klassenvorgabe) - nur Button 1 entging dem, weil dort "Keyboard 1" schon stimmte.
+		if (!Button || Button->GetToolTip() || Button->ToolTipWidgetDelegate.IsBound())
+		{
+			continue;
+		}
+		const FString Current = Button->GetToolTipText().ToString();
+		if (!Current.StartsWith(TEXT("Keyboard")))
+		{
+			continue;
+		}
+		const FText KeyText = Bindings->GetChordText(static_cast<ERTSKeyAction>(static_cast<int32>(ERTSKeyAction::Ability1) + i));
+		const FString Wanted = KeyText.IsEmpty() ? FString(TEXT("Keyboard: no key assigned")) : FString::Printf(TEXT("Keyboard %s"), *KeyText.ToString());
+		if (Current != Wanted)
+		{
+			Button->SetToolTipText(FText::FromString(Wanted));
+		}
+	}
+}
+
 void UUnitWidgetSelector::UpdateSelectedUnits()
 {
 	
@@ -94,6 +321,7 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 		}
 		
 		UpdateUnitPreview(TooltipUnit);
+		UpdateAbilityKeyTooltips();
 
 		if (!ControllerBase->SelectedUnits.Num()) return;
 		if (ControllerBase->CurrentUnitWidgetIndex < 0 || ControllerBase->CurrentUnitWidgetIndex >= ControllerBase->SelectedUnits.Num()) return;
@@ -128,6 +356,8 @@ void UUnitWidgetSelector::UpdateSelectedUnits()
 
 		UpdateAbilityButtonsState();
 		UpdateAbilityCooldowns();
+		// Same rhythm: while armed, ask the server whether the page should move on (AExtendedControllerBase).
+		ControllerBase->TickAutoAbilityScroll();
 		UpdateCurrentAbility();
 		UpdateQueuedAbilityIcons();
 	}
@@ -219,6 +449,42 @@ void UUnitWidgetSelector::UpdateCurrentAbility()
  */
 void UUnitWidgetSelector::SetWidgetCooldown(int32 AbilityIndex, float RemainingTime)
 {
+    // The shade and the seconds on the button (BuildAbilityCooldownViews). A rise of the time left is a new
+    // cooldown - its length is the full height of the shade.
+    if (AbilityCooldownViews.IsValidIndex(AbilityIndex))
+    {
+        FAbilityCooldownView& View = AbilityCooldownViews[AbilityIndex];
+        if (RemainingTime > 0.f)
+        {
+            if (View.Full <= 0.f || RemainingTime > View.Last + 0.5f)
+            {
+                View.Full = RemainingTime;
+            }
+            View.Last = RemainingTime;
+            if (View.Shade.IsValid())
+            {
+                View.Shade->SetHeightOverride((View.Height - 10.f) * FMath::Clamp(RemainingTime / FMath::Max(View.Full, 0.1f), 0.f, 1.f));
+                View.Shade->SetVisibility(ESlateVisibility::HitTestInvisible);
+            }
+            if (View.Seconds.IsValid())
+            {
+                View.Seconds->SetText(FText::AsNumber(FMath::CeilToInt(RemainingTime)));
+            }
+        }
+        else
+        {
+            View.Full = 0.f;
+            View.Last = 0.f;
+            if (View.Shade.IsValid()) View.Shade->SetVisibility(ESlateVisibility::Collapsed);
+            if (View.Seconds.IsValid()) View.Seconds->SetText(FText::GetEmpty());
+        }
+        // The old number above the button: the seconds are on the button now.
+        if (View.Seconds.IsValid() && AbilityCooldownTexts.IsValidIndex(AbilityIndex) && AbilityCooldownTexts[AbilityIndex])
+        {
+            AbilityCooldownTexts[AbilityIndex]->SetText(FText::GetEmpty());
+            return;
+        }
+    }
     if (RemainingTime > 0.f)
     {
         // Format to one decimal place for a smoother countdown look
@@ -251,6 +517,15 @@ void UUnitWidgetSelector::UpdateAbilityCooldowns()
 
 	AUnitBase* SelectedUnit = ControllerBase->SelectedUnits[ControllerBase->CurrentUnitWidgetIndex];
 
+	// Combat units: the button shows the shortest cooldown of ALL selected units owning that ability (any
+	// class). Workers keep showing only their own unit.
+	const bool bAcrossSelection = SelectedUnit && !SelectedUnit->IsWorker;
+	auto OwnsAbility = [](const AUnitBase* U, const TSubclassOf<UGameplayAbilityBase>& AbilityClass)
+	{
+		return U->DefaultAbilities.Contains(AbilityClass) || U->SecondAbilities.Contains(AbilityClass)
+			|| U->ThirdAbilities.Contains(AbilityClass) || U->FourthAbilities.Contains(AbilityClass);
+	};
+
 	// Loop through each ability up to AbilityButtonCount
 	for (int32 AbilityIndex = 0; AbilityIndex < MaxAbilityButtonCount; ++AbilityIndex)
 	{
@@ -270,7 +545,22 @@ void UUnitWidgetSelector::UpdateAbilityCooldowns()
 			return;
 		}
 		
-		ControllerBase->Server_RequestCooldown(SelectedUnit, AbilityIndex, Ability);
+		if (bAcrossSelection)
+		{
+			TArray<AUnitBase*> Owners;
+			for (AUnitBase* U : ControllerBase->SelectedUnits)
+			{
+				if (IsValid(U) && !U->IsWorker && OwnsAbility(U, AbilityArray[AbilityIndex]))
+				{
+					Owners.Add(U);
+				}
+			}
+			ControllerBase->Server_RequestCooldownForUnits(Owners, AbilityIndex, AbilityArray[AbilityIndex]);
+		}
+		else
+		{
+			ControllerBase->Server_RequestCooldown(SelectedUnit, AbilityIndex, Ability);
+		}
 	}
     
 }

@@ -54,6 +54,13 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float RunStallTimeout = 6.f;
 
+	/**
+	 * Crowd settle: a unit within VelocityDistanceCheck of its goal that has not come closer for this long has
+	 * arrived (neighbours hold it off its own point). 0 = off.
+	 */
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
+	float RunSettleSeconds = 0.4f;
+
 	/** Strecke, ab der ein Tick als Fortschritt zaehlt und der Waechter zurueckgesetzt wird. */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = RTSUnitTemplate)
 	float RunStallProgressDistance = 25.f;

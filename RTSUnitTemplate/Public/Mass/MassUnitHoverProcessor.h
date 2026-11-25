@@ -52,7 +52,7 @@ protected:
 	 * ohne neu zu bauen.
 	 */
 	UPROPERTY(EditAnywhere, Category = "RTSUnitTemplate|Performance")
-	float HoverUpdateInterval = 0.05f;
+	float HoverUpdateInterval = 0.02f;
 
 	/** Zeitgeber der Diagnose aus rts.hover.diag. */
 	float HoverDiagTime = 0.f;

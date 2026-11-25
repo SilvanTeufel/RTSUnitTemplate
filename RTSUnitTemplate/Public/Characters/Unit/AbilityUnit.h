@@ -10,6 +10,28 @@
 #include "AbilityUnit.generated.h"
 
 
+class UAutoAbility;
+
+/** One automatic ability of a unit and when it is ready again (server time, AGameStateBase::GetServerWorldTimeSeconds). */
+USTRUCT(BlueprintType)
+struct RTSUNITTEMPLATE_API FAutoAbilityStatus
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "AutoAbility")
+	TSubclassOf<UAutoAbility> Ability;
+
+	UPROPERTY(BlueprintReadOnly, Category = "AutoAbility")
+	float ReadyAt = 0.f;
+
+	/** 0.5 = halved (card + attribute tree). */
+	UPROPERTY(BlueprintReadOnly, Category = "AutoAbility")
+	float CooldownMultiplier = 1.f;
+
+	/** Defined in AbilityUnit.cpp (UAutoAbility is only forward declared here). */
+	bool operator==(const FAutoAbilityStatus& O) const;
+};
+
 UCLASS()
 class RTSUNITTEMPLATE_API AAbilityUnit : public ALevelUnit
 {
@@ -270,6 +292,18 @@ public:
 	
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability)
 	bool AutoApplyAbility = true;
+
+	/** Every this many levels (5, 10, 15, 20 ...) the unit gets one more random automatic ability of its type
+	 *  (UAutoAbilitySubsystem, pool = the auto ability cards). 0 = none. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability, meta = (ClampMin = "0"))
+	int32 AutoAbilityEveryXLevels = 5;
+
+	/** Server: draws the level abilities the unit is owed. True = the automatic abilities handle it. */
+	bool SyncAutoAbilityLevels();
+
+	/** The unit's automatic abilities and their cooldowns, for the UI on every machine (UAutoAbilitySubsystem writes it). */
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = Ability)
+	TArray<FAutoAbilityStatus> AutoAbilityStatus;
 
 	// Delay before attempting to activate StartAbilities on spawn (server-only). Adjustable in Details panel.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Ability, meta=(ClampMin="0.0"))

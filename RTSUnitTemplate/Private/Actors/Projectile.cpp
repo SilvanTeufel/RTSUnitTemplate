@@ -25,6 +25,7 @@
 #include "Core/CollisionUtils.h"
 #include "Mass/MassActorBindingComponent.h"
 #include "Mass/Projectile/ProjectileVisualManager.h"
+#include "System/AutoAbilitySubsystem.h"
 
 namespace
 {
@@ -1135,7 +1136,9 @@ void AProjectile::Impact(AActor* ImpactTarget)
 				NewDamage = Damage - UnitToHit->Attributes->GetMagicResistance();
 		}
 		
-		if(UnitToHit->Attributes->GetShield() <= 0)
+		if (bDamageAsGameplayEffect)
+			UnitToHit->ApplyDamageAsEffect(NewDamage);
+		else if(UnitToHit->Attributes->GetShield() <= 0)
 			UnitToHit->SetHealth_Implementation(UnitToHit->Attributes->GetHealth()-NewDamage);
 		else
 			UnitToHit->SetShield_Implementation(UnitToHit->Attributes->GetShield()-NewDamage);
@@ -1159,6 +1162,10 @@ void AProjectile::Impact(AActor* ImpactTarget)
 		{
 			UnitToHit->ActivateAbilityByInputID(UnitToHit->DefensiveAbilityID, UnitToHit->DefensiveAbilities);
 		}
+		if (UnitToHit->TeamId != TeamId)
+		{
+			UAutoAbilitySubsystem::NotifyTrigger(UnitToHit, EAutoAbilityTrigger::OnHit, ShootingUnit);
+		}
 		// Spawn impact effects at the surface point so they are visible on large units/buildings
 		if (APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(ShootingUnit))
 		{
@@ -1179,11 +1186,13 @@ void AProjectile::Impact(AActor* ImpactTarget)
 			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 			const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 			const float KillDelay = 2.0f;
-			PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+			PerfShooter->FireEffectsAtLocation(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+			bImpactEffectsShown = true;
 		}
 		else
 		{
-			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
+			UnitToHit->FireEffects(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound);
+			bImpactEffectsShown = true;
 		}
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);
@@ -1291,11 +1300,13 @@ void AProjectile::ImpactHeal(AActor* ImpactTarget)
 			const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 			const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 			const float KillDelay = 2.0f;
-			PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+			PerfShooter->FireEffectsAtLocation(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+			bImpactEffectsShown = true;
 		}
 		else
 		{
-			UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
+			UnitToHit->FireEffects(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound);
+			bImpactEffectsShown = true;
 		}
 		SetNextBouncing(ShootingUnit, UnitToHit);
 		SetBackBouncing(ShootingUnit);
@@ -1392,11 +1403,13 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 				const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 				const float KillDelay = 2.0f;
-				PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+				PerfShooter->FireEffectsAtLocation(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+				bImpactEffectsShown = true;
 			}
 			else
 			{
-				UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
+				UnitToHit->FireEffects(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound);
+				bImpactEffectsShown = true;
 			}
 			DestroyWhenMaxPierced();
 		}else if(UnitToHit && UnitToHit->TeamId == TeamId && BouncedBack && IsHealing)
@@ -1426,11 +1439,13 @@ void AProjectile::OnOverlapBegin_Implementation(UPrimitiveComponent* OverlappedC
 				const FVector FromLoc = ShootingUnit ? (Cast<AUnitBase>(ShootingUnit) ? Cast<AUnitBase>(ShootingUnit)->GetMassActorLocation() : ShootingUnit->GetMassActorLocation()) : SurfaceLoc;
 				const FRotator FaceRot = MakeFaceRotationXY(FromLoc, SurfaceLoc);
 				const float KillDelay = 2.0f;
-				PerfShooter->FireEffectsAtLocation(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+				PerfShooter->FireEffectsAtLocation(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound, SurfaceLoc, KillDelay, FaceRot);
+				bImpactEffectsShown = true;
 			}
 			else
 			{
-				UnitToHit->FireEffects(ImpactVFX, ImpactSound, ScaleImpactVFX, ScaleImpactSound);
+				UnitToHit->FireEffects(ImpactVFXForHit(), ImpactSoundForHit(), ScaleImpactVFX, ScaleImpactSound);
+				bImpactEffectsShown = true;
 			}
 			DestroyWhenMaxPierced();
 		}else if(UnitToHit && (UnitToHit->TeamId != TeamId || UnitToHit == Target) && !IsHealing)

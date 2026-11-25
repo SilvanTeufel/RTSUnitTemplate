@@ -11,6 +11,12 @@
 #include "Mass/UnitMassTag.h"
 #include "ProfilingDebugging/CsvProfiler.h"
 
+// [EffectDiag] Warum bekommt eine Einheit in einer Flaeche (Siege-Zone, Aura) keinen Effekt? 1 = je Lauf die Caster
+// und jede Einheit in Reichweite samt Entscheidung. Standard aus.
+static TAutoConsoleVariable<int32> CVarRTS_EffectDiag(
+	TEXT("RTS.EffectDiag"), 0,
+	TEXT("1 = loggt die Caster des GamePlayEffectProcessor und jede Einheit in ihrer Reichweite."));
+
 UGamePlayEffectProcessor::UGamePlayEffectProcessor()
 {
     ExecutionFlags = (int32)(EProcessorExecutionFlags::Server | EProcessorExecutionFlags::Standalone);
@@ -35,6 +41,7 @@ void UGamePlayEffectProcessor::ConfigureQueries(const TSharedRef<FMassEntityMana
     TargetQuery.AddRequirement<FMassActorFragment>(EMassFragmentAccess::ReadWrite); // ReadOnly is fine, we operate on the Actor, not the fragment
     TargetQuery.AddRequirement<FMassGameplayEffectTargetFragment>(EMassFragmentAccess::ReadWrite);
     TargetQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly);
+    TargetQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
     TargetQuery.AddTagRequirement<FMassIsEffectAreaTag>(EMassFragmentPresence::None);
     TargetQuery.RegisterWithProcessor(*this);
 }
@@ -73,6 +80,7 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             Caster.Position = TransformFragments[i].GetTransform().GetLocation();
             Caster.RadiusSq = FMath::Square(EffectFragments[i].EffectRadius);
             Caster.TeamId = CombatStatsFragments[i].TeamId;
+            Caster.bAffectFlying = EffectFragments[i].bAffectFlyingUnits;
             
             if (EffectFragments[i].FriendlyEffect)
             {
@@ -84,6 +92,18 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             }
         }
     });
+
+    const bool bDiag = CVarRTS_EffectDiag.GetValueOnGameThread() > 0;
+    if (bDiag)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("[EffectDiag] Lauf: %d Caster"), CasterDataList.Num());
+        for (const FCasterData& C : CasterDataList)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("[EffectDiag] Caster Team %d bei %s Radius %.0f Enemy=%s Friendly=%s Flieger=%d"),
+                C.TeamId, *C.Position.ToCompactString(), FMath::Sqrt(C.RadiusSq), *GetNameSafe(C.EnemyEffect.Get()),
+                *GetNameSafe(C.FriendlyEffect.Get()), C.bAffectFlying ? 1 : 0);
+        }
+    }
 
     // If there are no casters, there's nothing to do.
     if (CasterDataList.IsEmpty())
@@ -99,6 +119,7 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             TArrayView<FMassActorFragment> ActorFragments = ChunkContext.GetMutableFragmentView<FMassActorFragment>();
         const TConstArrayView<FMassCombatStatsFragment> CombatStatsFragments = ChunkContext.GetFragmentView<FMassCombatStatsFragment>();
             TArrayView<FMassGameplayEffectTargetFragment> EffectTargetFragments = ChunkContext.GetMutableFragmentView<FMassGameplayEffectTargetFragment>();
+        const TConstArrayView<FMassAgentCharacteristicsFragment> CharList = ChunkContext.GetFragmentView<FMassAgentCharacteristicsFragment>();
 
         int NumTargets = ChunkContext.GetNumEntities();
             
@@ -113,13 +134,26 @@ void UGamePlayEffectProcessor::Execute(FMassEntityManager& EntityManager, FMassE
             {
                 continue;
             }
+            const bool bTargetFlies = CharList.Num() > 0 && CharList[TargetIndex].bIsFlying;
 
             // For each target, check against every caster
             for (const FCasterData& Caster : CasterDataList)
             {
+                // Eine Bodenflaeche (z. B. die Siege-Zone des EclipseWing) trifft keine Flieger, 11.11.2026.
+                if (bTargetFlies && !Caster.bAffectFlying)
+                {
+                    continue;
+                }
+
                 // A. Check Distance
                 if (FVector::DistSquared(TargetPosition, Caster.Position) <= Caster.RadiusSq)
                 {
+                    if (bDiag)
+                    {
+                        UE_LOG(LogTemp, Warning, TEXT("[EffectDiag]   %s Team %d Abstand %.0f Flieger=%d EnemyApplied=%d"),
+                            *GetNameSafe(UnitBase), TargetTeamId, FVector::Dist(TargetPosition, Caster.Position), bTargetFlies ? 1 : 0,
+                            EffectTargetFragments[TargetIndex].EnemyEffectApplied ? 1 : 0);
+                    }
                     // B. Check Team Alignment & Apply Effect
                     const bool bIsFriendly = (Caster.TeamId == TargetTeamId);
                     

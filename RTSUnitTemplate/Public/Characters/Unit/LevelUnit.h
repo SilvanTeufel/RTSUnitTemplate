@@ -10,6 +10,7 @@
 #include "LevelUnit.generated.h"
 
 class UTexture2D;
+class UAutoAbility;
 
 // ---------------------------------------------------------------------------
 //  Radial Attribute Tree
@@ -82,6 +83,16 @@ struct FAttributeTreeNodeRow : public FTableRowBase
 	/** Base tint of the node disc (state shading is applied on top). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Presentation")
 	FLinearColor NodeColor = FLinearColor(0.15f, 0.55f, 0.95f, 1.f);
+
+	// --- Automatic ability slot ---
+	/** The node gives no attribute: it switches on an automatic ability for every unit with UnitTag. Which one is
+	 *  drawn per team at match start from AutoAbilityPool (AUpgradeGameState::TreeAutoAbilityPicks). DisplayName is
+	 *  the name of the unit type then ("Infantry"). Use MaxPoints 1. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Auto Ability")
+	bool bAutoAbilitySlot = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Auto Ability", meta = (EditCondition = "bAutoAbilitySlot"))
+	TArray<TSubclassOf<UAutoAbility>> AutoAbilityPool;
 };
 
 /** Replicated per-node investment state for the attribute tree (NodeId = the row name). */
@@ -257,6 +268,9 @@ public:
 	// Helper method to handle the actual attribute increase when a point is invested
 	UFUNCTION(BlueprintCallable, Category = "Leveling")
 	void ApplyInvestmentEffect(const TSubclassOf<UGameplayEffect>& InvestmentEffect);
+
+	/** Server: Amount damage (> 0) as an instant EffectDamage GameplayEffect on this unit (shield first, indicator). */
+	void ApplyDamageAsEffect(float Amount);
 
 	// ---------------------------------------------------------------------
 	//  Radial Attribute Tree (alternative to the TalentChooser)

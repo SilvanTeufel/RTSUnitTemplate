@@ -30,6 +30,7 @@
 #include "System/PlayerTeamSubsystem.h"
 #include "GameModes/ProceduralPondComponent.h"
 #include "GameModes/FullProceduralMapComponent.h"
+#include "GameModes/StartLoadoutComponent.h"
 #include "Characters/Camera/BehaviorTree/RTSBTController.h"
 #include "BehaviorTree/BlackboardComponent.h"
 
@@ -59,6 +60,7 @@ ARTSGameModeBase::ARTSGameModeBase()
 {
 	ProceduralPonds = CreateDefaultSubobject<UProceduralPondComponent>(TEXT("ProceduralPonds"));
 	FullProcedural = CreateDefaultSubobject<UFullProceduralMapComponent>(TEXT("FullProcedural"));
+	StartLoadout = CreateDefaultSubobject<UStartLoadoutComponent>(TEXT("StartLoadout"));
 }
 
 void ARTSGameModeBase::StartPlay()
@@ -94,6 +96,12 @@ void ARTSGameModeBase::BeginPlay()
 	}
 
 	Super::BeginPlay();
+
+	if (bUsePlayerPressureSpawns)
+	{
+		GetWorldTimerManager().SetTimer(PressureTimer, this, &ARTSGameModeBase::UpdatePlayerPressure,
+			FMath::Max(1.f, PressureUpdateInterval), true, FMath::Max(1.f, PressureUpdateInterval));
+	}
 
 	TagsDestroyedCountMap.Empty();
 	TagsAliveCountMap.Empty();
@@ -1091,6 +1099,11 @@ void ARTSGameModeBase::HandleSeamlessTravelPlayer(AController*& C)
 void ARTSGameModeBase::HandleLoadingScreenFinished()
 {
 	OnLoadingScreenFinished.Broadcast();
+	// The start loadout opens when the players see the map.
+	if (StartLoadout)
+	{
+		StartLoadout->BeginSelection();
+	}
 }
 
 void ARTSGameModeBase::SetupLoadingWidgetForPlayer(APlayerController* NewPlayer)
@@ -1433,6 +1446,47 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 		}
 	}
 
+	// AI slots from the lobby (UPlayerTeamSubsystem::SetAISlots): each takes a start of its team that is not an AI
+	// start yet - first one no human stands on - and turns it into one for the loop below.
+	if (TeamSubsystem)
+	{
+		TSet<APlayerStartBase*> HumanStarts;
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+		{
+			const APawn* Pawn = It->Get() ? It->Get()->GetPawn() : nullptr;
+			for (APlayerStartBase* Start : PlayerStarts)
+			{
+				if (Pawn && Start && FVector::Dist2D(Pawn->GetActorLocation(), Start->GetActorLocation()) < 50.f)
+				{
+					HumanStarts.Add(Start);
+				}
+			}
+		}
+		for (const int32 AITeam : TeamSubsystem->ConsumeAISlots())
+		{
+			APlayerStartBase* Chosen = nullptr;
+			for (int32 Pass = 0; Pass < 2 && !Chosen; ++Pass)
+			{
+				for (APlayerStartBase* Start : PlayerStarts)
+				{
+					if (Start && !Start->bIsAi && Start->SelectableTeamId == AITeam && (Pass == 1 || !HumanStarts.Contains(Start)))
+					{
+						Chosen = Start;
+						break;
+					}
+				}
+			}
+			if (!Chosen)
+			{
+				UE_LOG(LogTemp, Warning, TEXT("[GM] Lobby AI slot for team %d: no free player start of that team - no AI player."), AITeam);
+				continue;
+			}
+			Chosen->bIsAi = true;
+			FreePlayerStarts.Remove(Chosen);
+			UE_LOG(LogTemp, Log, TEXT("[GM] Lobby AI slot: team %d plays from %s."), AITeam, *GetNameSafe(Chosen));
+		}
+	}
+
 	// Now ensure AI players are spawned for AI-designated PlayerStarts whose teams have no controller
 	for (APlayerStartBase* Start : PlayerStarts)
 	{
@@ -1590,6 +1644,15 @@ void ARTSGameModeBase::SetTeamIdsAndWaypoints_Implementation()
 
 	NextPlayerIndex = PlayerIndex;
 	bControllersGathered = true;
+
+	if (StartLoadout)
+	{
+		StartLoadout->OnControllersGathered();
+		if (!LoadingWidgetClass)
+		{
+			StartLoadout->BeginSelection();   // no loading screen: right away
+		}
+	}
 
 	NavInitialisation();
 
@@ -1912,6 +1975,151 @@ float ARTSGameModeBase::GetAdaptiveSpawnMultiplier(const FUnitSpawnParameter& Sp
 	return FMath::Clamp(Multiplier, MinMul, MaxMul);
 }
 
+int32 ARTSGameModeBase::GetEnemyLevelBonus() const
+{
+	const UWorld* World = GetWorld();
+	if (!bUseEnemyLevelBonus || !World)
+	{
+		return 0;
+	}
+	// Same match clock as the win condition: counted from the end of the loading screen.
+	float MatchSeconds = World->GetTimeSeconds();
+	if (const AResourceGameState* GS = GetGameState<AResourceGameState>(); GS && GS->MatchStartTime > 0)
+	{
+		MatchSeconds = GS->GetServerWorldTimeSeconds() - GS->MatchStartTime;
+	}
+	if (MatchSeconds < EnemyLevelBonusStartSeconds)
+	{
+		return 0;
+	}
+	const int32 Steps = 1 + FMath::FloorToInt((MatchSeconds - EnemyLevelBonusStartSeconds) / FMath::Max(1.f, EnemyLevelBonusIntervalSeconds));
+	return Steps * FMath::Max(1, EnemyLevelBonusPerStep);
+}
+
+bool ARTSGameModeBase::IsHumanPlayerTeam(int32 InTeamId) const
+{
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		// A human has a UPlayer (local player or net connection). The AI opponents (RLAgent) are player
+		// controllers too, but without one.
+		const AControllerBase* PC = Cast<AControllerBase>(It->Get());
+		if (PC && PC->Player && PC->SelectableTeamId == InTeamId)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void ARTSGameModeBase::ApplyEnemyLevelBonus(AUnitBase* Unit, int32 EarnedLevel)
+{
+	if (!Unit || !bUseEnemyLevelBonus || IsHumanPlayerTeam(Unit->TeamId))
+	{
+		return;
+	}
+	const int32 Bonus = GetEnemyLevelBonus();
+	if (Bonus <= 0)
+	{
+		return;
+	}
+	const int32 MaxLevel = FMath::Max(1, EnemyLevelBonusMaxLevel);
+	const int32 Target = FMath::Min(FMath::Max(EarnedLevel, Unit->LevelData.CharacterLevel) + Bonus, MaxLevel);
+	Unit->LevelUpData.MaxCharacterLevel = FMath::Max(Unit->LevelUpData.MaxCharacterLevel, MaxLevel);
+	// After the Mass setup, which resets the attributes once more - same as the start loadout bonus.
+	TWeakObjectPtr<AUnitBase> WeakUnit(Unit);
+	Unit->RunAfterAttributeInit([WeakUnit, Target, Bonus]()
+	{
+		AUnitBase* U = WeakUnit.Get();
+		if (!U)
+		{
+			return;
+		}
+		++U->ActiveInvestments;
+		U->RaiseToLevel(Target);
+		--U->ActiveInvestments;
+		if (U->Attributes)
+		{
+			// A fresh spawn starts with full health at its new level.
+			U->Attributes->SetHealth(U->Attributes->GetMaxHealth());
+		}
+		UE_LOG(LogTemp, Log, TEXT("[EnemyLevelBonus] %s team %d +%d -> level %d (target %d, max health %.0f)"),
+			*U->GetName(), U->TeamId, Bonus, U->LevelData.CharacterLevel, Target, U->Attributes ? U->Attributes->GetMaxHealth() : 0.f);
+	});
+}
+
+void ARTSGameModeBase::NoteGatheredResources(int32 InTeamId, float Amount)
+{
+	if (InTeamId < 0 || Amount <= 0.f)
+	{
+		return;
+	}
+	if (TeamGatheredTotal.Num() <= InTeamId)
+	{
+		TeamGatheredTotal.SetNumZeroed(InTeamId + 1);
+	}
+	TeamGatheredTotal[InTeamId] += Amount;
+}
+
+float ARTSGameModeBase::GetPressureSpawnMultiplier(const FUnitSpawnParameter& SpawnParameter) const
+{
+	return (bUsePlayerPressureSpawns && SpawnParameter.TeamId != PressureTeamId) ? PlayerPressureMultiplier : 1.f;
+}
+
+void ARTSGameModeBase::UpdatePlayerPressure()
+{
+	const UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const double Now = World->GetTimeSeconds();
+	const float Gathered = TeamGatheredTotal.IsValidIndex(PressureTeamId) ? TeamGatheredTotal[PressureTeamId] : 0.f;
+	int32 Lost = 0;
+	if (const AResourceGameState* State = World->GetGameState<AResourceGameState>())
+	{
+		Lost = State->TeamUnitsLost.IsValidIndex(PressureTeamId) ? State->TeamUnitsLost[PressureTeamId] : 0;
+	}
+	PressureSamples.Add({ Now, Gathered, Lost });
+	// Oldest sample still inside the window is the reference.
+	while (PressureSamples.Num() > 2 && Now - PressureSamples[1].Time >= PressureWindowSeconds)
+	{
+		PressureSamples.RemoveAt(0, EAllowShrinking::No);
+	}
+	const FPressureSample& Ref = PressureSamples[0];
+	const double Span = Now - Ref.Time;
+	if (Span < FMath::Min(30.0, (double)PressureWindowSeconds))
+	{
+		return;   // too little to judge yet - stay where we are
+	}
+
+	const float IncomePerMinute = (Gathered - Ref.Gathered) * 60.f / static_cast<float>(Span);
+	const int32 LostInWindow = FMath::Max(0, Lost - Ref.Lost);
+	const int32 Army = CountAliveUnitsForTeam(PressureTeamId);
+	const float LossShare = static_cast<float>(LostInWindow) / static_cast<float>(FMath::Max(1, Army + LostInWindow));
+
+	const float IncomeScore = FMath::Clamp((IncomePerMinute - PressureIncomeNeutralPerMinute)
+		/ FMath::Max(1.f, PressureIncomeHighPerMinute - PressureIncomeNeutralPerMinute), 0.f, 1.f);
+	const float LossScore = FMath::Clamp(LossShare / FMath::Max(0.01f, PressureLossShareForFullReduction), 0.f, 1.f);
+	// Losses (units that died) make the waves smaller. Income only raises them when bPressureIncomeRaisesWaves
+	// is on - by default a growing economy or army never makes the game harder, only dying units count.
+	// The opening economy says nothing about the defence: during the grace period the waves can only get easier.
+	const bool bInGrace = Now < PressureGraceSeconds;
+	const float Bonus = (bInGrace || !bPressureIncomeRaisesWaves) ? 0.f : PressureMaxBonus * IncomeScore * (1.f - LossScore);
+	const float Target = FMath::Clamp(1.f + Bonus - PressureMaxReduction * LossScore,
+		1.f - PressureMaxReduction, 1.f + PressureMaxBonus);
+	const float Old = PlayerPressureMultiplier;
+	PlayerPressureMultiplier = FMath::Clamp(Target, Old - PressureMaxStepDown, Old + PressureMaxStep);
+
+	// On every change, and once a minute anyway (the income level is what the thresholds are tuned by).
+	if (!FMath::IsNearlyEqual(Old, PlayerPressureMultiplier, 0.005f) || Now - LastPressureLogTime >= 60.0)
+	{
+		LastPressureLogTime = Now;
+		UE_LOG(LogTemp, Log, TEXT("[SpawnPressure] team %d: income %.0f/min, lost %d of %d in %.0fs -> enemy waves x%.2f (target %.2f)%s"),
+			PressureTeamId, IncomePerMinute, LostInWindow, Army + LostInWindow, Span, PlayerPressureMultiplier, Target,
+			bInGrace ? TEXT(" [grace]") : TEXT(""));
+	}
+}
+
 int32 ARTSGameModeBase::CheckAndRemoveDeadUnits(int32 SpawnParaId)
 {
 	int32 CountOfSpecificID = 0;
@@ -2115,12 +2323,13 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 	// Adaptive reinforcement. Returns exactly 1.0 when the row has bAdaptiveSpawn off, so
 	// the effective values below are identical to the raw ones for every existing table.
 	const float AdaptiveMultiplier = GetAdaptiveSpawnMultiplier(SpawnParameter);
-	const int32 EffectiveMaxUnitSpawnCount = SpawnParameter.bAdaptiveSpawn && SpawnParameter.bAdaptiveScalesMaxCount
+	const float PressureMultiplier = GetPressureSpawnMultiplier(SpawnParameter);
+	const int32 EffectiveMaxUnitSpawnCount = FMath::Max(1, FMath::RoundToInt(PressureMultiplier * (SpawnParameter.bAdaptiveSpawn && SpawnParameter.bAdaptiveScalesMaxCount
 		? FMath::Max(1, FMath::RoundToInt(SpawnParameter.MaxUnitSpawnCount * AdaptiveMultiplier))
-		: SpawnParameter.MaxUnitSpawnCount;
-	const int32 EffectiveUnitCount = SpawnParameter.bAdaptiveSpawn
+		: SpawnParameter.MaxUnitSpawnCount)));
+	const int32 EffectiveUnitCount = FMath::Max(1, FMath::RoundToInt(PressureMultiplier * (SpawnParameter.bAdaptiveSpawn
 		? FMath::Max(1, FMath::RoundToInt(SpawnParameter.UnitCount * AdaptiveMultiplier))
-		: SpawnParameter.UnitCount;
+		: SpawnParameter.UnitCount)));
 
 	FTimerHandleMapping TimerMap = GetTimerHandleMappingById(SpawnParameter.Id);
 
@@ -2273,6 +2482,7 @@ void ARTSGameModeBase::SpawnUnits_Implementation(FUnitSpawnParameter SpawnParame
 				{
 					UnitBase->RaiseToLevel(EarnedLevel);
 				}
+				ApplyEnemyLevelBonus(UnitBase, EarnedLevel);
 
 				//UnitBase->MassActorBindingComponent->SetupMassOnUnit();
 				// Assign a new unique UnitIndex without reusing old ones
@@ -2297,6 +2507,11 @@ int ARTSGameModeBase::AssignNewHighestIndex(AUnitBase* Unit)
 {
 	HighestUnitIndex++;
 	Unit->SetUnitIndex(HighestUnitIndex);
+	// Every unit that appears passes here - the chosen difficulty weakens the enemies' ones.
+	if (StartLoadout)
+	{
+		StartLoadout->ApplyDifficultyTo(Unit);
+	}
 	return HighestUnitIndex;
 }
 
@@ -2553,5 +2768,12 @@ void ARTSGameModeBase::MeldeSurvivalZeit(ACameraControllerBase* PC)
 		Spieler = PC->PlayerState->GetPlayerName();
 	}
 
+	// Nur Competitive kommt in die Bestenliste - ein leichterer Grad zeigt am Ende nur die Zeit.
+	if (StartLoadout && StartLoadout->Difficulties.IsValidIndex(StartLoadout->ChosenDifficulty)
+		&& !StartLoadout->Difficulties[StartLoadout->ChosenDifficulty].IsRanked())
+	{
+		Rangliste->SetUnrankedRun(Karte, Sekunden, Wellen, StartLoadout->Difficulties[StartLoadout->ChosenDifficulty].Name);
+		return;
+	}
 	Rangliste->SubmitScore(Karte, Spieler, Sekunden, Wellen);
 }

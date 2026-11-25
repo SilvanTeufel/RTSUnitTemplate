@@ -12,11 +12,14 @@
 #include "GameModes/FullProceduralMapComponent.h"
 #include "Characters/Unit/BuildingBase.h"
 #include "Controller/PlayerController/CameraControllerBase.h"
+#include "Controller/PlayerController/WidgetController.h"
+#include "Characters/Unit/WorkingUnitBase.h"
 #include "GameStates/ResourceGameState.h"
 #include "Net/UnrealNetwork.h"
 #include "Core/RTSSupplyMessung.h"
 #include "GameFramework/PlayerStart.h"
 #include "NavigationSystem.h"
+#include "Engine/StaticMesh.h"
 #include "NavigationData.h"
 #include "Math/RandomStream.h"
 
@@ -65,9 +68,15 @@ void AResourceGameMode::BeginPlay()
 	AResourceGameState* RGState = GetGameState<AResourceGameState>();
 	if (RGState)
 	{
-		RGState->SetTeamResources(TeamResources); 
+		RGState->SetTeamResources(TeamResources);
 	}
 	//AssignWorkAreasToWorkers();
+
+	// Player teams: worker distribution follows the worker count (new ones onto Primary, dead ones out).
+	if (bAutoWorkerDistribution && HasAuthority())
+	{
+		GetWorldTimerManager().SetTimer(WorkerDistributionTimer, this, &AResourceGameMode::ReconcileAllWorkerDistributions, 0.5f, true, 0.5f);
+	}
 }
 
 void AResourceGameMode::StartPlay()
@@ -82,6 +91,11 @@ void AResourceGameMode::StartPlay()
 		if (ProceduralSettings.Procedural)
 		{
 			SpawnProceduralResources(false);
+			if (ProceduralSettings.bGrowingResources && GrowingAreas.Num() > 0)
+			{
+				GetWorldTimerManager().SetTimer(GrowthTimer, this, &AResourceGameMode::GrowResources,
+					FMath::Max(0.5f, ProceduralSettings.GrowthInterval), true);
+			}
 		}
 		else if (TActorIterator<AResourceClusterMarker>(GetWorld()))
 		{
@@ -90,6 +104,26 @@ void AResourceGameMode::StartPlay()
 		}
 	}
 	Super::StartPlay();
+}
+
+void AResourceGameMode::GrowResources()
+{
+	const FProceduralSettings& S = ProceduralSettings;
+	GrowingAreas.RemoveAll([](const TWeakObjectPtr<AWorkArea>& Area) { return !Area.IsValid(); });
+	int32 Grown = 0, Reappeared = 0;
+	for (const TWeakObjectPtr<AWorkArea>& Weak : GrowingAreas)
+	{
+		AWorkArea* Area = Weak.Get();
+		if (Area->AvailableResourceAmount >= Area->MaxAvailableResourceAmount || FMath::FRand() >= S.GrowthChance)
+		{
+			continue;
+		}
+		const bool bWasEmpty = Area->bDepleted;
+		Area->AddResourceAmount(FMath::FRandRange(FMath::Min(S.GrowthMin, S.GrowthMax), FMath::Max(S.GrowthMin, S.GrowthMax)));
+		++Grown;
+		Reappeared += bWasEmpty && !Area->bDepleted ? 1 : 0;
+	}
+	UE_LOG(LogTemp, Verbose, TEXT("[ResourceGrowth] %d of %d place(s) grew, %d came back."), Grown, GrowingAreas.Num(), Reappeared);
 }
 
 void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
@@ -225,9 +259,33 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 	const FVector Extent(60.f, 60.f, 300.f);
 	const int32 MaxPlaces = FMath::Max(1, S.ClusterSize);
 	const int32 MinPlaces = FMath::Clamp(S.MinClusterSize, 1, MaxPlaces);
-	const float Spacing = S.ClusterSpacing;
 	// Random offset of every place (ClusterJitter); places keep (1 - Jitter) x their plan's gap from each other.
 	const float Jitter = FMath::Clamp(S.ClusterJitter, 0.f, 0.45f);
+	// Half the width of the largest resource place on the ground (its mesh x its scale). Places keep twice that
+	// (plus a margin) apart - the meshes must not overlap - and that much more from cliffs and walls (14.11.2026:
+	// a field was found half on a cliff edge, its crystals inside each other).
+	float Footprint = 0.f;
+	for (int32 T = 0; T < 3; ++T)
+	{
+		for (UClass* C : Classes[T])
+		{
+			const AWorkArea* CDO = C ? C->GetDefaultObject<AWorkArea>() : nullptr;
+			const UStaticMesh* Mesh = CDO && CDO->Mesh ? CDO->Mesh->GetStaticMesh() : nullptr;
+			if (!Mesh)
+			{
+				continue;
+			}
+			const FVector Ext = Mesh->GetBounds().BoxExtent * CDO->Mesh->GetRelativeScale3D().GetAbs()
+				* (MapScale.Contains(C) ? MapScale[C].GetAbs() : FVector::OneVector);
+			// Size2D, not max(X, Y): every place gets a random yaw, a turned box reaches out to its corner
+			// (19.11.2026: crystals of neighbouring places stood inside each other).
+			Footprint = FMath::Max(Footprint, static_cast<float>(FVector2D(Ext.X, Ext.Y).Size()));
+		}
+	}
+	Footprint = FMath::Min(Footprint, 700.f);
+	// No two places closer than this, whatever the cluster plan says (a ring of many places has a small gap).
+	const float MinAbsoluteGap = 2.f * Footprint + 40.f;
+	const float Spacing = FMath::Max(S.ClusterSpacing, (2.f * Footprint + 60.f) / (1.f - Jitter));
 	const float JitterRadius = Jitter * Spacing;
 	const int32 JitterTries = Jitter > 0.f ? 5 : 1;
 	TArray<FVector> AllPlaces;
@@ -278,22 +336,31 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 	TArray<float> CentreRadii;
 	int32 Spawned = 0;
 
-	// EdgeDistance to the navmesh's edge in 8 directions: the navmesh is there and no wall in between.
+	// EdgeDistance (+ the place's own footprint) to the navmesh's edge in 8 directions: the navmesh is there, no
+	// wall in between, and neither the navmesh nor the ground drops or rises much (a cliff edge whose slope still
+	// carries navmesh passed before).
 	auto HasEdgeClearance = [&](const FVector& P, float EdgeDistance) -> bool
 	{
 		if (EdgeDistance <= 0.f)
 		{
 			return true;
 		}
+		const float Reach = EdgeDistance + Footprint;
+		const float GroundZ = GroundBelow(P).Z;
 		for (int32 i = 0; i < 8; ++i)
 		{
-			const FVector Q = P + FVector(1.f, 0.f, 0.f).RotateAngleAxis(45.f * i, FVector::UpVector) * EdgeDistance;
-			FNavLocation OnNav;
-			FVector Hit;
-			if (!NavSys->ProjectPointToNavigation(Q, OnNav, Extent) || FVector::Dist2D(OnNav.Location, Q) > 40.f
-				|| UNavigationSystemV1::NavigationRaycast(World, P, OnNav.Location, Hit))
+			for (const float Part : { 0.5f, 1.f })
 			{
-				return false;
+				const FVector Q = P + FVector(1.f, 0.f, 0.f).RotateAngleAxis(45.f * i, FVector::UpVector) * Reach * Part;
+				FNavLocation OnNav;
+				FVector Hit;
+				if (!NavSys->ProjectPointToNavigation(Q, OnNav, Extent) || FVector::Dist2D(OnNav.Location, Q) > 40.f
+					|| FMath::Abs(OnNav.Location.Z - P.Z) > S.MaxHeightDifference * 1.5f
+					|| FMath::Abs(GroundBelow(OnNav.Location).Z - GroundZ) > S.MaxHeightDifference * 1.5f
+					|| UNavigationSystemV1::NavigationRaycast(World, P, OnNav.Location, Hit))
+				{
+					return false;
+				}
 			}
 		}
 		return true;
@@ -497,7 +564,7 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 		TArray<FVector> Places;
 		const float Turn0 = Random.FRand() * 360.f;
 		// Far enough from the places of this cluster and of the clusters before - no overlap.
-		const float MinPlaceGap = (1.f - Jitter) * Plan.Gap;
+		const float MinPlaceGap = FMath::Max((1.f - Jitter) * Plan.Gap, MinAbsoluteGap);
 		auto IsClear = [&](const FVector& P)
 		{
 			for (const FVector& Q : Places)
@@ -535,7 +602,9 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 						{
 							P = OnNav.Location;
 						}
-						if (IsClear(P) || Try == JitterTries - 1)
+						// Even a hand-placed cluster never puts a place onto another one: a spot that is not
+						// clear is left out (the cluster gets one place less) instead of overlapping.
+						if (IsClear(P))
 						{
 							Places.Add(P);
 							bPlaced = true;
@@ -556,7 +625,7 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 						bPlaced = true;
 					}
 				}
-				bFits = bPlaced;
+				bFits = bPlaced || bForced;
 			}
 			if (!bFits)
 			{
@@ -573,9 +642,26 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 			const FTransform Transform(FRotator(0.f, Random.FRand() * 360.f, 0.f), GroundBelow(P),
 				MapScale.Contains(Class) ? MapScale[Class] : FVector::OneVector);
-			if (World->SpawnActor<AWorkArea>(Class, Transform, Params))
+			if (AWorkArea* Area = World->SpawnActor<AWorkArea>(Class, Transform, Params))
 			{
 				++Spawned;
+				// Every place its own full amount; growing places may start empty (invisible until they grow).
+				if (S.MaxAmount > 0.f)
+				{
+					const float Full = Random.FRandRange(FMath::Min(S.MinAmount, S.MaxAmount), S.MaxAmount);
+					Area->MaxAvailableResourceAmount = FMath::Max(1.f, Full);
+					Area->AvailableResourceAmount = Area->MaxAvailableResourceAmount;
+				}
+				if (S.bGrowingResources)
+				{
+					Area->bRegrows = true;
+					GrowingAreas.Add(Area);
+					if ((!Anchor || S.bEmptyStartAtBases) && Random.FRand() < S.EmptyStartShare)
+					{
+						Area->AvailableResourceAmount = 0.f;
+						Area->SetDepleted(true);
+					}
+				}
 			}
 		}
 		if (Places.Num() > 0)
@@ -720,6 +806,7 @@ void AResourceGameMode::SpawnProceduralResources(bool bMarkersOnly)
 			SpawnCluster(C, Plan, 0.f, nullptr, S.MinEdgeDistance);
 		}
 	}
+	UE_LOG(LogTemp, Log, TEXT("SpawnProceduralResources: footprint %.0f, spacing %.0f."), Footprint, Spacing);
 	UE_LOG(LogTemp, Log, TEXT("SpawnProceduralResources: seed %d, removed %d, spawned %d in %d marker + %d start clusters (%d starts) + %d of %d clusters (navmesh %.1f x 100m^2), mixes P/PS/PT/ST/single %d/%d/%d/%d/%d, first %s."),
 		UsedSeed, ToRemove.Num(), Spawned, MarkerCentres, StartCentres, Starts.Num(), Centres.Num() - FixedCentres, Wanted, Area100m, MixClusters[0], MixClusters[1], MixClusters[2], MixClusters[3], MixClusters[4],
 		Centres.IsValidIndex(FixedCentres) ? *Centres[FixedCentres].ToCompactString() : TEXT("-"));
@@ -1135,6 +1222,10 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 		return;
 	}
 	
+	// Player teams: the new worker joins the distribution (Primary) before it picks - otherwise the first
+	// workers of a match chose freely and only moved to Primary after their first delivery.
+	ReconcileWorkerDistribution(Worker->TeamId);
+
 	// Check if worker distribution is set for this team
 	const bool bWorkerDistributionSet = IsWorkerDistributionSet(Worker->TeamId);
 	
@@ -1169,7 +1260,9 @@ void AResourceGameMode::AssignWorkAreasToWorker(AWorkingUnitBase* Worker)
 		if (bWorkerDistributionSet)
 		{
 			const EResourceType ResourceType = ConvertToResourceType(WorkPlace->Type);
-			const int32 CurrentWorkers = GetCurrentWorkersForResourceType(Worker->TeamId, ResourceType);
+			// The second run of this function (see below) finds the worker already counted in its type.
+			const bool bCountsHere = IsValid(Worker->ResourcePlace) && ConvertToResourceType(Worker->ResourcePlace->Type) == ResourceType;
+			const int32 CurrentWorkers = GetCurrentWorkersForResourceType(Worker->TeamId, ResourceType) - (bCountsHere ? 1 : 0);
 			const int32 MaxWorkers = GetMaxWorkersForResourceType(Worker->TeamId, ResourceType);
 			
 			// Skip if this resource type has reached its worker limit
@@ -1302,8 +1395,10 @@ ABuildingBase* AResourceGameMode::GetClosestBaseToLocation(AWorkingUnitBase* Wor
 
     // The nearest base that takes the load - a Collector or the main base, whichever is closer. A full
     // Collector is skipped, so the worker goes on to the next one that still has room.
+    // A base that only collects counts CollectOnlyDeliveryPenalty farther: what is dropped there still has
+    // to be hauled on by a logistics unit, so the storing base wins when the two are about as far.
     ABuildingBase* ClosestBase = nullptr;
-    float MinDistanceSquared = FLT_MAX;
+    float MinDistance = FLT_MAX;
     for (ABuildingBase* Base : Bases)
     {
        if (!IsValid(Base) || Worker->TeamId != Base->TeamId || Base->GetUnitState() == UnitData::Dead)
@@ -1318,10 +1413,11 @@ ABuildingBase* AResourceGameMode::GetClosestBaseToLocation(AWorkingUnitBase* Wor
        {
           continue;
        }
-       const float DistanceSquared = (Base->GetActorLocation() - Location).SizeSquared();
-       if (DistanceSquared < MinDistanceSquared)
+       const float Distance = (Base->GetActorLocation() - Location).Size()
+          + (Base->StoresLocally() ? CollectOnlyDeliveryPenalty : 0.f);
+       if (Distance < MinDistance)
        {
-          MinDistanceSquared = DistanceSquared;
+          MinDistance = Distance;
           ClosestBase = Base;
        }
     }
@@ -1629,11 +1725,41 @@ void AResourceGameMode::FilterResourcePlacesForWorker(AWorkingUnitBase* Worker, 
 	}
 
 	const int32 TeamId = Worker->TeamId;
-	InOutAreas.RemoveAll([this, Worker, TeamId](const AWorkArea* Area)
+
+	// 3) Range limit of the team (resource widget): only places close to one of the team's delivery bases.
+	const float MaxDistance = GetTeamMaxResourceDistance(TeamId);
+	TArray<FVector, TInlineAllocator<8>> TeamBaseLocations;
+	if (MaxDistance > 0.f)
+	{
+		for (const ABuildingBase* Base : WorkAreaGroups.BaseAreas)
+		{
+			if (IsValid(Base) && Base->TeamId == TeamId && Base->GetUnitState() != UnitData::Dead)
+			{
+				TeamBaseLocations.Add(Base->GetActorLocation());
+			}
+		}
+	}
+	const float MaxDistanceSq = MaxDistance * MaxDistance;
+
+	InOutAreas.RemoveAll([this, Worker, TeamId, &TeamBaseLocations, MaxDistanceSq](const AWorkArea* Area)
 	{
 		if (!IsValid(Area))
 		{
 			return true;
+		}
+
+		// No base of the team (yet): no reference point, so no limit.
+		if (TeamBaseLocations.Num() > 0)
+		{
+			const FVector AreaLocation = Area->GetActorLocation();
+			const bool bInRange = TeamBaseLocations.ContainsByPredicate([&AreaLocation, MaxDistanceSq](const FVector& BaseLocation)
+			{
+				return FVector::DistSquared2D(BaseLocation, AreaLocation) <= MaxDistanceSq;
+			});
+			if (!bInRange)
+			{
+				return true;
+			}
 		}
 
 		// 1) Is this worker allowed to gather that resource at all?
@@ -1646,6 +1772,26 @@ void AResourceGameMode::FilterResourcePlacesForWorker(AWorkingUnitBase* Worker, 
 		//    would strand the worker in an endless mine -> walk -> rejected loop.
 		return !CanTeamDeliverResourceType(TeamId, ConvertToResourceType(Area->Type));
 	});
+}
+
+void AResourceGameMode::SetTeamMaxResourceDistance(int32 TeamId, float Distance)
+{
+	if (Distance > 0.f)
+	{
+		TeamMaxResourceDistance.Add(TeamId, Distance);
+	}
+	else
+	{
+		TeamMaxResourceDistance.Remove(TeamId);
+	}
+	UE_LOG(LogTemp, Log, TEXT("[ResourceRange] Team %d: max resource distance %s"), TeamId,
+		Distance > 0.f ? *FString::Printf(TEXT("%.0f"), Distance) : TEXT("unlimited"));
+}
+
+float AResourceGameMode::GetTeamMaxResourceDistance(int32 TeamId) const
+{
+	const float* Found = TeamMaxResourceDistance.Find(TeamId);
+	return Found ? *Found : 0.f;
 }
 
 AWorkArea* AResourceGameMode::GetNearestAvailableResourceOfTypeWithin(AWorkingUnitBase* Worker, TEnumAsByte<WorkAreaData::WorkAreaType> Type, float Radius)
@@ -1674,7 +1820,7 @@ AWorkArea* AResourceGameMode::GetNearestAvailableResourceOfTypeWithin(AWorkingUn
 	return Best;
 }
 
-AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas)
+AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArray<AWorkArea*>& WorkAreas, EResourceType OwnType)
 {
 	AWorkArea* BestWorkArea = nullptr;
 	const bool bDistributionSet = IsWorkerDistributionSet(TeamId);
@@ -1698,7 +1844,8 @@ AWorkArea* AResourceGameMode::GetSuitableWorkAreaToWorker(int TeamId, const TArr
 			if (bDistributionSet)
 			{
 				const EResourceType ResourceType = ConvertToResourceType(WorkArea->Type);
-				const int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType);
+				// The asking worker already counts in its own type (see the header).
+				const int32 CurrentWorkers = GetCurrentWorkersForResourceType(TeamId, ResourceType) - (ResourceType == OwnType ? 1 : 0);
 				const int32 MaxWorkers = GetMaxWorkersForResourceType(TeamId, ResourceType);
 
 				if (CurrentWorkers >= MaxWorkers)
@@ -1787,6 +1934,202 @@ void AResourceGameMode::AddMaxWorkersForResourceType(int TeamId, EResourceType R
 
 	AResourceGameState* RGState = GetGameState<AResourceGameState>();
 	if (RGState)
+	{
+		RGState->SetTeamResources(TeamResources);
+	}
+}
+
+int32 AResourceGameMode::CountTeamWorkers(int TeamId) const
+{
+	int32 Count = 0;
+	for (TActorIterator<AWorkingUnitBase> It(GetWorld()); It; ++It)
+	{
+		const AWorkingUnitBase* Worker = *It;
+		if (IsValid(Worker) && Worker->IsWorker && Worker->TeamId == TeamId && Worker->GetUnitState() != UnitData::Dead)
+		{
+			++Count;
+		}
+	}
+	return Count;
+}
+
+int32 AResourceGameMode::GetTotalMaxWorkers(int TeamId) const
+{
+	int32 Sum = 0;
+	for (const FResourceArray& ResourceArray : TeamResources)
+	{
+		if (ResourceArray.MaxWorkers.IsValidIndex(TeamId))
+		{
+			Sum += FMath::Max(0, ResourceArray.MaxWorkers[TeamId]);
+		}
+	}
+	return Sum;
+}
+
+bool AResourceGameMode::SetMaxWorkersRaw(int TeamId, EResourceType ResourceType, int32 Value)
+{
+	for (FResourceArray& ResourceArray : TeamResources)
+	{
+		if (ResourceArray.ResourceType == ResourceType && ResourceArray.MaxWorkers.IsValidIndex(TeamId))
+		{
+			ResourceArray.MaxWorkers[TeamId] = FMath::Max(0, Value);
+			return true;
+		}
+	}
+	return false;
+}
+
+bool AResourceGameMode::IsHumanPlayerTeam(int TeamId) const
+{
+	if (TeamId <= 0)
+	{
+		return false;
+	}
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		const AWidgetController* PC = Cast<AWidgetController>(It->Get());
+		// bIsAi: the AI's own camera controller (it sets its distribution itself). Player != null: a local
+		// player or a client connection - an AI-driven controller has none.
+		if (PC && !PC->bIsAi && PC->Player && PC->SelectableTeamId == TeamId && !PC->IsSpectatorController())
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+void AResourceGameMode::ReconcileWorkerDistribution(int TeamId)
+{
+	if (!bAutoWorkerDistribution || !HasAuthority() || !IsHumanPlayerTeam(TeamId))
+	{
+		return;
+	}
+	const int32 Workers = CountTeamWorkers(TeamId);
+	int32 Sum = GetTotalMaxWorkers(TeamId);
+	int32& LastCount = DistributionWorkerCount.FindOrAdd(TeamId, 0);
+	bool bChanged = false;
+
+	// CurrentWorkers from the real assignments. The +1/-1 bookkeeping drifts (measured: 9 on Primary with
+	// 6 workers right after the start) - and the quota check reads it: a phantom-full Primary sent the
+	// workers that fill it off to the nearest free place of any type.
+	{
+		TMap<EResourceType, int32> Real;
+		for (TActorIterator<AWorkingUnitBase> It(GetWorld()); It; ++It)
+		{
+			const AWorkingUnitBase* Worker = *It;
+			if (IsValid(Worker) && Worker->TeamId == TeamId && IsValid(Worker->ResourcePlace) && Worker->GetUnitState() != UnitData::Dead)
+			{
+				Real.FindOrAdd(ConvertToResourceType(Worker->ResourcePlace->Type))++;
+			}
+		}
+		for (FResourceArray& ResourceArray : TeamResources)
+		{
+			const int32* Found = Real.Find(ResourceArray.ResourceType);
+			const int32 Value = Found ? *Found : 0;
+			if (ResourceArray.CurrentWorkers.IsValidIndex(TeamId) && ResourceArray.CurrentWorkers[TeamId] != Value)
+			{
+				ResourceArray.CurrentWorkers[TeamId] = Value;
+				bChanged = true;
+			}
+		}
+	}
+
+	// New workers (and at the start: all of them) onto Primary - never beyond the worker count.
+	if (Workers > LastCount && Sum < Workers)
+	{
+		const int32 Add = FMath::Min(Workers - LastCount, Workers - Sum);
+		bChanged |= SetMaxWorkersRaw(TeamId, EResourceType::Primary, GetMaxWorkersForResourceType(TeamId, EResourceType::Primary) + Add);
+		Sum += Add;
+	}
+
+	// Fewer workers than assigned (died, turned into something else): take from the type with the most.
+	while (Sum > Workers)
+	{
+		EResourceType Most = EResourceType::MAX;
+		int32 MostCount = 0;
+		for (const FResourceArray& ResourceArray : TeamResources)
+		{
+			if (ResourceArray.MaxWorkers.IsValidIndex(TeamId) && ResourceArray.MaxWorkers[TeamId] > MostCount)
+			{
+				MostCount = ResourceArray.MaxWorkers[TeamId];
+				Most = ResourceArray.ResourceType;
+			}
+		}
+		if (Most == EResourceType::MAX)
+		{
+			break;
+		}
+		SetMaxWorkersRaw(TeamId, Most, MostCount - 1);
+		--Sum;
+		bChanged = true;
+	}
+	LastCount = Workers;
+
+	if (bChanged)
+	{
+		if (AResourceGameState* RGState = GetGameState<AResourceGameState>())
+		{
+			RGState->SetTeamResources(TeamResources);
+		}
+	}
+}
+
+void AResourceGameMode::ReconcileAllWorkerDistributions()
+{
+	TSet<int32> Teams;
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (const AWidgetController* PC = Cast<AWidgetController>(It->Get()))
+		{
+			if (PC->SelectableTeamId > 0)
+			{
+				Teams.Add(PC->SelectableTeamId);
+			}
+		}
+	}
+	for (const int32 TeamId : Teams)
+	{
+		ReconcileWorkerDistribution(TeamId);
+	}
+}
+
+void AResourceGameMode::ShiftWorkerToResourceType(int TeamId, EResourceType ResourceType)
+{
+	ReconcileWorkerDistribution(TeamId);
+	const int32 Workers = CountTeamWorkers(TeamId);
+	const int32 Sum = GetTotalMaxWorkers(TeamId);
+	const int32 Current = GetMaxWorkersForResourceType(TeamId, ResourceType);
+	if (Current >= Workers)
+	{
+		return;   // every worker is on this type already
+	}
+	if (Sum >= Workers)
+	{
+		// All assigned: one from the other type with the most.
+		EResourceType Donor = EResourceType::MAX;
+		int32 DonorCount = 0;
+		for (const FResourceArray& ResourceArray : TeamResources)
+		{
+			if (ResourceArray.ResourceType != ResourceType && ResourceArray.MaxWorkers.IsValidIndex(TeamId)
+				&& ResourceArray.MaxWorkers[TeamId] > DonorCount)
+			{
+				DonorCount = ResourceArray.MaxWorkers[TeamId];
+				Donor = ResourceArray.ResourceType;
+			}
+		}
+		if (Donor == EResourceType::MAX)
+		{
+			return;
+		}
+		SetMaxWorkersRaw(TeamId, Donor, DonorCount - 1);
+	}
+	SetMaxWorkersRaw(TeamId, ResourceType, Current + 1);
+	UE_LOG(LogTemp, Log, TEXT("[WorkerDistribution] Team %d: +1 %s -> P%d S%d T%d (workers %d)"), TeamId,
+		*StaticEnum<EResourceType>()->GetNameStringByValue(static_cast<int64>(ResourceType)),
+		GetMaxWorkersForResourceType(TeamId, EResourceType::Primary), GetMaxWorkersForResourceType(TeamId, EResourceType::Secondary),
+		GetMaxWorkersForResourceType(TeamId, EResourceType::Tertiary), Workers);
+
+	if (AResourceGameState* RGState = GetGameState<AResourceGameState>())
 	{
 		RGState->SetTeamResources(TeamResources);
 	}
@@ -1922,6 +2265,29 @@ UClass* AResourceGameMode::GetLogisticsRoadClass(int32 TeamId) const
 		{
 			return Settings.RoadClass.Get();
 		}
+	}
+	return LogisticsRoadClass ? LogisticsRoadClass.Get() : ALogisticsRoad::StaticClass();
+}
+
+UClass* AResourceGameMode::GetLogisticsRoadClassFor(const ABuildingBase* Source, const ABuildingBase* Sink) const
+{
+	const int32 TeamId = Source ? Source->TeamId : (Sink ? Sink->TeamId : -1);
+	for (const FTeamLogisticsSettings& Settings : TeamLogisticsSettings)
+	{
+		if (Settings.TeamId == TeamId && Settings.RoadClass)
+		{
+			return Settings.RoadClass.Get();
+		}
+	}
+	// The faction's own choice. Only BP_GameModeBase_1_AH named the Xeno team, so in every other level the Xeno
+	// were given the carrier roads of the default - and those are hidden from the other teams.
+	if (Source && Source->LogisticsRoadClass)
+	{
+		return Source->LogisticsRoadClass.Get();
+	}
+	if (Sink && Sink->LogisticsRoadClass)
+	{
+		return Sink->LogisticsRoadClass.Get();
 	}
 	return LogisticsRoadClass ? LogisticsRoadClass.Get() : ALogisticsRoad::StaticClass();
 }

@@ -54,7 +54,7 @@ public class RTSUnitTemplate : ModuleRules
             "InputCore",
 
             // Misc
-            "Json", "JsonUtilities", "RenderCore", "Landscape",
+            "Json", "JsonUtilities", "RenderCore", "RHI", "Landscape",
             "NNE",
 
             // Runtime-built meshes (ALogisticsPipeline)

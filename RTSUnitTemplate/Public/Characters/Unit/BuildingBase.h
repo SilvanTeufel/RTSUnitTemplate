@@ -16,6 +16,7 @@
 #include "BuildingBase.generated.h"
 
 class AEnergyWall;
+class UMaterialInterface;
 
 UENUM(BlueprintType)
 enum class EExtensionSnapMethod : uint8
@@ -146,6 +147,14 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Logistics")
 	bool CanProvideResource(EResourceType ResourceType) const;
+
+	/**
+	 * Road actor of the logistics links this building starts (or, if the other end sets none, ends) - per
+	 * faction, e.g. the organic pipelines on the Xeno parent. Empty = the game mode's choice. A
+	 * TeamLogisticsSettings entry of the game mode still wins (a level that wants something else per team).
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "RTSUnitTemplate|Logistics")
+	TSubclassOf<class ALogisticsRoad> LogisticsRoadClass;
 
 	/** Total amount a CollectOnly base (or the output store of a Converter) can hold, all types together. 0 = unlimited. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Logistics",
@@ -283,7 +292,51 @@ public:
 	/** CollectOnlyWithoutWorker without a place: link the free resource place it stands on, if any. Server only. */
 	void LinkResourcePlaceUnderneath();
 
+	/**
+	 * Components (by name, e.g. the jets under a hovering reactor) only shown while switched on with
+	 * SetToggleVFXActive: hidden from the start, shown and hidden again on the server and every client
+	 * (replicated, so a player joining later sees the current state too). Niagara systems are activated and
+	 * deactivated along with it.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visual")
+	TArray<FName> ToggleVFXComponentNames;
+
+	/** Server: shows (true) or hides (false) the ToggleVFXComponentNames components everywhere. */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "RTSUnitTemplate|Visual")
+	void SetToggleVFXActive(bool bActive);
+
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Visual")
+	bool IsToggleVFXActive() const { return bToggleVFXActive; }
+
+	/**
+	 * Switches the ToggleVFXComponentNames on by itself while the building flies (IsFlying) and off again
+	 * FlightVFXLandingHoldSeconds after IsFlying went false (the descent) - the thrusters under a flying main base.
+	 * Server; the state replicates like SetToggleVFXActive.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visual")
+	bool bToggleVFXWhileFlying = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visual", meta = (ClampMin = "0", EditCondition = "bToggleVFXWhileFlying"))
+	float FlightVFXLandingHoldSeconds = 1.5f;
+
+	/** Shown toggle effects hang on the actor: it has to follow the Mass transform every frame while they are on. */
+	virtual bool HasActiveAttachedEffect() const override;
+
+protected:
+	UPROPERTY(ReplicatedUsing = OnRep_ToggleVFXActive)
+	bool bToggleVFXActive = false;
+
+	UFUNCTION()
+	void OnRep_ToggleVFXActive();
+
+	/** Shows or hides the ToggleVFXComponentNames components by bToggleVFXActive. */
+	void ApplyToggleVFX();
+
 private:
+	FTimerHandle FlightVFXTimerHandle;
+	double FlightVFXLandingSince = -1.0;
+	void UpdateFlightVFX();
+
 	FTimerHandle ExtractionTimerHandle;
 
 	/** A resource place was linked at least once - with bDieWhenResourceDepleted losing it kills the building. */
@@ -412,6 +465,34 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Supply")
 	void ReleaseSupplyCapacity();
+
+	/**
+	 * Raises the capacity this building grants by Bonus - at once, and as part of SupplyCapacityGain, so
+	 * ReleaseSupplyCapacity hands it back together with the rest when the building dies (supply like).
+	 * Server only. Returns false and changes nothing while the building grants nothing (not yet applied,
+	 * already released) or the team is at SupplyCapacityLimit - the caller must not charge for it then.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Supply")
+	bool AddSupplyCapacityBonus(const FBuildingCost& Bonus);
+
+	/** How often AddSupplyCapacityBonus succeeded on this building. Replicated for the visual. */
+	UPROPERTY(ReplicatedUsing = OnRep_SupplyBoostCount, BlueprintReadOnly, Category = "RTSUnitTemplate|Supply")
+	int32 SupplyBoostCount = 0;
+
+	/** Component name of the mesh that shows the boost (the reactor: "Sphere"). None = no visual. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Supply")
+	FName SupplyBoostMeshName = NAME_None;
+
+	/** Material that mesh gets once the building is boosted. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Supply")
+	TObjectPtr<UMaterialInterface> SupplyBoostMaterial = nullptr;
+
+	/** Server and clients, whenever SupplyBoostCount changes. Default: SupplyBoostMaterial on SupplyBoostMeshName. */
+	UFUNCTION(BlueprintNativeEvent, Category = "RTSUnitTemplate|Supply")
+	void OnSupplyBoostChanged();
+
+	UFUNCTION()
+	void OnRep_SupplyBoostCount();
 
 	/**
 	 * Transporter buildings that only produce while staffed (Antimatter, MetabolicSiphon) pull their crew

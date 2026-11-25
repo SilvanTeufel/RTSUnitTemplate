@@ -38,6 +38,8 @@
 #include "Engine/GameInstance.h"
 #include "Controller/PlayerController/ControllerBase.h"
 #include "Core/ViewportUtils.h"
+#include "Components/DecalComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 // Debug category for squad healthbar visibility
 DEFINE_LOG_CATEGORY_STATIC(LogSquadHB, Log, All);
@@ -552,6 +554,25 @@ bool APerformanceUnit::CanLocalPlayerPerceiveEffect(const FVector& Location) con
 		return false;
 	}
 	return RTSViewportUtils::IsLocationNearLocalViewport(this, Location, EffectViewportMargin);
+}
+
+void APerformanceUnit::MulticastShowRangeRing_Implementation(UMaterialInterface* Material, FVector Location, float Radius, float Lifetime, FLinearColor Color)
+{
+	if (!Material || Radius <= 0.f || GetNetMode() == NM_DedicatedServer || !CanLocalPlayerPerceiveEffect(Location))
+	{
+		return;
+	}
+	const float Life = FMath::Max(0.2f, Lifetime);
+	// Projected straight down; X is the depth of the projection box.
+	if (UDecalComponent* Decal = UGameplayStatics::SpawnDecalAtLocation(this, Material, FVector(600.f, Radius, Radius), Location, FRotator(-90.f, 0.f, 0.f), 0.f))
+	{
+		if (UMaterialInstanceDynamic* MID = Decal->CreateDynamicMaterialInstance())
+		{
+			MID->SetVectorParameterValue(TEXT("Color"), Color);
+		}
+		Decal->SetFadeScreenSize(0.f);
+		Decal->SetFadeOut(Life * 0.6f, Life * 0.4f, true);
+	}
 }
 
 void APerformanceUnit::PlayFogAwareSound(USoundBase* Sound, FVector Location, float VolumeMultiplier, float PitchMultiplier)

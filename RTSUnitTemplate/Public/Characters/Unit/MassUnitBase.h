@@ -158,7 +158,7 @@ public:
 	void SyncActorTransformFromMass();
 
 	/** Wahr, wenn ein angehefteter Niagara-Effekt sichtbar ist und deshalb jedes Bild mitgefuehrt werden muss. */
-	bool HasActiveAttachedEffect() const;
+	virtual bool HasActiveAttachedEffect() const;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Mass|Visual")
 	class UDataTable* ISMAnimationDataTable = nullptr;
 
@@ -331,6 +331,23 @@ public:
 	 *  data 14 to 1; the material (e.g. Material_Master_B: CastBlinkRate, CastBlinkMin) turns it into the blink. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	bool bBlinkEmissiveWhileWorking = false;
+
+	/** Materialize a unit that spawns during the match (not level-placed): per-instance custom data 22 runs from 1
+	 *  (invisible) to 0 (complete) over MaterializeOnSpawnDuration seconds of world time, on server and clients;
+	 *  23 / 24 = bottom and height of the mesh in local space, so the front runs over exactly the model.
+	 *  The unit's material turns it into the effect (MF_SpawnMaterialize_AH). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bMaterializeOnSpawn = false;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.05", EditCondition = "bMaterializeOnSpawn"))
+	float MaterializeOnSpawnDuration = 3.f;
+
+	/** Progress curve like AWorkArea::MaterializePower: amount = progress ^ power (3 = slow start, fast finish). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.1", EditCondition = "bMaterializeOnSpawn"))
+	float MaterializeOnSpawnPower = 3.f;
+
+	/** World time the spawn materialize started on this machine; < 0 = not yet. Re-assigned visuals continue it. */
+	float MaterializeStartTime = -1.f;
 
 	/**
 	 * Pass the cast to the main mesh's material, on server and clients: per-instance custom data 18 = world time
@@ -651,6 +668,13 @@ public:
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
 	void MulticastMoveUnitLinear(const FVector& RelativeLocationChange, float InMoveDuration, float InMoveEaseExponent);
 
+	/**
+	 * Components (by name) that stay on the ground when MulticastMoveUnitLinear lifts or lowers the unit - e.g. the
+	 * foundation decal under a reactor that hovers: it keeps its height while the building rises.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Visual")
+	TArray<FName> GroundAnchoredComponentNames;
+
 	// Continuously rotate an ISM instance's Yaw at a constant rate (runs on server and clients)
 	// YawRate is in degrees per second. Duration <= 0 means infinite.
 	UFUNCTION(BlueprintCallable, NetMulticast, Reliable, Category = RTSUnitTemplate)
@@ -764,6 +788,16 @@ protected:
 	FStaticMeshMoveTween UnitMoveTween;
 	FTimerHandle UnitMoveTimerHandle;
 	void UnitMove_Step();
+
+	/** Height the unit has been moved up (or down) by MulticastMoveUnitLinear in total, and that at the start of the current move. */
+	float LinearMoveLiftZ = 0.f;
+	float LinearMoveLiftZAtStart = 0.f;
+
+	/** Relative locations of the GroundAnchoredComponentNames components before any lift. */
+	TMap<FName, FVector> GroundAnchorRestLocations;
+
+	/** Keeps the GroundAnchoredComponentNames components at the height they had before the lift. */
+	void ApplyGroundAnchors();
 
 	// Continuous constant rotation state for the unit itself
 	bool bContinuousUnitRotationEnabled = false;

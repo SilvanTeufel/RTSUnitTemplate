@@ -25,6 +25,10 @@ public:
 
 	void AssignUnitVisual(FMassEntityHandle Entity, UInstancedStaticMeshComponent* TemplateISM, AMassUnitBase* Unit);
 
+	// After TemplateISM->SetMaterial at runtime: the pool is keyed by mesh + material 0, so the entity's instance of
+	// that template moves into the pool of the new material (the old slot is freed). No-op without a live instance.
+	void RefreshUnitVisualMaterial(FMassEntityHandle Entity, UInstancedStaticMeshComponent* TemplateISM, AMassUnitBase* Unit);
+
 	void RemoveUnitVisual(FMassEntityHandle Entity);
 
 	void SetUnitVisualVisible(FMassEntityHandle Entity, bool bVisible);
@@ -67,6 +71,18 @@ protected:
 	void ReleasePooledInstanceInternal(UInstancedStaticMeshComponent* ISM, int32 InstanceIndex, AMassUnitBase* ExpectedOwner);
 
 	FTimerHandle SweepTimerHandle;
+
+	/** Spawn materialize (AMassUnitBase::bMaterializeOnSpawn): instances whose custom data 22 still ramps 1 -> 0. */
+	struct FMaterializeEntry
+	{
+		TWeakObjectPtr<UInstancedStaticMeshComponent> ISM;
+		int32 InstanceIndex = INDEX_NONE;
+		TWeakObjectPtr<AMassUnitBase> Unit;
+	};
+	TArray<FMaterializeEntry> MaterializeEntries;
+	FTimerHandle MaterializeTimerHandle;
+	void StartMaterialize(UInstancedStaticMeshComponent* ISM, int32 InstanceIndex, AMassUnitBase* Unit);
+	void TickMaterialize();
 
 	UPROPERTY()
 	TMap<FMeshMaterialKey, UInstancedStaticMeshComponent*> ISMPool;

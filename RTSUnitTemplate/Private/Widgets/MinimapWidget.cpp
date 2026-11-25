@@ -288,7 +288,7 @@ void UMinimapWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
             if (UnderAttackSound && !(bSilentWhenOnScreen && Alert.bOnScreen) && Now - LastAlertSoundTime >= UnderAttackSoundCooldown)
             {
                 LastAlertSoundTime = Now;
-                UGameplayStatics::PlaySound2D(this, UnderAttackSound, PC->GetSoundMultiplier());
+                UGameplayStatics::PlaySound2D(this, UnderAttackSound, UnderAttackSoundVolume * PC->GetSoundMultiplier());
             }
         }
         if (bAnyRunning)

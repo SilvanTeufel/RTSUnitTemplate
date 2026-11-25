@@ -86,6 +86,43 @@ protected:
 	UFUNCTION()
 	void OnResumeClicked();
 
+public:
+	/**
+	 * Sub page (e.g. the graphics settings) that the Blueprint shows instead of the main list. Looked up by name (the
+	 * existing menus have their own variables of that name). Esc closes it again and the menu always reopens on the
+	 * main list.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	FName SubPageWidgetName = TEXT("GraphicsPanel");
+
+	/** The main list of buttons, hidden while the sub page is open. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate")
+	FName MainPageWidgetName = TEXT("MenuList");
+
+	/** Closes an open sub page and shows MenuList again. True if a sub page was open. */
+	bool CloseSubPage();
+
+	/**
+	 * Button that opens the keyboard layout choice (Modern / Classic / User defined). If the
+	 * Blueprint has no widget of this name, a copy of KeyLayoutTemplateButtonName (style, font,
+	 * slot) is put right below that button - so every existing menu gets it without editing.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Keys")
+	FName KeyLayoutButtonName = TEXT("KeyLayoutButton");
+
+	/** Button the key layout button is copied from (and placed below). Missing = ExitButton. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Keys")
+	FName KeyLayoutTemplateButtonName = TEXT("GraphicsButton");
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Keys")
+	FText KeyLayoutButtonLabel = NSLOCTEXT("MapMenu", "KeyLayout", "Controls");
+
+	UFUNCTION()
+	void OnKeyLayoutClicked();
+
+protected:
+
+	virtual void NativeOnInitialized() override;
 	virtual void NativeConstruct() override;
 
 	UFUNCTION()

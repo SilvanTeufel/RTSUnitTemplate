@@ -6,6 +6,7 @@
 #include "Characters/Unit/BuildingBase.h"
 #include "Characters/Unit/UnitBase.h"
 #include "Controller/PlayerController/ControllerBase.h"
+#include "Controller/PlayerController/ExtendedControllerBase.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
 #include "EngineUtils.h"
@@ -13,11 +14,16 @@
 #include "Kismet/GameplayStatics.h"
 #include "Save/TutorialProgressSave.h"
 #include "Widgets/TutorialWidget.h"
+#include "Widgets/StartLoadoutWidget.h"
+#include "Widgets/KeyLayoutWidgets.h"
+#include "Controller/Input/RTSKeyBindings.h"
 
 ATutorialActor::ATutorialActor()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
+	// Ticks through the pause of the card selection, only to keep the panel out of its way (see Tick).
+	PrimaryActorTick.bTickEvenWhenPaused = true;
 	bReplicates = false;
 	SetHidden(true);
 #if WITH_EDITORONLY_DATA
@@ -39,10 +45,33 @@ void ATutorialActor::BeginPlay()
 		StartTimer = StartDelay;
 		SetActorTickEnabled(true);
 	}
+	if (URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this))
+	{
+		Bindings->OnBindingsChanged.AddUniqueDynamic(this, &ATutorialActor::HandleKeyBindingsChanged);
+	}
+}
+
+void ATutorialActor::HandleKeyBindingsChanged()
+{
+	if (bRunning && Widget && Steps.IsValidIndex(CurrentStep))
+	{
+		Widget->ShowStep(MakeLocalizedStepText(Steps[CurrentStep]), CurrentStep, Steps.Num());
+	}
+}
+
+FText ATutorialActor::MakeLocalizedStepText(const FTutorialStep& Step) const
+{
+	const FText Text = MakeStepText(Step);
+	const URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this);
+	return Bindings ? Bindings->LocalizeKeyHints(Text) : Text;
 }
 
 void ATutorialActor::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this))
+	{
+		Bindings->OnBindingsChanged.RemoveDynamic(this, &ATutorialActor::HandleKeyBindingsChanged);
+	}
 	if (Widget)
 	{
 		Widget->RemoveFromParent();
@@ -214,7 +243,7 @@ void ATutorialActor::BeginStep(int32 Index)
 	CheckTimer = 0.f;
 	if (Widget)
 	{
-		Widget->ShowStep(MakeStepText(Steps[Index]), Index, Steps.Num());
+		Widget->ShowStep(MakeLocalizedStepText(Steps[Index]), Index, Steps.Num());
 	}
 	OnStepStarted.Broadcast(Index);
 }
@@ -222,6 +251,19 @@ void ATutorialActor::BeginStep(int32 Index)
 void ATutorialActor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	// A card selection on the screen: the panel steps aside and the tutorial waits until it is done.
+	const bool bSelectionOpen = UStartLoadoutWidget::IsAnyOpen(GetWorld()) || URTSKeyLayoutChoiceWidget::IsAnyWindowOpen(GetWorld());
+	if (Widget && bSelectionOpen != bHiddenForSelection)
+	{
+		bHiddenForSelection = bSelectionOpen;
+		Widget->SetVisibility(bSelectionOpen ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+	}
+	const UWorld* World = GetWorld();
+	if (bSelectionOpen || (World && World->IsPaused()))
+	{
+		return;
+	}
 
 	if (StartTimer >= 0.f)
 	{
@@ -299,14 +341,29 @@ bool ATutorialActor::MatchesClasses(const FTutorialStep& Step, const UClass* Cla
 bool ATutorialActor::KeyPressed(const FTutorialStep& Step) const
 {
 	const APlayerController* Controller = GetLocalController();
-	if (!Controller || !Step.Key.Key.IsValid() || !Controller->WasInputKeyJustPressed(Step.Key.Key))
+	if (!Controller || !Step.Key.Key.IsValid())
+	{
+		return false;
+	}
+	// Die Schritte sind fuer die Modern-Belegung geschrieben - gefragt ist die Taste, die jetzt
+	// dasselbe tut (Classic: "1" fuer Ctrl+1, "Q" fuer 1).
+	FRTSKeyChord Wanted(Step.Key.Key, Step.Key.bCtrl, Step.Key.bAlt);
+	if (const URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this))
+	{
+		const FRTSKeyChord Now = Bindings->TranslateModernChord(Wanted);
+		if (Now.IsValid())
+		{
+			Wanted = Now;
+		}
+	}
+	if (!Controller->WasInputKeyJustPressed(Wanted.Key))
 	{
 		return false;
 	}
 	auto Down = [Controller](const FKey& A, const FKey& B) { return Controller->IsInputKeyDown(A) || Controller->IsInputKeyDown(B); };
-	return (!Step.Key.bCtrl || Down(EKeys::LeftControl, EKeys::RightControl))
+	return (!Wanted.bCtrl || Down(EKeys::LeftControl, EKeys::RightControl))
 		&& (!Step.Key.bShift || Down(EKeys::LeftShift, EKeys::RightShift))
-		&& (!Step.Key.bAlt || Down(EKeys::LeftAlt, EKeys::RightAlt))
+		&& (!Wanted.bAlt || Down(EKeys::LeftAlt, EKeys::RightAlt))
 		&& (!Step.Key.bCmd || Down(EKeys::LeftCommand, EKeys::RightCommand));
 }
 
@@ -321,12 +378,33 @@ bool ATutorialActor::IsStepDone(const FTutorialStep& Step) const
 		{
 			return false;
 		}
+		FGameplayTagContainer TierTags;
+		if (Step.bAnyTierGroup)
+		{
+			if (const AExtendedControllerBase* Extended = Cast<AExtendedControllerBase>(Controller))
+			{
+				for (const FGameplayTag& Tag : { Extended->KeyTagCtrl1, Extended->KeyTagCtrl2, Extended->KeyTagCtrl3, Extended->KeyTagCtrl4 })
+				{
+					if (Tag.IsValid())
+					{
+						TierTags.AddTag(Tag);
+					}
+				}
+			}
+		}
 		int32 Matching = 0;
 		for (const AUnitBase* Unit : Controller->SelectedUnits)
 		{
-			if (IsValid(Unit) && Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == Controller->SelectableTeamId
+			if (!IsValid(Unit))
+			{
+				continue;
+			}
+			const bool bTagMatches = Step.bAnyTierGroup
+				? Unit->UnitTags.HasAnyExact(TierTags)
+				: (!Step.UnitTag.IsValid() || Unit->UnitTags.HasTagExact(Step.UnitTag));
+			if (Unit->GetUnitState() != UnitData::Dead && Unit->TeamId == Controller->SelectableTeamId
 				&& (!Step.bWorkersOnly || Unit->IsWorker)
-				&& (!Step.UnitTag.IsValid() || Unit->UnitTags.HasTagExact(Step.UnitTag))
+				&& bTagMatches
 				&& MatchesClasses(Step, Unit->GetClass()))
 			{
 				++Matching;

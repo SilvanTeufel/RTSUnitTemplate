@@ -21,6 +21,16 @@ void UAbilityChooser::NativeConstruct()
     InitializeButtonArray(ButtonPreFixes[3], ThrowAbilityButtons);
     InitializeAbilityIconArray("Ability", SelectAbilityIcons, SelectAbilityButtons);
     SetVisibility(ESlateVisibility::Hidden);
+    if (!bChooserEnabled)
+    {
+        // Switched off: out of the HUD for good (the camera's pointer to it stays harmless).
+        // Removed a tick later - not while the HUD is still building its children.
+        SetVisibility(ESlateVisibility::Collapsed);
+        if (UWorld* World = GetWorld())
+        {
+            World->GetTimerManager().SetTimerForNextTick(FTimerDelegate::CreateWeakLambda(this, [this]() { RemoveFromParent(); }));
+        }
+    }
 }
 
 void UAbilityChooser::InitWidget(ACustomControllerBase* InController)
@@ -45,6 +55,10 @@ void UAbilityChooser::SetOwnerActor(AAbilityUnit* NewOwner)
 
 void UAbilityChooser::StartUpdateTimer()
 {
+    if (!bChooserEnabled)
+    {
+        return;
+    }
     // Set a repeating timer to call NativeTick at a regular interval based on UpdateInterval
     GetWorld()->GetTimerManager().SetTimer(UpdateTimerHandle, this, &UAbilityChooser::UpdateAbilityDisplay, UpdateInterval, true);
 }

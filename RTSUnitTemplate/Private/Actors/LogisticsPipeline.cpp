@@ -2,7 +2,9 @@
 
 #include "Actors/LogisticsPipeline.h"
 
+#include "Actors/FogActor.h"
 #include "Characters/Unit/BuildingBase.h"
+#include "Controller/PlayerController/CustomControllerBase.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EngineUtils.h"
@@ -53,6 +55,50 @@ void ALogisticsPipeline::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(ALogisticsPipeline, RetractStartTime);
 	DOREPLIFETIME(ALogisticsPipeline, RetractEndTime);
 	DOREPLIFETIME(ALogisticsPipeline, bRetractToSink);
+}
+
+void ALogisticsPipeline::BeginPlay()
+{
+	// Fog of war (enemies see the tube piece by piece, BuildTube masks it) is set up by ALogisticsRoad.
+	Super::BeginPlay();
+}
+
+bool ALogisticsPipeline::RevealRingsFromFog(AFogActor* Fog)
+{
+	if (!Fog)
+	{
+		return false;
+	}
+	bool bNew = false;
+	for (const FVector& P : BuiltLine)
+	{
+		const FIntPoint Cell = FogCell(P);
+		if (!FogRevealedCells.Contains(Cell) && Fog->IsWorldPositionRevealed(P))
+		{
+			FogRevealedCells.Add(Cell);
+			bNew = true;
+		}
+	}
+	return bNew;
+}
+
+void ALogisticsPipeline::UpdateFogReveal()
+{
+	if (BuiltLine.Num() < 2 || IsActorBeingDestroyed())
+	{
+		return;
+	}
+	AFogActor* Fog = GetMaskingFog();
+	const bool bRevealedMore = RevealRingsFromFog(Fog);
+	// Masked and more of it seen, or masked before but not any more (team known now, alliance, no fog).
+	if ((Fog && (bRevealedMore || !bBuiltFogMasked)) || (!Fog && bBuiltFogMasked))
+	{
+		// BuildTube clears the Built* arrays first - pass copies.
+		const TArray<FVector> Line = BuiltLine;
+		const TArray<float> Scale = BuiltScale;
+		const TArray<uint8> Merged = BuiltMerged;
+		BuildTube(Line, Scale, Merged);
+	}
 }
 
 void ALogisticsPipeline::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -369,6 +415,7 @@ void ALogisticsPipeline::ClearVisuals()
 	ClearWalkCollision();
 	BuiltLine.Reset();
 	BuiltScale.Reset();
+	BuiltMerged.Reset();
 	VisualLength = 0.f;
 	VisualGrowLength = 0.f;
 	VisualTailMin = 0.f;
@@ -839,11 +886,28 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 	}
 	BuiltLine = Line;
 	BuiltScale = RadiusScale;
+	BuiltMerged = Merged;
 	BuildWalkCollision(Line, RadiusScale);
 	if (GetNetMode() == NM_DedicatedServer)
 	{
 		return;
 	}
+
+	// Fog of war: an enemy pipeline only shows the rings the local team has seen. Judged right here, so a
+	// new or rebuilt tube never flashes up whole for a frame.
+	AFogActor* MaskingFog = GetMaskingFog();
+	bBuiltFogMasked = MaskingFog != nullptr;
+	TArray<uint8> MainShown;
+	if (bBuiltFogMasked)
+	{
+		RevealRingsFromFog(MaskingFog);
+		MainShown.SetNumZeroed(Line.Num());
+		for (int32 i = 0; i < Line.Num(); ++i)
+		{
+			MainShown[i] = FogRevealedCells.Contains(FogCell(Line[i])) ? 1 : 0;
+		}
+	}
+	int32 TriangleCount = 0;
 
 	// One mesh for the tube and its roots (one draw call). Every tube is rings of vertices; the seam is
 	// doubled for the UVs. UV layout: see the class comment.
@@ -869,11 +933,18 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 		float OwnDistance = 0.f;   // UV0.x
 		FVector2f Main;            // UV1
 		FVector2f MainSide;        // UV2
+		float Fade = 1.f;          // fog of war: 1 shown .. 0 at the fog (UV3.y = 1 - Fade)
 	};
 
-	auto AddTube = [&](const TArray<FVector>& Points, const TArray<FTubeRing>& RingData, int32 Sides)
+	// Shown: per ring (fog of war), null = all. A piece between two rings is drawn when one of them is shown,
+	// so a revealed stretch reaches half a ring spacing on into the fog. The lengths for the growth are
+	// measured from every ring, shown or not - the material timing stays the same while the tube is uncovered.
+	auto AddTube = [&](const TArray<FVector>& Points, const TArray<FTubeRing>& RingData, int32 Sides, const TArray<uint8>* Shown)
 	{
 		const int32 Count = Points.Num();
+		auto PieceOn = [&](int32 Ring) { return !Shown || (Shown->IsValidIndex(Ring) && (*Shown)[Ring]) || (Shown->IsValidIndex(Ring + 1) && (*Shown)[Ring + 1]); };
+		TArray<int32> RingFirst;   // first vertex instance of a ring in Instances, INDEX_NONE = not built
+		RingFirst.Init(INDEX_NONE, Count);
 		TArray<FVertexInstanceID> Instances;
 		Instances.Reserve(Count * (Sides + 1));
 		FVector Side = FVector::RightVector;
@@ -887,6 +958,13 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 			}
 			const FVector Up = FVector::CrossProduct(Forward, Side).GetSafeNormal();
 			const FTubeRing& Data = RingData[Ring];
+			VisualGrowLength = FMath::Max(VisualGrowLength, Data.OwnDistance);
+			VisualTailMin = FMath::Min(VisualTailMin, 2.f * Data.Main.X - Data.OwnDistance);
+			if (!((Ring > 0 && PieceOn(Ring - 1)) || (Ring + 1 < Count && PieceOn(Ring))))
+			{
+				continue;
+			}
+			RingFirst[Ring] = Instances.Num();
 
 			for (int32 i = 0; i <= Sides; ++i)
 			{
@@ -904,23 +982,26 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 				UVs.Set(Instance, 0, FVector2f(Data.OwnDistance, float(i) / float(Sides)));
 				UVs.Set(Instance, 1, Data.Main);
 				UVs.Set(Instance, 2, Data.MainSide);
-				UVs.Set(Instance, 3, FVector2f(Data.Radius, 0.f));
+				UVs.Set(Instance, 3, FVector2f(Data.Radius, 1.f - Data.Fade));
 				Instances.Add(Instance);
 			}
-			VisualGrowLength = FMath::Max(VisualGrowLength, Data.OwnDistance);
-			VisualTailMin = FMath::Min(VisualTailMin, 2.f * Data.Main.X - Data.OwnDistance);
 		}
 
 		for (int32 Ring = 0; Ring + 1 < Count; ++Ring)
 		{
+			if (!PieceOn(Ring) || RingFirst[Ring] == INDEX_NONE || RingFirst[Ring + 1] == INDEX_NONE)
+			{
+				continue;
+			}
 			for (int32 i = 0; i < Sides; ++i)
 			{
-				const FVertexInstanceID A = Instances[Ring * (Sides + 1) + i];
-				const FVertexInstanceID B = Instances[Ring * (Sides + 1) + i + 1];
-				const FVertexInstanceID C = Instances[(Ring + 1) * (Sides + 1) + i];
-				const FVertexInstanceID D = Instances[(Ring + 1) * (Sides + 1) + i + 1];
+				const FVertexInstanceID A = Instances[RingFirst[Ring] + i];
+				const FVertexInstanceID B = Instances[RingFirst[Ring] + i + 1];
+				const FVertexInstanceID C = Instances[RingFirst[Ring + 1] + i];
+				const FVertexInstanceID D = Instances[RingFirst[Ring + 1] + i + 1];
 				Description.CreateTriangle(Group, { A, C, B });
 				Description.CreateTriangle(Group, { B, C, D });
+				TriangleCount += 2;
 			}
 		}
 	};
@@ -957,6 +1038,30 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 		}
 		VisualLength = Distance;
 	}
+	// Fog of war, soft edges: rings near a hidden one fade out (the material dithers by UV3.y) instead of the
+	// tube being cut off hard where the seen part ends.
+	if (bBuiltFogMasked && MainShown.Num() == Rings)
+	{
+		const float FadeLength = FMath::Max(1.f, FogEdgeFadeLength);
+		TArray<float> ToHidden;
+		ToHidden.Init(TNumericLimits<float>::Max(), Rings);
+		float Last = -TNumericLimits<float>::Max();
+		for (int32 Ring = 0; Ring < Rings; ++Ring)
+		{
+			if (!MainShown[Ring]) Last = MainDistance[Ring];
+			ToHidden[Ring] = FMath::Min(ToHidden[Ring], MainDistance[Ring] - Last);
+		}
+		Last = TNumericLimits<float>::Max();
+		for (int32 Ring = Rings - 1; Ring >= 0; --Ring)
+		{
+			if (!MainShown[Ring]) Last = MainDistance[Ring];
+			ToHidden[Ring] = FMath::Min(ToHidden[Ring], Last - MainDistance[Ring]);
+		}
+		for (int32 Ring = 0; Ring < Rings; ++Ring)
+		{
+			MainData[Ring].Fade = MainShown[Ring] ? FMath::Clamp(ToHidden[Ring] / FadeLength, 0.f, 1.f) : 0.f;
+		}
+	}
 	{
 		// Only the parts outside other pipelines; each piece reaches one ring into the hidden part, so its
 		// open end lies inside the pipeline it joins.
@@ -978,7 +1083,9 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 			const int32 Last = FMath::Min(End + 1, Rings - 1);
 			if (Last > First)
 			{
-				AddTube(TArray<FVector>(Line.GetData() + First, Last - First + 1), TArray<FTubeRing>(MainData.GetData() + First, Last - First + 1), Sides);
+				const TArray<uint8> PieceShown = bBuiltFogMasked ? TArray<uint8>(MainShown.GetData() + First, Last - First + 1) : TArray<uint8>();
+				AddTube(TArray<FVector>(Line.GetData() + First, Last - First + 1), TArray<FTubeRing>(MainData.GetData() + First, Last - First + 1), Sides,
+					bBuiltFogMasked ? &PieceShown : nullptr);
 			}
 			Ring = End + 1;
 		}
@@ -1026,8 +1133,13 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 				R.OwnDistance = Own0 + Length * T;
 				R.Main = FVector2f(MainDistance[Ring], 1.f + FMath::Lerp(Progress0, 1.f, T));
 				R.MainSide = FVector2f(MainSide[Ring].X, MainSide[Ring].Y);
+				R.Fade = MainData.IsValidIndex(Ring) ? MainData[Ring].Fade : 1.f;
 			}
-			AddTube(Points, Data, Sides);
+			// Fog of war: a root shows with the ring it leaves from. Built (or measured) either way, so the
+			// random sequence - and with it every other root - stays the same while the tube is uncovered.
+			const bool bRootShown = !bBuiltFogMasked || (MainShown.IsValidIndex(Ring) && MainShown[Ring]);
+			static const TArray<uint8> NoneShown;
+			AddTube(Points, Data, Sides, bRootShown ? nullptr : &NoneShown);
 
 			if (bFork && Random.FRand() < RootForkChance)
 			{
@@ -1073,6 +1185,11 @@ void ALogisticsPipeline::BuildTube(const TArray<FVector>& Line, const TArray<flo
 			}
 			Distance += RootSpacing * Random.FRandRange(0.5f, 1.5f);
 		}
+	}
+
+	if (TriangleCount == 0)
+	{
+		return;   // an enemy pipeline still entirely in the fog - nothing to draw yet (UpdateFogReveal rebuilds)
 	}
 
 	UMaterialInterface* Material = (bIsSupplyRoad && SupplyPipeMaterial) ? SupplyPipeMaterial.Get() : PipeMaterial.Get();

@@ -9,6 +9,10 @@
 #include "Components/VerticalBox.h"
 #include "Engine/Engine.h" // For UEnum
 #include "Engine/Texture2D.h"
+#include "Components/Button.h"
+#include "Blueprint/WidgetTree.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Controller/PlayerController/WidgetController.h"
 
 UResourceWidget::UResourceWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
@@ -26,6 +30,7 @@ void UResourceWidget::NativeConstruct()
     // This will be safely overwritten when SetTeamId is invoked later.
     PopulateResourceList();
     UpdateWidget();
+    ApplyWorkerRange(true);
 }
 
 
@@ -35,6 +40,8 @@ void UResourceWidget::SetTeamId(int32 Id)
     UpdateTeamIdText();
     PopulateResourceList();
     UpdateWidget(); // Initial update
+    // The server may only now know our team - send the range again.
+    ApplyWorkerRange(true);
 }
 
 void UResourceWidget::UpdateTeamIdText()
@@ -112,6 +119,13 @@ void UResourceWidget::PopulateResourceList()
             ++AddedCount;
         }
     }
+
+    // ClearChildren above removed the row too - put it back below the resources.
+    EnsureWorkerRangeRow();
+    if (WorkerRangeButton)
+    {
+        ResourceEntriesBox->AddChild(WorkerRangeButton);
+    }
 }
 
 void UResourceWidget::UpdateWidget()
@@ -165,5 +179,101 @@ void UResourceWidget::UpdateWidget()
                 Entry->SetResourceData(ResourceArray->ResourceType, ResourceNameText, ResourceAmount, WorkerCount, TeamId, IconTexture, MaxResourceAmount, bIsSupplyLike, bCollapseWorkerUI);
             }
         }
+    }
+}
+
+namespace ResourceWidgetLocal
+{
+    static const TCHAR* ConfigSection = TEXT("RTSUnitTemplate.Workers");
+    static const TCHAR* ConfigKey = TEXT("MaxResourceDistanceStep");
+}
+
+void UResourceWidget::EnsureWorkerRangeRow()
+{
+    if (WorkerRangeButton || WorkerRangeSteps.Num() == 0 || !WidgetTree)
+    {
+        return;
+    }
+    WorkerRangeButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("WorkerRangeButton"));
+    WorkerRangeText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("WorkerRangeText"));
+    if (!WorkerRangeButton || !WorkerRangeText)
+    {
+        return;
+    }
+
+    // Text only: no button frame, a faint tint on hover.
+    FButtonStyle Style = WorkerRangeButton->GetStyle();
+    Style.Normal.DrawAs = ESlateBrushDrawType::NoDrawType;
+    Style.Hovered.DrawAs = ESlateBrushDrawType::RoundedBox;
+    Style.Hovered.TintColor = FSlateColor(FLinearColor(1.f, 1.f, 1.f, 0.08f));
+    Style.Pressed.DrawAs = ESlateBrushDrawType::RoundedBox;
+    Style.Pressed.TintColor = FSlateColor(FLinearColor(1.f, 1.f, 1.f, 0.15f));
+    Style.NormalPadding = FMargin(4.f, 2.f);
+    Style.PressedPadding = FMargin(4.f, 2.f);
+    WorkerRangeButton->SetStyle(Style);
+    WorkerRangeButton->SetToolTipText(NSLOCTEXT("ResourceWidget", "WorkerRangeTip",
+        "How far from your bases workers look for resources on their own.\nNothing in range: they wait idle instead of walking into danger.\nClick to change."));
+
+    FSlateFontInfo Font = TeamIdText ? TeamIdText->GetFont() : WorkerRangeText->GetFont();
+    Font.Size = WorkerRangeFontSize;
+    WorkerRangeText->SetFont(Font);
+    WorkerRangeText->SetColorAndOpacity(FSlateColor(FLinearColor(0.75f, 0.85f, 0.95f, 1.f)));
+    WorkerRangeButton->AddChild(WorkerRangeText);
+    WorkerRangeButton->OnClicked.AddDynamic(this, &UResourceWidget::HandleWorkerRangeClicked);
+}
+
+void UResourceWidget::HandleWorkerRangeClicked()
+{
+    if (WorkerRangeSteps.Num() == 0)
+    {
+        return;
+    }
+    WorkerRangeStep = (FMath::Max(WorkerRangeStep, 0) + 1) % WorkerRangeSteps.Num();
+    if (GConfig)
+    {
+        GConfig->SetInt(ResourceWidgetLocal::ConfigSection, ResourceWidgetLocal::ConfigKey, WorkerRangeStep, GGameUserSettingsIni);
+        GConfig->Flush(false, GGameUserSettingsIni);
+    }
+    ApplyWorkerRange(true);
+}
+
+void UResourceWidget::ApplyWorkerRange(bool bSendToServer)
+{
+    if (WorkerRangeSteps.Num() == 0)
+    {
+        return;
+    }
+    if (WorkerRangeStep == INDEX_NONE)
+    {
+        int32 Saved = DefaultWorkerRangeStep;
+        if (GConfig)
+        {
+            GConfig->GetInt(ResourceWidgetLocal::ConfigSection, ResourceWidgetLocal::ConfigKey, Saved, GGameUserSettingsIni);
+        }
+        WorkerRangeStep = FMath::Clamp(Saved, 0, WorkerRangeSteps.Num() - 1);
+    }
+    const float Distance = WorkerRangeSteps[WorkerRangeStep];
+
+    if (WorkerRangeText)
+    {
+        // uu are centimetres.
+        const FText Value = Distance > 0.f
+            ? FText::Format(NSLOCTEXT("ResourceWidget", "WorkerRangeMeters", "{0} m"), FText::AsNumber(FMath::RoundToInt(Distance / 100.f)))
+            : NSLOCTEXT("ResourceWidget", "WorkerRangeUnlimited", "unlimited");
+        WorkerRangeText->SetText(FText::Format(NSLOCTEXT("ResourceWidget", "WorkerRange", "Worker range: {0}"), Value));
+    }
+
+    if (!bSendToServer)
+    {
+        return;
+    }
+    AWidgetController* Controller = Cast<AWidgetController>(GetOwningPlayer());
+    if (WorkerRangeButton && Controller)
+    {
+        WorkerRangeButton->SetVisibility(Controller->IsSpectatorController() ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+    }
+    if (Controller && Controller->IsLocalController() && !Controller->IsSpectatorController())
+    {
+        Controller->Server_SetMaxResourceDistance(Distance);
     }
 }

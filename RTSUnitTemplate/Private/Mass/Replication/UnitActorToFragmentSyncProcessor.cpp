@@ -340,6 +340,7 @@ void UUnitActorToFragmentSyncProcessor::SyncAITarget(const AUnitBase& Unit, FMas
 			{
 				AITarget.FriendlyTargetEntity = TargetHandle;
 				AITarget.LastKnownFriendlyLocation = Unit.FollowUnit->GetActorLocation();
+				AITarget.bFollowEngagesEnemies = Unit.bFollowAttacks;
 			}
 		}
 		else

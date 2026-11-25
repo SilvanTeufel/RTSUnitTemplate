@@ -171,6 +171,11 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	if (UWorld* World = GetWorld())
 	{
 		ActivationStartTime = World->GetTimeSeconds();
+		World->GetTimerManager().ClearTimer(AutoCancelTimer);
+		if (AutoCancelAfterSeconds > 0.f && ActorInfo && ActorInfo->IsNetAuthority())
+		{
+			World->GetTimerManager().SetTimer(AutoCancelTimer, this, &UGameplayAbilityBase::CheckAutoCancel, AutoCancelAfterSeconds, false);
+		}
 	}
 
 
@@ -279,7 +284,8 @@ void UGameplayAbilityBase::ActivateAbility(const FGameplayAbilitySpecHandle Hand
 	// overwrite the Casting actor state) AND after Super::ActivateAbility(), so the Blueprint can still
 	// see the pre-cast UnitState. It now lives below the Super call.
 
-	if (bStopMovementOnActivation && ActorInfo && ActorInfo->IsNetAuthority())
+	// Beside the slot the unit keeps doing what it does (a building keeps producing) - no stop, no state change.
+	if (bStopMovementOnActivation && !bRunsBesideAbilitySlot && ActorInfo && ActorInfo->IsNetAuthority())
 	{
 		if (AUnitBase* Unit = Cast<AUnitBase>(ActorInfo->OwnerActor.Get()))
 		{
@@ -555,6 +561,17 @@ void UGameplayAbilityBase::AddCastingFallback()
 		{
 			Unit->ResetCastInvariantStrikes();
 		}
+
+		// Aufladen: an der Einheit, so lange wie der Cast. Nicht am Muendungspunkt - die Einheit dreht
+		// sich erst waehrend des Casts zum Ziel, der Effekt stand dann neben ihr in der Luft.
+		// Nur der Server loest es aus - der Effekt geht als Multicast an alle, auf dem Client
+		// zusaetzlich gestartet stuende er doppelt.
+		AUnitBase* Caster = Cast<AUnitBase>(Unit);
+		if (Caster && Caster->HasAuthority() && (CastChargeVFX || CastChargeSound))
+		{
+			Caster->FireEffectsAtLocation(CastChargeVFX, CastChargeSound, CastChargeVFXScale, CastChargeSoundScale,
+				Caster->GetMassActorLocation(), FMath::Max(Caster->CastTime, 0.2f), Caster->GetActorRotation());
+		}
 	}
 }
 
@@ -563,8 +580,50 @@ void UGameplayAbilityBase::RemoveCastingFallback()
 	bBlueprintCastActive = false;
 }
 
+void UGameplayAbilityBase::CheckAutoCancel()
+{
+	if (!IsActive())
+	{
+		return;
+	}
+	const FGameplayAbilityActorInfo* Info = GetCurrentActorInfo();
+	AUnitBase* Unit = Info ? Cast<AUnitBase>(Info->OwnerActor.Get()) : nullptr;
+	if (Unit && Unit->GetUnitState() == UnitData::Casting)
+	{
+		// The cast runs - it ends the ability itself; look again in a while.
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(AutoCancelTimer, this, &UGameplayAbilityBase::CheckAutoCancel, FMath::Max(1.f, AutoCancelAfterSeconds * 0.5f), false);
+		}
+		return;
+	}
+	UE_LOG(LogTemp, Warning, TEXT("[AbilityWatchdog] %s on %s still active after %.0f s without a cast - cancelled."),
+		*GetName(), *GetNameSafe(Unit), AutoCancelAfterSeconds);
+	if (Unit && Unit->ActivatedAbilityInstance == this)
+	{
+		// The unit's own way: also clears its active ability and snapshot.
+		Unit->CancelCurrentAbility();
+	}
+	else
+	{
+		K2_CancelAbility();
+	}
+}
+
 void UGameplayAbilityBase::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
 {
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(AutoCancelTimer);
+		// A cancelled ability stops everything it still had running. A Blueprint timer (e.g. "wait until the unit is
+		// at the spot, then cast" every 0.5 s) would otherwise keep firing on the instance (InstancedPerActor lives
+		// on) and start the cast later anyway - the unit freezes long after the player gave another order.
+		if (bWasCancelled)
+		{
+			World->GetTimerManager().ClearAllTimersForObject(this);
+		}
+	}
+
 	// Zurueckgenommen, sobald die Ability endet. Sonst meldete die Instanz (InstancedPerActor
 	// ueberlebt die Aktivierung) beim naechsten Mal einen laufenden Cast, den es nicht gibt - und der
 	// Waechter wuerde die Einheit stattdessen INS Casting zwingen (Regel 1).

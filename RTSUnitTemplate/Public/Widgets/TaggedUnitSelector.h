@@ -102,6 +102,33 @@ protected:
     UPROPERTY(meta = (BindWidgetOptional))
     class UButton* WinConditionButton;
 
+    /**
+     * Hover-Tooltip der Fensterknoepfe (10.11.2026) - sie hatten keinen. Klasse mit den Textfeldern
+     * Name / TypeName / Description wie im ControlWidget (Astra Helix: BP_ToolTip_ControlKey_AH).
+     * Leer: einfacher Texttooltip. Ein im Blueprint gesetzter Tooltip bleibt unangetastet.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tooltip")
+    TSubclassOf<UUserWidget> ToggleButtonTooltipClass;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tooltip")
+    FText AttributeTreeTooltipTitle = NSLOCTEXT("TaggedUnitSelector", "AttributeTreeTitle", "Attribute Tree");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tooltip", meta = (MultiLine = true))
+    FText AttributeTreeTooltipText = NSLOCTEXT("TaggedUnitSelector", "AttributeTreeText",
+        "Opens the attribute tree of the selected unit.\nSpend earned attribute points on permanent upgrades such as health, damage or speed.\nThe button pulses while points are left to spend.");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tooltip")
+    FText AbilityChooserTooltipTitle = NSLOCTEXT("TaggedUnitSelector", "AbilityChooserTitle", "Ability Chooser");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tooltip", meta = (MultiLine = true))
+    FText AbilityChooserTooltipText = NSLOCTEXT("TaggedUnitSelector", "AbilityChooserText",
+        "Opens the ability chooser.\nPick the Offensive, Defensive, Attack and Throw abilities for a whole unit tier (T1-T4) at once.");
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Tooltip")
+    FText ToggleTooltipTypeName = NSLOCTEXT("TaggedUnitSelector", "ToggleType", "Left click - open / close");
+
+    void ApplyToggleTooltip(class UButton* Button, const FText& Title, const FText& Body);
+
     UFUNCTION()
     void HandleAttributeTreeToggleClicked();
 

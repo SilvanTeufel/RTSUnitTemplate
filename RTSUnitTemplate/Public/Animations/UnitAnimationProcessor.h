@@ -33,6 +33,16 @@ struct FISMAnimationData : public FTableRowBase
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations")
     float PlayRate = 1.0f;
+
+    /**
+     * Ground speed (uu/s of the VAT mesh at scale 1) at which this clip, played at rate 1, shows no
+     * foot sliding - measured from the feet of the source walk animation during ground contact.
+     * > 0: while the unit shows this clip, the play rate follows its real ground speed:
+     *      speed / (NoSlideSpeed * mesh scale). PlayRate is then ignored for this clip.
+     * 0:   fixed PlayRate (idle, attacks, clips without feet).
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animations", meta = (ClampMin = "0.0"))
+    float NoSlideSpeed = 0.0f;
 };
 
 USTRUCT()
@@ -234,6 +244,16 @@ protected:
         // fortbewegt. Siehe AnimGleitTempo.
         float    SekundenOhneVerschiebung = 0.f;
         bool     bSichtbarUnterwegs = false;
+
+        // [HoldAnimDiag] last logged values, so the diagnostic only writes on a change.
+        uint8    DiagLastReal = 0xFF;
+        uint8    DiagLastShown = 0xFF;
+        bool     bDiagLastHold = false;
+
+        // Speed-coupled locomotion clips (FISMAnimationData::NoSlideSpeed): ground speed smoothed
+        // over ~0.25 s. Per-frame speed jumps on the client (reconcile snaps), so one frame is no measure.
+        float    SmoothedSpeed = 0.f;
+        float    LastCoupledRateLog = -1.f;
     };
     TMap<FMassEntityHandle, FAnimStandWatch> AnimStandWatches;
 

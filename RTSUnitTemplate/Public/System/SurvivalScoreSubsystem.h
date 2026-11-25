@@ -52,9 +52,22 @@ class RTSUNITTEMPLATE_API USurvivalScoreSubsystem : public UGameInstanceSubsyste
 	GENERATED_BODY()
 
 public:
+	/**
+	 * Merkt sich einen Lauf, der NICHT in die Bestenliste gehoert (leichter Schwierigkeitsgrad).
+	 * Der Endbildschirm zeigt dann nur diese Zeit statt der Liste (GetScoreboardText).
+	 */
+	void SetUnrankedRun(const FString& MapName, float Seconds, int32 Waves, const FText& Difficulty);
+
 	/** Traegt einen Lauf ein und gibt zurueck, ob es eine neue Bestzeit war. */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Survival")
 	bool SubmitScore(const FString& MapName, const FString& PlayerName, float Seconds, int32 Waves);
+
+	/**
+	 * Der letzte gewertete Lauf auf der Karte dieser Welt war eine neue Bestzeit (SubmitScore). Der Endbildschirm
+	 * feiert ihn (UWinLoseWidget). OutPreviousBest = 0, wenn es der erste Lauf auf der Karte war.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Survival", meta = (WorldContext = "WorldContextObject"))
+	static bool WasNewHighscore(const UObject* WorldContextObject, float& OutSeconds, float& OutPreviousBest, int32& OutWaves);
 
 	/** Liefert die Bestenliste einer Karte, absteigend nach Zeit. */
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category = "RTSUnitTemplate|Survival")
@@ -81,12 +94,34 @@ public:
 	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate|Survival")
 	FString EosStatName = TEXT("SurvivalSeconds");
 
+	/**
+	 * The last finished run of this session: map, survived time, boss wave and whether it counted for the best
+	 * times (competitive). False when no run finished yet. The online leaderboard upload reads it.
+	 */
+	bool GetLastRun(FString& OutMap, float& OutSeconds, int32& OutWaves, bool& bOutRanked) const;
+
 	/** Wie viele Eintraege je Karte aufgehoben werden. */
 	UPROPERTY(BlueprintReadWrite, Category = "RTSUnitTemplate|Survival")
 	int32 MaxStoredPerMap = 25;
 
 private:
 	static const TCHAR* SlotName() { return TEXT("SurvivalScores"); }
+
+	// Der letzte nicht gewertete Lauf (Karte leer = der letzte Lauf war gewertet).
+	FString UnrankedMap;
+	float UnrankedSeconds = 0.f;
+	int32 UnrankedWaves = 0;
+	FText UnrankedDifficulty;
+	// Der letzte beendete Lauf ueberhaupt (fuer GetLastRun).
+	FString LastRunMap;
+	float LastRunSeconds = 0.f;
+	int32 LastRunWaves = 0;
+	bool bLastRunRanked = false;
+	// Die letzte neue Bestzeit (Karte leer = der letzte Lauf war keine).
+	FString HighscoreMap;
+	float HighscoreSeconds = 0.f;
+	float HighscorePrevious = 0.f;
+	int32 HighscoreWaves = 0;
 
 	TArray<FSurvivalScoreEntry> LadeListe(const FString& MapName) const;
 	void SpeichereListe(const FString& MapName, const TArray<FSurvivalScoreEntry>& Liste) const;

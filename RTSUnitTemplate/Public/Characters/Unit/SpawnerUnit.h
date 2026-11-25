@@ -46,7 +46,25 @@ public:
 
 	UPROPERTY(Replicated, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	FGameplayTag TalentTag;
-	
+
+	/**
+	 * Position of this unit in a tag selection (Ctrl+Q and the other key tags) and therefore in the order the
+	 * ability pages scroll through. Lower comes first; equal values fall back to the actor name, which keeps
+	 * units of one class together. Production buildings use their tech tier: T1 = 1 ... T4 = 4.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	int32 SelectionOrder = 0;
+
+	/** Sort predicate for selections: SelectionOrder, then actor name. */
+	static bool IsBeforeInSelection(const ASpawnerUnit& A, const ASpawnerUnit& B)
+	{
+		if (A.SelectionOrder != B.SelectionOrder)
+		{
+			return A.SelectionOrder < B.SelectionOrder;
+		}
+		return A.GetName() < B.GetName();
+	}
+
 	ASpawnerUnit(const FObjectInitializer& ObjectInitializer);
 	
 	virtual void BeginPlay() override;

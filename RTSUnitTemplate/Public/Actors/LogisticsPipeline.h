@@ -64,6 +64,7 @@ public:
 	ALogisticsPipeline();
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual bool UsesCarriers() const override { return false; }
 
@@ -297,6 +298,15 @@ protected:
 	/** What the tube was last built from - unchanged = no rebuild. */
 	TArray<FVector> BuiltLine;
 	TArray<float> BuiltScale;
+	TArray<uint8> BuiltMerged;
+
+	// --- Fog of war (state in ALogisticsRoad) ---
+
+	/** Marks the rings of BuiltLine the local fog shows now; true if a new cell was revealed. */
+	bool RevealRingsFromFog(AFogActor* Fog);
+
+	/** Timer: rebuilds the tube when the fog revealed more of it, or when it no longer needs masking. */
+	virtual void UpdateFogReveal() override;
 
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<class UCapsuleComponent>> WalkCollision;

@@ -17,6 +17,9 @@
 #include "Actors/EffectArea.h"
 #include "Mass/Abilitys/DecalScalingFragments.h"
 #include "MassEntityManager.h"
+#include "Actors/FogActor.h"
+#include "Engine/Texture2D.h"
+#include "TimerManager.h"
 #include "Mass/MassActorBindingComponent.h"
 
 UAreaDecalComponent::UAreaDecalComponent()
@@ -145,10 +148,190 @@ void UAreaDecalComponent::BeginPlay()
 	}
 
 	UpdateDecalVisuals();
+
+	if (bRevealToEnemiesByFog && GetNetMode() != NM_DedicatedServer && !HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
+	{
+		if (UWorld* World = GetWorld())
+		{
+			World->GetTimerManager().SetTimer(FogRevealTimer, this, &UAreaDecalComponent::UpdateFogReveal,
+				FMath::Max(0.05f, FogRevealInterval), true, FMath::FRandRange(0.f, FogRevealInterval));
+		}
+	}
 }
 
+void UAreaDecalComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (UWorld* World = GetWorld())
+	{
+		World->GetTimerManager().ClearTimer(FogRevealTimer);
+	}
+	Super::EndPlay(EndPlayReason);
+}
 
+int32 UAreaDecalComponent::GetOwnerTeamId() const
+{
+	if (const AUnitBase* Unit = Cast<AUnitBase>(GetOwner()))
+	{
+		return Unit->TeamId;
+	}
+	if (const AEffectArea* Area = Cast<AEffectArea>(GetOwner()))
+	{
+		return Area->TeamId;
+	}
+	return INDEX_NONE;
+}
 
+AFogActor* UAreaDecalComponent::GetMaskingFog()
+{
+	if (!bRevealToEnemiesByFog || !bUseRuntimeVirtualTexture || GetNetMode() == NM_DedicatedServer)
+	{
+		return nullptr;
+	}
+	const int32 OwnerTeam = GetOwnerTeamId();
+	if (OwnerTeam == INDEX_NONE)
+	{
+		return nullptr;
+	}
+	return AFogActor::FindMaskingFogFor(GetWorld(), OwnerTeam, CachedFogActor);
+}
+
+FIntPoint UAreaDecalComponent::FogCell(const FVector2D& P) const
+{
+	const float Size = FMath::Max(25.f, FogRevealCellSize);
+	return FIntPoint(FMath::FloorToInt(P.X / Size), FMath::FloorToInt(P.Y / Size));
+}
+
+void UAreaDecalComponent::UpdateFogReveal()
+{
+	if (!RVTWriterComponent || !bUseRuntimeVirtualTexture)
+	{
+		return;
+	}
+	AFogActor* Fog = GetMaskingFog();
+	bool bChanged = false;
+	const float Radius = CurrentDecalRadius;
+	if (!bDecalIsVisible || Radius <= 0.1f)
+	{
+		// Gone completely: forgotten - a new area here has to be seen again.
+		if (FogRevealedCells.Num() > 0)
+		{
+			FogRevealedCells.Reset();
+			bChanged = true;
+		}
+	}
+	else if (Fog)
+	{
+		// Only cells inside the area now: what grows later into the fog stays hidden until seen.
+		const FVector Centre = RVTWriterComponent->GetComponentLocation();
+		const float Cell = FMath::Max(25.f, FogRevealCellSize);
+		const int32 MinX = FMath::FloorToInt((Centre.X - Radius) / Cell);
+		const int32 MaxX = FMath::FloorToInt((Centre.X + Radius) / Cell);
+		const int32 MinY = FMath::FloorToInt((Centre.Y - Radius) / Cell);
+		const int32 MaxY = FMath::FloorToInt((Centre.Y + Radius) / Cell);
+		const float RadiusSq = FMath::Square(Radius + Cell * 0.5f);
+		for (int32 X = MinX; X <= MaxX; ++X)
+		{
+			for (int32 Y = MinY; Y <= MaxY; ++Y)
+			{
+				const FIntPoint Key(X, Y);
+				if (FogRevealedCells.Contains(Key))
+				{
+					continue;
+				}
+				const FVector P((X + 0.5f) * Cell, (Y + 0.5f) * Cell, Centre.Z);
+				if (FVector::DistSquared2D(P, Centre) <= RadiusSq && Fog->IsWorldPositionRevealed(P))
+				{
+					FogRevealedCells.Add(Key);
+					bChanged = true;
+				}
+			}
+		}
+	}
+
+	const bool bMasked = Fog != nullptr;
+	// The writer moved (a building lifts off / lands): the mask has to follow it.
+	const bool bMoved = bMasked && FogMaskTexels > 0
+		&& FVector2D::Distance(FVector2D(RVTWriterComponent->GetComponentLocation()), FogMaskOrigin) > FogRevealCellSize * 0.5f;
+	if (bChanged || bMoved || bMasked != bFogMasked)
+	{
+		bFogMasked = bMasked;
+		if (bMasked)
+		{
+			RebuildFogMaskTexture();
+		}
+		UpdateDecalVisuals();
+		if (RVTWriterComponent->IsVisible())
+		{
+			RVTWriterComponent->MarkRenderStateDirty();   // the virtual texture only redraws on a change
+		}
+	}
+}
+
+void UAreaDecalComponent::RebuildFogMaskTexture()
+{
+	if (!RVTWriterComponent)
+	{
+		return;
+	}
+	const float Size = RVTWriterComponent->GetComponentScale().X * 100.f;   // 100 uu base plane
+	const float Cell = FMath::Max(25.f, FogRevealCellSize);
+	const int32 Texels = FMath::Clamp(FMath::CeilToInt(Size / Cell), 4, 256);
+	if (!FogMaskTexture || FogMaskTexels != Texels)
+	{
+		FogMaskTexture = UTexture2D::CreateTransient(Texels, Texels, PF_B8G8R8A8);
+		if (!FogMaskTexture)
+		{
+			return;
+		}
+		// sRGB like the material's Color sampler; the mask only holds 0 and 255, which sRGB keeps exact.
+		FogMaskTexture->SRGB = true;
+		FogMaskTexture->Filter = TF_Bilinear;
+		FogMaskTexture->AddressX = TA_Clamp;
+		FogMaskTexture->AddressY = TA_Clamp;
+		FogMaskTexture->UpdateResource();
+		FogMaskTexels = Texels;
+	}
+	FogMaskOrigin = FVector2D(RVTWriterComponent->GetComponentLocation());
+	FogMaskSize = Size;
+
+	// Texel (x, y) covers world X / Y from the plane's corner; the material maps the same way (FogMaskOrigin,
+	// FogMaskSize), so the texture does not depend on the plane's UVs.
+	const int32 Count = Texels * Texels;
+	FColor* Pixels = new FColor[Count];
+	for (int32 Y = 0; Y < Texels; ++Y)
+	{
+		for (int32 X = 0; X < Texels; ++X)
+		{
+			const FVector2D P = FogMaskOrigin + FVector2D((X + 0.5f) / Texels - 0.5f, (Y + 0.5f) / Texels - 0.5f) * Size;
+			const uint8 Value = FogRevealedCells.Contains(FogCell(P)) ? 255 : 0;
+			Pixels[Y * Texels + X] = FColor(Value, Value, Value, 255);
+		}
+	}
+	FUpdateTextureRegion2D* Region = new FUpdateTextureRegion2D(0, 0, 0, 0, Texels, Texels);
+	FogMaskTexture->UpdateTextureRegions(0, 1, Region, Texels * sizeof(FColor), sizeof(FColor),
+		reinterpret_cast<uint8*>(Pixels),
+		[](uint8* SrcData, const FUpdateTextureRegion2D* Regions)
+		{
+			delete[] reinterpret_cast<FColor*>(SrcData);
+			delete Regions;
+		});
+}
+
+void UAreaDecalComponent::ApplyFogMaskParameters()
+{
+	if (!RVTWriterDynamicMaterial)
+	{
+		return;
+	}
+	const bool bUseMask = bFogMasked && FogMaskTexture && FogMaskSize > 1.f;
+	RVTWriterDynamicMaterial->SetScalarParameterValue(TEXT("FogMaskStrength"), bUseMask ? 1.f : 0.f);
+	if (bUseMask)
+	{
+		RVTWriterDynamicMaterial->SetTextureParameterValue(TEXT("FogMask"), FogMaskTexture);
+		RVTWriterDynamicMaterial->SetVectorParameterValue(TEXT("FogMaskOrigin"), FLinearColor(FogMaskOrigin.X, FogMaskOrigin.Y, 0.f, 0.f));
+		RVTWriterDynamicMaterial->SetScalarParameterValue(TEXT("FogMaskSize"), FogMaskSize);
+	}
+}
 
 void UAreaDecalComponent::OnRep_CurrentMaterial()
 {
@@ -264,8 +447,9 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 				RVTWriterComponent->SetReceivesDecals(false);
 			}
 
-			// Only show and write if radius is meaningful
-			bool bShouldBeActive = (CurrentDecalRadius > 0.1f);
+			// Only show and write if radius is meaningful - and for an enemy under fog of war once some of it
+			// was seen.
+			bool bShouldBeActive = (CurrentDecalRadius > 0.1f) && (!bFogMasked || FogRevealedCells.Num() > 0);
 			RVTWriterComponent->SetHiddenInGame(!bShouldBeActive);
 			RVTWriterComponent->SetVisibility(bShouldBeActive);
 
@@ -319,7 +503,7 @@ void UAreaDecalComponent::UpdateDecalVisuals()
 					FinalRadiusParam = FMath::RoundToFloat(FinalRadiusParam / Step) * Step;
 				}
 				RVTWriterDynamicMaterial->SetScalarParameterValue("Radius", FinalRadiusParam);
-
+				ApplyFogMaskParameters();
 			}
 			
 			// 3. RVT Assignment (only update if it changed)
@@ -426,6 +610,7 @@ void UAreaDecalComponent::Server_ActivateDecal_Implementation(UMaterialInterface
 			EffectFragment->EnemyEffect    = EnemyEffect;
 		
 		EffectFragment->EffectRadius   = NewRadius;
+		EffectFragment->bAffectFlyingUnits = bAffectFlyingUnits;
 	}
 }
 

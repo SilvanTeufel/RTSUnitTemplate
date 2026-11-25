@@ -100,6 +100,10 @@ void URunStateProcessor::Execute(FMassEntityManager& EntityManager, FMassExecuti
 
 }
 
+static TAutoConsoleVariable<int32> CVarRTS_RunSettleLog(
+    TEXT("RTS.RunSettleLog"), 0,
+    TEXT("1 = log every crowd-settle arrival ([RunSettle], server and client)."));
+
 namespace
 {
     // Wie lange nach einem Laufbefehl die Regel "nah am Ziel UND Geschwindigkeit null -> Idle" NICHT
@@ -171,6 +175,9 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                 if (!StateFrag.SwitchingStateClient)
                 {
                     StateFrag.StoredLocation = CurrentLocation;
+                    // Hold stops on the spot: without this the unit rolled on with its old velocity (measured
+                    // ~0.9 s / 130 uu after the hold) and the animation showed running all that time.
+                    VelocityList[i].Value = FVector::ZeroVector;
 
                     if (bHasPredList)
                     {
@@ -235,6 +242,28 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
                 else
                 {
                     StateFrag.NoProgressTimer += ExecutionInterval;
+                    // Crowd settle: close to the goal and no longer getting closer counts as arrived. In a group
+                    // the neighbours keep the unit from its own point and push it around, so neither the radius
+                    // nor "speed ~0" fires and it ran on the spot for 1-2 s (measured most on Vector).
+                    const bool bClientAnlaufVorbei = !bHasPredList || PredictionList[i].CommandPredictTime < 0.f
+                        || (World->GetTimeSeconds() - PredictionList[i].CommandPredictTime) >= RunVelocityIdleGraceSeconds;
+                    if (bClientAnlaufVorbei && DistZumZiel <= VelocityDistanceCheck && RunSettleSeconds > 0.f && StateFrag.NoProgressTimer >= RunSettleSeconds
+                        && !StateFrag.SwitchingStateClient)
+                    {
+                        if (CVarRTS_RunSettleLog.GetValueOnAnyThread())
+                        {
+                            UE_LOG(LogTemp, Log, TEXT("[RunSettle] CLIENT %s dist %.0f speed %.0f no progress %.2f s -> Idle"),
+                                ActorList[i].Get() ? *ActorList[i].Get()->GetName() : TEXT("?"), DistZumZiel, VelocityList[i].Value.Size2D(), StateFrag.NoProgressTimer);
+                        }
+                        StateFrag.NoProgressTimer = 0.f;
+                        if (bHasPredList)
+                        {
+                            PredictionList[i].bHasData = false;
+                        }
+                        VelocityList[i].Value = FVector::ZeroVector;
+                        SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                        continue;
+                    }
                     if (StateFrag.NoProgressTimer >= RunStallTimeout && !StateFrag.SwitchingStateClient)
                     {
                         UE_LOG(LogTemp, Warning,
@@ -281,7 +310,7 @@ void URunStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMassE
 
             const bool bHasDetectTag = DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct());
 
-            if (bHasDetectTag && !bHasFriendly)
+            if (bHasDetectTag && (!bHasFriendly || RTSUnitUtils::FollowerMayEngage(EntityManager, TargetFrag, CurrentLocation)))
             {
                 const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
                 if (TargetFrag.bHasValidTarget && bIsTargetActive)
@@ -397,6 +426,8 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
             {
                 StateFrag.StoredLocation = CurrentLocation;
                 StopMovement(MoveTargetList[i], World);
+                // See the client branch: stop at once instead of rolling out with the old velocity.
+                VelocityList[i].Value = FVector::ZeroVector;
                 SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
                 continue;
             }
@@ -446,6 +477,22 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
                 else
                 {
                     StateFrag.NoProgressTimer += ExecutionInterval;
+                    // Crowd settle (see the client branch): near the goal, no longer closing in, no path search.
+                    if (DistToDest <= VelocityDistanceCheck && RunSettleSeconds > 0.f && StateFrag.NoProgressTimer >= RunSettleSeconds
+                        && (World->GetTimeSeconds() - MoveTarget.GetCurrentActionStartTime()) >= RunVelocityIdleGraceSeconds
+                        && !(bHasNavPathFrag && NavPathList[i].bIsPathfindingInProgress))
+                    {
+                        if (CVarRTS_RunSettleLog.GetValueOnAnyThread())
+                        {
+                            UE_LOG(LogTemp, Log, TEXT("[RunSettle] SERVER %s dist %.0f speed %.0f no progress %.2f s -> Idle"),
+                                ActorList[i].Get() ? *ActorList[i].Get()->GetName() : TEXT("?"), DistToDest, VelocityList[i].Value.Size2D(), StateFrag.NoProgressTimer);
+                        }
+                        StateFrag.NoProgressTimer = 0.f;
+                        StopMovement(MoveTarget, World);
+                        VelocityList[i].Value = FVector::ZeroVector;
+                        SwitchToIdleState(EntityManager, ChunkContext, Entity, StateFrag, ActorList[i].GetMutable());
+                        continue;
+                    }
                     if (StateFrag.NoProgressTimer >= RunStallTimeout)
                     {
                         // Gleiche Triage wie bei [ChaseStall]: trennt "kein Befehl" von
@@ -513,7 +560,8 @@ void URunStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMassE
 
             const bool bIsTargetActive = EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
             
-            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && bIsTargetActive && !Stats.bCanMoveWhileAttacking && !bIsFriendlyActiveServer)
+            if (DoesEntityHaveTag(EntityManager,Entity, FMassStateDetectTag::StaticStruct()) && TargetFrag.bHasValidTarget && bIsTargetActive && !Stats.bCanMoveWhileAttacking
+                && (!bIsFriendlyActiveServer || RTSUnitUtils::FollowerMayEngage(EntityManager, TargetFrag, CurrentLocation)))
             {
                 SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                 continue;
@@ -586,6 +634,14 @@ void URunStateProcessor::SwitchToIdleState(FMassEntityManager& EntityManager, FM
             Pred->PredDesiredSpeed = 0.f;
             Pred->bHasData = true;
             Pred->PredSource = 17; // [PredDiag]
+        }
+        // Where the client stopped is its idle spot. Otherwise the client's Idle compared against the
+        // commanded point (or, without a client command, the spot from before the move) and predicted a run
+        // back to it every frame while the server held the unit - running on the spot. Returning to a spot is
+        // the server's call; once it really does, its replicated move brings the client along.
+        if (const FTransformFragment* IdleXf = EntityManager.GetFragmentDataPtr<FTransformFragment>(Entity))
+        {
+            StateFrag.StoredLocation = IdleXf->GetTransform().GetLocation();
         }
 
         StateFrag.SwitchingStateClient = true;

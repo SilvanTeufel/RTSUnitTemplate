@@ -29,7 +29,7 @@ static TAutoConsoleVariable<float> CVarHoverInterval(
 	TEXT("rts.hover.interval"),
 	-1.f,
 	TEXT("Abstand zwischen zwei Hover-Pruefungen in Sekunden. -1 = Wert aus dem Prozessor ")
-	TEXT("(HoverUpdateInterval, Vorgabe 0,05). Kleiner = schneller, aber teurer."),
+	TEXT("(HoverUpdateInterval, Vorgabe 0,02). Kleiner = schneller, aber teurer."),
 	ECVF_Default);
 
 static TAutoConsoleVariable<int32> CVarHoverDiag(
@@ -56,6 +56,50 @@ static TAutoConsoleVariable<int32> CVarHoverDebugDraw(
 // LastGroundLocation verankert statt am FTransformFragment - dessen Z lag bei einem Teil der
 // Gebaeude eine Kapselhalbhoehe zu tief, und genau so tief lag der Hover am WallTower.
 namespace HoverShapes = RTSUnitGeometry;
+
+// Writes the hover value into custom data slot 0 of everything that draws the unit: every pooled ISM
+// instance of the entity (body, weapons, extra parts), else the hovered instance, and the custom primitive
+// data of its non-instanced meshes (skeletal units). Materials read it through MF_HoverOutline.
+static void WriteHoverCustomData(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, AMassUnitBase* Unit, const FMassHoverFragment& HoverFrag, const bool bHovered)
+{
+	const AUnitBase* UnitBase = Cast<AUnitBase>(Unit);
+	const float Value = bHovered ? (UnitBase ? UnitBase->HoverCustomDataValue : 1.f) : 0.f;
+
+	bool bWritten = false;
+	if (const FMassUnitVisualFragment* Visual = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity))
+	{
+		for (const FMassUnitVisualInstance& Instance : Visual->VisualInstances)
+		{
+			UInstancedStaticMeshComponent* ISM = Instance.TargetISM.Get();
+			if (ISM && Instance.InstanceIndex != INDEX_NONE && ISM->NumCustomDataFloats > 0 && ISM->IsValidInstance(Instance.InstanceIndex))
+			{
+				ISM->SetCustomDataValue(Instance.InstanceIndex, 0, Value, true);
+				bWritten = true;
+			}
+		}
+	}
+	if (!bWritten && HoverFrag.HoveredInstanceIndex != INDEX_NONE)
+	{
+		if (UInstancedStaticMeshComponent* TargetISM = HoverFrag.HoveredISM.Get())
+		{
+			TargetISM->SetCustomDataValue(HoverFrag.HoveredInstanceIndex, 0, Value, true);
+		}
+		else if (Unit->ISMComponent)
+		{
+			Unit->ISMComponent->SetCustomDataValue(HoverFrag.HoveredInstanceIndex, 0, Value, true);
+		}
+	}
+
+	// Primitive custom data would light up every instance of a shared ISM, so only plain meshes get it.
+	TInlineComponentArray<UMeshComponent*> Meshes(Unit);
+	for (UMeshComponent* Mesh : Meshes)
+	{
+		if (Mesh && !Mesh->IsA<UInstancedStaticMeshComponent>())
+		{
+			Mesh->SetCustomPrimitiveDataFloat(0, Value);
+		}
+	}
+}
 
 UMassUnitHoverProcessor::UMassUnitHoverProcessor()
 {
@@ -406,16 +450,9 @@ void UMassUnitHoverProcessor::HandleCustomOverlapStart(FName SignalName, TArray<
 					{
 						Unit->CustomOverlapStart(HoverFrag->HoveredInstanceIndex, HoverFrag->HoveredMesh.Get());
 
-						if (this->bSetCustomDataValue && HoverFrag->HoveredInstanceIndex != INDEX_NONE)
+						if (this->bSetCustomDataValue)
 						{
-							if (UInstancedStaticMeshComponent* TargetISM = HoverFrag->HoveredISM.Get())
-							{
-								TargetISM->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 1.0f, true);
-							}
-							else if (Unit->ISMComponent)
-							{
-								Unit->ISMComponent->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 1.0f, true);
-							}
+							WriteHoverCustomData(EntityManager, Entity, Unit, *HoverFrag, /*bHovered=*/true);
 						}
 					}
 				}
@@ -453,16 +490,9 @@ void UMassUnitHoverProcessor::HandleCustomOverlapEnd(FName SignalName, TArray<FM
 					{
 						Unit->CustomOverlapEnd(HoverFrag->HoveredInstanceIndex, HoverFrag->HoveredMesh.Get());
 
-						if (this->bSetCustomDataValue && HoverFrag->HoveredInstanceIndex != INDEX_NONE)
+						if (this->bSetCustomDataValue)
 						{
-							if (UInstancedStaticMeshComponent* TargetISM = HoverFrag->HoveredISM.Get())
-							{
-								TargetISM->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 0.0f, true);
-							}
-							else if (Unit->ISMComponent)
-							{
-								Unit->ISMComponent->SetCustomDataValue(HoverFrag->HoveredInstanceIndex, 0, 0.0f, true);
-							}
+							WriteHoverCustomData(EntityManager, Entity, Unit, *HoverFrag, /*bHovered=*/false);
 						}
 					}
 				}

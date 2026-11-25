@@ -15,6 +15,8 @@
 #include "Engine/HitResult.h"
 #include "CollisionQueryParams.h"
 #include "Components/InstancedStaticMeshComponent.h"
+#include "GameFramework/Pawn.h"
+#include "Actors/EnergyWall.h"
 #include "Mass/MassUnitVisualFragments.h"
 #include "NavigationSystem.h"
 
@@ -140,6 +142,72 @@ namespace RTSUnitUtils
 		return TargetPos;
 	}
 
+	/**
+	 * Is the target up on a cliff (or down below one) with the terrain in between?
+	 *
+	 * WARUM (08.11.): Die Reichweite wird in 2D gemessen. Steht ein Ziel oben auf einem Plateau (eine Basis, die
+	 * WallTowers und Energiewaende zur Netzinsel machen), war es vom Klippenfuss aus "in Reichweite": die Xenos
+	 * blieben unten stehen, wechselten zwischen Pause und Attack und trafen nur die Klippe - statt den Hang hinauf zu
+	 * gehen. Nachgestellt in PIE: Skitterling am Klippenfuss 1068 vom Reactor, Pause/Attack im Wechsel, 0 Schaden.
+	 *
+	 * Nur bei deutlichem Hoehenunterschied (sonst keine Abfrage): ein Strahl gegen statische Welt (Landschaft,
+	 * Felsen, Klippen) vom Angreifer zum Ziel; trifft er weit vor dem Ziel auf, steht Gelaende dazwischen.
+	 * Fliegende Angreifer sind ausgenommen.
+	 *
+	 * WARUM (10.11.): Gebaeude wurden "unsterblich" - WallTowers und Gebaeude an manchen Stellen nahm niemand mehr
+	 * an, Nahkaempfer standen direkt darauf (gleiche XY) und schlugen nie zu. Drei Luecken:
+	 *  - Der Strahl traf die Darstellung von Einheiten (Visual-Manager-ISMs, eine Klasse AActor), Energiewaende und
+	 *    das Wirtsgebaeude eines erhoehten Turms - all das zaehlt nicht als Gelaende.
+	 *  - Der Ausnahmeabstand "Treffer am Ziel selbst" war 3D: von unten/oben (gleiche XY) liegt der Treffer am
+	 *    Boden/Dach des Gebaeudes, also eine Kapselhoehe vom Mittelpunkt weg - immer "dahinter". Jetzt 2D.
+	 *  - Steht der Angreifer innerhalb der Grundflaeche des Ziels, liegt kein Gelaende dazwischen.
+	 * Weil Chase die Einheit bei "dahinter" zum Zielmittelpunkt schickt, landete sie genau dort und blieb haengen.
+	 */
+	inline bool IsTerrainHit(const FHitResult& Hit)
+	{
+		const AActor* HitActor = Hit.GetActor();
+		if (!HitActor)
+		{
+			return true;   // Landschaft ohne Actor-Bezug, BSP
+		}
+		return !HitActor->IsA<APawn>() && !HitActor->IsA<AEnergyWall>() && HitActor->GetClass() != AActor::StaticClass();
+	}
+
+	inline bool IsTargetBehindTerrain(const UWorld* World, const FMassAgentCharacteristicsFragment& AttackerChar,
+		const FVector& AttackerLocation, const FVector& TargetLocation, const FMassAgentCharacteristicsFragment* TargetChar)
+	{
+		if (!World || AttackerChar.bIsFlying || FMath::Abs(TargetLocation.Z - AttackerLocation.Z) < 250.f)
+		{
+			return false;
+		}
+		const float TargetRadius = TargetChar ? TargetChar->CapsuleRadius : 0.f;
+		if (FVector::Dist2D(AttackerLocation, TargetLocation) <= TargetRadius + AttackerChar.CapsuleRadius + 150.f)
+		{
+			return false;
+		}
+		static const FName TraceTag(TEXT("RTSTargetBehindTerrain"));
+		FCollisionQueryParams Params(TraceTag, false);
+		const FVector From = AttackerLocation + FVector(0.f, 0.f, 50.f);
+		const FVector To = TargetLocation + FVector(0.f, 0.f, 50.f);
+		// Einheiten, Waende und Darstellungen ueberspringen: neu werfen und den Actor dabei auslassen.
+		for (int32 Versuch = 0; Versuch < 4; ++Versuch)
+		{
+			FHitResult Hit;
+			if (!World->LineTraceSingleByObjectType(Hit, From, To, FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+			{
+				return false;
+			}
+			if (!IsTerrainHit(Hit))
+			{
+				Params.AddIgnoredActor(Hit.GetActor());
+				continue;
+			}
+			// A hit on the target itself (a building's mesh) or right in front of it does not count - measured in 2D.
+			return FVector::Dist2D(Hit.ImpactPoint, To) > TargetRadius + 150.f;
+		}
+		return false;
+	}
+
 	inline float GetCombinedRadii(const FMassAgentCharacteristicsFragment& AttackerChar, const FTransform& AttackerTransform,
 		const FMassAgentCharacteristicsFragment* TargetChar, const FTransform* TargetTransform, const FVector& TargetLocation)
 	{
@@ -239,7 +307,11 @@ namespace RTSUnitUtils
 			DesiredPos.Z = FriendlyLoc.Z;
 		}
 
-		// Ensure DesiredPos is not in a dirty area
+		// Ensure DesiredPos is not in a dirty area (Flieger: egal - sie fliegen darueber, 10.11.2026)
+		if (CharacteristicsFrag && CharacteristicsFrag->bIsFlying)
+		{
+			return DesiredPos;
+		}
 		if (UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World))
 		{
 			FNavLocation DesiredNav;
@@ -286,9 +358,33 @@ namespace RTSUnitUtils
 		return DesiredPos;
 	}
 
+	/**
+	 * Darf eine folgende Einheit gerade Gegner angreifen? Nur bei Folgen mit Angriffsbefehl und solange sie nicht
+	 * weiter als FollowEngageLeash vom Anfuehrer weg ist - siehe FMassAITargetFragment::bFollowEngagesEnemies.
+	 */
+	inline bool FollowerMayEngage(FMassEntityManager& EntityManager, const FMassAITargetFragment& TargetFrag, const FVector& CurrentLocation)
+	{
+		if (!TargetFrag.bFollowEngagesEnemies || !EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity))
+		{
+			return false;
+		}
+		FVector FriendlyLoc = TargetFrag.LastKnownFriendlyLocation;
+		if (const FTransformFragment* FriendlyXform = EntityManager.GetFragmentDataPtr<FTransformFragment>(TargetFrag.FriendlyTargetEntity))
+		{
+			FriendlyLoc = FriendlyXform->GetTransform().GetLocation();
+		}
+		return FVector::DistSquared2D(CurrentLocation, FriendlyLoc) <= FMath::Square(TargetFrag.FollowEngageLeash);
+	}
+
 	inline bool IsWithinFollowThreshold(FMassEntityManager& EntityManager, const FMassEntityHandle Entity, const FMassAITargetFragment& TargetFrag, const FMassAgentCharacteristicsFragment* CharacteristicsFrag, const FVector& CurrentLocation, const FMassMoveTargetFragment& MoveTarget, UWorld* World, float AcceptanceMultiplier)
 	{
 		if (!EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity))
+		{
+			return true;
+		}
+
+		// Folgen mit Angriffsbefehl: im Kampf nicht zum Anfuehrer zurueckreissen, solange die Leine reicht.
+		if (FollowerMayEngage(EntityManager, TargetFrag, CurrentLocation))
 		{
 			return true;
 		}

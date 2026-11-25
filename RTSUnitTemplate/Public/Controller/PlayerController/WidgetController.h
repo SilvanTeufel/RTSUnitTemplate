@@ -117,5 +117,9 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void RemoveWorkerFromResource(EResourceType ResourceType, int TeamId);
+
+	/** Range limit for the automatic resource choice of this player's workers (uu, <= 0 = unlimited). Uses the server's team id. */
+	UFUNCTION(Server, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void Server_SetMaxResourceDistance(float Distance);
 };
 

@@ -3,6 +3,18 @@
 #include "Widgets/TaggedUnitButton.h"
 #include "Components/Button.h"
 #include "Components/Image.h"
+#include "Controller/Input/RTSKeyBindings.h"
+
+FText UTaggedUnitButton::GetKeyBindingTextOr(FText Fallback) const
+{
+	if (KeyAction == ERTSKeyAction::None)
+	{
+		return Fallback;
+	}
+	const URTSKeyBindingSubsystem* Bindings = URTSKeyBindingSubsystem::Get(this);
+	const FText KeyText = Bindings ? Bindings->GetChordText(KeyAction) : FText::GetEmpty();
+	return KeyText.IsEmpty() ? NSLOCTEXT("TaggedUnitButton", "NoKey", "No key assigned") : KeyText;
+}
 
 void UTaggedUnitButton::NativeConstruct()
 {

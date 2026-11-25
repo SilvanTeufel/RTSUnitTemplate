@@ -6,6 +6,8 @@
 #include "GameFramework/GameModeBase.h"
 #include "HAL/PlatformTime.h"
 #include "Characters/Unit/LevelUnit.h"
+#include "GAS/AutoAbility.h"
+#include "Engine/DataTable.h"
 
 AUpgradeGameState::AUpgradeGameState()
 {
@@ -17,6 +19,8 @@ void AUpgradeGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(AUpgradeGameState, TeamUpgradesArray);
     DOREPLIFETIME(AUpgradeGameState, TeamAttributeTrees);
+    DOREPLIFETIME(AUpgradeGameState, TeamAutoAbilityGrants);
+    DOREPLIFETIME(AUpgradeGameState, TreeAutoAbilityPicks);
 }
 
 void AUpgradeGameState::RequestTalentPause(ACameraControllerBase* Requester, float Seconds)
@@ -439,6 +443,157 @@ void AUpgradeGameState::ResetTeamAttributeTree(int32 TeamId)
     Tree->AvailablePoints += Tree->UsedPoints;
     Tree->UsedPoints = 0;
     Tree->Nodes.Reset();
+    RemoveTreeAutoAbilities(TeamId);
+}
+
+// --------------------------------------------------------------------------
+//  Automatische Faehigkeiten je Team
+// --------------------------------------------------------------------------
+
+void AUpgradeGameState::OnRep_AutoAbilities()
+{
+    OnAutoAbilitiesChanged.Broadcast();
+}
+
+void AUpgradeGameState::AutoAbilitiesChanged()
+{
+    ++AutoAbilityVersion;
+    OnAutoAbilitiesChanged.Broadcast();
+    ForceNetUpdate();
+}
+
+void AUpgradeGameState::GrantTeamAutoAbility(int32 TeamId, FGameplayTag UnitTag, TSubclassOf<UAutoAbility> Ability, bool bFromCard)
+{
+    if (!HasAuthority() || !Ability || !UnitTag.IsValid())
+    {
+        return;
+    }
+    FTeamAutoAbilityGrant* Grant = TeamAutoAbilityGrants.FindByPredicate([&](const FTeamAutoAbilityGrant& G)
+    {
+        return G.TeamId == TeamId && G.UnitTag == UnitTag && G.Ability == Ability;
+    });
+    if (!Grant)
+    {
+        Grant = &TeamAutoAbilityGrants.AddDefaulted_GetRef();
+        Grant->TeamId = TeamId;
+        Grant->UnitTag = UnitTag;
+        Grant->Ability = Ability;
+    }
+    (bFromCard ? Grant->bFromCard : Grant->bFromTree) = true;
+    UE_LOG(LogTemp, Log, TEXT("[AutoAbility] Team %d: %s for %s (%s)%s."), TeamId, *Ability->GetName(), *UnitTag.ToString(),
+        bFromCard ? TEXT("card") : TEXT("attribute tree"), GetAutoAbilityCooldownMultiplier(TeamId, Ability) < 1.f ? TEXT(" - chosen twice, cooldown halved") : TEXT(""));
+    AutoAbilitiesChanged();
+}
+
+void AUpgradeGameState::RemoveTreeAutoAbilities(int32 TeamId)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+    bool bChanged = false;
+    for (int32 i = TeamAutoAbilityGrants.Num() - 1; i >= 0; --i)
+    {
+        FTeamAutoAbilityGrant& Grant = TeamAutoAbilityGrants[i];
+        if (Grant.TeamId == TeamId && Grant.bFromTree)
+        {
+            Grant.bFromTree = false;
+            bChanged = true;
+            if (!Grant.bFromCard)
+            {
+                TeamAutoAbilityGrants.RemoveAt(i);
+            }
+        }
+    }
+    if (bChanged)
+    {
+        AutoAbilitiesChanged();
+    }
+}
+
+bool AUpgradeGameState::HasAutoAbilityFrom(int32 TeamId, TSubclassOf<UAutoAbility> Ability, bool bCard) const
+{
+    for (const FTeamAutoAbilityGrant& Grant : TeamAutoAbilityGrants)
+    {
+        if (Grant.TeamId == TeamId && Grant.Ability == Ability && (bCard ? Grant.bFromCard : Grant.bFromTree))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+float AUpgradeGameState::GetAutoAbilityCooldownMultiplier(int32 TeamId, TSubclassOf<UAutoAbility> Ability) const
+{
+    return Ability && HasAutoAbilityFrom(TeamId, Ability, true) && HasAutoAbilityFrom(TeamId, Ability, false) ? 0.5f : 1.f;
+}
+
+const FTreeAutoAbilityPick* AUpgradeGameState::FindTreeAutoAbilityPick(int32 TeamId, FName NodeId) const
+{
+    return TreeAutoAbilityPicks.FindByPredicate([&](const FTreeAutoAbilityPick& P) { return P.TeamId == TeamId && P.NodeId == NodeId; });
+}
+
+void AUpgradeGameState::EnsureTreeAutoAbilityPicks(int32 TeamId)
+{
+    if (!HasAuthority() || TeamId < 0 || TreePicksRolled.Contains(TeamId))
+    {
+        return;
+    }
+    const UDataTable* Table = FindTeamAttributeTreeTable(TeamId);
+    if (!Table)
+    {
+        return;
+    }
+    TreePicksRolled.Add(TeamId);
+    TArray<FName> RowNames = Table->GetRowNames();
+    RowNames.Sort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
+    // Two nodes of one unit type never draw the same ability while the pool has others.
+    TMap<FGameplayTag, TArray<UClass*>> Used;
+    int32 Drawn = 0;
+    for (const FName& RowName : RowNames)
+    {
+        const FAttributeTreeNodeRow* Row = Table->FindRow<FAttributeTreeNodeRow>(RowName, TEXT("EnsureTreeAutoAbilityPicks"), false);
+        if (!Row || !Row->bAutoAbilitySlot || Row->AutoAbilityPool.Num() == 0 || FindTreeAutoAbilityPick(TeamId, RowName))
+        {
+            continue;
+        }
+        TArray<UClass*>& Taken = Used.FindOrAdd(Row->UnitTag);
+        TArray<TSubclassOf<UAutoAbility>> Candidates;
+        for (const TSubclassOf<UAutoAbility>& Ability : Row->AutoAbilityPool)
+        {
+            if (Ability && !Taken.Contains(Ability.Get()))
+            {
+                Candidates.Add(Ability);
+            }
+        }
+        if (Candidates.Num() == 0)
+        {
+            Candidates = Row->AutoAbilityPool;
+        }
+        FTreeAutoAbilityPick& Pick = TreeAutoAbilityPicks.AddDefaulted_GetRef();
+        Pick.TeamId = TeamId;
+        Pick.NodeId = RowName;
+        Pick.UnitTag = Row->UnitTag;
+        Pick.Ability = Candidates[FMath::RandRange(0, Candidates.Num() - 1)];
+        Taken.Add(Pick.Ability.Get());
+        ++Drawn;
+        UE_LOG(LogTemp, Log, TEXT("[AutoAbility] Team %d: tree node %s draws %s."), TeamId, *RowName.ToString(), *GetNameSafe(Pick.Ability.Get()));
+    }
+    if (Drawn > 0)
+    {
+        AutoAbilitiesChanged();
+    }
+}
+
+bool AUpgradeGameState::ApplyTreeAutoAbilityNode(int32 TeamId, FName NodeId)
+{
+    const FTreeAutoAbilityPick* Pick = FindTreeAutoAbilityPick(TeamId, NodeId);
+    if (!HasAuthority() || !Pick || !Pick->Ability)
+    {
+        return false;
+    }
+    GrantTeamAutoAbility(TeamId, Pick->UnitTag, Pick->Ability, /*bFromCard=*/false);
+    return true;
 }
 
 const UDataTable* AUpgradeGameState::FindTeamAttributeTreeTable(int32 TeamId) const

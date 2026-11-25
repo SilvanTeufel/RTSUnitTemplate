@@ -17,6 +17,26 @@ void UTaggedUnitSelector::NativeConstruct()
 {
     Super::NativeConstruct();
 
+    // Welche Taste den Knopf ausloest, kommt aus der Tastaturbelegung - der Tooltip zeigt sie
+    // (UTaggedUnitButton::GetKeyBindingTextOr), statt eines festen "Ctrl + 1".
+    const TPair<UTaggedUnitButton*, ERTSKeyAction> KeyButtons[] = {
+        { TagButtonCtrl1, ERTSKeyAction::SelectGroup1 }, { TagButtonCtrl2, ERTSKeyAction::SelectGroup2 },
+        { TagButtonCtrl3, ERTSKeyAction::SelectGroup3 }, { TagButtonCtrl4, ERTSKeyAction::SelectGroup4 },
+        { TagButtonCtrl5, ERTSKeyAction::SelectGroup5 }, { TagButtonCtrl6, ERTSKeyAction::SelectGroup6 },
+        { TagButtonAlt1, ERTSKeyAction::SelectAltGroup1 }, { TagButtonAlt2, ERTSKeyAction::SelectAltGroup2 },
+        { TagButtonAlt3, ERTSKeyAction::SelectAltGroup3 }, { TagButtonAlt4, ERTSKeyAction::SelectAltGroup4 },
+        { TagButtonAlt5, ERTSKeyAction::SelectAltGroup5 }, { TagButtonAlt6, ERTSKeyAction::SelectAltGroup6 },
+        { TagButtonCtrlQ, ERTSKeyAction::SelectGroupQ }, { TagButtonCtrlW, ERTSKeyAction::SelectGroupW },
+        { TagButtonCtrlE, ERTSKeyAction::SelectGroupE }, { TagButtonCtrlR, ERTSKeyAction::SelectGroupR },
+    };
+    for (const TPair<UTaggedUnitButton*, ERTSKeyAction>& Entry : KeyButtons)
+    {
+        if (Entry.Key && Entry.Key->KeyAction == ERTSKeyAction::None)
+        {
+            Entry.Key->KeyAction = Entry.Value;
+        }
+    }
+
     // Die beiden Knoepfe sind optional - ein Blueprint ohne sie ist kein Fehler.
     if (AttributeTreeToggleButton)
     {
@@ -30,6 +50,36 @@ void UTaggedUnitSelector::NativeConstruct()
     {
         WinConditionButton->OnClicked.AddUniqueDynamic(this, &UTaggedUnitSelector::HandleWinConditionClicked);
     }
+
+    ApplyToggleTooltip(AttributeTreeToggleButton, AttributeTreeTooltipTitle, AttributeTreeTooltipText);
+    ApplyToggleTooltip(AbilityChooserToggleButton, AbilityChooserTooltipTitle, AbilityChooserTooltipText);
+}
+
+void UTaggedUnitSelector::ApplyToggleTooltip(UButton* Button, const FText& Title, const FText& Body)
+{
+    // Vorhandenes nie ueberschreiben - SetToolTipText ersetzt ein Tooltip-Widget (siehe UnitWidgetSelector).
+    if (!Button || Button->GetToolTip() || Button->ToolTipWidgetDelegate.IsBound() || !Button->GetToolTipText().IsEmpty())
+    {
+        return;
+    }
+    UUserWidget* Tip = ToggleButtonTooltipClass ? CreateWidget<UUserWidget>(this, ToggleButtonTooltipClass) : nullptr;
+    if (!Tip)
+    {
+        Button->SetToolTipText(FText::Format(NSLOCTEXT("TaggedUnitSelector", "PlainTip", "{0}\n{1}"), Title, Body));
+        return;
+    }
+    // Felder per Namen fuellen, wie UControlWidget::ApplyTooltip.
+    auto SetText = [Tip](const TCHAR* Name, const FText& Value)
+    {
+        if (FTextProperty* Property = FindFProperty<FTextProperty>(Tip->GetClass(), Name))
+        {
+            Property->SetPropertyValue_InContainer(Tip, Value);
+        }
+    };
+    SetText(TEXT("Name"), Title);
+    SetText(TEXT("TypeName"), ToggleTooltipTypeName);
+    SetText(TEXT("Description"), Body);
+    Button->SetToolTip(Tip);
 }
 
 void UTaggedUnitSelector::ShowWinCondition()
@@ -95,6 +145,16 @@ void UTaggedUnitSelector::NativeTick(const FGeometry& MyGeometry, float InDeltaT
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
 
+    // A switched-off AbilityChooser (UAbilityChooser::bChooserEnabled) has no button.
+    if (AbilityChooserToggleButton && AbilityChooserToggleButton->GetVisibility() != ESlateVisibility::Collapsed)
+    {
+        const AExtendedCameraBase* Camera = GetOwningCamera();
+        if (Camera && Camera->AbilityChooserWidget && !Camera->AbilityChooserWidget->bChooserEnabled)
+        {
+            AbilityChooserToggleButton->SetVisibility(ESlateVisibility::Collapsed);
+        }
+    }
+
     if (!AttributeTreeToggleButton)
     {
         return;
@@ -152,7 +212,7 @@ void UTaggedUnitSelector::ToggleAttributeTree()
 void UTaggedUnitSelector::ToggleAbilityChooser()
 {
     AExtendedCameraBase* Camera = GetOwningCamera();
-    if (!Camera || !Camera->AbilityChooserWidget)
+    if (!Camera || !Camera->AbilityChooserWidget || !Camera->AbilityChooserWidget->bChooserEnabled)
     {
         return;
     }

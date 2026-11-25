@@ -296,7 +296,9 @@ void UPauseStateProcessor::ServerExecute(FMassEntityManager& EntityManager, FMas
         // Richtung: bei Reichweite 900 sind 15 % ganze 135 Einheiten, und die Einheiten parkten
         // sichtbar auf Abstand. 25 Einheiten sind kleiner als jede Angriffsreichweite im Spiel
         // und faellt optisch nicht auf.
-        if (Dist > AttackRange + PauseRechaseEpsilon)
+        // Auch in 2D-Reichweite weiter verfolgen, wenn Gelaende dazwischen steht (RTSUnitUtils::IsTargetBehindTerrain).
+        if (Dist > AttackRange + PauseRechaseEpsilon
+            || RTSUnitUtils::IsTargetBehindTerrain(World, CharFrag, Transform.GetLocation(), MutableTargetFrag.LastKnownLocation, TargetCharFrag))
         {
             GoAfterTarget();
         }
@@ -422,9 +424,12 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
     const float CombinedRadii = RTSUnitUtils::GetCombinedRadii(CharFrag, Transform, TargetCharFrag, TargetTransform, TargetFrag.LastKnownLocation);
     const float AttackRange = Stats.AttackRange + CombinedRadii;
 
+    const bool bBehindTerrain = bIsTargetActive
+        && RTSUnitUtils::IsTargetBehindTerrain(EntityManager.GetWorld(), CharFrag, Transform.GetLocation(), TargetFrag.LastKnownLocation, TargetCharFrag);
+
     if (bIsTargetActive)
     {
-        if (Dist <= AttackRange)
+        if (Dist <= AttackRange && !bBehindTerrain)
         {
             if (StateFrag.StateTimerClient >= Stats.PauseDuration)
             {
@@ -449,7 +454,7 @@ void UPauseStateProcessor::ClientExecute(FMassEntityManager& EntityManager, FMas
                 }
             }
         }
-        else if (Dist > AttackRange + 150.f)
+        else if (Dist > AttackRange + 150.f || bBehindTerrain)
         {
             if (!StateFrag.SwitchingStateClient)
             {

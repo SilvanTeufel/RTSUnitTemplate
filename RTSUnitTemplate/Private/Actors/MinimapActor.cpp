@@ -486,7 +486,7 @@ void AMinimapActor::CaptureMapTopography()
         for (AActor* Actor : WorkAreaActors)
         {
             AWorkArea* WorkArea = Cast<AWorkArea>(Actor);
-            if (!WorkArea) continue;
+            if (!WorkArea || WorkArea->bDepleted) continue;
 
             FColor MarkerColor;
             switch (WorkArea->Type)

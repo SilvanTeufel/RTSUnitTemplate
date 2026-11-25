@@ -30,6 +30,12 @@ struct FAttributeTreeSlateNode
 	// independent owner, which is why UAttributeTreeWidget owns those as UPROPERTYs instead.
 	FSlateBrush IconBrush;
 	bool bHasIcon = false;
+	/** Branch of the tree (tier T0..T4) this node belongs to; INDEX_NONE = no branch marking. */
+	int32 Branch = INDEX_NONE;
+	/** Colour of the branch: outer arc, label, tinted ring guides and links. */
+	FLinearColor BranchColor = FLinearColor::White;
+	/** Label drawn at the outer end of the branch ("T0 Buildings"); taken from the first node of a branch. */
+	FText BranchLabel;
 };
 
 // Live queries / actions back into the owning UMG widget (which reads the replicated ALevelUnit).
@@ -108,6 +114,8 @@ public:
 		SLATE_EVENT(FAttrTreeOnInvest, OnInvest)
 		SLATE_EVENT(FAttrTreeOnReset, OnReset)
 		SLATE_EVENT(FAttrTreeOnClose, OnClose)
+		/** False = Close and Back to Game are hidden (the talent pause waits for a choice). */
+		SLATE_ATTRIBUTE(bool, CanClose)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -166,6 +174,20 @@ private:
 	TMap<FName, int32> IdToIndex;
 	int32 MaxRing = 0;
 
+	/** One per branch, built in SetNodes: where its sector lies (degrees, clockwise from the top). */
+	struct FBranchInfo
+	{
+		float CenterAngle = 0.f;
+		float MinDelta = 0.f;
+		float MaxDelta = 0.f;
+		int32 MinRing = 0;
+		int32 MaxRing = 0;
+		FLinearColor Color = FLinearColor::White;
+		FText Label;
+	};
+	TArray<FBranchInfo> Branches;
+	FSlateFontInfo BranchFont;
+
 	// Style
 	float RingSpacing = 90.f;
 	float NodeRadius = 26.f;
@@ -199,6 +221,8 @@ private:
 	FAttrTreeOnInvest OnInvestDelegate;
 	FAttrTreeOnReset OnResetDelegate;
 	FAttrTreeOnClose OnCloseDelegate;
+	TAttribute<bool> CanCloseAttr;
+	bool ShowsClose() const { return OnCloseDelegate.IsBound() && CanCloseAttr.Get(true); }
 
 	// Render resources
 	FSlateBrush NodeBackgroundBrush;

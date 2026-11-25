@@ -14,6 +14,7 @@
 #include "Brushes/SlateColorBrush.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "GAS/AutoAbility.h"
 
 // A Slate brush material MUST have Material Domain = "User Interface". This is enforced only at shader
 // permutation level (the Slate material shaders compile solely for MD_UI) and FSlateBrush's own ensure
@@ -90,7 +91,8 @@ TSharedRef<SWidget> UAttributeTreeWidget::RebuildWidget()
 		.OnIsUnlocked(FAttrTreeIsUnlocked::CreateUObject(this, &UAttributeTreeWidget::HandleIsUnlocked))
 		.OnInvest(FAttrTreeOnInvest::CreateUObject(this, &UAttributeTreeWidget::HandleInvest))
 		.OnReset(FAttrTreeOnReset::CreateUObject(this, &UAttributeTreeWidget::HandleReset))
-		.OnClose(FAttrTreeOnClose::CreateUObject(this, &UAttributeTreeWidget::HandleClose));
+		.OnClose(FAttrTreeOnClose::CreateUObject(this, &UAttributeTreeWidget::HandleClose))
+		.CanClose_UObject(this, &UAttributeTreeWidget::HandleCanClose);
 
 	RefreshNodes();
 	return MyTree.ToSharedRef();
@@ -288,9 +290,58 @@ void UAttributeTreeWidget::RefreshNodes()
 			N.ToolTipText  = Row->ToolTipText;
 			N.BaseColor    = Row->NodeColor;
 
-			if (Row->Icon)
+			// Tier of the branch from the row name: "T2_03", "AA_T2_Mid" -> 2.
 			{
-				N.IconBrush.SetResourceObject(Row->Icon);
+				const FString Name = RowName.ToString();
+				for (int32 Pos = 0; Pos + 1 < Name.Len(); ++Pos)
+				{
+					const bool bStartOk = Pos == 0 || Name[Pos - 1] == TCHAR('_');
+					const bool bEndOk = Pos + 2 >= Name.Len() || Name[Pos + 2] == TCHAR('_');
+					if (Name[Pos] == TCHAR('T') && FChar::IsDigit(Name[Pos + 1]) && bStartOk && bEndOk)
+					{
+						N.Branch = Name[Pos + 1] - TCHAR('0');
+						break;
+					}
+				}
+				if (N.Branch != INDEX_NONE)
+				{
+					N.BranchColor = TierColors.IsValidIndex(N.Branch) ? TierColors[N.Branch] : N.BaseColor;
+					N.BranchLabel = TierLabels.IsValidIndex(N.Branch) ? TierLabels[N.Branch] : FText::FromString(FString::Printf(TEXT("T%d"), N.Branch));
+				}
+			}
+
+			UTexture2D* NodeIcon = Row->Icon;
+			if (Row->bAutoAbilitySlot)
+			{
+				// Auto ability node: the ability drawn for this team (replicated), its text and icon.
+				const int32 TeamId = MyTeamId();
+				const FTreeAutoAbilityPick* Pick = GameStateRef->FindTreeAutoAbilityPick(TeamId, RowName);
+				const UAutoAbility* Ability = Pick && Pick->Ability ? Pick->Ability->GetDefaultObject<UAutoAbility>() : nullptr;
+				const FText TypeName = Row->DisplayName.IsEmpty() ? FText::FromString(Row->UnitTag.ToString()) : Row->DisplayName;
+				if (Ability)
+				{
+					const bool bByCard = GameStateRef->HasAutoAbilityFrom(TeamId, Pick->Ability, true);
+					N.DisplayName = Ability->GetAutoName();
+					N.ToolTipTitle = FText::Format(NSLOCTEXT("AttributeTree", "AutoTitle", "Auto ability: {0} ({1})"), Ability->GetAutoName(), TypeName);
+					FString Body = FString::Printf(TEXT("Switches this automatic ability on for every unit of this type (%s) - the ones you have and every one you build later.\n\n%s"),
+						*TypeName.ToString(), *Ability->GetAutoDescription(bByCard ? 0.5f : 1.f).ToString());
+					if (bByCard)
+					{
+						Body += TEXT("\n\nYou chose it as a card already: taking it here halves its cooldown.");
+					}
+					N.ToolTipText = FText::FromString(Body);
+					NodeIcon = Ability->AbilityIcon ? Ability->AbilityIcon : NodeIcon;
+				}
+				else
+				{
+					N.ToolTipTitle = FText::Format(NSLOCTEXT("AttributeTree", "AutoTitleOpen", "Auto ability ({0})"), TypeName);
+					N.ToolTipText = NSLOCTEXT("AttributeTree", "AutoOpen", "A random automatic ability for this unit type, drawn when the match starts.");
+				}
+			}
+
+			if (NodeIcon)
+			{
+				N.IconBrush.SetResourceObject(NodeIcon);
 				N.IconBrush.ImageSize = FVector2D(NodeRadius * 1.6f, NodeRadius * 1.6f);
 				N.IconBrush.DrawAs = ESlateBrushDrawType::Image;
 				N.bHasIcon = true;
@@ -303,6 +354,18 @@ void UAttributeTreeWidget::RefreshNodes()
 	// Belegen, dass ALLE Zeilen gezeichnet werden und nicht nur der Teilbaum einer Stufe.
 	// Ohne diese Zeile ist von aussen nicht zu unterscheiden, ob der Baum vollstaendig ist oder
 	// ob der alte Tagfilter noch greift - genau das war der gemeldete Fehler.
+	// Redraw when the drawn / granted auto abilities change (they replicate after the widget is built).
+	if (GameStateRef && BoundGameState.Get() != GameStateRef)
+	{
+		if (AUpgradeGameState* Old = BoundGameState.Get())
+		{
+			Old->OnAutoAbilitiesChanged.RemoveAll(this);
+		}
+		AUpgradeGameState* Mutable = const_cast<AUpgradeGameState*>(GameStateRef);
+		Mutable->OnAutoAbilitiesChanged.AddUObject(this, &UAttributeTreeWidget::RefreshNodes);
+		BoundGameState = Mutable;
+	}
+
 	UE_LOG(LogTemp, Log, TEXT("[Attributbaum] Widget zeichnet %d Knoten aus '%s'."),
 		SlateNodes.Num(),
 		Table ? *Table->GetName() : TEXT("-"));
@@ -421,8 +484,18 @@ void UAttributeTreeWidget::HandleInvest(FName NodeId)
 	}
 }
 
+bool UAttributeTreeWidget::HandleCanClose() const
+{
+	const ACameraControllerBase* PC = Cast<ACameraControllerBase>(GetOwningPlayer());
+	return !PC || !PC->IsTalentPauseHoldingTree();
+}
+
 void UAttributeTreeWidget::HandleClose()
 {
+	if (!HandleCanClose())
+	{
+		return;
+	}
 	// Schliessen heisst: zurueck auf die Startansicht, nicht nur "unsichtbar machen".
 	//
 	// Wuerde hier nur SetVisibility(Collapsed) stehen, bliebe TabMode auf 4 stehen - der

@@ -197,7 +197,7 @@ const AProjectile* UProjectileVisualManager::GetProjectileCDO(TSubclassOf<AProje
 	return Cast<AProjectile>(ProjectileClass->GetDefaultObject());
 }
 
-void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible, float ScaleMultiplier)
+void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible, float ScaleMultiplier, float DistanceToTarget, const FVector& TargetLocation)
 {
 	if (!CDO || !bVisible) return;
 	if (!CDO->SpawnVFX && !CDO->SpawnSound) return;
@@ -217,8 +217,19 @@ void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FT
 		// bAutoDestroy (default true) already covers one-shot systems; the kill delay is the backstop
 		// for a looping one. Deliberately not registered in APerformanceUnit::ActiveNiagara - that
 		// array is only ever emptied by StopAllEffects, so a per-shot effect would accumulate there.
-		if (UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, CDO->SpawnVFX, Loc, Rot, CDO->ScaleSpawnVFX * ScaleMultiplier))
+		// A Z-beam stands on the target and points back at the muzzle (see AProjectile::bSpawnVFXFromTargetAlongZ).
+		const bool bFromTarget = CDO->bSpawnVFXFromTargetAlongZ && !TargetLocation.IsNearlyZero() && DistanceToTarget > 0.f;
+		const FVector VFXLoc = bFromTarget ? TargetLocation : Loc;
+		const FRotator VFXRot = bFromTarget ? FRotationMatrix::MakeFromZ((Loc - TargetLocation).GetSafeNormal()).Rotator() : Rot;
+		if (UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, CDO->SpawnVFX, VFXLoc, VFXRot, CDO->ScaleSpawnVFX * ScaleMultiplier))
 		{
+			if (!CDO->SpawnVFXLengthParameter.IsNone() && DistanceToTarget > 0.f)
+			{
+				// The component is scaled; the beam length is in its local space.
+				const FVector CompScale = NC->GetComponentScale();
+				const float AxisScale = FMath::Max(bFromTarget ? CompScale.Z : CompScale.X, KINDA_SMALL_NUMBER);
+				NC->SetVariableFloat(CDO->SpawnVFXLengthParameter, DistanceToTarget * CDO->SpawnVFXLengthScale / AxisScale);
+			}
 			if (KillDelay > 0.f)
 			{
 				TWeakObjectPtr<UNiagaraComponent> WeakNC = NC;
@@ -235,8 +246,15 @@ void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FT
 		}
 	}
 
-	if (CDO->SpawnSound)
+	// Multishot & co. fire several projectiles of one class in the same frame from (almost) the same muzzle:
+	// one shot sound for the volley instead of a stacked, phasing copy per projectile.
+	const bool bSameVolley = LastSpawnSoundCDO.Get() == CDO && LastSpawnSoundFrame == GFrameCounter
+		&& FVector::DistSquared(LastSpawnSoundLocation, Loc) < FMath::Square(300.f);
+	if (CDO->SpawnSound && !bSameVolley)
 	{
+		LastSpawnSoundCDO = CDO;
+		LastSpawnSoundFrame = GFrameCounter;
+		LastSpawnSoundLocation = Loc;
 		float Multiplier = CDO->ScaleSpawnSound;
 		if (UGameInstance* GI = World->GetGameInstance())
 		{
@@ -268,10 +286,11 @@ void UProjectileVisualManager::FireSpawnEffects(const AProjectile* CDO, const FT
 	}
 }
 
-FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& Transform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale, float Damage, int32 MaxPiercedTargets, bool bIsPredicted, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3, FEffectAreaInfo AreaInfo)
+FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<AProjectile> ProjectileClass, const FTransform& InTransform, AActor* Shooter, AActor* Target, FVector TargetLocation, FMassEntityHandle ShooterEntity, FMassEntityHandle TargetEntity, float ProjectileSpeed, int32 ShooterTeamId, bool bFollowTarget, float HomingInitialAngle, float HomingRotationSpeed, float HomingMaxSpiralRadius, float HomingInterpSpeed, FMassCommandBuffer* CommandBuffer, FVector Scale, float Damage, int32 MaxPiercedTargets, bool bIsPredicted, TSubclassOf<class UGameplayEffect> ProjectileEffect, TSubclassOf<class UGameplayEffect> ProjectileEffect2, TSubclassOf<class UGameplayEffect> ProjectileEffect3, FEffectAreaInfo AreaInfo)
 {
     UWorld* World = GetWorld();
     bool bIsClient = World && World->GetNetMode() == NM_Client;
+    FTransform Transform = InTransform;
 
     // Lazy-Initialisierung des EntityManager (besonders wichtig auf Clients)
     if (!EntityManager && World)
@@ -298,6 +317,22 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
             SpawnMassProjectile(ProjectileClass, Transform, Shooter, Target, TargetLocation, ShooterEntity, TargetEntity, ProjectileSpeed, ShooterTeamId, bFollowTarget, HomingInitialAngle, HomingRotationSpeed, HomingMaxSpiralRadius, HomingInterpSpeed, nullptr, Scale, Damage, MaxPiercedTargets, bIsPredicted, ProjectileEffect, ProjectileEffect2, ProjectileEffect3, AreaInfo);
         });
         return FMassEntityHandle();
+    }
+
+    // Climbing shot: start further along the flight path (see AProjectile::ClimbSpawnAdvance). Applied here,
+    // after the deferral above, so server, clients and abilities all get it exactly once.
+    if (const AProjectile* ClimbCDO = ProjectileClass->GetDefaultObject<AProjectile>())
+    {
+        if (ClimbCDO->ClimbSpawnAdvance > 0.f && !TargetLocation.IsNearlyZero())
+        {
+            const FVector Dir = (TargetLocation - Transform.GetLocation()).GetSafeNormal();
+            const float Climb = FMath::Clamp(Dir.Z / 0.35f, 0.f, 1.f);
+            const float MaxAdvance = FVector::Dist(TargetLocation, Transform.GetLocation()) * 0.5f;
+            if (Climb > 0.f)
+            {
+                Transform.AddToTranslation(Dir * FMath::Min(ClimbCDO->ClimbSpawnAdvance * Climb, MaxAdvance));
+            }
+        }
     }
 
 	UInstancedStaticMeshComponent* ISM = GetOrCreateISMComponent(ProjectileClass);
@@ -788,7 +823,8 @@ FMassEntityHandle UProjectileVisualManager::SpawnMassProjectile(TSubclassOf<APro
 		// class flashes smaller on a gunship than on a soldier. No shooter actor (client, actor-less) = 1.
 		const APerformanceUnit* PerfShooter = Cast<APerformanceUnit>(Shooter);
 		const float SpawnVFXScale = PerfShooter ? PerfShooter->SpawnVFXScaleMultiplier : 1.f;
-		FireSpawnEffects(CDO, SpawnFXTransform, bSpawnFXUnfogged && bSpawnFXOnScreen, SpawnVFXScale);
+		const float DistanceToTarget = TargetLocation.IsNearlyZero() ? -1.f : FVector::Dist(TargetLocation, SpawnFXTransform.GetLocation());
+		FireSpawnEffects(CDO, SpawnFXTransform, bSpawnFXUnfogged && bSpawnFXOnScreen, SpawnVFXScale, DistanceToTarget, TargetLocation);
 	}
 
     // Apply fragments

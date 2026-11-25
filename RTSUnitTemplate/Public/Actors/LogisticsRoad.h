@@ -350,9 +350,32 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual", meta = (ClampMin = "0"))
 	float AirGapLength = 150.f;
 
-	/** Hide the road from players of other teams. */
+	/** Hide the road from players of other teams (unless bRevealToEnemiesByFog). */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|Visual")
 	bool bOnlyVisibleToOwnTeam = true;
+
+	// --- Fog of war: enemies see the road / pipeline piece by piece ---------------------------------
+
+	/**
+	 * Other teams see the road, but only the stretches their fog of war has revealed at least once - like a
+	 * building it stays visible after that (until the road is gone). Revealed piece by piece, so an enemy does
+	 * not see at once where it leads. Overrides bOnlyVisibleToOwnTeam. Off = hidden from other teams.
+	 * Per machine: each client judges with its own fog; levels without a fog actor show everything.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|FogOfWar")
+	bool bRevealToEnemiesByFog = true;
+
+	/** Seconds between two fog checks of an enemy road. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|FogOfWar", meta = (ClampMin = "0.05"))
+	float FogRevealInterval = 0.4f;
+
+	/** Size of a remembered revealed cell (uu); a piece of the road counts as revealed when its cell is. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|FogOfWar", meta = (ClampMin = "25"))
+	float FogRevealCellSize = 100.f;
+
+	/** Where an enemy road / pipeline ends at the fog, it fades out over this length (uu) instead of a hard cut. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Logistics|FogOfWar", meta = (ClampMin = "0"))
+	float FogEdgeFadeLength = 400.f;
 
 	/** The pick-up point at the source base and the drop-off point at the sink, as used by the dispatcher. */
 	UFUNCTION(BlueprintPure, Category = Logistics)
@@ -470,6 +493,10 @@ protected:
 	/** Last written VisibleFrom, VisibleTo, RevealSoftness per piece - unchanged pieces are not redrawn. */
 	TArray<FVector3f> RVTPieceReveal;
 
+	/** Per writer piece, per instance: the fog of war's visible stretch (VisibleFrom, VisibleTo, softness; softness
+	 *  0 = not limited by the fog). Combined with the growth range in ApplyRoadReveal. */
+	TArray<TArray<FVector3f>> RVTInstanceFog;
+
 	/** V at the road's end. */
 	float RVTTotalLength = 0.f;
 
@@ -490,4 +517,46 @@ protected:
 
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Root;
+
+	// --- Fog of war (clients / listen server, never replicated) ---
+
+	/** Cells (FogRevealCellSize) the local team has seen of this road - kept for good, also across rebuilds. */
+	TSet<FIntPoint> FogRevealedCells;
+
+	/** The current visuals only show the revealed pieces. */
+	bool bBuiltFogMasked = false;
+
+	FTimerHandle FogRevealTimer;
+
+	TWeakObjectPtr<class AFogActor> CachedFogActor;
+
+	/** The local viewer's fog, if this road is an enemy one for them and the level has fog of war; else null. */
+	class AFogActor* GetMaskingFog();
+
+	FIntPoint FogCell(const FVector& P) const;
+
+	/** Timer: remembers newly seen cells and updates the masked visuals. */
+	virtual void UpdateFogReveal();
+
+	/** Points along everything the road draws (about two per cell), checked against the fog. */
+	TArray<FVector> FogSamplePoints;
+
+	/** The cells of FogSamplePoints. */
+	TSet<FIntPoint> FogSampleCells;
+
+	/** Adds samples along a polyline (FogSamplePoints / FogSampleCells). */
+	void AddFogSamples(const TArray<FVector>& Points);
+
+	/** Revealed cells of this road and of the team's other roads (they merge into one drawn network). */
+	void GatherTeamRevealedCells(TSet<FIntPoint>& OutCells) const;
+
+	/** Shown under the fog mask: one of the three points' cells is revealed. Revealed null = not masked. */
+	bool IsFogShown(const TSet<FIntPoint>* Revealed, const FVector& A, const FVector& B, const FVector& C) const;
+
+	/** Applies the fog mask to decals / segments and redraws the RVT writer. */
+	void RefreshFogVisuals();
+
+	/** Per decal / segment: its start, middle and end (fog mask). */
+	TArray<FVector> DecalFogPoints;
+	TArray<FVector> SegmentFogPoints;
 };
