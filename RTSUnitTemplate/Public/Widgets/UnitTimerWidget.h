@@ -5,7 +5,33 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Characters/Unit/UnitBase.h"
+#include "GameplayTagContainer.h"
 #include "UnitTimerWidget.generated.h"
+
+class UImage;
+class UMaterialInterface;
+
+/** Frame look of the cast bar for one kind of unit (e.g. a faction): the first matching entry wins. */
+USTRUCT(BlueprintType)
+struct RTSUNITTEMPLATE_API FUnitTimerFrameStyle
+{
+	GENERATED_BODY()
+
+	/** Matches units whose UnitTags contain this tag (parents count, Units.Xeno matches Units.Xeno.Kraken). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FGameplayTag UnitTag;
+
+	/** Or: matches units whose class name contains this text (e.g. "Xeno"). Empty = not used. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	FString ClassNameContains;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TObjectPtr<UMaterialInterface> FrameMaterial = nullptr;
+
+	/** Fill of the bar (a UI material; FillColorAndOpacity reaches it as vertex colour). None = DefaultFillMaterial. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	TObjectPtr<UMaterialInterface> FillMaterial = nullptr;
+};
 
 /**
  * 
@@ -17,10 +43,21 @@ class RTSUNITTEMPLATE_API UUnitTimerWidget : public UUserWidget
 	virtual void NativeConstruct() override;
 	
 public:
-	void SetOwnerActor(AUnitBase* Unit) {
-		OwnerCharacter = Unit;
-		GetWorld()->GetTimerManager().SetTimer(TickTimerHandle, this, &UUnitTimerWidget::TimerTick, UpdateInterval, true);
-	}
+	void SetOwnerActor(AUnitBase* Unit);
+
+	/**
+	 * Optional frame around the bar (an Image behind it, e.g. in an Overlay): shown only while the bar is, with the
+	 * FrameMaterial of the first matching FrameStyles entry, else DefaultFrameMaterial (None = keep the brush).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Frame")
+	TArray<FUnitTimerFrameStyle> FrameStyles;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Frame")
+	TObjectPtr<UMaterialInterface> DefaultFrameMaterial = nullptr;
+
+	/** Fill of the bar when no FrameStyles entry brings one. None = keep the bar's own fill brush. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Frame")
+	TObjectPtr<UMaterialInterface> DefaultFillMaterial = nullptr;
 
 
 protected:
@@ -33,6 +70,13 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 		class UTextBlock* TransportText;
+
+	/** See FrameStyles. */
+	UPROPERTY(meta = (BindWidgetOptional))
+		UImage* BarFrame = nullptr;
+
+	void UpdateBar();
+	void ApplyFrameStyle();
 
 	
 public:

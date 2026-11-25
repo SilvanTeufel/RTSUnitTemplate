@@ -68,11 +68,13 @@ void SAttributeTreeWidget::Construct(const FArguments& InArgs)
 	OnInvestDelegate            = InArgs._OnInvest;
 	OnResetDelegate             = InArgs._OnReset;
 	OnCloseDelegate             = InArgs._OnClose;
+	CanCloseAttr                = InArgs._CanClose;
 
 	NodeBackgroundBrush = FSlateRoundedBoxBrush(FLinearColor::White, NodeRadius, FVector2D(NodeRadius * 2.f, NodeRadius * 2.f));
 
 	NodeFont  = FCoreStyle::GetDefaultFontStyle("Bold", InArgs._NodeFontSize);
 	CountFont = FCoreStyle::GetDefaultFontStyle("Bold", InArgs._CountFontSize);
+	BranchFont = FCoreStyle::GetDefaultFontStyle("Bold", FMath::Max(InArgs._NodeFontSize * 2, 16));
 
 	SetCanTick(true);
 	// Tick() is unreliable under Slate global invalidation; an active timer always runs.
@@ -146,6 +148,46 @@ void SAttributeTreeWidget::SetNodes(TArray<FAttributeTreeSlateNode> InNodes)
 	{
 		IdToIndex.Add(Nodes[i].Id, i);
 		MaxRing = FMath::Max(MaxRing, Nodes[i].Ring);
+	}
+
+	// Branch sectors: circular mean of the node angles, then the spread on both sides of it
+	// (a branch may straddle 0/360 degrees).
+	Branches.Reset();
+	TMap<int32, TArray<int32>> NodesPerBranch;
+	for (int32 i = 0; i < Nodes.Num(); ++i)
+	{
+		if (Nodes[i].Branch != INDEX_NONE && Nodes[i].Ring > 0)
+		{
+			NodesPerBranch.FindOrAdd(Nodes[i].Branch).Add(i);
+		}
+	}
+	NodesPerBranch.KeySort([](int32 A, int32 B) { return A < B; });
+	for (const TPair<int32, TArray<int32>>& Pair : NodesPerBranch)
+	{
+		FVector2D Sum = FVector2D::ZeroVector;
+		for (const int32 Index : Pair.Value)
+		{
+			const float A = FMath::DegreesToRadians(Nodes[Index].Angle);
+			Sum += FVector2D(FMath::Sin(A), FMath::Cos(A));
+		}
+		FBranchInfo Info;
+		Info.CenterAngle = FMath::RadiansToDegrees(FMath::Atan2(Sum.X, Sum.Y));
+		Info.MinRing = TNumericLimits<int32>::Max();
+		for (const int32 Index : Pair.Value)
+		{
+			const FAttributeTreeSlateNode& Node = Nodes[Index];
+			const float Delta = FMath::FindDeltaAngleDegrees(Info.CenterAngle, Node.Angle);
+			Info.MinDelta = FMath::Min(Info.MinDelta, Delta);
+			Info.MaxDelta = FMath::Max(Info.MaxDelta, Delta);
+			Info.MinRing = FMath::Min(Info.MinRing, Node.Ring);
+			Info.MaxRing = FMath::Max(Info.MaxRing, Node.Ring);
+			if (Info.Label.IsEmpty())
+			{
+				Info.Label = Node.BranchLabel;
+				Info.Color = Node.BranchColor;
+			}
+		}
+		Branches.Add(Info);
 	}
 	HoveredNodeIndex = INDEX_NONE;
 	HoverElapsed = 0.f;
@@ -400,6 +442,58 @@ int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	}
 	++Layer;
 
+	// --- 1b. Branch marking (T0..T4): tinted ring guides inside each sector, an outer arc and a label ---
+	if (Branches.Num() > 0)
+	{
+		const TSharedRef<FSlateFontMeasure> BranchFontMeasure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		const float PadDegrees = 7.f;
+		const float ArcRadius = (float)MaxRing * RingSpacing + NodeRadius + 18.f;
+		auto Arc = [&Center](float Radius, float FromDeg, float ToDeg)
+		{
+			TArray<FVector2D> Points;
+			const int32 Steps = FMath::Max(2, FMath::CeilToInt((ToDeg - FromDeg) / 3.f));
+			for (int32 s = 0; s <= Steps; ++s)
+			{
+				const float A = FMath::DegreesToRadians(FMath::Lerp(FromDeg, ToDeg, (float)s / (float)Steps));
+				Points.Add(Center + FVector2D(FMath::Sin(A), -FMath::Cos(A)) * Radius);
+			}
+			return Points;
+		};
+		for (const FBranchInfo& Branch : Branches)
+		{
+			const float From = Branch.CenterAngle + Branch.MinDelta - PadDegrees;
+			const float To = Branch.CenterAngle + Branch.MaxDelta + PadDegrees;
+
+			FLinearColor Guide = Branch.Color;
+			Guide.A = 0.28f;
+			for (int32 Ring = FMath::Max(1, Branch.MinRing); Ring <= Branch.MaxRing; ++Ring)
+			{
+				FSlateDrawElement::MakeLines(OutDrawElements, Layer, WholeGeom, Arc((float)Ring * RingSpacing, From, To),
+					ESlateDrawEffect::None, Guide, true, 2.5f);
+			}
+
+			FLinearColor Band = Branch.Color;
+			Band.A = 0.9f;
+			FSlateDrawElement::MakeLines(OutDrawElements, Layer, WholeGeom, Arc(ArcRadius, From, To),
+				ESlateDrawEffect::None, Band, true, 5.f);
+
+			if (!Branch.Label.IsEmpty())
+			{
+				const FString LabelText = Branch.Label.ToString();
+				const FVector2D TextSize = BranchFontMeasure->Measure(LabelText, BranchFont);
+				const float A = FMath::DegreesToRadians(Branch.CenterAngle);
+				const FVector2D Direction(FMath::Sin(A), -FMath::Cos(A));
+				// Push the label out by half its extent along the direction so it never sits on the arc.
+				const float Extent = FMath::Abs(Direction.X) * TextSize.X * 0.5f + FMath::Abs(Direction.Y) * TextSize.Y * 0.5f;
+				const FVector2D LabelCenter = Center + Direction * (ArcRadius + 10.f + Extent);
+				FSlateDrawElement::MakeText(OutDrawElements, Layer + 1,
+					AllottedGeometry.ToPaintGeometry(TextSize, FSlateLayoutTransform(1.f, LabelCenter - TextSize * 0.5f)),
+					LabelText, BranchFont, ESlateDrawEffect::None, Branch.Color);
+			}
+		}
+		Layer += 2;
+	}
+
 	// --- 2. Links (child -> parent) ---
 	{
 		for (const FAttributeTreeSlateNode& Node : Nodes)
@@ -417,9 +511,11 @@ int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 			const FVector2D ParentC = GetNodeLocalCenter(Nodes[*ParentIdx], LocalSize);
 
 			const int32 Pts = GetNodePoints(Node.Id);
-			FLinearColor C = LinkColor;
+			// Locked links carry a hint of the branch colour, so the path of each tier reads at a glance.
+			FLinearColor C = Node.Branch != INDEX_NONE ? FMath::Lerp(LinkColor, Node.BranchColor, 0.45f) : LinkColor;
+			C.A = 1.f;
 			if (Pts >= FMath::Max(1, Node.MaxPoints)) { C = FullColor; }
-			else if (IsUnlocked(Node.Id))            { C = LinkColor * 1.8f; C.A = 1.f; }
+			else if (IsUnlocked(Node.Id))            { C = C * 1.6f; C.A = 1.f; }
 
 			TArray<FVector2D> Line;
 			Line.Add(ParentC);
@@ -510,7 +606,7 @@ int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	}
 
 	// --- 3b2. Schliessen-Knopf (fest oben rechts, faehrt beim Schwenken nicht mit) ---
-	if (OnCloseDelegate.IsBound())
+	if (ShowsClose())
 	{
 		const FSlateRect R = CloseButtonRect(LocalSize);
 		const FVector2D BtnSize(R.GetSize().X, R.GetSize().Y);
@@ -529,7 +625,7 @@ int32 SAttributeTreeWidget::OnPaint(const FPaintArgs& Args, const FGeometry& All
 	}
 
 	// --- 3b3. Grosser "Back to Game"-Knopf, fest unten rechts ---
-	if (OnCloseDelegate.IsBound())
+	if (ShowsClose())
 	{
 		const FSlateRect R = BackToGameButtonRect(LocalSize);
 		const FVector2D BtnSize(R.GetSize().X, R.GetSize().Y);
@@ -726,14 +822,14 @@ FReply SAttributeTreeWidget::OnMouseButtonDown(const FGeometry& MyGeometry, cons
 		const FVector2D Local = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
 
 		// Der grosse Zurueck-Knopf unten rechts - dieselbe Wirkung wie der kleine oben.
-		if (OnCloseDelegate.IsBound() && BackToGameButtonRect(MyGeometry.GetLocalSize()).ContainsPoint(Local))
+		if (ShowsClose() && BackToGameButtonRect(MyGeometry.GetLocalSize()).ContainsPoint(Local))
 		{
 			OnCloseDelegate.Execute();
 			return FReply::Handled();
 		}
 
 		// Schliessen-Knopf (fest oben rechts) hat wie Reset Vorrang vor Knoten und Schwenken.
-		if (OnCloseDelegate.IsBound() && CloseButtonRect(MyGeometry.GetLocalSize()).ContainsPoint(Local))
+		if (ShowsClose() && CloseButtonRect(MyGeometry.GetLocalSize()).ContainsPoint(Local))
 		{
 			OnCloseDelegate.Execute();
 			return FReply::Handled();

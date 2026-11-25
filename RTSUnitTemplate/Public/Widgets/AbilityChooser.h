@@ -33,6 +33,14 @@ public:
 	
 	virtual void NativeConstruct() override;
 
+	/**
+	 * Off = the chooser is not used (14.11.2026: the automatic abilities come from cards, the attribute tree and the
+	 * unit's level milestones now - see UAutoAbilitySubsystem). It removes itself from the HUD, its toggle button in
+	 * the UTaggedUnitSelector is hidden. Kept as a class, switched off in the project's Blueprint.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bChooserEnabled = true;
+
 	void InitWidget(ACustomControllerBase* InController);
 	//virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 

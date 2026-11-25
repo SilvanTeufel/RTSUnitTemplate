@@ -18,6 +18,8 @@
 #include "CanvasItem.h"
 #include "System/DamageNumberSubsystem.h"
 #include "Engine/Font.h"
+#include "Engine/Texture2D.h"
+#include "TextureResource.h"
 #include "GameModes/RTSGameModeBase.h"
 #include "Engine/Canvas.h"
 #include "Materials/MaterialInterface.h"
@@ -1289,6 +1291,83 @@ void AHUDBase::HandleSelectionRectangle()
 
 	// Mass-Units/ISM Logik
 	SelectISMUnitsInRectangle(InitialPoint, CurrentPoint);
+
+	ApplySelectionRectangleFilter();
+}
+
+void AHUDBase::ApplySelectionRectangleFilter()
+{
+	if (SelectionRectangleFilter == ESelectionRectangleFilter::None || SelectedUnits.Num() < 2)
+	{
+		return;
+	}
+
+	auto IsStatic = [](const AUnitBase* Unit)
+	{
+		return Unit->IsA<ABuildingBase>() || Unit->IsA<AConstructionUnit>();
+	};
+
+	TFunction<bool(const AUnitBase*)> Keep;
+	switch (SelectionRectangleFilter)
+	{
+	case ESelectionRectangleFilter::PreferMoveable:
+	case ESelectionRectangleFilter::PreferStatic:
+	{
+		const bool bWantStatic = SelectionRectangleFilter == ESelectionRectangleFilter::PreferStatic;
+		const bool bAnyWanted = SelectedUnits.ContainsByPredicate([&](const AUnitBase* U) { return U && IsStatic(U) == bWantStatic; });
+		if (!bAnyWanted)
+		{
+			return;
+		}
+		Keep = [IsStatic, bWantStatic](const AUnitBase* U) { return IsStatic(U) == bWantStatic; };
+		break;
+	}
+	case ESelectionRectangleFilter::PreferCombat:
+	{
+		auto IsCombat = [IsStatic](const AUnitBase* U) { return !IsStatic(U) && !U->IsWorker; };
+		if (!SelectedUnits.ContainsByPredicate([&](const AUnitBase* U) { return U && IsCombat(U); }))
+		{
+			return;
+		}
+		Keep = IsCombat;
+		break;
+	}
+	case ESelectionRectangleFilter::PreferMostCommonType:
+	{
+		TMap<UClass*, int32> Counts;
+		UClass* BestClass = nullptr;
+		int32 BestCount = 0;
+		for (const AUnitBase* U : SelectedUnits)
+		{
+			if (!U) continue;
+			const int32 Count = ++Counts.FindOrAdd(U->GetClass());
+			if (Count > BestCount)
+			{
+				BestCount = Count;
+				BestClass = U->GetClass();
+			}
+		}
+		Keep = [BestClass](const AUnitBase* U) { return U->GetClass() == BestClass; };
+		break;
+	}
+	default:
+		return;
+	}
+
+	for (int32 i = SelectedUnits.Num() - 1; i >= 0; --i)
+	{
+		AUnitBase* Unit = SelectedUnits[i];
+		if (Unit && Keep(Unit))
+		{
+			continue;
+		}
+		if (Unit)
+		{
+			Unit->SetDeselected();
+			SelectedUnitsSet.Remove(Unit);
+		}
+		SelectedUnits.RemoveAt(i);
+	}
 }
 
 void AHUDBase::DrawMaterialWall(const FVector& Start, const FVector& End, float Height, UMaterialInterface* Material, const FLinearColor& Color)
@@ -1335,6 +1414,7 @@ void AHUDBase::DrawHUD()
 	DrawAllHealthBars();
 	DrawAllResourceCounts();
 	DrawLogisticsAmounts();
+	DrawAutoSummonCounts();
 	DrawDamageNumbers();
 
 	if (ExtensionPreviewLine.bIsActive)
@@ -2807,6 +2887,75 @@ void AHUDBase::DrawLogisticsAmounts()
 		}
 	}
 
+}
+
+void AHUDBase::DrawAutoSummonCounts()
+{
+	if (!bShowAutoSummonCounts || !Canvas || !LevelFont) return;
+
+	APlayerController* PC = GetOwningPlayerController();
+	UWorld* World = GetWorld();
+	const AControllerBase* LocalPC = Cast<AControllerBase>(PC);
+	if (!PC || !World || !LocalPC) return;
+
+	const int32 LocalTeam = LocalPC->SelectableTeamId;
+	const float FontScale = FMath::Clamp(LogisticsTextScale, 0.1f, 10.f);
+	const float Spacing = LogisticsConverterLineSpacing * FontScale;
+
+	for (TActorIterator<AUnitBase> It(World); It; ++It)
+	{
+		const AUnitBase* Unit = *It;
+		if (!IsValid(Unit) || Unit->AutoSummonMax <= 0 || Unit->TeamId != LocalTeam) continue;
+		if (Unit->GetUnitState() == UnitData::Dead || Unit->IsInsideTransport) continue;
+
+		// Same anchor as the store amount, one line above it (two above a Converter's pair).
+		const ABuildingBase* Base = Cast<ABuildingBase>(Unit);
+		const int32 LinesBelow = (bShowLogisticsStorage && Base && Base->StoresLocally()) ? (Base->IsConverter() ? 2 : 1) : 0;
+		const FVector Anchor = Unit->TimerWidgetComp
+			? Unit->TimerWidgetComp->GetComponentLocation()
+			: Unit->GetActorLocation() + FVector(0.f, 0.f, LogisticsStorageHeightOffset);
+		const float OffsetY = (Unit->TimerWidgetComp ? LogisticsStorageTimerPixelOffset * FontScale : 0.f) - Spacing * LinesBelow;
+
+		FVector2D ScreenPos;
+		if (!PC->ProjectWorldLocationToScreen(Anchor, ScreenPos)) continue;
+		ScreenPos.Y += OffsetY;
+
+		const bool bOn = Unit->bAutoSummonEnabled;
+		const FLinearColor Color(bOn ? (Unit->bAutoSummonIsLogistics ? AutoSummonLogisticsColor : AutoSummonWorkerColor) : AutoSummonOffColor);
+		const FString Text = FString::Printf(TEXT("%d/%d"), Unit->AutoSummonAlive, Unit->AutoSummonMax);
+		const float IconSize = AutoSummonIconSize * FontScale;
+		const float Gap = 3.f * FontScale;
+		const float TextW = 8.f * FontScale * Text.Len();
+		float X = ScreenPos.X - (IconSize + Gap + TextW) * 0.5f;
+		const float LineMidY = ScreenPos.Y + 7.f * FontScale;
+
+		if (Unit->AutoSummonIcon)
+		{
+			const FVector2D IconPos(X, LineMidY - IconSize * 0.5f);
+			FCanvasTileItem Frame(IconPos - FVector2D(1.f, 1.f), GWhiteTexture, FVector2D(IconSize + 2.f, IconSize + 2.f), Color);
+			Frame.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Frame);
+			FCanvasTileItem Icon(IconPos, Unit->AutoSummonIcon->GetResource(), FVector2D(IconSize, IconSize), bOn ? FLinearColor::White : FLinearColor(0.35f, 0.35f, 0.35f, 1.f));
+			Icon.BlendMode = SE_BLEND_Translucent;
+			Canvas->DrawItem(Icon);
+			if (!bOn)
+			{
+				// Switched off: a red slash over the icon.
+				FCanvasLineItem Slash(IconPos + FVector2D(1.f, IconSize - 1.f), IconPos + FVector2D(IconSize - 1.f, 1.f));
+				Slash.SetColor(FLinearColor(1.f, 0.15f, 0.1f, 1.f));
+				Slash.LineThickness = 2.f * FontScale;
+				Canvas->DrawItem(Slash);
+			}
+			X += IconSize + Gap;
+		}
+
+		FCanvasTextItem TextItem(FVector2D(X, ScreenPos.Y), FText::FromString(Text), LevelFont, Color);
+		TextItem.Scale = FVector2D(FontScale, FontScale);
+		TextItem.bOutlined = true;
+		TextItem.OutlineColor = FLinearColor::Black;
+		TextItem.BlendMode = SE_BLEND_Translucent;
+		Canvas->DrawItem(TextItem);
+	}
 }
 
 float AHUDBase::GetHysteresisPct(float ActualPct, float& DisplayedPct, const FHealthBarSettings& Settings)

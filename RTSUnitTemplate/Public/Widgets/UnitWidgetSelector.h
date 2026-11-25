@@ -23,6 +23,7 @@ class RTSUNITTEMPLATE_API UUnitWidgetSelector : public UUserWidget
 	
 	virtual void NativeConstruct() override;
 	virtual void NativeDestruct() override;
+	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	//void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
@@ -33,6 +34,13 @@ private:
 	FTimerHandle UpdateTimerHandle;
 
 	void StartUpdateTimer();
+
+	/**
+	 * Ability buttons whose designer tooltip is the old fixed "Keyboard 1" get the key of the
+	 * active key layout instead ("Keyboard Q" in Classic). Buttons with a tooltip widget binding
+	 * (Astra Helix) show that widget as before.
+	 */
+	void UpdateAbilityKeyTooltips();
 
 	/** Shows Unit in the 3D window, or hides the window (nullptr / no material). */
 	void UpdateUnitPreview(AUnitBase* Unit);
@@ -205,5 +213,54 @@ public:
 	/** Shows UnitPreviewMaterial. */
 	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|UnitPreview", meta = (BindWidgetOptional))
 	class UImage* UnitPreviewImage = nullptr;
+
+	// --- Automatic abilities (14.11.2026) -----------------------------------------------------------------
+	// A row of small icons above the ability buttons: the selected unit's automatic abilities (AAbilityUnit::
+	// AutoAbilityStatus) with their cooldown. Without an AutoAbilityRow in the Blueprint it is built at runtime
+	// right above the row that holds AbilityButtonWidget_0.
+
+	/** Optional: a box of the Blueprint to fill. Empty = built at runtime. */
+	UPROPERTY(BlueprintReadOnly, Category = "RTSUnitTemplate|AutoAbilities", meta = (BindWidgetOptional))
+	class UHorizontalBox* AutoAbilityRow = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AutoAbilities", meta = (ClampMin = "12"))
+	float AutoAbilityIconSize = 34.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AutoAbilities")
+	FLinearColor AutoAbilityFrameColor = FLinearColor(1.f, 0.55f, 0.1f, 1.f);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AutoAbilities")
+	FMargin AutoAbilityRowPadding = FMargin(10.f, 2.f, 0.f, 0.f);
+
+	/** Cooldown on the ability buttons too: a dark shade over the button (falling with the time left) and the
+	 *  seconds in its middle, built at runtime over every AbilityButton. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AutoAbilities")
+	bool bShowAbilityCooldownShade = true;
+
+private:
+	void BuildAutoAbilityRow();
+	void BuildAbilityCooldownViews();
+	struct FAbilityCooldownView
+	{
+		TWeakObjectPtr<class USizeBox> Shade;
+		TWeakObjectPtr<class UTextBlock> Seconds;
+		float Full = 0.f;
+		float Last = 0.f;
+		float Height = 70.f;
+	};
+	TArray<FAbilityCooldownView> AbilityCooldownViews;
+	void UpdateAutoAbilityRow();
+	struct FAutoAbilityTile
+	{
+		TWeakObjectPtr<class UWidget> Root;
+		TWeakObjectPtr<class UImage> Icon;
+		TWeakObjectPtr<class USizeBox> Shade;
+		TWeakObjectPtr<class UTextBlock> Seconds;
+		UClass* Shown = nullptr;
+		float ShownMultiplier = -1.f;
+	};
+	TArray<FAutoAbilityTile> AutoAbilityTiles;
+	float AutoAbilityRefresh = 0.f;
+public:
 	
 };

@@ -59,6 +59,27 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Style")
 	FLinearColor RingColor = FLinearColor(1.f, 1.f, 1.f, 0.06f);
 
+	/**
+	 * Branch marking: colour per tier T0..T4 (index = tier). The tier of a node comes from its row name
+	 * ("T2_03", "AA_T2_Mid"). Drawn as an outer arc with a label, tinted ring guides and tinted links.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Style")
+	TArray<FLinearColor> TierColors = {
+		FLinearColor(0.80f, 0.82f, 0.88f, 1.f),
+		FLinearColor(0.20f, 0.80f, 1.00f, 1.f),
+		FLinearColor(0.35f, 0.92f, 0.45f, 1.f),
+		FLinearColor(1.00f, 0.70f, 0.20f, 1.f),
+		FLinearColor(0.90f, 0.40f, 1.00f, 1.f) };
+
+	/** Label per tier (index = tier), drawn at the outer end of the branch. Empty entry = only the arc. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Tree|Style")
+	TArray<FText> TierLabels = {
+		NSLOCTEXT("AttributeTree", "TierLabel0", "T0 Buildings"),
+		NSLOCTEXT("AttributeTree", "TierLabel1", "T1 Units"),
+		NSLOCTEXT("AttributeTree", "TierLabel2", "T2 Units"),
+		NSLOCTEXT("AttributeTree", "TierLabel3", "T3 Units"),
+		NSLOCTEXT("AttributeTree", "TierLabel4", "T4 Units") };
+
 	// --- Background ---
 	/** Tint of the backdrop drawn behind the tree. Multiplied into BackgroundBrush's own Tint.
 	 *  IGNORED when BackgroundBrush holds a MATERIAL - Slate never multiplies a tint into a material
@@ -191,6 +212,8 @@ protected:
 	void HandleReset();
 	/** Schliessen-Knopf: zurueck auf die Startansicht (siehe ShowStartScreen). */
 	void HandleClose();
+	/** False while the talent pause waits for this player's choice. */
+	bool HandleCanClose() const;
 
 	UPROPERTY()
 	ALevelUnit* TargetUnit = nullptr;
@@ -203,4 +226,7 @@ protected:
 	// festnagelte, auf der gar nicht gebucht wurde.
 
 	TSharedPtr<SAttributeTreeWidget> MyTree;
+
+	/** The game state whose OnAutoAbilitiesChanged redraws the auto ability nodes. */
+	TWeakObjectPtr<class AUpgradeGameState> BoundGameState;
 };

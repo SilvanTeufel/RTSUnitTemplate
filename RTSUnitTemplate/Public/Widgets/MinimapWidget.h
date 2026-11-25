@@ -61,7 +61,11 @@ public:
 
 	/** Least time between two alarm sounds (seconds). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|AttackAlert", meta = (ClampMin = "0"))
-	float UnderAttackSoundCooldown = 6.f;
+	float UnderAttackSoundCooldown = 3.f;
+
+	/** Volume of the alarm sound (times the player's sound setting). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|AttackAlert", meta = (ClampMin = "0"))
+	float UnderAttackSoundVolume = 0.5f;
 
 	/** Colour of the two brackets that close in on the attacked spot. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Minimap|AttackAlert")

@@ -7,6 +7,8 @@
 #include <Components/ProgressBar.h>
 #include "Components/TextBlock.h"
 #include "Components/Widget.h"
+#include "Components/Image.h"
+#include "Materials/MaterialInterface.h"
 
 void UUnitTimerWidget::NativeConstruct()
 {
@@ -17,10 +19,68 @@ void UUnitTimerWidget::NativeConstruct()
 	{
 		TransportText->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	if (BarFrame)
+	{
+		BarFrame->SetVisibility(ESlateVisibility::Collapsed);
+	}
+	ApplyFrameStyle();
 	//TimerBar->SetVisibility(ESlateVisibility::Visible);
 }
 
+void UUnitTimerWidget::SetOwnerActor(AUnitBase* Unit)
+{
+	OwnerCharacter = Unit;
+	ApplyFrameStyle();
+	GetWorld()->GetTimerManager().SetTimer(TickTimerHandle, this, &UUnitTimerWidget::TimerTick, UpdateInterval, true);
+}
+
+void UUnitTimerWidget::ApplyFrameStyle()
+{
+	const AUnitBase* Unit = OwnerCharacter.Get();
+	if (!Unit)
+	{
+		return;
+	}
+	UMaterialInterface* Material = DefaultFrameMaterial;
+	UMaterialInterface* Fill = DefaultFillMaterial;
+	const FString ClassName = Unit->GetClass()->GetName();
+	for (const FUnitTimerFrameStyle& Style : FrameStyles)
+	{
+		const bool bTag = Style.UnitTag.IsValid() && Unit->UnitTags.HasTag(Style.UnitTag);
+		const bool bName = !Style.ClassNameContains.IsEmpty() && ClassName.Contains(Style.ClassNameContains);
+		if (bTag || bName)
+		{
+			Material = Style.FrameMaterial ? Style.FrameMaterial.Get() : Material;
+			Fill = Style.FillMaterial ? Style.FillMaterial.Get() : Fill;
+			break;
+		}
+	}
+	if (Material && BarFrame)
+	{
+		BarFrame->SetBrushFromMaterial(Material);
+	}
+	// The fill: a material of the faction, tinted by the state colour (FillColorAndOpacity, vertex colour).
+	if (Fill && TimerBar)
+	{
+		FProgressBarStyle Style = TimerBar->GetWidgetStyle();
+		Style.FillImage.SetResourceObject(Fill);
+		Style.FillImage.DrawAs = ESlateBrushDrawType::Image;
+		TimerBar->SetWidgetStyle(Style);
+	}
+}
+
 void UUnitTimerWidget::TimerTick()
+{
+	UpdateBar();
+	// The frame belongs to the bar: visible exactly while the bar is.
+	if (BarFrame && TimerBar)
+	{
+		const bool bBarShown = TimerBar->GetVisibility() != ESlateVisibility::Collapsed && TimerBar->GetVisibility() != ESlateVisibility::Hidden;
+		BarFrame->SetVisibility(bBarShown ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+}
+
+void UUnitTimerWidget::UpdateBar()
 {
 	if (!OwnerCharacter.IsValid())
 		return;

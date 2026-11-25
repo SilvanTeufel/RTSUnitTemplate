@@ -30,7 +30,7 @@ public:
 
 	/** Show Unit (nullptr = show nothing and stop capturing). Cheap when it already shows that unit. */
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
-	void ShowUnit(AUnitBase* Unit, UTextureRenderTarget2D* Target);
+	void ShowUnit(AActor* Unit, UTextureRenderTarget2D* Target);
 
 	/**
 	 * Drives one 3D window (UUnitWidgetSelector, UUnitStatsTooltipWidget): shows Unit in the render target behind
@@ -39,7 +39,7 @@ public:
 	 * light each other's models.
 	 */
 	static void UpdateWindow(UObject* WorldContext, TObjectPtr<AUnitPreviewStage>& Stage, UWidget* Box, UMaterialInterface* Material,
-		FName TextureParameter, AUnitBase* Unit, float InRotationSpeed, float InCaptureRate, const FVector& StageLocation);
+		FName TextureParameter, AActor* Unit, float InRotationSpeed, float InCaptureRate, const FVector& StageLocation);
 
 	/** Degrees per second of the turntable. */
 	float RotationSpeed = 30.f;
@@ -58,7 +58,7 @@ protected:
 
 private:
 	void ClearModel();
-	void BuildModel(AUnitBase* Unit);
+	void BuildModel(AActor* Unit);
 	void FrameModel();
 
 	UPROPERTY()
@@ -80,7 +80,8 @@ private:
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UMeshComponent>> ModelMeshes;
 
-	TWeakObjectPtr<AUnitBase> ShownUnit;
+	/** A live unit, or another actor showing one (a replay proxy). */
+	TWeakObjectPtr<AActor> ShownUnit;
 	TWeakObjectPtr<UTextureRenderTarget2D> ShownTarget;
 	float CaptureTimer = 0.f;
 };

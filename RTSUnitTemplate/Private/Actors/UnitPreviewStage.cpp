@@ -73,7 +73,7 @@ AUnitPreviewStage::AUnitPreviewStage()
 	FillLight->SetLightColor(FLinearColor(0.6f, 0.75f, 1.f));
 }
 
-void AUnitPreviewStage::ShowUnit(AUnitBase* Unit, UTextureRenderTarget2D* Target)
+void AUnitPreviewStage::ShowUnit(AActor* Unit, UTextureRenderTarget2D* Target)
 {
 	if (Unit == ShownUnit.Get() && Target == ShownTarget.Get())
 	{
@@ -99,7 +99,7 @@ void AUnitPreviewStage::ShowUnit(AUnitBase* Unit, UTextureRenderTarget2D* Target
 }
 
 void AUnitPreviewStage::UpdateWindow(UObject* WorldContext, TObjectPtr<AUnitPreviewStage>& Stage, UWidget* Box, UMaterialInterface* Material,
-	FName TextureParameter, AUnitBase* Unit, float InRotationSpeed, float InCaptureRate, const FVector& StageLocation)
+	FName TextureParameter, AActor* Unit, float InRotationSpeed, float InCaptureRate, const FVector& StageLocation)
 {
 	UTexture* Texture = nullptr;
 	if (Material)
@@ -153,10 +153,21 @@ void AUnitPreviewStage::ClearModel()
 	ModelRoot->SetRelativeRotation(FRotator::ZeroRotator);
 }
 
-void AUnitPreviewStage::BuildModel(AUnitBase* Unit)
+void AUnitPreviewStage::BuildModel(AActor* Unit)
 {
 	const FTransform UnitTransform = Unit->GetActorTransform();
-	const bool bSkeletal = Unit->bUseSkeletalMovement;
+	const AUnitBase* AsUnit = Cast<AUnitBase>(Unit);
+	bool bSkeletal = AsUnit && AsUnit->bUseSkeletalMovement;
+	if (!AsUnit)
+	{
+		// Not a unit (a replay proxy): skeletal when it shows a skeletal mesh, else its instanced/static look.
+		TArray<USkeletalMeshComponent*> Skeletons;
+		Unit->GetComponents<USkeletalMeshComponent>(Skeletons);
+		for (const USkeletalMeshComponent* Skeleton : Skeletons)
+		{
+			bSkeletal |= Skeleton->GetSkeletalMeshAsset() && Skeleton->IsVisible();
+		}
+	}
 
 	TArray<UMeshComponent*> SourceMeshes;
 	Unit->GetComponents<UMeshComponent>(SourceMeshes);
@@ -255,7 +266,7 @@ void AUnitPreviewStage::FrameModel()
 
 	// Turn around the model's centre: shift the meshes so that it sits on ModelRoot.
 	FVector Shift = ModelRoot->GetComponentLocation() - Bounds.Origin;
-	if (const AUnitBase* Unit = ShownUnit.Get())
+	if (const AUnitBase* Unit = Cast<AUnitBase>(ShownUnit.Get()))
 	{
 		Shift += Unit->PreviewModelOffset * FMath::Max(Bounds.SphereRadius, 10.f);
 	}
