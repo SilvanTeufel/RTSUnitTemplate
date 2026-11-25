@@ -124,9 +124,33 @@ public:
 	UPROPERTY(Transient)
 	TObjectPtr<URTSMouseCursorWidget> MouseCursorWidgetInstance = nullptr;
 
+	/**
+	 * Grows the cursor with the viewport: at this viewport height the cursor has its authored size, at twice
+	 * the height (4K against 1080p) twice the size. Never shrinks below the authored size. 0 = no auto scale.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Cursor", meta = (ClampMin = "0.0"))
+	float CursorReferenceHeight = 1080.f;
+
+	/** Pixel size of the hardware cursor PNG without a size suffix (Slate/Cursors/<Name>.png). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Cursor", meta = (ClampMin = "1.0"))
+	float HardwareCursorBasePixels = 32.f;
+
+	/** Resolution scale times the player's cursor size setting (URTSKeyBindingSubsystem::GetCursorScale). */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Cursor")
+	float GetEffectiveCursorScale() const;
+
 	/** (Re)applies the configured cursor. Call again after changing the cursor properties at runtime. */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Cursor")
 	void ApplyCustomMouseCursor();
+
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+private:
+	void HandleViewportResized(FViewport* Viewport, uint32 Unused);
+	FDelegateHandle ViewportResizedHandle;
+	float LastAppliedCursorScale = -1.f;
+
+public:
 
 	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
 	AAbilityIndicator* CurrentDraggedAbilityIndicator;
@@ -528,6 +552,10 @@ public:
 		double Time = 0.0;
 	};
 	TArray<FPendingBuildSelection> PendingBuildSelections;
+
+	/** Looks for the buildings of PendingBuildSelections; repeats every 0.2 s while one waits (at most 15 s). */
+	void TryResolvePendingBuildSelections();
+	FTimerHandle PendingSelectionTimer;
 	
 	UPROPERTY(ReplicatedUsing = OnRep_SelectableTeamId, EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 	int SelectableTeamId = -1;

@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "GameplayTagContainer.h"
+#include "Controller/Input/RTSKeyBindings.h"
 #include "TaggedUnitButton.generated.h"
 
 // Declare a dynamic multicast delegate. This is how this button will tell its owner (the TaggedUnitSelector) that it was clicked.
@@ -32,6 +33,14 @@ public:
 	// Public function to allow the parent to set the icon texture.
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate")
 	void SetIcon(UTexture2D* NewIcon);
+
+	/** Key layout action that selects this group. UTaggedUnitSelector sets it for its TagButton* widgets. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Keys")
+	ERTSKeyAction KeyAction = ERTSKeyAction::None;
+
+	/** Key of KeyAction in the active layout ("CTRL + 1", or "1" in Classic) - Fallback when there is none. For the tooltip. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Keys")
+	FText GetKeyBindingTextOr(FText Fallback) const;
 
 protected:
 	// Overriding NativeConstruct to bind our internal button's OnClicked event.

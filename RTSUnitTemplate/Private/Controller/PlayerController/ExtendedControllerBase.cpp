@@ -1084,7 +1084,9 @@ void AExtendedControllerBase::AddAbilityIndex(int Add)
 	if (!SelectedUnits.Num()) return;
 	if (CurrentUnitWidgetIndex < 0 || CurrentUnitWidgetIndex >= SelectedUnits.Num()) return;
 	if (!SelectedUnits[CurrentUnitWidgetIndex]) return;
-	
+
+	// The player scrolls by hand: an armed auto scroll must not jump somewhere else afterwards.
+	DisarmAutoAbilityScroll();
 
 	int NewIndex = AbilityArrayIndex+=Add;
 
@@ -1336,9 +1338,10 @@ TArray<AUnitBase*> AExtendedControllerBase::GetAndPrepareAbilityTargets(TSubclas
 				// state and its StateTimer restarts once the tag returns. Measured on GA_Siege_Tank_AH
 				// (CastTime 3.5 s): 3.70 s for a single press, 5.49 s with 4 extra presses, 6.27 s with 10.
 				const bool bWillBeDropped = GASUnit && !AbilityCDO->UseAbilityQue
-					&& GASUnit->IsAnyAbilityActive();
+					&& !AbilityCDO->bRunsBesideAbilitySlot && GASUnit->IsAnyAbilityActive();
 
-				if (!bWillQueue && !bWillBeDropped && AbilityCDO->bStopMovementOnActivation && Unit->MassActorBindingComponent)
+				// Beside the slot nothing stops: clearing the state tags here wiped the running production cast.
+				if (!bWillQueue && !bWillBeDropped && AbilityCDO->bStopMovementOnActivation && !AbilityCDO->bRunsBesideAbilitySlot && Unit->MassActorBindingComponent)
 				{
 					FMassEntityHandle Entity = Unit->MassActorBindingComponent->GetMassEntityHandle();
 					if (UMassEntitySubsystem* MassSubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>())
@@ -1537,7 +1540,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 				{
 					continue;
 				}
-				if (UnitAbilityCDO && !UnitAbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive())
+				if (UnitAbilityCDO && !UnitAbilityCDO->UseAbilityQue && !UnitAbilityCDO->bRunsBesideAbilitySlot && GASUnit->IsAnyAbilityActive())
 				{
 					continue;
 				}
@@ -1567,7 +1570,7 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 							continue;
 						}
 
-						if (!AbilityCDO->UseAbilityQue && GASUnit->IsAnyAbilityActive())
+						if (!AbilityCDO->UseAbilityQue && !AbilityCDO->bRunsBesideAbilitySlot && GASUnit->IsAnyAbilityActive())
 						{
 							continue;
 						}
@@ -1578,6 +1581,14 @@ void AExtendedControllerBase::ActivateKeyboardAbilitiesOnMultipleUnits(EGASAbili
 						bActivatedAny = true;
 					}
 				}
+			}
+
+			// A player fired a combat unit's ability: from now on the page may move on to the next group
+			// as soon as this one has nothing left to fire (TickAutoAbilityScroll, every widget update).
+			if (bActivatedAny && bAutoAbilityScroll && IsLocalController() && CurrentUnit && !CurrentUnit->IsWorker)
+			{
+				AutoAbilityScrollArmedUntil = GetWorld()->GetTimeSeconds() + AutoAbilityScrollWindow;
+				AutoAbilityScrollFrom = CurrentUnit;
 			}
 		}
 	}
@@ -4888,7 +4899,8 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             const FBoxSphereBounds MeshBounds = CurrentIndicator->IndicatorMesh ? CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform()) : FBoxSphereBounds(CurrentIndicator->GetActorLocation(), FVector::ZeroVector, 0.f);
             const float HalfH = MeshBounds.BoxExtent.Z;
             const float BottomZ = MeshBounds.Origin.Z - HalfH;
-            const float OffsetActorToBottom = BottomZ - CurrentIndicator->GetActorLocation().Z;
+            // An anchored mesh stands on the caster, not under the actor - its height says nothing about the mouse point.
+            const float OffsetActorToBottom = CurrentIndicator->bAnchorMeshAtCaster ? 0.f : BottomZ - CurrentIndicator->GetActorLocation().Z;
             FHitResult GroundHit;
             FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_MouseFollowGround")), true, CurrentIndicator);
             Params.AddIgnoredActor(CurrentIndicator);
@@ -4961,7 +4973,8 @@ void AExtendedControllerBase::MoveAbilityIndicator_Local(float DeltaSeconds)
             const FBoxSphereBounds MeshBoundsNow = CurrentIndicator->IndicatorMesh->CalcBounds(CurrentIndicator->IndicatorMesh->GetComponentTransform());
             const float HalfH = MeshBoundsNow.BoxExtent.Z;
             const float BottomZ = MeshBoundsNow.Origin.Z - HalfH;
-            const float OffsetActorToBottom = BottomZ - CurrentIndicator->GetActorLocation().Z;
+            // An anchored mesh stands on the caster, not under the actor - its height says nothing about the mouse point.
+            const float OffsetActorToBottom = CurrentIndicator->bAnchorMeshAtCaster ? 0.f : BottomZ - CurrentIndicator->GetActorLocation().Z;
             FHitResult GroundHit;
             FCollisionQueryParams Params(FName(TEXT("AbilityIndicator_GroundTrace")), true, CurrentIndicator);
             Params.AddIgnoredActor(CurrentIndicator);
@@ -5278,6 +5291,13 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			if (ABuildingBase* BuildingCDO = WA->BuildingClass->GetDefaultObject<ABuildingBase>())
 			{
 				NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
+				// The building's talent effects too (see UUnitStateProcessor::HandleWorkerOrBuildingCastProgress).
+				NewConstruction->StaminaInvestmentEffect = BuildingCDO->StaminaInvestmentEffect;
+				NewConstruction->AttackPowerInvestmentEffect = BuildingCDO->AttackPowerInvestmentEffect;
+				NewConstruction->WillpowerInvestmentEffect = BuildingCDO->WillpowerInvestmentEffect;
+				NewConstruction->HasteInvestmentEffect = BuildingCDO->HasteInvestmentEffect;
+				NewConstruction->ArmorInvestmentEffect = BuildingCDO->ArmorInvestmentEffect;
+				NewConstruction->MagicResistanceInvestmentEffect = BuildingCDO->MagicResistanceInvestmentEffect;
 			}
 		}
 		if (AConstructionUnit* CU = Cast<AConstructionUnit>(NewConstruction))
@@ -5311,8 +5331,8 @@ void AExtendedControllerBase::Server_SpawnExtensionConstructionUnit_Implementati
 			// Start construction with minimal health/shield so it progresses over time
 			if (NewConstruction->Attributes)
 			{
-				NewConstruction->SetHealth(1.f);
-				NewConstruction->SetShield(1.f);
+				// As a fraction: the Mass binding resets the attributes to the building's full values later.
+				NewConstruction->ApplySpawnHealthFraction(0.05f, 0.05f);
 				NewConstruction->OpenHealthWidget = true;
 				NewConstruction->bShowLevelOnly = false;
 				NewConstruction->UpdateWidget();
@@ -5712,6 +5732,61 @@ void AExtendedControllerBase::SetAbilityEnabledByKey(AUnitBase* UnitBase, const 
 			}
 		}
 	}
+}
+
+// DIE LETZTE SPERRE vor dem Setzen (12.11.2026, Nutzerbefund "in Ausnahmefaellen liess sich eine Buildarea auf
+// Ressourcen oder andere Gebaeude setzen"). Die Regeln in DropWorkAreaForUnit decken sich gegenseitig nicht ab: ein
+// gesnappter Drop toleriert in EvaluatePlacement JEDE Ueberlappung, die Erstpruefung misst gesnappt nur 35 % der
+// Reichweite, Erweiterungen laufen gar nicht durch EvaluatePlacement (Ressourcenplaetze ungeprueft), und die
+// Korrektursuche schiebt die Flaeche bis 1000 weit und bewertet sie ueber die Ueberlappungsliste der Engine. Hier
+// zaehlt nur die Geometrie, fuer alle Wege gleich: steckt die Grundflaeche deutlich in einem lebenden Gebaeude, einer
+// anderen Baustelle oder einem Ressourcenplatz, wird nicht gesetzt. Randkontakt (Snap) bleibt erlaubt.
+static const AActor* FindPlacementIntruder(UWorld* World, AWorkArea* Area, const ABuildingBase* Host, float Tolerance)
+{
+	FVector Mitte, Mass;
+	if (!World || !Area || !GetActorBoundsForSnap(Area, Mitte, Mass))
+	{
+		return nullptr;
+	}
+	auto Steckt = [&](AActor* Other) -> bool
+	{
+		FVector AndereMitte, AndereMass;
+		if (!GetActorBoundsForSnap(Other, AndereMitte, AndereMass))
+		{
+			return false;
+		}
+		const float X = (Mass.X + AndereMass.X) - FMath::Abs(Mitte.X - AndereMitte.X);
+		const float Y = (Mass.Y + AndereMass.Y) - FMath::Abs(Mitte.Y - AndereMitte.Y);
+		// Die Huellkaesten schraeg stehender Gebaeude sind groesser als der Grundriss - wer nur deren Rand streift,
+		// steckt nicht darin. Es muss mindestens ein Viertel der kleineren Breite sein.
+		const float Kleinere = FMath::Min(FMath::Min(Mass.X, Mass.Y), FMath::Min(AndereMass.X, AndereMass.Y));
+		return FMath::Min(X, Y) > FMath::Max(Tolerance, 0.5f * Kleinere);
+	};
+	for (TActorIterator<ABuildingBase> It(World); It; ++It)
+	{
+		ABuildingBase* Other = *It;
+		if (!IsValid(Other) || IsDeadForPlacement(Other) || (Host && (Other == Host || Other == Host->Origin)))
+		{
+			continue;
+		}
+		if (Steckt(Other))
+		{
+			return Other;
+		}
+	}
+	for (TActorIterator<AWorkArea> It(World); It; ++It)
+	{
+		AWorkArea* Other = *It;
+		if (!IsValid(Other) || Other == Area || (Other->Type != WorkAreaData::BuildArea && !IsResourcePlace(Other)))
+		{
+			continue;
+		}
+		if (Steckt(Other))
+		{
+			return Other;
+		}
+	}
+	return nullptr;
 }
 
 bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound)
@@ -7142,6 +7217,34 @@ bool AExtendedControllerBase::DropWorkAreaForUnit(AUnitBase* UnitBase, bool bWor
 			}
 		}
 	
+		if (!bResourceArea)
+		{
+			const ABuildingBase* Wirt = nullptr;
+			if (bIsExtensionArea)
+			{
+				Wirt = Cast<ABuildingBase>(UnitBase);
+				if (!Wirt)
+				{
+					if (const AWorkingUnitBase* Worker = Cast<AWorkingUnitBase>(UnitBase)) Wirt = Worker->Base;
+				}
+			}
+			if (const AActor* Eindringling = FindPlacementIntruder(GetWorld(), DraggedWorkArea, Wirt, PlacementOverlapTolerance))
+			{
+				UE_LOG(LogTemp, Warning, TEXT("DropWorkAreaForUnit: rejected at the last check, %s would sit on %s (gesnappt=%d)."),
+				       *DraggedWorkArea->GetName(), *Eindringling->GetName(), bWorkAreaIsSnapped ? 1 : 0);
+				if (InDropWorkAreaFailedSound)
+				{
+					Client_PlaySound2D(InDropWorkAreaFailedSound);
+				}
+				DraggedWorkArea->Destroy();
+				UnitBase->BuildArea = nullptr;
+				UnitBase->CurrentDraggedWorkArea = nullptr;
+				CancelCurrentAbility(UnitBase);
+				SendWorkerToBase(UnitBase);
+				return true;
+			}
+		}
+
 		if (UnitBase->IsWorker)
 		{
 			if (DropWorkAreaSound)
@@ -7813,28 +7916,12 @@ void AExtendedControllerBase::SelectUnitsWithTag_Implementation(FGameplayTag Tag
 	// Check if there are units to sort
 	if (NewSelection.Num() > 1)
 	{
-		// Sort the NewSelection array by tag
-		NewSelection.Sort([Tag](const AUnitBase& A, const AUnitBase& B) -> bool
+		// Every unit here carries the tag (filtered above), so the order is SelectionOrder, then the name.
+		// The name alone put OrbitalUplink (T4) in front of BioIntegrator (T1) - the ability pages are
+		// scrolled in this order, so T1 -> T4 needs the explicit tier.
+		NewSelection.Sort([](const AUnitBase& A, const AUnitBase& B) -> bool
 		{
-			// Example Sorting Logic:
-			// If both units have the tag, sort by unit name
-			// Otherwise, prioritize units that have the tag
-			bool AHasTag = A.UnitTags.HasTag(Tag);
-			bool BHasTag = B.UnitTags.HasTag(Tag);
-
-			if (AHasTag && BHasTag)
-			{
-				return A.GetName() < B.GetName();
-			}
-			if (AHasTag)
-			{
-				return true; // A comes before B
-			}
-			if (BHasTag)
-			{
-				return false; // B comes before A
-			}
-			return A.GetName() < B.GetName(); // Fallback sorting
+			return ASpawnerUnit::IsBeforeInSelection(A, B);
 		});
 	}
 
@@ -7965,6 +8052,165 @@ void AExtendedControllerBase::AddToCurrentUnitWidgetIndex(int Add)
 	{
 		CurrentUnitWidgetIndex = StartIndex;
 	}
+}
+
+float AExtendedControllerBase::GetAbilityCooldownRemaining(AUnitBase* Unit, TSubclassOf<UGameplayAbilityBase> AbilityClass)
+{
+	if (!Unit || !AbilityClass)
+	{
+		return 0.f;
+	}
+	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+	if (!ASC || !ASC->AbilityActorInfo.IsValid())
+	{
+		return 0.f;
+	}
+	FGameplayAbilitySpec* Spec = ASC->FindAbilitySpecFromClass(AbilityClass);
+	if (!Spec)
+	{
+		return 0.f;
+	}
+	float Remaining = 0.f;
+	float Duration = 0.f;
+	// The instance knows its own WeaponComponent (custom cooldowns); the CDO is the fallback.
+	TArray<UGameplayAbility*> Instances = Spec->GetAbilityInstances();
+	const UGameplayAbility* Source = Instances.Num() > 0 ? Instances[0] : AbilityClass->GetDefaultObject<UGameplayAbility>();
+	if (Source)
+	{
+		Source->GetCooldownTimeRemainingAndDuration(Spec->Handle, ASC->AbilityActorInfo.Get(), Remaining, Duration);
+	}
+	return FMath::Max(0.f, Remaining);
+}
+
+bool AExtendedControllerBase::IsDefaultAbilityReady(AUnitBase* Unit, TSubclassOf<UGameplayAbilityBase> AbilityClass)
+{
+	if (!Unit || !AbilityClass)
+	{
+		return false;
+	}
+	UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+	if (!ASC || !ASC->FindAbilitySpecFromClass(AbilityClass))
+	{
+		return false;
+	}
+	// A locked ability (research not done yet) has no cooldown, but it cannot be fired either. Counting it
+	// as ready would keep the page on a unit whose only free buttons are greyed out.
+	if (!UGameplayAbilityBase::IsAbilityKeyGateOpen(AbilityClass->GetDefaultObject<UGameplayAbilityBase>(), Unit->TeamId, ASC))
+	{
+		return false;
+	}
+	return GetAbilityCooldownRemaining(Unit, AbilityClass) <= KINDA_SMALL_NUMBER;
+}
+
+int32 AExtendedControllerBase::FindAutoAbilityScrollTarget(const TArray<AUnitBase*>& Units, int32 CurrentIndex) const
+{
+	if (!Units.IsValidIndex(CurrentIndex) || !IsValid(Units[CurrentIndex]) || Units[CurrentIndex]->IsWorker)
+	{
+		return INDEX_NONE;
+	}
+	auto IsCandidate = [](const AUnitBase* U)
+	{
+		return IsValid(U) && !U->IsWorker && U->CanActivateAbilities
+			&& U->GetUnitState() != UnitData::Dead && U->DefaultAbilities.Num() > 0;
+	};
+	// A group is what one page shows: all units with the same AbilitySelectionTag (AddToCurrentUnitWidgetIndex
+	// steps over them as one). It has something to fire when ANY of its units has ANY DefaultAbility ready.
+	auto GroupHasReady = [&Units, &IsCandidate](const FGameplayTag& GroupTag)
+	{
+		for (AUnitBase* U : Units)
+		{
+			if (!IsCandidate(U) || U->AbilitySelectionTag != GroupTag)
+			{
+				continue;
+			}
+			for (const TSubclassOf<UGameplayAbilityBase>& AbilityClass : U->DefaultAbilities)
+			{
+				if (AbilityClass && IsDefaultAbilityReady(U, AbilityClass))
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+
+	const FGameplayTag CurrentTag = Units[CurrentIndex]->AbilitySelectionTag;
+	if (GroupHasReady(CurrentTag))
+	{
+		return INDEX_NONE;
+	}
+
+	// Same walking order as the mouse wheel (+1): the first unit of the next group that can fire.
+	const int32 Num = Units.Num();
+	TSet<FGameplayTag> Checked;
+	Checked.Add(CurrentTag);
+	for (int32 Step = 1; Step < Num; ++Step)
+	{
+		const int32 Index = (CurrentIndex + Step) % Num;
+		AUnitBase* U = Units[Index];
+		if (!IsCandidate(U) || Checked.Contains(U->AbilitySelectionTag))
+		{
+			continue;
+		}
+		Checked.Add(U->AbilitySelectionTag);
+		if (GroupHasReady(U->AbilitySelectionTag))
+		{
+			return Index;
+		}
+	}
+	return INDEX_NONE;
+}
+
+void AExtendedControllerBase::DisarmAutoAbilityScroll()
+{
+	AutoAbilityScrollArmedUntil = -1.f;
+	AutoAbilityScrollFrom.Reset();
+}
+
+void AExtendedControllerBase::TickAutoAbilityScroll()
+{
+	if (AutoAbilityScrollArmedUntil < 0.f || !IsLocalController() || bIsAi)
+	{
+		return;
+	}
+	const UWorld* World = GetWorld();
+	if (!World || World->GetTimeSeconds() > AutoAbilityScrollArmedUntil)
+	{
+		DisarmAutoAbilityScroll();
+		return;
+	}
+	// The player moved on (other unit shown, new selection): nothing to do any more.
+	if (!SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex)
+		|| SelectedUnits[CurrentUnitWidgetIndex] != AutoAbilityScrollFrom.Get())
+	{
+		DisarmAutoAbilityScroll();
+		return;
+	}
+	Server_RequestAutoAbilityScroll(SelectedUnits, CurrentUnitWidgetIndex);
+}
+
+void AExtendedControllerBase::Server_RequestAutoAbilityScroll_Implementation(const TArray<AUnitBase*>& Units, int32 CurrentIndex)
+{
+	const int32 Target = FindAutoAbilityScrollTarget(Units, CurrentIndex);
+	if (Target != INDEX_NONE)
+	{
+		Client_ApplyAutoAbilityScroll(Target, Units[CurrentIndex], Units[Target]);
+	}
+}
+
+void AExtendedControllerBase::Client_ApplyAutoAbilityScroll_Implementation(int32 TargetIndex, AUnitBase* FromUnit, AUnitBase* TargetUnit)
+{
+	// Only if nothing changed while the answer was on its way: same unit shown, same selection order.
+	if (AutoAbilityScrollArmedUntil < 0.f
+		|| !SelectedUnits.IsValidIndex(CurrentUnitWidgetIndex) || SelectedUnits[CurrentUnitWidgetIndex] != FromUnit
+		|| !SelectedUnits.IsValidIndex(TargetIndex) || SelectedUnits[TargetIndex] != TargetUnit)
+	{
+		return;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[AutoAbilityScroll] %s -> %s (index %d)"), *GetNameSafe(FromUnit), *GetNameSafe(TargetUnit), TargetIndex);
+	CurrentUnitWidgetIndex = TargetIndex;
+	AbilityArrayIndex = 0;
+	DisarmAutoAbilityScroll();
 }
 
 void AExtendedControllerBase::SendWorkerToResource_Implementation(AWorkingUnitBase* Worker, AWorkArea* WorkArea)

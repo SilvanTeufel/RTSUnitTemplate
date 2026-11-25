@@ -15,6 +15,7 @@
 #include "Widgets/StoryWidgetBase.h"
 #include "Widgets/AttributeTreeWidget.h"
 #include "Widgets/FormationSelectorWidget.h"
+#include "Controller/Input/RTSKeyBindings.h"
 #include "GameplayTagContainer.h"
 #include "ExtendedCameraBase.generated.h"
 
@@ -128,6 +129,57 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void SwitchControllerStateMachine(const FInputActionValue& InputActionValue, int32 NewCameraState);
+
+	// ============================================================================================
+	// Tastaturbelegung (09.11.2026). Die Tasten, die frueher fest als W_Pressed, 1_Pressed ... im
+	// IMC hingen, laufen jetzt ueber URTSKeyBindingSubsystem: der Controller reicht jede Taste an
+	// HandleBoundKey weiter, und ApplyInputMappingContext nimmt genau diese Tasten aus dem IMC.
+
+	/**
+	 * Off = the camera keeps the old fixed keys from the IMC and ignores the layout. For projects
+	 * whose IMC maps the per-key actions to other keys.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Keys")
+	bool bUseKeyLayout = true;
+
+	/** Called by ACameraControllerBase::InputKey for every key event. True when the key belongs to the layout. */
+	bool HandleBoundKey(const FKey& Key, EInputEvent Event);
+
+	/** Runs the action of a layout key. bPressed false = the key was let go. */
+	void ExecuteKeyAction(ERTSKeyAction Action, bool bPressed);
+
+	/** "CTRL + 1" in the active layout - what tooltips show. Empty when the action has no key. */
+	UFUNCTION(BlueprintPure, Category = "RTSUnitTemplate|Keys")
+	FText GetKeyBindingText(ERTSKeyAction Action) const;
+
+	/** Opens the Modern / Classic / User defined choice over everything. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Keys")
+	void OpenKeyLayoutChoice();
+
+	/** The key list (URTSKeyBindingListWidget) - the user-defined layout is edited there. FocusKey marks its rows. */
+	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|Keys")
+	void OpenKeyboardEditor(FKey FocusKey);
+
+	/** Closes the layout choice / keyboard window if one is open. True when something was closed. */
+	bool CloseKeyLayoutWindows();
+
+	/** The class used for the keyboard window: the HUD's control widget class if it is one, else UControlWidget. */
+	TSubclassOf<class UControlWidget> GetKeyboardWidgetClass() const;
+
+protected:
+	UFUNCTION()
+	void OnKeyBindingsChanged();
+
+	/** Keys the layout held down at press time - the release goes to the same action even if Ctrl was let go in between. */
+	TMap<FKey, ERTSKeyAction> HeldLayoutKeys;
+
+	/** Copy of MappingContext without the keys of the layout - this one is registered, not the asset. */
+	UPROPERTY(Transient)
+	TObjectPtr<UInputMappingContext> FilteredMappingContext;
+
+	virtual void ApplyInputMappingContext() override;
+
+public:
 
 	// ============================================================================================
 	// LUX-ANPASSUNG (16.08.2026) â€” Linksklick feuert in der Direktsteuerung.

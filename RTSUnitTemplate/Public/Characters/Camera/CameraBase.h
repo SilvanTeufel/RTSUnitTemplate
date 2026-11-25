@@ -232,8 +232,42 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
 		float EdgeScrollDeceleration = 14.f;
 
+	/**
+	 * Edge scrolling moves the camera with the WASD code (MoveInDirection: CamSpeed, AccelerationRate,
+	 * DecelerationRate, ground trace, bounds, server sync). The old path (PanMoveCameraSmoothed) tied the speed
+	 * to the camera actor's height, which follows the ground - the scrolling surged and shook while WASD ran
+	 * smooth (reported 15.11.2026). Off = the old path with EdgeScrollCamSpeed/EdgeScrollAcceleration.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		bool bEdgeScrollLikeWASD = true;
+
+	/**
+	 * Edge scrolling speed as a share of CamSpeed (only with bEdgeScrollLikeWASD). 1.8: the old path ran at
+	 * EdgeScrollCamSpeed 200 x camera height 600 x 0.06 = ~7200 uu/s against CamSpeed 4000 (measured in
+	 * Level_6_Survive, 15.11.2026) - the edge keeps the speed players are used to.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate, meta = (ClampMin = "0.05"))
+		float EdgeScrollSpeedScale = 1.8f;
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "Margin", Keywords = "RTSUnitTemplate Margin"), Category = RTSUnitTemplate)
 		float Margin = 15;
+
+	/**
+	 * Randbreite fuer das Randscrollen, solange die Maus ueber einem Knopf (oder einem anderen
+	 * bedienbaren Element) des HUD liegt. Knoepfe am Bildschirmrand - etwa im ResourceWidget - waren
+	 * sonst nicht zu treffen, ohne dass die Kamera wegfuhr. Ganz an den Rand geschoben scrollt es
+	 * weiterhin.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float MarginOverButtons = 2.f;
+
+	/**
+	 * Kommt die Maus gerade von einem Knopf (vor hoechstens 0,3 s) in die Randzone, scrollt es erst
+	 * nach dieser Verweildauer (Sekunden). Ueber den Knopf hinausgefahren heisst sonst sofort
+	 * Kamerafahrt - die Knoepfe des ResourceWidgets liegen nur wenige Pixel unter dem Rand.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+		float EdgeScrollDelayAfterButton = 0.4f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta = (DisplayName = "ScreenSizeX", Keywords = "RTSUnitTemplate ScreenSizeX"), Category = RTSUnitTemplate)
 		int32 ScreenSizeX;
@@ -442,6 +476,10 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void MoveInDirection(FVector Direction, float DeltaTime);
+
+	/** MoveInDirection with CamSpeed scaled (the edge scrolling uses it with EdgeScrollSpeedScale). */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	void MoveInDirectionScaled(FVector Direction, float DeltaTime, float SpeedScale);
 	
 	UPROPERTY(BlueprintReadWrite, meta = (DisplayName = "StartTime", Keywords = "TopDownRTSCamLib StartTime"), Category = RTSUnitTemplate)
 		float StartTime = 0.f;

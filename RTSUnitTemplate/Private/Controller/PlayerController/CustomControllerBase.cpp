@@ -67,6 +67,9 @@
 #include "HAL/FileManager.h"
 #include "Widgets/UnitStatsTooltipWidget.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
+#include "Blueprint/SlateBlueprintLibrary.h"
+#include "Blueprint/GameViewportSubsystem.h"
+#include "Widgets/TaggedUnitSelector.h"
 
 
 void ACustomControllerBase::BeginPlay()
@@ -298,7 +301,8 @@ void ACustomControllerBase::CorrectSetUnitMoveTarget_Implementation(UObject* Wor
 	FVector FinalTargetLocation = NewTargetLocation;
 
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
-	if (NavSys)
+	// Flieger brauchen kein Navmesh unter dem Ziel (Plateau, Wand, Gebaeude) - siehe AdjustBatchTargetsForNav.
+	if (NavSys && !(Unit && Unit->IsFlying))
 	{
 		FNavLocation NavLoc;
 		const bool bOnNav = NavSys->ProjectPointToNavigation(FinalTargetLocation, NavLoc, NavMeshProjectionExtent);
@@ -444,6 +448,16 @@ TArray<FVector> ACustomControllerBase::AdjustBatchTargetsForNav(const TArray<AUn
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
 	if (!NavSys || InTargets.Num() == 0) return Result;
 
+	// WARUM (10.11.2026): Flieger blieben an Klippen und Energiewaenden haengen bzw. kamen nur ueber Rampen.
+	// Ein Klick auf ein Plateau ohne Navmesh, in eine Wand oder auf ein Gebaeude wurde hier fuer die GANZE
+	// Gruppe auf das naechste saubere Navmesh geschoben - Klippenfuss oder Wandaussenseite. Flieger lenken
+	// ohne Pfad direkt aufs Ziel; sie behalten ihren Klickpunkt.
+	const bool bAlleFliegen = !Units.ContainsByPredicate([](const AUnitBase* U) { return U && !U->IsFlying; });
+	if (bAlleFliegen)
+	{
+		return Result;
+	}
+
 	// Trigger the (relatively expensive) re-projection only when at least one target is off-navmesh or
 	// in a dirty (UNavArea_Obstacle) area. The common case (all points valid) returns the input unchanged.
 	bool bNeedsFormationAdjust = false;
@@ -507,7 +521,8 @@ TArray<FVector> ACustomControllerBase::AdjustBatchTargetsForNav(const TArray<AUn
 	{
 		if (Units.IsValidIndex(i) && Units[i])
 		{
-			Result[i] = FormationCenter + TempOffsets.FindRef(Units[i]);
+			// Gemischte Gruppe: Flieger behalten ihren urspruenglichen Platz (siehe oben).
+			Result[i] = Units[i]->IsFlying ? InTargets[i] : FormationCenter + TempOffsets.FindRef(Units[i]);
 		}
 	}
 
@@ -1739,7 +1754,7 @@ void ACustomControllerBase::CorrectSetUnitMoveTargetForAbility_Implementation(UO
     FMassEntityManager& EntityManager = MassSubsystem->GetMutableEntityManager();
 
 	UNavigationSystemV1* NavSys = UNavigationSystemV1::GetCurrent(World);
-	if (NavSys)
+	if (NavSys && !(Unit && Unit->IsFlying))
 	{
 		FNavLocation NavLoc;
 		if (!NavSys->ProjectPointToNavigation(NewTargetLocation, NavLoc, NavMeshProjectionExtent) || IsLocationInDirtyArea(NavLoc.Location))
@@ -2180,6 +2195,24 @@ void ACustomControllerBase::ExecuteFollowCommand(const TArray<AUnitBase*>& Units
 			Unit->ApplyFollowTarget(nullptr);
 		}
 
+		// Folgen mit Angriffsbefehl (Beschwoerungen): siehe FMassAITargetFragment::bFollowEngagesEnemies.
+		Unit->bFollowAttacks = AttackT && FollowTarget && Unit != FollowTarget;
+		if (World && Unit->MassActorBindingComponent)
+		{
+			if (UMassEntitySubsystem* FollowMassSubsystem = World->GetSubsystem<UMassEntitySubsystem>())
+			{
+				FMassEntityManager& FollowEntityManager = FollowMassSubsystem->GetMutableEntityManager();
+				const FMassEntityHandle FollowHandle = Unit->MassActorBindingComponent->GetMassEntityHandle();
+				if (FollowEntityManager.IsEntityValid(FollowHandle))
+				{
+					if (FMassAITargetFragment* FollowAITarget = FollowEntityManager.GetFragmentDataPtr<FMassAITargetFragment>(FollowHandle))
+					{
+						FollowAITarget->bFollowEngagesEnemies = Unit->bFollowAttacks;
+					}
+				}
+			}
+		}
+
 		if (Unit->IsWorker && FollowTarget)
 		{
 			if (FollowTarget->bIsBuilding)
@@ -2604,7 +2637,9 @@ bool ACustomControllerBase::TryHandleFollowOnRightClick(const FHitResult& HitPaw
 	// If we clicked on a unit while having a selection, assign follow or attack and early return
 	if (SelectedUnits.Num() > 0 && ResolvedHit.bBlockingHit)
 	{
-		if (!Cast<AConstructionUnit>(ResolvedHit.GetActor()))
+		// Eigene Baustellen: kein Folgen (der Klick gehoert dem Bauplatz). Gegnerische: angreifen.
+		const AConstructionUnit* HitSite = Cast<AConstructionUnit>(ResolvedHit.GetActor());
+		if (!HitSite || HitSite->TeamId != SelectableTeamId)
 		{
 			if (AUnitBase* HitUnit = GetUnitFromHitResult(ResolvedHit))
 			{
@@ -2765,6 +2800,19 @@ void ACustomControllerBase::RightClickPressedMass()
 			}
 		}
 		bZieltAufBauplatz = (Getroffen != nullptr) && !Getroffen->IsNoBuildZone;
+
+		// Die Baustelle eines GEGNERS ist kein Bauplatz fuer uns, sondern ein Ziel: der Klick geht an
+		// TryHandleFollowOnRightClick und wird zum Angriffsbefehl. Sonst schluckte CheckClickOnWorkArea
+		// ihn (Xeno-Bauplaetze sind IsExtensionArea) oder machte einen reinen Laufbefehl daraus.
+		if (bZieltAufBauplatz)
+		{
+			const AUnitBase* Site = Getroffen->ConstructionUnit;
+			const int32 SiteTeam = IsValid(Site) ? Site->TeamId : Getroffen->TeamId;
+			if (SiteTeam != 0 && SiteTeam != SelectableTeamId)
+			{
+				bZieltAufBauplatz = false;
+			}
+		}
 
 		// Steht auf dem Bauplatz ein FERTIGES Gebaeude, meint der Klick das Gebaeude - nicht den
 		// Bauplatz darunter. Die AWorkArea bleibt nach dem Bau bestehen und blockt weiterhin
@@ -3543,7 +3591,10 @@ bool ACustomControllerBase::ValidateAndAdjustGridLocation(const TArray<AUnitBase
     // Grid shapes ignore it entirely.
     const FVector FormationForward = ComputeApproachDirection(Units, InOutLocation);
 
-    if (!NavSys || Units.Num() == 0)
+    // Reine Fliegergruppe: Ziel nicht aufs Navmesh verschieben (siehe AdjustBatchTargetsForNav).
+    const bool bAlleFliegen = Units.Num() > 0
+        && !Units.ContainsByPredicate([](const AUnitBase* U) { return U && !U->IsFlying; });
+    if (!NavSys || Units.Num() == 0 || bAlleFliegen)
     {
         OutOffsets = ComputeSlotOffsetsDirectional(Units, OutSpacing, FormationForward);
         return true;
@@ -4234,9 +4285,9 @@ void ACustomControllerBase::ResetModifierKeyFlags(const TCHAR* Reason)
 	}
 }
 
-void ACustomControllerBase::HealStaleModifierFlags(const TCHAR* Where)
+void ACustomControllerBase::HealStaleModifierFlags(const TCHAR* Where, bool bRequireFocus)
 {
-	if (!IsHumanLocalPlayer() || !FSlateApplication::IsInitialized() || !FApp::HasFocus())
+	if (!IsHumanLocalPlayer() || !FSlateApplication::IsInitialized() || (bRequireFocus && !FApp::HasFocus()))
 	{
 		return;
 	}
@@ -4273,6 +4324,12 @@ void ACustomControllerBase::LeftClickPressedMass()
 {
     // Vor allem anderen: ein haengengebliebenes Alt wuerde den Klick sonst in den Alt-Zweig lenken.
     HealStaleModifierFlags(TEXT("LeftClickPressedMass"));
+
+    // A replay plays over the match: the click is the replay's (proxy selection and card).
+    if (bReplayViewing)
+    {
+        return;
+    }
 
     // Every left click closes the enemy stats popup; a click on an enemy opens it again below.
     HideUnitStatsPopup();
@@ -4340,7 +4397,12 @@ void ACustomControllerBase::LeftClickPressedMass()
             {
                 for (AUnitBase* U : SelectedUnits)
                 {
-                    if (U && (U->CurrentSnapshot.AbilityClass || U->CurrentDraggedWorkArea))
+                    // A unit that is already CASTING (a building printing a unit, a cast in progress) keeps its
+                    // snapshot for the whole cast but waits for no click. Counting it as aiming sent every left
+                    // click of the selection to the server - and with a "keep selection" ability anywhere in the
+                    // selection no box select and no deselect worked any more until ESC (12.11.2026).
+                    if (U && (U->CurrentDraggedWorkArea
+                        || (U->CurrentSnapshot.AbilityClass && U->GetUnitState() != UnitData::Casting)))
                     {
                         bAnyUnitIsAimingOrDragging = true;
                         break;
@@ -4389,7 +4451,12 @@ void ACustomControllerBase::LeftClickPressedMass()
 
 void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const TArray<AUnitBase*>& Units, const FHitResult& HitPawn, bool bWorkAreaIsSnapped, USoundBase* InDropWorkAreaFailedSound, bool bHasClientWorkAreaTransform, FTransform ClientWorkAreaTransform, int32 InAbilityIndex)
 {
-    if (Units.Num() == 0) return;
+    if (Units.Num() == 0)
+    {
+        // Always answer - without a reply the click neither selected nor started a box.
+        Client_ContinueSelectionAfterAbility(HitPawn);
+        return;
+    }
 
     // Ensure server has the same transform for the dragged work area as the client
     if (bHasClientWorkAreaTransform && Units[0] && Units[0]->CurrentDraggedWorkArea)
@@ -4406,6 +4473,10 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
     bool AbilityUnSynced = false;
     bool bFromCooldown = false;
     bool bAnyAbilityWantsToKeepSelection = false;
+    // From units WITHOUT a running ability: only meaningful when the click fired nothing (the keyboard-pressed
+    // ability is not synced yet / on cooldown). Next to a unit whose ability did fire it must not swallow the
+    // click - InAbilityIndex is the ability PAGE, so it reads an unrelated slot of an idle unit.
+    bool bIdleUnitWantsToKeepSelection = false;
 
     if (this->IsShiftPressed)
     {
@@ -4414,6 +4485,11 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
 
     for (AUnitBase* U : Units)
     {
+        // Casting = already executing, the click is not aimed at it (same rule as LeftClickPressedMass).
+        if (U && U->CurrentSnapshot.AbilityClass && U->GetUnitState() == UnitData::Casting)
+        {
+            continue;
+        }
         if (U && U->CurrentSnapshot.AbilityClass)
         {
 
@@ -4445,7 +4521,7 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
                 {
                     if (AbilityCDO->bKeepSelectionAfterAbility)
                     {
-                        bAnyAbilityWantsToKeepSelection = true;
+                        bIdleUnitWantsToKeepSelection = true;
                         if (AGASUnit* GASUnit = Cast<AGASUnit>(U))
                         {
                             if (GASUnit->IsAbilityOnCooldownByClass(AbilityArray[InAbilityIndex]))
@@ -4457,6 +4533,11 @@ void ACustomControllerBase::Server_HandleAbilityUnderCursor_Implementation(const
                 }
             }
         }
+    }
+
+    if (bIdleUnitWantsToKeepSelection && !AbilityFired)
+    {
+        bAnyAbilityWantsToKeepSelection = true;
     }
 
     if ((AbilityFired || AbilityUnSynced) && bAnyAbilityWantsToKeepSelection)
@@ -4527,12 +4608,24 @@ void ACustomControllerBase::Client_ContinueSelectionAfterAbility_Implementation(
 
         if (HitUnit && HitUnit->CanBeSelected && (HitUnit->TeamId == SelectableTeamId || SelectableTeamId == 0) && !SUnit)
         {
-            if (IsCtrlPressed)
+            const double Now = GetWorld() ? GetWorld()->GetRealTimeSeconds() : 0.0;
+            // Two ways, either is enough: the OS double click event (Windows' own time/distance tolerance - the
+            // trace of the second click may hit a neighbour of the same kind), or two own clicks on this unit.
+            const bool bOsDoubleClick = bLeftDoubleClickPending;
+            bLeftDoubleClickPending = false;
+            const bool bDoubleClick = bOsDoubleClick || (LastClickedUnit.Get() == HitUnit && LastClickTime >= 0.0
+                && Now - LastClickTime <= DoubleClickSeconds);
+            // A third click starts a new pair instead of counting as another double click.
+            LastClickedUnit = bDoubleClick ? nullptr : HitUnit;
+            LastClickTime = bDoubleClick ? -1.0 : Now;
+
+            if (IsCtrlPressed || bDoubleClick)
             {
-                // Strg+Klick waehlt nur die Einheiten dieser Art, die gerade im Bild sind. Strg+Ziffer
-                // (Kontrollgruppe) bleibt bei SelectUnitsWithTag und holt weiter alle auf der Karte.
+                // Strg+Klick / Doppelklick waehlt nur die Einheiten DESSELBEN Blueprints, die gerade im Bild
+                // sind (kein Tag: zwei Einheiten mit gleichem Tag koennen verschiedene Typen sein).
+                // Strg+Ziffer (Kontrollgruppe) bleibt bei SelectUnitsWithTag und holt weiter alle auf der Karte.
                 // Rein lokal: die Auswahl lebt im HUD, der Server bekommt die Einheiten mit jedem Befehl.
-                SelectVisibleUnitsWithTag(HitUnit->UnitTags.First(), HitUnit);
+                SelectVisibleUnitsWithTag(FGameplayTag(), HitUnit);
             }
             else
             {
@@ -4581,17 +4674,17 @@ void ACustomControllerBase::SelectVisibleUnitsWithTag(FGameplayTag Tag, AUnitBas
             continue;
         }
         // Ohne Tag gilt die Klasse der angeklickten Einheit als Art.
-        const bool bGleicheArt = Tag.IsValid()
+        const bool bSameKind = Tag.IsValid()
             ? Unit->UnitTags.HasAnyExact(FGameplayTagContainer(Tag))
             : (ClickedUnit && Unit->GetClass() == ClickedUnit->GetClass());
-        if (!bGleicheArt && Unit != ClickedUnit)
+        if (!bSameKind && Unit != ClickedUnit)
         {
             continue;
         }
         FVector2D Screen;
-        const bool bImBild = ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), Screen)
+        const bool bOnScreen = ProjectWorldLocationToScreen(Unit->GetMassActorLocation(), Screen)
             && Screen.X >= 0.f && Screen.Y >= 0.f && Screen.X <= SizeX && Screen.Y <= SizeY;
-        if (bImBild || Unit == ClickedUnit)
+        if (bOnScreen || Unit == ClickedUnit)
         {
             NewSelection.Add(Unit);
         }
@@ -4620,16 +4713,90 @@ void ACustomControllerBase::ShowUnitStatsPopup(AUnitBase* Unit)
     UnitStatsPopup->bCloseWhenUnitGone = true;
     // Before AddToViewport: the Blueprint copies Name / TypeName / Description into its texts on Construct.
     UnitStatsPopup->SetUnit(Unit, /*bFillHeaderTexts=*/true);
-    UnitStatsPopup->SetVisibility(ESlateVisibility::HitTestInvisible);
-    UnitStatsPopup->AddToViewport(50);
+    UnitStatsPopup->SetVisibility(ESlateVisibility::SelfHitTestInvisible); // children hoverable: ability icon tooltips
+    if (bEnemyStatsPopupBottomLeft && Unit->TeamId != SelectableTeamId)
+    {
+        PlaceUnitStatsPopupBottomLeft();
+    }
+    else
+    {
+        PlaceUnitStatsPopupAtCursor();
+    }
+}
 
+void ACustomControllerBase::PlaceUnitStatsPopupBottomLeft()
+{
+    const float Scale = FMath::Max(UWidgetLayoutLibrary::GetViewportScale(this), 0.01f);
+    const FVector2D ViewSize = UWidgetLayoutLibrary::GetViewportSize(this) / Scale;
+    float Left = 0.f;
+    // Right of the TaggedUnitSelector (the bar on the left): its right edge on screen.
+    if (const AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn()))
+    {
+        if (const UWidget* Selector = Camera->TaggedSelectorWidget)
+        {
+            const FGeometry& G = Selector->GetCachedGeometry();
+            if (Selector->IsVisible() && G.GetLocalSize().X > 1.f)
+            {
+                FVector2D PixelPos, ViewportPos;
+                USlateBlueprintLibrary::AbsoluteToViewport(this, G.LocalToAbsolute(FVector2D(G.GetLocalSize().X, 0.f)), PixelPos, ViewportPos);
+                Left = ViewportPos.X;
+            }
+        }
+    }
+    SetUnitStatsPopupSlot(FVector2D(Left + EnemyStatsPopupMargin.X, ViewSize.Y - EnemyStatsPopupMargin.Y), FVector2D(0.f, 1.f));
+}
+
+void ACustomControllerBase::SetUnitStatsPopupSlot(const FVector2D& Position, const FVector2D& Alignment)
+{
+    // One slot write: SetPositionInViewport / SetAlignmentInViewport each reset the other while the widget is not (yet) managed by the viewport subsystem.
+    UGameViewportSubsystem* ViewportSubsystem = UGameViewportSubsystem::Get(GetWorld());
+    if (!ViewportSubsystem || !UnitStatsPopup)
+    {
+        return;
+    }
+    FGameViewportWidgetSlot Slot = UGameViewportSubsystem::SetWidgetSlotPosition(FGameViewportWidgetSlot(), UnitStatsPopup, Position, /*bRemoveDPIScale=*/false);
+    Slot.Alignment = Alignment;
+    Slot.ZOrder = 50;
+    if (ViewportSubsystem->IsWidgetAdded(UnitStatsPopup))
+    {
+        ViewportSubsystem->SetWidgetSlot(UnitStatsPopup, Slot);
+    }
+    else
+    {
+        ViewportSubsystem->AddWidget(UnitStatsPopup, Slot);
+    }
+}
+
+void ACustomControllerBase::PlaceUnitStatsPopupAtCursor()
+{
     // Next to the cursor, on the side with more room.
     const FVector2D Mouse = UWidgetLayoutLibrary::GetMousePositionOnViewport(this);
     const FVector2D ViewSize = UWidgetLayoutLibrary::GetViewportSize(this) / FMath::Max(UWidgetLayoutLibrary::GetViewportScale(this), 0.01f);
     const bool bLeft = Mouse.X > ViewSize.X * 0.6f;
     const bool bUp = Mouse.Y > ViewSize.Y * 0.5f;
-    UnitStatsPopup->SetAlignmentInViewport(FVector2D(bLeft ? 1.f : 0.f, bUp ? 1.f : 0.f));
-    UnitStatsPopup->SetPositionInViewport(Mouse + FVector2D(bLeft ? -24.f : 24.f, bUp ? -24.f : 24.f), /*bRemoveDPIScale=*/false);
+    SetUnitStatsPopupSlot(Mouse + FVector2D(bLeft ? -24.f : 24.f, bUp ? -24.f : 24.f), FVector2D(bLeft ? 1.f : 0.f, bUp ? 1.f : 0.f));
+}
+
+UUnitStatsTooltipWidget* ACustomControllerBase::ShowUnitStatsPopupForSnapshot(TSubclassOf<AUnitBase> UnitClass, const FUnitStatsValues& Values, AActor* PreviewSource)
+{
+    if (!UnitStatsPopupClass || !IsLocalController())
+    {
+        return nullptr;
+    }
+    if (!UnitStatsPopup)
+    {
+        UnitStatsPopup = CreateWidget<UUnitStatsTooltipWidget>(this, UnitStatsPopupClass);
+        if (!UnitStatsPopup)
+        {
+            return nullptr;
+        }
+    }
+    UnitStatsPopup->RemoveFromParent();
+    UnitStatsPopup->bCloseWhenUnitGone = true;
+    UnitStatsPopup->SetStatsSnapshot(UnitClass, Values, PreviewSource, /*bFillHeaderTexts=*/true);
+    UnitStatsPopup->SetVisibility(ESlateVisibility::SelfHitTestInvisible); // children hoverable: ability icon tooltips
+    PlaceUnitStatsPopupAtCursor();
+    return UnitStatsPopup;
 }
 
 void ACustomControllerBase::HideUnitStatsPopup()
@@ -4668,6 +4835,7 @@ void ACustomControllerBase::ReportUnderAttack(const FVector& Location)
     GetViewportSize(ViewX, ViewY);
     Alert.bOnScreen = ProjectWorldLocationToScreen(Location, Screen, true)
         && Screen.X >= 0.f && Screen.Y >= 0.f && Screen.X <= ViewX && Screen.Y <= ViewY;
+    UE_LOG(LogTemp, Log, TEXT("[AttackAlert] %s: alert %d at %s (on screen: %d)."), *GetName(), Alert.Id, *Location.ToCompactString(), Alert.bOnScreen ? 1 : 0);
 }
 
 void ACustomControllerBase::LeftClickAttackMass_Implementation(const TArray<AUnitBase*>& Units, const TArray<FVector>& Locations, bool AttackT, AActor* CursorHitActor)
@@ -5595,11 +5763,19 @@ bool ACustomControllerBase::FinishFormationLineDrag(bool bFromRightMouse)
 
 void ACustomControllerBase::LeftClickReleasedMass()
 {
+	if (bReplayViewing)
+	{
+		LeftClickIsPressed = false;
+		return;
+	}
+
 	// Run before the bookkeeping below: FinishFormationLineDrag reads SelectedUnits, and the
 	// line below overwrites it from the HUD.
 	FinishFormationLineDrag(/*bFromRightMouse=*/false);
 
 	LeftClickIsPressed = false;
+	// A double click on the ground must not turn the next single click on a unit into one.
+	bLeftDoubleClickPending = false;
 	HUDBase->bSelectFriendly = false;
 	SelectedUnits = HUDBase->SelectedUnits;
 
@@ -5902,6 +6078,40 @@ void ACustomControllerBase::Server_RequestCooldown_Implementation(AUnitBase* Uni
 	}
 
 	Client_ReceiveCooldown(AbilityIndex, RTime);
+}
+
+void ACustomControllerBase::Server_RequestCooldownForUnits_Implementation(const TArray<AUnitBase*>& Units, int32 AbilityIndex, TSubclassOf<UGameplayAbilityBase> AbilityClass)
+{
+	if (!HasAuthority() || !AbilityClass)
+	{
+		Client_ReceiveCooldown(AbilityIndex, 0.f);
+		return;
+	}
+
+	// Shortest time left among the units that own the ability. Units without it do not count, and a single
+	// ready one makes the button ready - pressing it fires on that one.
+	bool bAnyOwner = false;
+	float Shortest = TNumericLimits<float>::Max();
+	for (AUnitBase* Unit : Units)
+	{
+		if (!IsValid(Unit) || Unit->IsWorker)
+		{
+			continue;
+		}
+		UAbilitySystemComponent* ASC = Unit->GetAbilitySystemComponent();
+		if (!ASC || !ASC->FindAbilitySpecFromClass(AbilityClass))
+		{
+			continue;
+		}
+		bAnyOwner = true;
+		Shortest = FMath::Min(Shortest, GetAbilityCooldownRemaining(Unit, AbilityClass));
+		if (Shortest <= 0.f)
+		{
+			break;
+		}
+	}
+
+	Client_ReceiveCooldown(AbilityIndex, bAnyOwner ? Shortest : 0.f);
 }
 
 void ACustomControllerBase::RequestSetTeam(int32 NewTeamId)

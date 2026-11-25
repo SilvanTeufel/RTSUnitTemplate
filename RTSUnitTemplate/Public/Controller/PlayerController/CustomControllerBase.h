@@ -15,6 +15,7 @@
 #include "Engine/Engine.h"       // Include for GEngine
 #include "Engine/EngineTypes.h"   // For FHitResult in UFUNCTION params
 #include "TimerManager.h"  // For FTimerHandle
+#include "Widgets/UnitStatsTooltipWidget.h"
 
 class USoundBase;
 class AUnitBase;
@@ -56,8 +57,25 @@ class RTSUNITTEMPLATE_API ACustomControllerBase : public AExtendedControllerBase
 	GENERATED_BODY()
 
 public:
-	/** Strg+Linksklick: selects the clicked unit's kind, but only the units currently on screen. */
+	/**
+	 * Ctrl+left click / double click: selects the units of the clicked unit's kind that are currently on screen.
+	 * Tag invalid = same Blueprint class as ClickedUnit (what the clicks use); a valid tag = every unit carrying it.
+	 */
 	void SelectVisibleUnitsWithTag(FGameplayTag Tag, AUnitBase* ClickedUnit);
+
+	/** Two left clicks on the same unit within this time select all units of its Blueprint on screen (like Ctrl+click). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|Selection", meta = (ClampMin = "0.05", ClampMax = "1.0"))
+	float DoubleClickSeconds = 0.5f;
+
+	/** The OS reported the last left press as a double click (its own time and distance tolerance). Set in
+	 *  ACameraControllerBase::InputKey, read and cleared by the selection (Client_ContinueSelectionAfterAbility). */
+	bool bLeftDoubleClickPending = false;
+
+private:
+	TWeakObjectPtr<AUnitBase> LastClickedUnit;
+	double LastClickTime = -1.0;
+
+public:
 
 protected:
 	// /** If true, the formation will be recalculated on the next move command, even if the selection hasn't changed. */
@@ -180,8 +198,40 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void HideUnitStatsPopup();
 
+	/**
+	 * The same popup for something that is no live unit - a replay proxy: header texts from UnitClass's defaults,
+	 * the given values, the 3D window from PreviewSource's meshes. Closes when PreviewSource is gone. Returns the
+	 * popup so the caller can keep its values current (UpdateStatsSnapshot).
+	 */
+	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
+	UUnitStatsTooltipWidget* ShowUnitStatsPopupForSnapshot(TSubclassOf<AUnitBase> UnitClass, const FUnitStatsValues& Values, AActor* PreviewSource);
+
+	/**
+	 * Set by the replay while it plays over the live match. A left click then belongs to the replay (it selects
+	 * its proxies and opens their card); the live click handling - selection, the enemy popup - stays out. The
+	 * live units are hidden or gone, a click on them (an enemy kept by the fog) opened the wrong card.
+	 */
+	UPROPERTY(BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bReplayViewing = false;
+
 	UPROPERTY(Transient)
 	TObjectPtr<class UUnitStatsTooltipWidget> UnitStatsPopup;
+
+	void PlaceUnitStatsPopupAtCursor();
+	/** Enemies: always in the bottom-left corner, right of the TaggedUnitSelector. */
+	void PlaceUnitStatsPopupBottomLeft();
+	void SetUnitStatsPopupSlot(const FVector2D& Position, const FVector2D& Alignment);
+
+public:
+	/** The popup of an enemy unit stands bottom left (right of the TaggedUnitSelector) instead of at the cursor. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UnitStats")
+	bool bEnemyStatsPopupBottomLeft = true;
+
+	/** Gap to the TaggedUnitSelector's right edge and to the bottom of the screen (viewport units). Without a
+	 *  selector on screen X is the distance to the left edge. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|UnitStats")
+	FVector2D EnemyStatsPopupMargin = FVector2D(12.f, 12.f);
+
 
 	/** Raises a minimap attack alert, unless one was raised nearby lately (UnderAttackAlertRadius / Cooldown). */
 	UFUNCTION(BlueprintCallable, Category = "RTSUnitTemplate|AttackAlert")
@@ -200,11 +250,11 @@ public:
 
 	/** A fight within this distance of a recent alert raises no new one (uu). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackAlert", meta = (ClampMin = "0"))
-	float UnderAttackAlertRadius = 2500.f;
+	float UnderAttackAlertRadius = 1500.f;
 
 	/** Seconds until the same area may raise an alert again. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "RTSUnitTemplate|AttackAlert", meta = (ClampMin = "0"))
-	float UnderAttackAlertCooldown = 20.f;
+	float UnderAttackAlertCooldown = 8.f;
 
 protected:
 	UPROPERTY(Transient)
@@ -668,7 +718,9 @@ public:
 	 * Nur ereignisgetrieben aufrufen (Klick, Tastendruck) - kein Tick. Nur fuer den lokalen
 	 * menschlichen Spieler; der RL-Agent setzt Alt/Ctrl selbst und darf nicht korrigiert werden.
 	 */
-	void HealStaleModifierFlags(const TCHAR* Where);
+	// bRequireFocus=false for callers that just RECEIVED a key: the key itself proves the window has focus
+	// (FApp::HasFocus lags behind after Alt+Tab, and the heal was skipped exactly then).
+	void HealStaleModifierFlags(const TCHAR* Where, bool bRequireFocus = true);
 
 	/** Eine Zeile Saved/SelectionDiag.csv mit dem ganzen Auswahlzustand. Schalter: rts.selection.diag */
 	void WriteSelectionDiag(const TCHAR* Where, const TCHAR* Outcome);
@@ -863,6 +915,14 @@ public:
 
 	UFUNCTION(Server, Reliable)
 	void Server_RequestCooldown(AUnitBase* Unit, int32 AbilityIndex, UGameplayAbilityBase* Ability);
+
+	/**
+	 * Cooldown shown on an ability button when several selected units own that ability: the SHORTEST time
+	 * left among them (0 as soon as one of them is ready), because pressing the button fires on the ready
+	 * ones. Workers keep Server_RequestCooldown (their own unit only).
+	 */
+	UFUNCTION(Server, Reliable)
+	void Server_RequestCooldownForUnits(const TArray<AUnitBase*>& Units, int32 AbilityIndex, TSubclassOf<UGameplayAbilityBase> AbilityClass);
 
 	/**
 	 * Vergibt eine Faehigkeit an ALLE eigenen Einheiten einer Tierklasse (02.09.2026).

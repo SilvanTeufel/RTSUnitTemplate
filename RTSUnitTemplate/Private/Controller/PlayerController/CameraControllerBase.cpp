@@ -4,6 +4,7 @@
 #include "System/RTSTravelHelpers.h"
 #include "Characters/Camera/ExtendedCameraBase.h"
 #include "DrawDebugHelpers.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Engine/World.h"
 #include "UnrealClient.h"
 #include "Characters/Unit/UnitBase.h" // Include UnitBase for the RPC
@@ -501,6 +502,35 @@ void ACameraControllerBase::Server_UpdateCameraUnitMovement_Implementation(const
 #include "Engine/GameInstance.h"
 #include "System/MapSwitchSubsystem.h"
 #include "Misc/PackageName.h"
+#include "InputKeyEventArgs.h"
+
+bool ACameraControllerBase::InputKey(const FInputKeyEventArgs& Params)
+{
+	// Erst das normale Input (Enhanced Input, Tastenzustand fuer IsInputKeyDown), dann die
+	// Tastaturbelegung. Die Tasten der Belegung stehen nicht mehr im IMC (siehe
+	// AExtendedCameraBase::ApplyInputMappingContext), es loest also nichts doppelt aus.
+	const bool bResult = Super::InputKey(Params);
+	if (Params.Key == EKeys::LeftMouseButton)
+	{
+		// The press handler runs later in this frame (Enhanced Input), so the flag is ready for it.
+		if (Params.Event == IE_DoubleClick)
+		{
+			bLeftDoubleClickPending = true;
+		}
+		else if (Params.Event == IE_Pressed)
+		{
+			bLeftDoubleClickPending = false;
+		}
+	}
+	if (IsLocalController())
+	{
+		if (AExtendedCameraBase* Camera = Cast<AExtendedCameraBase>(GetPawn()))
+		{
+			Camera->HandleBoundKey(Params.Key, Params.Event);
+		}
+	}
+	return bResult;
+}
 
 bool ACameraControllerBase::Server_TravelToMap_Validate(const FString& MapName, FName TagToEnable)
 {
@@ -1087,6 +1117,9 @@ static void TalenteGeben(const TArray<FString>& Args, UWorld* World, FOutputDevi
 
 	Ar.Logf(TEXT("[Talente] %d Talentpunkte an %d eigene Einheiten und %d Punkte an den Attributbaum von Team %d."),
 		Anzahl, Beschenkte, Anzahl, PC->SelectableTeamId);
+
+	// Wie die echte Vergabe: mit RTS.Talents.PauseOnPoint haelt das Spiel an und der Baum geht auf.
+	PC->MaybeStartTalentPause();
 }
 
 static FAutoConsoleCommandWithWorldArgsAndOutputDevice GTalenteGebenCmd(
@@ -1799,6 +1832,15 @@ void ACameraControllerBase::SetTalentPauseMusicKeepsPlaying(bool bKeepPlaying)
 	}
 }
 
+void ACameraControllerBase::Client_SetPauseMusicKeepsPlaying_Implementation(bool bKeepPlaying)
+{
+	// Same rule as the talent pause: only switch while the game still runs (see Client_BeginTalentPause).
+	if (!bKeepPlaying || (GetWorld() && !GetWorld()->IsPaused()))
+	{
+		SetTalentPauseMusicKeepsPlaying(bKeepPlaying);
+	}
+}
+
 void ACameraControllerBase::Client_BeginTalentPause_Implementation(float Seconds, bool bOpenTree)
 {
 	// Nur solange das Spiel noch laeuft: steht es schon, hat die Engine die Musik fest pausiert,
@@ -1809,6 +1851,7 @@ void ACameraControllerBase::Client_BeginTalentPause_Implementation(float Seconds
 	}
 
 	TalentPauseClientEndTime = FPlatformTime::Seconds() + FMath::Max(0.f, Seconds);
+	bTalentPauseChoosing = bOpenTree;
 
 	if (bOpenTree && !bTalentPauseOpenedTree)
 	{
@@ -1832,6 +1875,16 @@ void ACameraControllerBase::Client_BeginTalentPause_Implementation(float Seconds
 	}
 
 	const TWeakObjectPtr<ACameraControllerBase> WeakThis(this);
+	FSlateFontInfo TimerFont;
+	if (UObject* FontObject = WarningToastFontPath.TryLoad())
+	{
+		TimerFont = FSlateFontInfo(FontObject, 22);
+		TimerFont.LetterSpacing = 60;
+	}
+	else
+	{
+		TimerFont = FCoreStyle::GetDefaultFontStyle("Bold", 22);
+	}
 	TalentPauseTimerWidget =
 		SNew(SBox)
 		.HAlign(HAlign_Center)
@@ -1851,7 +1904,7 @@ void ACameraControllerBase::Client_BeginTalentPause_Implementation(float Seconds
 					return FText::Format(NSLOCTEXT("RTSUnitTemplate", "TalentPauseTimer", "Choose an attribute  {0}"),
 						FText::AsNumber(Left));
 				})
-				.Font(FCoreStyle::GetDefaultFontStyle("Bold", 22))
+				.Font(TimerFont)
 				.ColorAndOpacity(FSlateColor(FLinearColor(0.209f, 0.644f, 0.694f, 1.f)))
 			]
 		];
@@ -1879,8 +1932,15 @@ void ACameraControllerBase::Client_BeginTalentPause_Implementation(float Seconds
 		}), 0.25f);
 }
 
+bool ACameraControllerBase::IsTalentPauseHoldingTree() const
+{
+	// The end time guards against a lost Client_EndTalentPause: the tree never stays locked.
+	return bTalentPauseChoosing && FPlatformTime::Seconds() < TalentPauseClientEndTime + 1.0;
+}
+
 void ACameraControllerBase::Client_EndTalentPause_Implementation()
 {
+	bTalentPauseChoosing = false;
 	HideTalentPauseTimer();
 	SetTalentPauseMusicKeepsPlaying(false);
 
@@ -1909,6 +1969,54 @@ void ACameraControllerBase::HideTalentPauseTimer()
 		GEngine->GameViewport->RemoveViewportWidgetContent(TalentPauseTimerWidget.ToSharedRef());
 	}
 	TalentPauseTimerWidget.Reset();
+}
+
+void ACameraControllerBase::Client_ShowWarningToast_Implementation(const FText& Text)
+{
+	if (!GEngine || !GEngine->GameViewport)
+	{
+		return;
+	}
+	HideWarningToast();
+
+	FSlateFontInfo Font;
+	if (UObject* FontObject = WarningToastFontPath.TryLoad())
+	{
+		Font = FSlateFontInfo(FontObject, WarningToastFontSize);
+	}
+	else
+	{
+		Font = FCoreStyle::GetDefaultFontStyle("Bold", WarningToastFontSize);
+	}
+	Font.LetterSpacing = 60;
+	Font.OutlineSettings.OutlineSize = 2;
+	Font.OutlineSettings.OutlineColor = FLinearColor(0.f, 0.f, 0.f, 0.85f);
+
+	WarningToast =
+		SNew(SBox)
+		.HAlign(HAlign_Center)
+		.VAlign(VAlign_Top)
+		.Padding(FMargin(0.f, WarningToastTopPadding, 0.f, 0.f))
+		.Visibility(EVisibility::HitTestInvisible)
+		[
+			SNew(STextBlock)
+			.Text(Text)
+			.Font(Font)
+			.ColorAndOpacity(FSlateColor(WarningToastColor))
+		];
+	GEngine->GameViewport->AddViewportWidgetContent(WarningToast.ToSharedRef(), 21);
+	// Real time: also visible while the game stands still.
+	GetWorldTimerManager().SetTimer(WarningToastTimerHandle, this, &ACameraControllerBase::HideWarningToast,
+		FMath::Max(0.5f, WarningToastSeconds), false);
+}
+
+void ACameraControllerBase::HideWarningToast()
+{
+	if (WarningToast.IsValid() && GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->RemoveViewportWidgetContent(WarningToast.ToSharedRef());
+	}
+	WarningToast.Reset();
 }
 
 void ACameraControllerBase::HideTalentPointToast()
@@ -2089,6 +2197,37 @@ void ACameraControllerBase::GetViewPortScreenSizes(int x)
 	}
 }
 
+namespace
+{
+	// Liegt die Maus ueber einem bedienbaren HUD-Element? Der Slate-Pfad unter dem Zeiger enthaelt
+	// jeden Vorfahren, ein Knopf mit Bild oder Text darin wird also auch ueber dem Bild erkannt.
+	bool IsCursorOverClickableWidget()
+	{
+		if (!FSlateApplication::IsInitialized())
+		{
+			return false;
+		}
+		static const FName ClickableTypes[] = {
+			TEXT("SButton"), TEXT("SCheckBox"), TEXT("SSlider"), TEXT("SSpinBox<float>"), TEXT("SComboButton"),
+			TEXT("SEditableText"), TEXT("SEditableTextBox"), TEXT("SMultiLineEditableText") };
+
+		FSlateApplication& Slate = FSlateApplication::Get();
+		const FWidgetPath Path = Slate.LocateWindowUnderMouse(Slate.GetCursorPos(), Slate.GetInteractiveTopLevelWindows());
+		for (int32 Index = Path.Widgets.Num() - 1; Index >= 0; --Index)
+		{
+			const FName Type = Path.Widgets[Index].Widget->GetType();
+			for (const FName& Clickable : ClickableTypes)
+			{
+				if (Type == Clickable)
+				{
+					return Path.Widgets[Index].Widget->IsEnabled();
+				}
+			}
+		}
+		return false;
+	}
+}
+
 FVector ACameraControllerBase::GetCameraPanDirection() {
 	float MousePosX = 0;
 	float MousePosY = 0;
@@ -2125,22 +2264,72 @@ FVector ACameraControllerBase::GetCameraPanDirection() {
 	// schlicht der zuletzt gepruefte Rand, die Kamera fuhr nur hoch statt hoch UND links.
 	// Aufaddieren statt zuweisen, und am Ende normieren, damit die Diagonale nicht schneller ist
 	// als eine gerade Kante (sonst waere sie um den Faktor Wurzel 2 schneller).
-	if (MousePosX <= CameraBase->Margin)
+	// HUD-KNOEPFE AM RAND (gemeldet 12.11.2026: die Knoepfe des ResourceWidgets liegen so nah am
+	// Rand, dass man beim Anfahren die Kamera wegschiebt).
+	// - Ueber einem Knopf zaehlt nur der aeusserste Rand (MarginOverButtons).
+	// - Kommt die Maus gerade von einem Knopf in die Randzone, scrollt es erst nach einer kurzen
+	//   Verweildauer - ueber den Knopf hinausgerutscht ist kein Scrollwunsch.
+	// Der Slate-Test laeuft nur in Randnaehe und nur, wenn sich die Maus bewegt hat.
+	float Margin = CameraBase->Margin;
+	const auto InZone = [&](float Width)
+	{
+		return MousePosX <= Width || MousePosY <= Width
+			|| MousePosX >= CameraBase->ScreenSizeX - 1 - Width || MousePosY >= CameraBase->ScreenSizeY - 1 - Width;
+	};
+	const double Now = FPlatformTime::Seconds();
+	const bool bInEdgeZone = InZone(Margin);
+	if (CameraBase->MarginOverButtons < Margin && InZone(Margin + 120.f))
+	{
+		const FVector2D Mouse(MousePosX, MousePosY);
+		if (Mouse != EdgeLastTestedMouse)
+		{
+			EdgeLastTestedMouse = Mouse;
+			bEdgeLastOverButton = IsCursorOverClickableWidget();
+		}
+		if (bEdgeLastOverButton)
+		{
+			EdgeLastOverButtonTime = Now;
+			Margin = FMath::Max(0.f, CameraBase->MarginOverButtons);
+		}
+	}
+	else
+	{
+		EdgeLastTestedMouse = FVector2D(-1.0, -1.0);
+		bEdgeLastOverButton = false;
+	}
+
+	// Ueber dem Knopf laeuft die Uhr nicht - erst wer ihn in Richtung Rand verlaesst, "betritt" den Rand.
+	if (!bInEdgeZone || bEdgeLastOverButton)
+	{
+		EdgeZoneEnterTime = -1.0;
+	}
+	else if (EdgeZoneEnterTime < 0.0)
+	{
+		EdgeZoneEnterTime = Now;
+	}
+	if (!bEdgeLastOverButton && bInEdgeZone && EdgeLastOverButtonTime >= 0.0
+		&& EdgeZoneEnterTime - EdgeLastOverButtonTime < 0.3
+		&& Now - EdgeZoneEnterTime < CameraBase->EdgeScrollDelayAfterButton)
+	{
+		return FVector::ZeroVector;
+	}
+
+	if (MousePosX <= Margin)
 	{
 		CamDirectionY += -CosYaw;
 		CamDirectionX += SinYaw;
 	}
-	if (MousePosY <= CameraBase->Margin)
+	if (MousePosY <= Margin)
 	{
 		CamDirectionX += CosYaw;
 		CamDirectionY += SinYaw;
 	}
-	if (MousePosX >= CameraBase->ScreenSizeX - CameraBase->Margin)
+	if (MousePosX >= CameraBase->ScreenSizeX - 1 - Margin)
 	{
 		CamDirectionY += CosYaw;
 		CamDirectionX += -SinYaw;
 	}
-	if (MousePosY >= CameraBase->ScreenSizeY - CameraBase->Margin)
+	if (MousePosY >= CameraBase->ScreenSizeY - 1 - Margin)
 	{
 		CamDirectionX += -CosYaw;
 		CamDirectionY += -SinYaw;
@@ -2312,6 +2501,8 @@ void ACameraControllerBase::StopAllCameraMovement()
 		// Die gefuehrte Scrollgeschwindigkeit gehoert genauso angehalten. Sonst rollt die Kamera
 		// nach einem Fokusverlust noch ein Stueck weiter, obwohl "alles anhalten" gemeint war.
 		CameraBase->ResetPanVelocity();
+		// A rotation still winding down would keep MoveWASD from handing back to the edge scrolling.
+		CameraBase->CurrentRotationValue = 0.f;
 		if (CameraBase->GetCharacterMovement())
 		{
 			CameraBase->GetCharacterMovement()->StopMovementImmediately();
@@ -2346,8 +2537,6 @@ void ACameraControllerBase::CameraBaseMachine(float DeltaTime)
 	}
 
 	if(CameraBase->BlockControls) return;
-	
-	FVector PanDirection = GetCameraPanDirection();
 	
 	if(CameraBase)
 	{
@@ -2464,11 +2653,40 @@ void ACameraControllerBase::CameraState_UseScreenEdges()
 	// Restgeschwindigkeit sauber ausrollt statt eingefroren stehen zu bleiben.
 	// No edge scrolling while the loading screen is up: the mouse resting at a screen edge during
 	// loading would otherwise drag the camera away from the start position (05.10.2026).
-	const FVector EdgeScrollTarget = (CameraBase->DisableEdgeScrolling || IsLoadingScreenActive())
-		? FVector::ZeroVector
-		: GetCameraPanDirection() * CameraBase->EdgeScrollCamSpeed;
+	const bool bEdgeScrollOff = CameraBase->DisableEdgeScrolling || IsLoadingScreenActive();
+	if (CameraBase->bEdgeScrollLikeWASD)
+	{
+		// Same motion as WASD: GetCameraPanDirection is a world direction, MoveInDirection wants the
+		// camera-local one (X forward, Y right) - rotate it back by the view yaw.
+		FVector LocalDirection = FVector::ZeroVector;
+		if (!bEdgeScrollOff)
+		{
+			const FVector WorldDirection = GetCameraPanDirection();
+			const float WorldYaw = FMath::DegreesToRadians(CameraBase->GetActorRotation().Yaw + CameraBase->SpringArmRotator.Yaw);
+			const float CosYaw = FMath::Cos(WorldYaw);
+			const float SinYaw = FMath::Sin(WorldYaw);
+			LocalDirection = FVector(WorldDirection.X * CosYaw + WorldDirection.Y * SinYaw,
+				-WorldDirection.X * SinYaw + WorldDirection.Y * CosYaw, 0.f);
+		}
+		if (IsLocalController())
+		{
+			// Fed with zero too, so a running pan decelerates instead of stopping dead.
+			CameraBase->MoveInDirectionScaled(LocalDirection, FrameTime, CameraBase->EdgeScrollSpeedScale);
+			const bool bIsPanning = !FMath::IsNearlyZero(CameraBase->CurrentCamSpeed.X) || !FMath::IsNearlyZero(CameraBase->CurrentCamSpeed.Y);
+			if (!HasAuthority() && bIsPanning)
+			{
+				Server_SyncCameraPosition(CameraBase->GetActorLocation());
+			}
+		}
+	}
+	else
+	{
+		const FVector EdgeScrollTarget = bEdgeScrollOff
+			? FVector::ZeroVector
+			: GetCameraPanDirection() * CameraBase->EdgeScrollCamSpeed;
 
-	CameraBase->PanMoveCameraSmoothed(EdgeScrollTarget, FrameTime);
+		CameraBase->PanMoveCameraSmoothed(EdgeScrollTarget, FrameTime);
+	}
 
 	if(AIsPressedState || DIsPressedState || WIsPressedState || SIsPressedState) CameraBase->SetCameraState(CameraData::MoveWASD);
 	else if(LockCameraToCharacter) CameraBase->SetCameraState(CameraData::LockOnCharacter);
@@ -2545,6 +2763,15 @@ void ACameraControllerBase::CameraState_MoveWASD(float DeltaTime)
 		{
 			CameraBase->RotateCamera(-1.0f, CameraBase->AddCamRotation, !CamIsRotatingRight);
 		}
+	}
+
+	// A rotation key released while in this state left CurrentRotationValue above zero: RotateCamera (which
+	// winds it down) only runs while a rotation key is held, so the check below never passed again and the
+	// camera stayed in MoveWASD for good - no edge scrolling any more (15.11.2026: hold W, tap Q, let go of Q
+	// first). Without a held rotation key there is no rotation left to finish.
+	if (!CamIsRotatingLeft && !CamIsRotatingRight)
+	{
+		CameraBase->CurrentRotationValue = 0.f;
 	}
 
 	// Stay in the WASD state while the camera is still coasting so the deceleration keeps ticking.
@@ -2830,6 +3057,23 @@ void ACameraControllerBase::CameraState_RotateRight()
 
 void ACameraControllerBase::CameraState_LockOnCharacter()
 {
+	// Edge scrolling died for good once the lock was on (reported 15.11.2026): this state never reads the
+	// screen edges, and with nothing selected it does nothing at all - only WASD left it (MoveWASD clears
+	// LockCameraToCharacter). Now the lock ends as soon as there is nothing to follow or the mouse asks for
+	// an edge scroll, the same way WASD ends it.
+	const bool bNothingToFollow = SelectedUnits.Num() == 0 || !SelectedUnits[0];
+	const bool bEdgeScrollWanted = CameraBase && !CameraBase->DisableEdgeScrolling && !IsLoadingScreenActive()
+		&& !GetCameraPanDirection().IsNearlyZero();
+	if (bNothingToFollow || bEdgeScrollWanted)
+	{
+		LockCameraToCharacter = false;
+		LockCameraToUnit = false;
+		if (CameraBase)
+		{
+			CameraBase->SetCameraState(CameraData::UseScreenEdges);
+		}
+		return;
+	}
 	LockCamToCharacter(0);
 }
 

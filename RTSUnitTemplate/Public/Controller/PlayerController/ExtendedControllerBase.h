@@ -761,6 +761,42 @@ public:
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void AddToCurrentUnitWidgetIndex(int Add);
 
+	// ---- Auto ability scroll -------------------------------------------------------------------
+	// After the player fires an ability of a non-worker unit, the ability page moves on by itself to the
+	// next unit group that still has a usable DefaultAbility - but only once EVERY DefaultAbility of the
+	// shown group is on cooldown (or locked). Workers never trigger it and are never a target. The
+	// mouse wheel keeps working and disarms it.
+
+	/** Seconds after a player ability press during which the auto scroll may still happen (cast times). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	float AutoAbilityScrollWindow = 6.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = RTSUnitTemplate)
+	bool bAutoAbilityScroll = true;
+
+	/** Called by the unit selector widget on its update tick: asks the server while armed. */
+	void TickAutoAbilityScroll();
+
+	void DisarmAutoAbilityScroll();
+
+	UFUNCTION(Server, Reliable)
+	void Server_RequestAutoAbilityScroll(const TArray<AUnitBase*>& Units, int32 CurrentIndex);
+
+	UFUNCTION(Client, Reliable)
+	void Client_ApplyAutoAbilityScroll(int32 TargetIndex, AUnitBase* FromUnit, AUnitBase* TargetUnit);
+
+	/** Server: index of the unit the page should move to, or INDEX_NONE. */
+	int32 FindAutoAbilityScrollTarget(const TArray<AUnitBase*>& Units, int32 CurrentIndex) const;
+
+	/** Server: seconds left on the cooldown of AbilityClass on Unit (0 = ready or unit lacks it). */
+	static float GetAbilityCooldownRemaining(AUnitBase* Unit, TSubclassOf<UGameplayAbilityBase> AbilityClass);
+
+	/** Server: true when Unit could fire this DefaultAbility now (granted, unlocked, off cooldown). */
+	static bool IsDefaultAbilityReady(AUnitBase* Unit, TSubclassOf<UGameplayAbilityBase> AbilityClass);
+
+	float AutoAbilityScrollArmedUntil = -1.f;
+	TWeakObjectPtr<AUnitBase> AutoAbilityScrollFrom;
+
 	UFUNCTION(BlueprintCallable, Category = RTSUnitTemplate)
 	void CastEndsEvent(AUnitBase* UnitBase);
 	

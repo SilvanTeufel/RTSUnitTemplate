@@ -561,7 +561,16 @@ void AWidgetController::AddWorkerToResource_Implementation(EResourceType Resourc
 	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
 	if (GameMode)
 	{
-		GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, 1); // Assuming this function exists in GameMode
+		// Player "+": moves a worker here from the type with the most when all are assigned (no "-" first).
+		// The old plain +1 (a no-op once every worker is assigned) stays for the RL agent.
+		if (GameMode->bAutoWorkerDistribution)
+		{
+			GameMode->ShiftWorkerToResourceType(TeamId, ResourceType);
+		}
+		else
+		{
+			GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, 1);
+		}
 	}
 }
 
@@ -571,6 +580,15 @@ void AWidgetController::RemoveWorkerFromResource_Implementation(EResourceType Re
 	if (GameMode)
 	{
 		GameMode->AddMaxWorkersForResourceType(TeamId, ResourceType, -1); // Assuming this function exists in GameMode
+	}
+}
+
+void AWidgetController::Server_SetMaxResourceDistance_Implementation(float Distance)
+{
+	AResourceGameMode* GameMode = Cast<AResourceGameMode>(UGameplayStatics::GetGameMode(GetWorld()));
+	if (GameMode && SelectableTeamId > 0)
+	{
+		GameMode->SetTeamMaxResourceDistance(SelectableTeamId, Distance);
 	}
 }
 
