@@ -17,6 +17,13 @@
 #include "NavMesh/RecastNavMesh.h"
 #include "NavAreas/NavArea_Obstacle.h"
 #include "ProfilingDebugging/CsvProfiler.h"
+#include "Core/RTSUnitUtils.h"
+
+// [IdleDiag] Warum wechselt eine Einheit mit Ziel nicht aus Idle in Chase? (10.11.2026, KrakenBoss stand
+// minutenlang in Idle neben Gebaeuden und nahm Schaden.) 1 = alle 3 s je haengender Einheit eine Zeile.
+static TAutoConsoleVariable<int32> CVarRTS_IdleDiag(
+	TEXT("RTS.IdleDiag"), 0,
+	TEXT("1 = loggt Einheiten, die mit Ziel in Idle bleiben, samt der blockierenden Bedingung."));
 
 // ...
 
@@ -156,7 +163,11 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             
             const bool bIsFriendlyActive = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity);
   
-            if (bIsFriendlyActive && !StateFrag.HoldPosition)
+            // Folgen mit Angriffsbefehl: ein Gegner geht vor dem Nachlaufen (siehe bFollowEngagesEnemies).
+            const bool bFollowerEngages = bIsFriendlyActive && TargetFrag.bHasValidTarget && bIsTargetActive
+                && RTSUnitUtils::FollowerMayEngage(EntityManager, TargetFrag, Transform.GetLocation());
+
+            if (bIsFriendlyActive && !StateFrag.HoldPosition && !bFollowerEngages)
             {
                 const FMassMoveTargetFragment& MoveTarget = MoveTargetList[i];
                                 
@@ -184,7 +195,7 @@ void UIdleStateProcessor::ExecuteClient(FMassEntityManager& EntityManager, FMass
             }
             
             
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && !bIsFriendlyActive)
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && (!bIsFriendlyActive || bFollowerEngages))
             {
                 if (!StateFrag.SwitchingStateClient)
                 {
@@ -316,7 +327,27 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
             const bool bShouldIgnoreEnemies = bPathActive && !PathFrag->bAttackToggled;
             const bool bIsTargetActive = EntityManager.IsEntityValid(TargetFrag.TargetEntity) && EntityManager.IsEntityActive(TargetFrag.TargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.TargetEntity);
 
+            // Haengengebliebenes SwitchingState loesen - derselbe Wachhund wie in Attack/Chase/Pause. Ohne ihn
+            // uebersprang Idle die Einheit fuer immer: kein Chase, kein Zurueck-Laufen.
+            if (RTSUnitUtils::TickSwitchingStateWatchdog(StateFrag, ExecutionInterval))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("[IdleDiag] SwitchingState in Idle haengengeblieben - geloest (Entity %d)"), Entity.Index);
+            }
             if (StateFrag.SwitchingState) continue;
+
+            if (CVarRTS_IdleDiag.GetValueOnGameThread() > 0 && TargetFrag.TargetEntity.IsSet()
+                && FMath::Fmod(StateFrag.StateTimer, 3.f) < ExecutionInterval)
+            {
+                UE_LOG(LogTemp, Warning,
+                    TEXT("[IdleDiag] Entity %d Team %d: Ziel gueltig=%d aktiv=%d Hold=%d IgnoriereGegner=%d Folgt=%d Detect=%d CanAttack=%d Init=%d Abstand=%.0f Reichweite=%.0f Timer=%.1f"),
+                    Entity.Index, StatsFrag.TeamId, TargetFrag.bHasValidTarget ? 1 : 0, bIsTargetActive ? 1 : 0,
+                    StateFrag.HoldPosition ? 1 : 0, bShouldIgnoreEnemies ? 1 : 0,
+                    (EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity)) ? 1 : 0,
+                    DoesEntityHaveTag(EntityManager, Entity, FMassStateDetectTag::StaticStruct()) ? 1 : 0,
+                    StateFrag.CanAttack ? 1 : 0, StateFrag.IsInitialized ? 1 : 0,
+                    FVector::Dist2D(Transform.GetLocation(), TargetFrag.LastKnownLocation), StatsFrag.AttackRange,
+                    StateFrag.StateTimer);
+            }
 
             const bool bIsFriendlyActive = EntityManager.IsEntityValid(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityActive(TargetFrag.FriendlyTargetEntity) && EntityManager.IsEntityBuilt(TargetFrag.FriendlyTargetEntity);
             /*
@@ -355,7 +386,10 @@ void UIdleStateProcessor::ExecuteServer(FMassEntityManager& EntityManager, FMass
                 StateFrag.StoredLocation = RTSUnitUtils::CalculateFollowPosition(EntityManager, Entity, TargetFrag, CharFrag, Transform.GetLocation(), FriendlyLoc, World);
             }
             
-            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && !bIsFriendlyActive)
+            // Folgen mit Angriffsbefehl: verfolgt Gegner wie eine freie Einheit (siehe bFollowEngagesEnemies).
+            const bool bFollowerEngages = bIsFriendlyActive
+                && RTSUnitUtils::FollowerMayEngage(EntityManager, TargetFrag, Transform.GetLocation());
+            if (TargetFrag.bHasValidTarget && bIsTargetActive && !StateFrag.HoldPosition && !bShouldIgnoreEnemies && (!bIsFriendlyActive || bFollowerEngages))
             {
                 SwitchToChaseState(EntityManager, ChunkContext, Entity, StateFrag);
                 continue;

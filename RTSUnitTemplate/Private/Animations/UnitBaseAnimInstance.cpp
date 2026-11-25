@@ -8,6 +8,7 @@
 #include "Characters/Unit/SpeakingUnit.h"
 #include "Core/UnitData.h"
 #include "Net/UnrealNetwork.h"
+#include "Animation/AnimMontage.h"
 #include "MassEntitySubsystem.h"
 #include "MassMovementFragments.h" // LUX-ANPASSUNG (16.08.2026): FMassVelocityFragment fuer MassSpeed
 #include "Mass/MassActorBindingComponent.h"
@@ -54,9 +55,14 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 	if(ControlTimer < UpdateTime) return;
 	ControlTimer = 0.f;
 	*/
-	bMassSpeedValid = false;
-
 	AActor* OwningActor = GetOwningActor();
+
+	// Nur fuer echte Einheiten neu bestimmt (unten). Ein Replay-Stellvertreter setzt Tempo und
+	// Gueltigkeit von aussen - hier geloescht, sah sein AnimBP nie eine gueltige Geschwindigkeit.
+	if (Cast<AUnitBase>(OwningActor))
+	{
+		bMassSpeedValid = false;
+	}
 
 	if (OwningActor != nullptr) {
 		AUnitBase* UnitBase = Cast<AUnitBase>(OwningActor);
@@ -377,7 +383,14 @@ void UUnitBaseAnimInstance::NativeUpdateAnimation(float Deltaseconds)
 				}
 			}
 
-			if (CharAnimState == UnitData::Casting && IsAnyMontagePlaying())
+			// Nur eine Montage, die zu diesem Skelett gehoert, darf die Laufseite stilllegen (10.11.2026).
+			// GA_Summon_Parent_AH spielt bei jeder Beschwoerung die Mannequin-Montage Manny_Test_Montage - auch
+			// beim KrakenBoss. Die bewegt dessen Skelett nicht, legte aber trotzdem alle Mischpunkte auf 0:
+			// der Boss stand den ganzen Cast lang in der Idle-Pose ("haengt"). Ohne passende Montage zeigt der
+			// Casting-Zustand jetzt seine Zeile aus der Animationstabelle.
+			const UAnimMontage* AktiveMontage = GetCurrentActiveMontage();
+			const bool bMontagePasst = AktiveMontage && AktiveMontage->GetSkeleton() == CurrentSkeleton;
+			if (CharAnimState == UnitData::Casting && bMontagePasst)
 			{
 				if (!bMontageHaltActive)
 				{

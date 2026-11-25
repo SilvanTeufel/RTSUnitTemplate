@@ -72,7 +72,12 @@ private:
 	 *                  entirely - a one-shot burst has no later frame in which it could be un-hidden,
 	 *                  so there is nothing to gain from spawning it hidden.
 	 */
-	void FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible, float ScaleMultiplier = 1.f);
+	void FireSpawnEffects(const AProjectile* CDO, const FTransform& SpawnTransform, bool bVisible, float ScaleMultiplier = 1.f, float DistanceToTarget = -1.f, const FVector& TargetLocation = FVector::ZeroVector);
+
+	/** Last spawn sound played: a volley (several projectiles of one class from one spot in one frame) plays it once. */
+	TWeakObjectPtr<const AProjectile> LastSpawnSoundCDO;
+	uint64 LastSpawnSoundFrame = 0;
+	FVector LastSpawnSoundLocation = FVector::ZeroVector;
 
 	UPROPERTY()
 	TMap<TSubclassOf<AProjectile>, FProjectileClassData> ProjectileDataMap;

@@ -156,6 +156,11 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	{
 		ISM->SetCustomDataValue(NewIndex, 21, 0.0f, true);
 	}
+	// And a spawn materialize the previous owner did not finish (22) - the new unit would start half invisible.
+	if (ISM->NumCustomDataFloats > 22)
+	{
+		ISM->SetCustomDataValue(NewIndex, 22, 0.0f, true);
+	}
 
 	// Copy collision settings from template to the pooled ISM
 	// Note: Since ISMs are pooled by mesh/material, the last one assigned will dictate collision for all instances.
@@ -174,8 +179,9 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 	// +1: index 14 = emissive blink while working (AMassUnitBase::bBlinkEmissiveWhileWorking).
 	// 15..17 = Converter colours, 18 / 19 = cast start / cast time (AMassUnitBase::bCastProgressToMaterial),
 	// 20 = last resource arrival (ABuildingBase::bPulseOnResourceArrival),
-	// 21 = time of death (AUnitBase::bDeathTimeToMaterial).
-	ISM->SetNumCustomDataFloats(FMath::Max(22, TemplateISM->NumCustomDataFloats));
+	// 21 = time of death (AUnitBase::bDeathTimeToMaterial),
+	// 22 = spawn materialize, 1 -> 0, 23 / 24 = mesh bottom / height for it (AMassUnitBase::bMaterializeOnSpawn).
+	ISM->SetNumCustomDataFloats(FMath::Max(25, TemplateISM->NumCustomDataFloats));
 
 	// Map ISM instance to MassUnitBase
 	TArray<TWeakObjectPtr<AMassUnitBase>>& UnitArray = ISMToUnitMap.FindOrAdd(ISM);
@@ -208,6 +214,104 @@ void UUnitVisualManager::AssignUnitVisual(FMassEntityHandle Entity, UInstancedSt
 
 	// Cache on the actor for entity-independent release in EndPlay.
 	if (Unit) Unit->CachePooledVisual(ISM, NewIndex);
+
+	StartMaterialize(ISM, NewIndex, Unit);
+}
+
+void UUnitVisualManager::StartMaterialize(UInstancedStaticMeshComponent* ISM, int32 InstanceIndex, AMassUnitBase* Unit)
+{
+	UWorld* World = GetWorld();
+	// Only units that appear during the match: level-placed units (loaded with the map) are there from the start.
+	// Not IsNetStartupActor(): that is also true for a freshly spawned actor before the level flagged its network
+	// actors (standalone), so nothing ever materialized.
+	if (!World || !Unit || !Unit->bMaterializeOnSpawn || Unit->HasAnyFlags(RF_WasLoaded) || !ISM || ISM->NumCustomDataFloats <= 24)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+	if (Unit->MaterializeStartTime < 0.f)
+	{
+		Unit->MaterializeStartTime = Now;
+	}
+	if (Now - Unit->MaterializeStartTime >= Unit->MaterializeOnSpawnDuration)
+	{
+		return; // a later re-assignment of an already finished unit
+	}
+	// The material sweeps its front from the bottom to the top of THIS mesh (local space, like LocalPosition).
+	if (const UStaticMesh* Mesh = ISM->GetStaticMesh())
+	{
+		const FBoxSphereBounds MeshBounds = Mesh->GetBounds();
+		ISM->SetCustomDataValue(InstanceIndex, 23, MeshBounds.Origin.Z - MeshBounds.BoxExtent.Z, false);
+		ISM->SetCustomDataValue(InstanceIndex, 24, FMath::Max(1.f, 2.f * MeshBounds.BoxExtent.Z), false);
+	}
+	ISM->SetCustomDataValue(InstanceIndex, 22, 1.0f, true);
+	FMaterializeEntry& Entry = MaterializeEntries.AddDefaulted_GetRef();
+	Entry.ISM = ISM;
+	Entry.InstanceIndex = InstanceIndex;
+	Entry.Unit = Unit;
+	if (!World->GetTimerManager().IsTimerActive(MaterializeTimerHandle))
+	{
+		// Only runs while something materializes.
+		World->GetTimerManager().SetTimer(MaterializeTimerHandle, this, &UUnitVisualManager::TickMaterialize, 1.f / 60.f, true);
+	}
+}
+
+void UUnitVisualManager::TickMaterialize()
+{
+	UWorld* World = GetWorld();
+	if (!World)
+	{
+		return;
+	}
+	const float Now = World->GetTimeSeconds();
+	for (int32 i = MaterializeEntries.Num() - 1; i >= 0; --i)
+	{
+		const FMaterializeEntry& Entry = MaterializeEntries[i];
+		UInstancedStaticMeshComponent* ISM = Entry.ISM.Get();
+		AMassUnitBase* Unit = Entry.Unit.Get();
+		// The slot may have been freed and handed to another unit meanwhile - never write into that one.
+		const TArray<TWeakObjectPtr<AMassUnitBase>>* Owners = ISM ? ISMToUnitMap.Find(ISM) : nullptr;
+		const bool bStillOurs = Unit && Owners && Owners->IsValidIndex(Entry.InstanceIndex) && (*Owners)[Entry.InstanceIndex].Get() == Unit
+			&& ISM->IsValidInstance(Entry.InstanceIndex);
+		if (!bStillOurs)
+		{
+			MaterializeEntries.RemoveAtSwap(i);
+			continue;
+		}
+		const float Alpha = FMath::Clamp((Now - Unit->MaterializeStartTime) / FMath::Max(0.05f, Unit->MaterializeOnSpawnDuration), 0.f, 1.f);
+		// Same curve as the work area's build materialize (AWorkArea::MaterializePower).
+		const float Amount = FMath::Pow(Alpha, FMath::Max(0.1f, Unit->MaterializeOnSpawnPower));
+		ISM->SetCustomDataValue(Entry.InstanceIndex, 22, 1.f - Amount, true);
+		if (Alpha >= 1.f)
+		{
+			MaterializeEntries.RemoveAtSwap(i);
+		}
+	}
+	if (MaterializeEntries.Num() == 0)
+	{
+		World->GetTimerManager().ClearTimer(MaterializeTimerHandle);
+	}
+}
+
+void UUnitVisualManager::RefreshUnitVisualMaterial(FMassEntityHandle Entity, UInstancedStaticMeshComponent* TemplateISM, AMassUnitBase* Unit) {
+	UMassEntitySubsystem* EntitySubsystem = GetWorld()->GetSubsystem<UMassEntitySubsystem>();
+	if (!TemplateISM || !EntitySubsystem) return;
+
+	FMassEntityManager& EntityManager = EntitySubsystem->GetMutableEntityManager();
+	if (!EntityManager.IsEntityActive(Entity)) return;
+	FMassUnitVisualFragment* VisualFrag = EntityManager.GetFragmentDataPtr<FMassUnitVisualFragment>(Entity);
+	if (!VisualFrag) return;
+
+	for (int32 i = VisualFrag->VisualInstances.Num() - 1; i >= 0; --i) {
+		const FMassUnitVisualInstance& Existing = VisualFrag->VisualInstances[i];
+		if (Existing.TemplateISM != TemplateISM) continue;
+		if (Existing.TargetISM.IsValid() && Existing.TargetISM->GetMaterial(0) == TemplateISM->GetMaterial(0)) return; // already right
+		// AssignUnitVisual would reuse this entry (same template) and keep the old pool - free it first.
+		ReleasePooledInstanceInternal(Existing.TargetISM.Get(), Existing.InstanceIndex, Unit);
+		VisualFrag->VisualInstances.RemoveAt(i);
+		AssignUnitVisual(Entity, TemplateISM, Unit);
+		return;
+	}
 }
 
 void UUnitVisualManager::RemoveUnitVisual(FMassEntityHandle Entity) {
@@ -529,7 +633,8 @@ UInstancedStaticMeshComponent* UUnitVisualManager::GetOrCreateISM(UStaticMesh* M
     // so 14 total, +1 for the emissive blink (index 14). Doing this here means it never has to resize a
     // live, shared ISM at runtime (which would zero EVERY instance's data).
     // 15..19: Converter colours and cast, 20: last resource arrival - see AssignUnitVisual.
-    NewISM->SetNumCustomDataFloats(21);
+    // 21: time of death, 22..24: spawn materialize - see AssignUnitVisual.
+    NewISM->SetNumCustomDataFloats(25);
     if (Material) {
         NewISM->SetMaterial(0, Material);
     }

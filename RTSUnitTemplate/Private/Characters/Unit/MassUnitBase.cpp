@@ -3036,6 +3036,8 @@ void AMassUnitBase::MulticastMoveUnitLinear_Implementation(const FVector& Relati
 		const FVector TargetLoc = GetActorLocation() + WorldOffset;
 		SetActorLocation(TargetLoc, false, nullptr, ETeleportType::TeleportPhysics);
 		SyncTranslation();
+		LinearMoveLiftZ += WorldOffset.Z;
+		ApplyGroundAnchors();
 		return;
 	}
 
@@ -3046,6 +3048,7 @@ void AMassUnitBase::MulticastMoveUnitLinear_Implementation(const FVector& Relati
 	UnitMoveTween.EaseExp = FMath::Max(InMoveEaseExponent, 0.001f);
 	UnitMoveTween.Start = GetActorLocation();
 	UnitMoveTween.Target = UnitMoveTween.Start + WorldOffset;
+	LinearMoveLiftZAtStart = LinearMoveLiftZ;
 
 	// Immediate step then start timer
 	UnitMove_Step();
@@ -3069,12 +3072,47 @@ void AMassUnitBase::UnitMove_Step()
 	const FVector NewLocation = FMath::Lerp(UnitMoveTween.Start, UnitMoveTween.Target, Alpha);
 	SetActorLocation(NewLocation, false, nullptr, ETeleportType::TeleportPhysics);
 	SyncTranslation();
+	LinearMoveLiftZ = LinearMoveLiftZAtStart + float(NewLocation.Z - UnitMoveTween.Start.Z);
 
 	if (Alpha >= 1.f)
 	{
 		SetActorLocation(UnitMoveTween.Target, false, nullptr, ETeleportType::TeleportPhysics);
 		SyncTranslation();
+		LinearMoveLiftZ = LinearMoveLiftZAtStart + float(UnitMoveTween.Target.Z - UnitMoveTween.Start.Z);
 		GetWorldTimerManager().ClearTimer(UnitMoveTimerHandle);
+	}
+	ApplyGroundAnchors();
+}
+
+void AMassUnitBase::ApplyGroundAnchors()
+{
+	// The hover and click shapes of a building stand on the ground (RTSUnitGeometry::GetAnchor) - they rise with it.
+	{
+		FMassEntityManager* EntityManager = nullptr;
+		FMassEntityHandle EntityHandle;
+		if (GetMassEntityData(EntityManager, EntityHandle))
+		{
+			if (FMassAgentCharacteristicsFragment* CharFrag = EntityManager->GetFragmentDataPtr<FMassAgentCharacteristicsFragment>(EntityHandle))
+			{
+				CharFrag->HoverLiftZ = LinearMoveLiftZ;
+			}
+		}
+	}
+	if (GroundAnchoredComponentNames.Num() == 0)
+	{
+		return;
+	}
+	TInlineComponentArray<USceneComponent*> Components(this);
+	for (USceneComponent* Component : Components)
+	{
+		if (!Component || !GroundAnchoredComponentNames.Contains(Component->GetFName()))
+		{
+			continue;
+		}
+		const FVector& Rest = GroundAnchorRestLocations.FindOrAdd(Component->GetFName(), Component->GetRelativeLocation());
+		// Back to the rest place, then down by the lift in world space (the parent may be scaled).
+		Component->SetRelativeLocation(Rest);
+		Component->AddWorldOffset(FVector(0.f, 0.f, -LinearMoveLiftZ));
 	}
 }
 

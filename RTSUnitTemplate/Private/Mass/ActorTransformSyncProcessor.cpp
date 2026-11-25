@@ -1315,7 +1315,13 @@ void UActorTransformSyncProcessor::ExecuteClient(FMassEntityManager& EntityManag
 
                 // No fallback for extraction: without a ResourcePlace pointer, holding the current yaw
                 // beats turning toward an unrelated friendly target.
-                if (!bRotatedToWorkTarget && !bIsExtracting)
+                // A cast with an ability target owns the facing (branch above). Without this hold the yaw ping-ponged
+                // between the ability target and the enemy: the branch above clears its flag once the facing is
+                // reached, this fallback then turned toward the enemy until CastingStateProcessor set the flag again
+                // the next tick. Big, slowly turning units (Kraken boss, 360 deg/s) visibly shook (19.11.2026).
+                const bool bHoldForCast = UnitBase->GetUnitState() == UnitData::Casting
+                    && !TargetList[i].AbilityTargetLocation.IsNearlyZero();
+                if (!bRotatedToWorkTarget && !bIsExtracting && !bHoldForCast)
                 {
                     const bool bPreferEnemy = bChunk_MassStateAttackTag ||
                                               bChunk_MassStatePauseTag;
@@ -1721,7 +1727,13 @@ void UActorTransformSyncProcessor::ExecuteServer(FMassEntityManager& EntityManag
 
                 // No fallback for extraction: without a ResourcePlace pointer, holding the current yaw
                 // beats turning toward an unrelated friendly target.
-                if (!bRotatedToWorkTarget && !bIsExtracting)
+                // A cast with an ability target owns the facing (branch above). Without this hold the yaw ping-ponged
+                // between the ability target and the enemy: the branch above clears its flag once the facing is
+                // reached, this fallback then turned toward the enemy until CastingStateProcessor set the flag again
+                // the next tick. Big, slowly turning units (Kraken boss, 360 deg/s) visibly shook (19.11.2026).
+                const bool bHoldForCast = UnitBase->GetUnitState() == UnitData::Casting
+                    && !TargetList[i].AbilityTargetLocation.IsNearlyZero();
+                if (!bRotatedToWorkTarget && !bIsExtracting && !bHoldForCast)
                 {
                     const bool bPreferEnemy = bChunk_MassStateAttackTag ||
                                               bChunk_MassStatePauseTag;

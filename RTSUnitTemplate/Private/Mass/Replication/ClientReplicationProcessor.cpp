@@ -6,6 +6,10 @@
 #include "Mass/Traits/UnitReplicationFragments.h" // FUnitReplicatedTransformFragment::GetServerStillTime (unten definiert)
 
 // CVARs for ClientReplicationProcessor (client)
+static TAutoConsoleVariable<FString> CVarRTS_ClientRunIdleDiag(
+	TEXT("RTS.ClientRunIdleDiag"), TEXT(""),
+	TEXT("Client: name fragment of units whose replicated Idle bit, move speed and Run/Idle tags are logged every 0.25 s ([RunIdleDiag]). Empty = off."));
+
 static TAutoConsoleVariable<int32> CVarRTS_ClientReplication_EnableCache(
     TEXT("net.RTS.ClientReplication.EnableCache"),
     1,
@@ -320,6 +324,29 @@ void UClientReplicationProcessor::Execute(FMassEntityManager& EntityManager, FMa
 							? (float)((UseItem->MoveData >> 8) & 0xFFF)
 							: 0.f;
 						ApplyReplicatedTagBits(EntityManager, ChunkCtx.GetEntity(EntityIdx), UseItem->TagBits, ReplDesiredSpeed);
+
+						// [RunIdleDiag] What the client gets from the server against what it shows (running on the spot).
+						const FString RunIdleDiag = CVarRTS_ClientRunIdleDiag.GetValueOnGameThread();
+						if (!RunIdleDiag.IsEmpty() && ActorList.IsValidIndex(EntityIdx) && ActorList[EntityIdx].Get()
+							&& ActorList[EntityIdx].Get()->GetName().Contains(RunIdleDiag))
+						{
+							static TMap<FString, double> LastDiag;
+							const FString DiagName = ActorList[EntityIdx].Get()->GetName();
+							const double DiagNow = World->GetTimeSeconds();
+							double& Last = LastDiag.FindOrAdd(DiagName, -100.0);
+							if (DiagNow - Last >= 0.25)
+							{
+								Last = DiagNow;
+								const FMassEntityHandle DiagEntity = ChunkCtx.GetEntity(EntityIdx);
+								const FMassClientPredictionFragment* DiagPred = EntityManager.GetFragmentDataPtr<FMassClientPredictionFragment>(DiagEntity);
+								UE_LOG(LogTemp, Log, TEXT("[RunIdleDiag] %.2f %s srvIdle=%d moveSlot=%d speed=%.0f run=%d idle=%d pred=%d predAge=%.2f"),
+									DiagNow, *DiagName, (UseItem->TagBits & UnitTagBits::Idle) ? 1 : 0,
+									(UseItem->TagBits & UnitReplicationBits::Slot_TargetIsMove) ? 1 : 0, ReplDesiredSpeed,
+									DoesEntityHaveTag(EntityManager, DiagEntity, FMassStateRunTag::StaticStruct()) ? 1 : 0,
+									DoesEntityHaveTag(EntityManager, DiagEntity, FMassStateIdleTag::StaticStruct()) ? 1 : 0,
+									DiagPred && DiagPred->bHasData ? 1 : 0, DiagPred ? DiagNow - DiagPred->CommandPredictTime : -1.0);
+							}
+						}
 
 						// AI Target Slot 1
 						if (AITargetList.IsValidIndex(EntityIdx))

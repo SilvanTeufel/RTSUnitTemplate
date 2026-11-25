@@ -265,6 +265,14 @@ public:
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void StopAllEffects(bool bFadeAudio = true, float FadeTime = 0.15f);
 
+	/**
+	 * A ring on the ground that marks the reach of an area ability: a decal of Material (deferred decal with a
+	 * vector parameter "Color"), Radius wide, fading out over the last part of Lifetime. Everyone who can see
+	 * Location (fog, viewport) gets it.
+	 */
+	UFUNCTION(NetMulticast, Unreliable, BlueprintCallable, Category = RTSUnitTemplate)
+	void MulticastShowRangeRing(UMaterialInterface* Material, FVector Location, float Radius, float Lifetime, FLinearColor Color);
+
 	UFUNCTION(NetMulticast, Reliable, BlueprintCallable, Category = RTSUnitTemplate)
 	void StopNiagaraByID(int32 ID, float FadeTime = 0.15f);
 		

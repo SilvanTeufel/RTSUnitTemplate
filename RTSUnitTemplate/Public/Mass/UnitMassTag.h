@@ -332,6 +332,10 @@ struct FMassGameplayEffectFragment : public FMassFragment
 
 	UPROPERTY(EditAnywhere, Category = "Ability")
 	float EffectRadius = 0.f;
+
+	/** False: units with FMassAgentCharacteristicsFragment::bIsFlying get neither effect (UAreaDecalComponent::bAffectFlyingUnits). */
+	UPROPERTY(EditAnywhere, Category = "Ability")
+	bool bAffectFlyingUnits = true;
 };
 
 USTRUCT()
@@ -911,6 +915,21 @@ struct FMassAITargetFragment : public FMassFragment
 
 	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
 	float FollowOffset = 0.f;
+
+	/**
+	 * Folgen MIT Angriffsbefehl (Server_SetUnitsFollowTarget mit AttackT = true).
+	 *
+	 * WARUM (10.11.2026): Beschwoerungen (GA_Summon_Parent_AH) folgen ihrem Beschwoerer mit AttackT = true -
+	 * das Flag wurde aber nirgends ausgewertet. Folgende Einheiten jagen keine Gegner (Idle/Run/Chase steigen bei
+	 * aktivem FriendlyTargetEntity aus), also liefen die kleinen Kraken des KrakenBoss nur hinter dem Boss her und
+	 * griffen nie an. Mit dem Flag verfolgen sie Gegner, solange sie innerhalb FollowEngageLeash vom Anfuehrer
+	 * bleiben; danach kehren sie zu ihm zurueck. Der normale Folgen-Befehl des Spielers bleibt passiv (Flag false).
+	 */
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	bool bFollowEngagesEnemies = false;
+
+	UPROPERTY(VisibleAnywhere, Category = "AI", Transient)
+	float FollowEngageLeash = 2500.f;
 };
 
 //----------------------------------------------------------------------//
@@ -1036,8 +1055,11 @@ inline void ApplyAttackedDetectionBonus(FMassAIStateFragment& VictimState,
                                         const FMassAITargetFragment& VictimTarget,
                                         const FMassCombatStatsFragment& VictimStats)
 {
-	// Already hunting something -> no help needed.
-	if (VictimTarget.bHasValidTarget)
+	// Already hunting something -> no NEW bonus. A running one is refreshed, though: it is what let the unit see
+	// the shooter in the first place. Left to run out while the unit walks up to a tower that outranges its sight
+	// (a Walltower behind an EnergyWall), the unit lost the tower again at LoseSightRadius, walked back to where it
+	// came from, got shot, saw the tower ... - the back and forth in front of walls.
+	if (VictimTarget.bHasValidTarget && !VictimState.bHasExtendedLoseSight)
 	{
 		return;
 	}
@@ -1271,6 +1293,10 @@ struct FMassAgentCharacteristicsFragment : public FMassFragment
 	 */
 	UPROPERTY()
 	bool bHoverGroundAnchored = false;
+
+	/** Height a ground-anchored building is lifted by (AMassUnitBase::MulticastMoveUnitLinear, the raised reactor). */
+	UPROPERTY()
+	float HoverLiftZ = 0.f;
 
 	/** Echte Kapsel: Radius und Halbhoehe der CollisionCylinder, OHNE AdditionalCapsuleRadius. */
 	UPROPERTY()
@@ -2532,6 +2558,49 @@ inline void ApplyReplicatedTagBits(FMassEntityManager& EntityManager, FMassEntit
 			// Server reports a real bit-backed state -> drive Idle from its own bit, clearing any Idle
 			// we parked during an un-replicated window (prevents Idle sticking / accumulation).
 			SetTag(UnitTagBits::Idle, FMassStateIdleTag());
+		}
+
+		// The server stopped, but the client still runs: Run has no replication bit, so nothing above ever removes
+		// it. A replicated Run (the "Idle -> Run once the server moves" rule) stayed beside the server's Idle, and
+		// ComputeState ranks Run first - measured 21.11.2026 on a listen server + client: the server's Vectors went
+		// Idle 0.05 s after stopping, the client's ran on the spot for another 4 s. A predicted Run stayed until the
+		// client's own arrival check passed against the clicked point, not where the server stopped. Once the
+		// command is no longer fresh, the server's Idle with zero speed ends the client's Run.
+		if ((Bits & UnitTagBits::Idle) && ReplicatedDesiredSpeed <= 10.f
+			&& DoesEntityHaveTag(EntityManager, Entity, FMassStateRunTag::StaticStruct()))
+		{
+			const UWorld* IdleWorld = EntityManager.GetWorld();
+			const float IdleNow = IdleWorld ? IdleWorld->GetTimeSeconds() : 0.f;
+			constexpr float FreshCommandWindow = 1.5f; // a little over RTS.ClientFreshCommandWindow: the order must have reached the server
+			const bool bCommandFresh = CommandPredictTime >= 0.f && (IdleNow - CommandPredictTime) < FreshCommandWindow;
+			if (!bCommandFresh)
+			{
+				EntityManager.Defer().RemoveTag<FMassStateRunTag>(Entity);
+				EntityManager.Defer().AddTag<FMassStateIdleTag>(Entity);
+				EntityManager.Defer().PushCommand<FMassDeferredSetCommand>([Entity](FMassEntityManager& Manager)
+				{
+					if (!Manager.IsEntityValid(Entity))
+					{
+						return;
+					}
+					const FTransformFragment* Xf = Manager.GetFragmentDataPtr<FTransformFragment>(Entity);
+					if (FMassClientPredictionFragment* PredFrag = Manager.GetFragmentDataPtr<FMassClientPredictionFragment>(Entity))
+					{
+						PredFrag->bHasData = false;
+						if (Xf)
+						{
+							PredFrag->Location = Xf->GetTransform().GetLocation();
+						}
+					}
+					// The client's Idle sends a unit back to StoredLocation once it stands further away - and that
+					// was still the spot from BEFORE the move, so it predicted Run straight back every frame while
+					// the server held the unit: the running on the spot (measured: pred=1, run=1 for 4 s).
+					if (FMassAIStateFragment* AIState = Manager.GetFragmentDataPtr<FMassAIStateFragment>(Entity); AIState && Xf)
+					{
+						AIState->StoredLocation = Xf->GetTransform().GetLocation();
+					}
+				});
+			}
 		}
 
 		// Latency kick for Pause state: Nur den Timer setzen, wenn der Server Pause meldet und der Client bereits lokal in Pause ist

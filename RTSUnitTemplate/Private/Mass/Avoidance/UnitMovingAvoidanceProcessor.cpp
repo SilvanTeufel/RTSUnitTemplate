@@ -435,6 +435,7 @@ void UUnitMovingAvoidanceProcessor::ConfigureQueries(const TSharedRef<FMassEntit
 
 	// ***** YOUR CUSTOMIZATION GOES HERE *****
 	EntityQuery.AddRequirement<FMassCombatStatsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
+	EntityQuery.AddRequirement<FMassAgentCharacteristicsFragment>(EMassFragmentAccess::ReadOnly, EMassFragmentPresence::Optional);
 	EntityQuery.AddTagRequirement<FMassDisableAvoidanceTag>(EMassFragmentPresence::None);
 	EntityQuery.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
 	ProcessorRequirements.AddSubsystemRequirement<UMassNavigationSubsystem>(EMassFragmentAccess::ReadOnly);
@@ -518,6 +519,7 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 		const TConstArrayView<FMassAvoidanceEntitiesToIgnoreFragment> EntitiesToIgnoreList = Context.GetFragmentView<FMassAvoidanceEntitiesToIgnoreFragment>();
 		const TConstArrayView<FMassMoveTargetFragment> MoveTargetList = Context.GetFragmentView<FMassMoveTargetFragment>();
 		const TConstArrayView<FMassCombatStatsFragment> CombatList = Context.GetFragmentView<FMassCombatStatsFragment>();
+		const TConstArrayView<FMassAgentCharacteristicsFragment> FlugCharList = Context.GetFragmentView<FMassAgentCharacteristicsFragment>();
 		
 		const FMassMovingAvoidanceParameters* MovingAvoidanceParamsPtr = Context.GetConstSharedFragmentPtr<FMassMovingAvoidanceParameters>();
 		const FMassMovementParameters* MovementParamsPtr = Context.GetConstSharedFragmentPtr<FMassMovementParameters>();
@@ -615,6 +617,14 @@ QUICK_SCOPE_CYCLE_COUNTER(UMassMovingAvoidanceProcessor);
 			const FVector::FReal MaximumSpeed = MovementParams.MaxSpeed;
 
 			const FVector AgentLocation = Location.GetTransform().GetTranslation();
+
+			// Flieger weichen Gebaeuden, WallTowers und Bodeneinheiten nicht aus (10.11.2026): sie fliegen
+			// darueber. Tief fliegende Einheiten lagen innerhalb der Projektionshoehe und wurden an
+			// Turmringen und Gebaeuden zurueckgedrueckt. Untereinander trennt sie der UnitSeparationProcessor.
+			if (FlugCharList.Num() > 0 && FlugCharList[EntityIt].bIsFlying)
+			{
+				continue;
+			}
 
 			if (NavSystem)
 			{

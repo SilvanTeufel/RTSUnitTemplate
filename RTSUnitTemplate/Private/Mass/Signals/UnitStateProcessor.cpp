@@ -66,6 +66,7 @@
 #include "Core/CollisionUtils.h"
 #include "Core/RTSUnitUtils.h"
 #include "ProfilingDebugging/CsvProfiler.h"
+#include "System/AutoAbilitySubsystem.h"
 using namespace RTSUnitUtils;
 
 // Diagnostic: set `RTS.WorkerMineLog 1` in the console to trace why an idle worker does/doesn't
@@ -1497,6 +1498,7 @@ void UUnitStateProcessor::UnitActivateRangedAbilities(FName SignalName, TArray<F
                         if (StrongAttacker /*&& GTEntityManager.IsEntityValid(AttackerEntity)*/) // Ensure Attacker is valid
                         {
                             bool bIsActivated = false;
+                            UAutoAbilitySubsystem::NotifyTrigger(StrongAttacker, EAutoAbilityTrigger::OnEngage);
                             // Attempt to activate Throw Ability
                             // Add any prerequisite checks for ThrowAbility here if needed
                             if (StrongAttacker->ThrowAbilityID != EGASAbilityInputID::None && StrongAttacker->ThrowAbilities.Num() > 0) // Good practice: check if ID is set
@@ -1650,6 +1652,10 @@ void UUnitStateProcessor::UnitMeeleAttack(FName SignalName, TArray<FMassEntityHa
 
                         // GAS / Abilities
                         StrongAttacker->ServerStartAttackEvent_Implementation();
+
+                        // Automatic abilities: the attacker attacks, the target is hit (melee).
+                        UAutoAbilitySubsystem::NotifyTrigger(StrongAttacker, EAutoAbilityTrigger::OnAttack, TargetUnit);
+                        UAutoAbilitySubsystem::NotifyTrigger(TargetUnit, EAutoAbilityTrigger::OnHit, StrongAttacker);
 
                         // --- THIS LINE SHOULD NOW BE SAFE ---
                         // Because we didn't corrupt memory with invalid fragment pointers earlier
@@ -1835,6 +1841,8 @@ void UUnitStateProcessor::UnitRangedAttack(FName SignalName, TArray<FMassEntityH
 
                         // --- Core Actor Actions ---
                         StrongAttacker->ServerStartAttackEvent_Implementation();
+                        // Automatic abilities on a shot (the hit itself is AProjectile::Impact).
+                        UAutoAbilitySubsystem::NotifyTrigger(StrongAttacker, EAutoAbilityTrigger::OnAttack, TargetUnit);
                         
                         if (TargetUnit && IsValid(TargetUnit))
                         {
@@ -2242,7 +2250,8 @@ void UUnitStateProcessor::HandleGetResource(FName SignalName, TArray<FMassEntity
 							{
 								UnitBase->ResourcePlace->RemoveWorkerFromArray(DepletingWorker);
 							}
-							UnitBase->ResourcePlace->Destroy();
+							// Destroyed - or, if it grows back, hidden until it has grown.
+							UnitBase->ResourcePlace->HandleDepleted();
 							UnitBase->ResourcePlace = nullptr;
 						}
  					else
@@ -2359,6 +2368,9 @@ void UUnitStateProcessor::HandleReachedBase(FName SignalName, TArray<FMassEntity
 								{
 									ResourceGameMode->ModifyResource(CarriedFrag->ResourceType, UnitBase->TeamId, CarriedFrag->MinedAmount);
 								}
+								// Income for the spawn pressure: counted here, where it is mined, not where
+								// logistics later moves it on (that would count it twice).
+								ResourceGameMode->NoteGatheredResources(UnitBase->TeamId, CarriedFrag->MinedAmount);
 								CarriedFrag->bIsCarrying = false;
 								CarriedFrag->MinedAmount = 0.f;
 							}
@@ -3203,7 +3215,7 @@ void UUnitStateProcessor::SpawnWorkResource(
     // If we’ve completely depleted it, destroy the place after we've attached the resource
     if (Remaining <= KINDA_SMALL_NUMBER)
     {
-        WorkingUnit->ResourcePlace->Destroy();
+        WorkingUnit->ResourcePlace->HandleDepleted();
         WorkingUnit->ResourcePlace = nullptr;
     }
     else if (WorkingUnit->ResourcePlace->ShrinkResource)
@@ -3879,9 +3891,23 @@ void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUn
 		EntityManager.Defer().AddTag<FMassStateDetectTag>(Entity);
 	}
 
+	const FVector CurrentLocation = TransformFrag->GetTransform().GetLocation();
+	float DistLeft = FVector::Dist2D(CurrentLocation, TargetWP);
+
+	// Arrival FIRST, before the kickoff below. The run state does not only stop exactly inside the acceptance
+	// radius: near the goal it also goes Idle when the unit no longer closes in (crowd settle / velocity near
+	// zero - always the case in a formation, where the units push each other). The unit then stood just
+	// outside Acceptance, the kickoff sent it back to Run, Run stopped it again at once - an endless
+	// Run/Idle loop at the first waypoint, the path never advanced. A unit the run state stopped on THIS
+	// waypoint (StoredLocation) close to it has arrived.
+	const bool bStoppedOnThisWaypoint = DoesEntityHaveTag(EntityManager, Entity, FMassStateIdleTag::StaticStruct())
+		&& FVector::DistSquared2D(StateFrag->StoredLocation, TargetWP) <= FMath::Square(1.f);
+	const float SettleRadius = FMath::Max(Acceptance * 3.f, 300.f);
+	const bool bReached = DistLeft <= Acceptance || (bStoppedOnThisWaypoint && DistLeft <= SettleRadius);
+
 	// Kickoff or retarget guard: only (re)assign if not already pursuing this WP
 	const bool bCenterMatches = FVector::DistSquared2D(MoveTargetFrag->Center, TargetWP) <= 1.0f; 
-	if (MoveTargetFrag->GetCurrentAction() != EMassMovementAction::Move || !bCenterMatches)
+	if (!bReached && (MoveTargetFrag->GetCurrentAction() != EMassMovementAction::Move || !bCenterMatches))
 	{
 		if (Debug) UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor][Path] Kickoff/Retarget to WP[%d/%d]=%s Speed=%.1f"), PathFrag->CurrentIndex, NumWPs, *TargetWP.ToString(), StatsFrag->RunSpeed);
 		StateFrag->StoredLocation = TargetWP;
@@ -3891,11 +3917,7 @@ void UUnitStateProcessor::UpdateUnitArrayMovement(FMassEntityHandle& Entity, AUn
 		return; // evaluate progress on next tick
 	}
 
-	// Reached test: use 2D distance for waypoint arrival as requested
-	const FVector CurrentLocation = TransformFrag->GetTransform().GetLocation();
-	float DistLeft = FVector::Dist2D(CurrentLocation, TargetWP);
-
-	if (DistLeft <= Acceptance)
+	if (bReached)
 	{
 		if (Debug) UE_LOG(LogTemp, Warning, TEXT("[UnitStateProcessor][Path] Reached WP[%d/%d] Dist=%.1f Acc=%.1f"), PathFrag->CurrentIndex, NumWPs, DistLeft, Acceptance);
 		
@@ -4280,8 +4302,7 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 
 		if (PreviousProgress <= 0.f)
 		{
-			Construction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
-			Construction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
+			Construction->ApplySpawnHealthFraction(FMath::Max(Progress, 0.05f), FMath::Max(Progress, 0.05f));
 			Construction->UpdateWidget();
 			// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
 			// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
@@ -4295,10 +4316,15 @@ bool UUnitStateProcessor::HandleExtensionCastForConstructionUnit(FMassEntityMana
 		else
 		{
 			const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
-			if (StepProgress > 0.f)
+			if (StepProgress > 0.f || Construction->Attributes->GetHealth() > MaxHP * FMath::Max(Progress, 0.05f) + 1.f)
 			{
-				Construction->SetHealth(FMath::Clamp(Construction->Attributes->GetHealth() + MaxHP * StepProgress, 0.f, MaxHP));
-				Construction->SetShield(FMath::Clamp(Construction->Attributes->GetShield() + MaxShield * StepProgress, 0.f, MaxShield));
+				// Capped at the build progress - see the worker path in HandleWorkerOrBuildingCastProgress.
+				const float Cap = FMath::Max(Progress, 0.05f);
+				const float NewHealth = FMath::Min(FMath::Clamp(Construction->Attributes->GetHealth() + MaxHP * StepProgress, 0.f, MaxHP), MaxHP * Cap);
+				const float NewShield = FMath::Min(FMath::Clamp(Construction->Attributes->GetShield() + MaxShield * StepProgress, 0.f, MaxShield), MaxShield * Cap);
+				Construction->ApplySpawnHealthFraction(
+					MaxHP > KINDA_SMALL_NUMBER ? NewHealth / MaxHP : -1.f,
+					MaxShield > KINDA_SMALL_NUMBER ? NewShield / MaxShield : 0.f);
 				Construction->UpdateWidget();
 				// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
 				// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
@@ -4443,6 +4469,15 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 					if (ABuildingBase* BuildingCDO = UnitBase->BuildArea->BuildingClass->GetDefaultObject<ABuildingBase>())
 					{
 						NewConstruction->DefaultAttributeEffect = BuildingCDO->DefaultAttributeEffect;
+						// The building's talent effects too: the team's attribute tree hands the site a point right
+						// after spawn - with the site's own (soldier) Stamina effect its MaxHealth ended at 510
+						// while the finished building had 600 (12.11.2026).
+						NewConstruction->StaminaInvestmentEffect = BuildingCDO->StaminaInvestmentEffect;
+						NewConstruction->AttackPowerInvestmentEffect = BuildingCDO->AttackPowerInvestmentEffect;
+						NewConstruction->WillpowerInvestmentEffect = BuildingCDO->WillpowerInvestmentEffect;
+						NewConstruction->HasteInvestmentEffect = BuildingCDO->HasteInvestmentEffect;
+						NewConstruction->ArmorInvestmentEffect = BuildingCDO->ArmorInvestmentEffect;
+						NewConstruction->MagicResistanceInvestmentEffect = BuildingCDO->MagicResistanceInvestmentEffect;
 					}
 				}
 				// Assign pointers if it is a AConstructionUnit
@@ -4626,8 +4661,9 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 				{
 					const float MaxHP = NewConstruction->Attributes->GetMaxHealth();
 					const float MaxShield = NewConstruction->Attributes->GetMaxShield();
-					NewConstruction->SetHealth(MaxHP * FMath::Max(Progress, 0.05f));
-					NewConstruction->SetShield(MaxShield * FMath::Max(Progress, 0.05f));
+					// Not SetHealth: the Mass binding runs InitializeAttributes once more AFTER this spawn and put
+					// the site back to the building's FULL health (12.11.2026). The fraction survives that reset.
+					NewConstruction->ApplySpawnHealthFraction(FMath::Max(Progress, 0.05f), FMath::Max(Progress, 0.05f));
 					// MESSUNG AUSKOMMENTIERT (24.09.2026, Nutzerwunsch) - zum Wiedereinschalten die
 					// folgenden Zeilen entkommentieren. Sie schreiben nach Saved/*.csv und ueberleben
 					// als einzige Messung den Shipping-Build (UE_LOG ist dort wegkompiliert).
@@ -4680,14 +4716,20 @@ void UUnitStateProcessor::HandleWorkerOrBuildingCastProgress(FMassEntityManager&
 				PreviousProgress = FMath::Clamp(CurrentHealth / MaxHP, 0.f, 1.f);
 			}
 			const float StepProgress = FMath::Max(0.f, Progress - PreviousProgress);
-			if (StepProgress > 0.f)
+			if (StepProgress > 0.f || CurrentHealth > MaxHP * FMath::Max(Progress, 0.05f) + 1.f)
 			{
+				// Never above the build progress: something refills a fresh site (the team's attribute-tree
+				// Stamina point right after spawn, regeneration, an attribute re-init) and the additive step then
+				// kept it at FULL health (12.11.2026). The cap only limits upwards - damage taken stays.
+				const float Cap = FMath::Max(Progress, 0.05f);
 				const float StepHealth = MaxHP * StepProgress;
-				const float NewHealth = FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP);
-				UnitBase->BuildArea->ConstructionUnit->SetHealth(NewHealth);
+				const float NewHealth = FMath::Min(FMath::Clamp(CurrentHealth + StepHealth, 0.f, MaxHP), MaxHP * Cap);
 				const float StepShield = MaxShield * StepProgress;
-				const float NewShield = FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield);
-				UnitBase->BuildArea->ConstructionUnit->SetShield(NewShield);
+				const float NewShield = FMath::Min(FMath::Clamp(CurrentShield + StepShield, 0.f, MaxShield), MaxShield * Cap);
+				// As a fraction, so a step that lands before the Mass binding is re-applied after its reset.
+				UnitBase->BuildArea->ConstructionUnit->ApplySpawnHealthFraction(
+					MaxHP > KINDA_SMALL_NUMBER ? NewHealth / MaxHP : -1.f,
+					MaxShield > KINDA_SMALL_NUMBER ? NewShield / MaxShield : 0.f);
 				UnitBase->BuildArea->ConstructionUnit->OpenHealthWidget = true;
 				UnitBase->BuildArea->ConstructionUnit->bShowLevelOnly = false;
 				UnitBase->BuildArea->ConstructionUnit->UpdateWidget();

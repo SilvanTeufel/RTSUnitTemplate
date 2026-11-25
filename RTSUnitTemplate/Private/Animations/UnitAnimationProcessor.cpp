@@ -130,6 +130,90 @@ static TAutoConsoleVariable<int32> CVarRTS_StandDiag(
     TEXT("Laufanimationsarbeit lief seitdem dauerhaft mit). 1 schaltet sie wieder ein."),
     ECVF_Default);
 
+static TAutoConsoleVariable<int32> CVarRTS_AnimStopResetsGlide(
+    TEXT("RTS.AnimStopResetsGlide"), 1,
+    TEXT("1 = entering Idle from a movement state clears the 'visibly moving' memory of the stand watch, ")
+    TEXT("so the idle pose follows a stop (Hold Position) at once. 0 = old behaviour."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_HoldAnimDiag(
+    TEXT("RTS.HoldAnimDiag"), 0,
+    TEXT("[HoldAnimDiag] for the selected unit: logs every change of real state, shown state and hold flag."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_AnimSpeedCoupling(
+    TEXT("RTS.AnimSpeedCoupling"), 1,
+    TEXT("1 = vertex-animated locomotion clips with NoSlideSpeed > 0 play at ground speed / (NoSlideSpeed * mesh scale) ")
+    TEXT("(feet do not slide). 0 = the fixed PlayRate of the table row."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarRTS_AnimSpeedCouplingMin(
+    TEXT("RTS.AnimSpeedCouplingMin"), 0.35f,
+    TEXT("Lowest play rate of a speed-coupled clip (a unit creeping in its run state)."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarRTS_AnimSpeedCouplingMax(
+    TEXT("RTS.AnimSpeedCouplingMax"), 8.0f,
+    TEXT("Highest play rate of a speed-coupled clip."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarRTS_AnimSpeedCouplingMaxHz(
+    TEXT("RTS.AnimSpeedCouplingMaxHz"), 4.5f,
+    TEXT("Highest step frequency (clip cycles per second) of a speed-coupled clip. Many creature walk cycles take tiny ")
+    TEXT("steps - sliding-free they would need 15-30x speed and flicker. 0 = no limit."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<float> CVarRTS_AnimSpeedCouplingStep(
+    TEXT("RTS.AnimSpeedCouplingStep"), 0.06f,
+    TEXT("Relative change of the coupled play rate before the instance data is rewritten (fewer render updates)."),
+    ECVF_Default);
+
+static TAutoConsoleVariable<int32> CVarRTS_AnimSpeedDiag(
+    TEXT("RTS.AnimSpeedDiag"), 0,
+    TEXT("[AnimSpeed] for the selected unit: speed, mesh scale and coupled play rate whenever the rate is rewritten."),
+    ECVF_Default);
+
+// Play rate of a speed-coupled clip, or the row's fixed rate.
+static float RTSCoupledPlayRate(const FISMAnimationData& Row, float GroundSpeed, float MeshScale)
+{
+    if (Row.NoSlideSpeed <= KINDA_SMALL_NUMBER || GroundSpeed < 0.f || CVarRTS_AnimSpeedCoupling.GetValueOnAnyThread() == 0)
+    {
+        return Row.PlayRate;
+    }
+    const float Reference = Row.NoSlideSpeed * FMath::Max(MeshScale, 0.01f);
+    float MaxRate = CVarRTS_AnimSpeedCouplingMax.GetValueOnAnyThread();
+    const float MaxHz = CVarRTS_AnimSpeedCouplingMaxHz.GetValueOnAnyThread();
+    const float Frames = Row.EndFrame - Row.StartFrame;
+    if (MaxHz > 0.f && Frames > 1.f)
+    {
+        // One cycle lasts Frames / (fps * rate) seconds.
+        MaxRate = FMath::Min(MaxRate, MaxHz * Frames / VATBildrate);
+    }
+    const float MinRate = FMath::Min(CVarRTS_AnimSpeedCouplingMin.GetValueOnAnyThread(), MaxRate);
+    return FMath::Clamp(GroundSpeed / Reference, MinRate, MaxRate);
+}
+
+// Visual size of the unit's mesh: the Blueprint offset of its ISM times the actor scale. Not the instance
+// transform - fog of war hides instances by scaling them to zero.
+static float RTSVisualMeshScale(const FMassUnitVisualFragment& Visual, const AActor* Actor)
+{
+    const float OffsetScale = Visual.VisualInstances.Num() > 0
+        ? Visual.VisualInstances[0].BaseOffset.GetScale3D().GetAbsMax() : 1.f;
+    const float ActorScale = Actor ? Actor->GetActorScale3D().GetAbsMax() : 1.f;
+    return FMath::Max(OffsetScale * ActorScale, 0.01f);
+}
+
+static bool IsMovementStateForStopReset(uint8 State)
+{
+    return State == UnitData::Run
+        || State == UnitData::Chase
+        || State == UnitData::Patrol
+        || State == UnitData::PatrolRandom
+        || State == UnitData::GoToBase
+        || State == UnitData::GoToBuild
+        || State == UnitData::GoToResourceExtraction;
+}
+
 bool RTSDiagIstAusgewaehlt(const AActor* Aktor)
 {
     if (!Aktor) { return false; }
@@ -242,6 +326,8 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 bool bStandingStill = false;
                 bool bGleitet = false;
                 float MeasuredSpeed = -1.f;
+                float CoupledGroundSpeed = -1.f;
+                FAnimStandWatch* DiagWatch = nullptr;
                 {
                     const FMassEntityHandle Entity = ChunkContext.GetEntity(i);
 
@@ -290,8 +376,33 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             Watch.FensterZeit = 0.f;
                             Watch.FensterWunschSumme = 0.f;
                         }
+                        // ---- Stop out of a movement state ------------------------------
+                        //
+                        // The mirror image of the start above. A unit that was running carries
+                        // bSichtbarUnterwegs and a measuring window full of running distance
+                        // into Idle. Hold Position (or any stop) then showed the run cycle until
+                        // that window ran out and AnimGleitAusSekunden had passed WITHOUT a single
+                        // frame of displacement - the client's reconcile nudges reset that clock,
+                        // so the idle pose came late. Entering Idle from a movement state starts
+                        // the measurement fresh: a unit that really keeps sliding is caught again
+                        // after AnimStandAusbruchStrecke or one window.
+                        // PatrolIdle is deliberately not included: at a waypoint units swing
+                        // between PatrolRandom and PatrolIdle and must keep their accumulated state.
+                        if (Watch.bHasLocation
+                            && CVarRTS_AnimStopResetsGlide.GetValueOnGameThread() != 0
+                            && RealState == UnitData::Idle
+                            && Watch.LetzterZustand != static_cast<uint8>(UnitData::Idle)
+                            && IsMovementStateForStopReset(Watch.LetzterZustand))
+                        {
+                            Watch.bSichtbarUnterwegs = false;
+                            Watch.SekundenOhneVerschiebung = 0.f;
+                            Watch.FensterStart = Location;
+                            Watch.FensterZeit = 0.f;
+                            Watch.FensterWunschSumme = 0.f;
+                        }
                         Watch.LetzterZustand = static_cast<uint8>(RealState);
                         Watch.LetzteBefehlszeit = Befehlszeit;
+                        DiagWatch = &Watch;
 
                         if (!Watch.bHasLocation)
                         {
@@ -305,6 +416,15 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             MeasuredSpeed = ChunkDeltaTime > KINDA_SMALL_NUMBER
                                 ? Moved / ChunkDeltaTime : 0.f;
                             Watch.LastLocation = Location;
+
+                            // Smoothed ground speed for speed-coupled clips. A single reconcile snap
+                            // reports several times the real speed, so a sample may at most double it.
+                            {
+                                const float Sample = FMath::Min(MeasuredSpeed, FMath::Max(Watch.SmoothedSpeed * 2.f, 300.f));
+                                const float Alpha = 1.f - FMath::Exp(-ChunkDeltaTime / 0.25f);
+                                Watch.SmoothedSpeed = FMath::Lerp(Watch.SmoothedSpeed, Sample, Alpha);
+                            }
+                            CoupledGroundSpeed = Watch.SmoothedSpeed;
 
                             // Entering takes AnimStandMinSeconds, leaving takes a single moving
                             // frame. Asymmetric on purpose: a unit that starts walking has to look
@@ -492,7 +612,13 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             // wird). Endet sofort, sobald die Einheit wirklich steht.
                             const bool bStillstandsZustand =
                                 RealState == UnitData::Idle || RealState == UnitData::PatrolIdle;
-                            if (bAnimStandFix && bStillstandsZustand && Watch.bSichtbarUnterwegs)
+                            // A unit on Hold Position does not walk anywhere by itself. Whatever still moves it
+                            // there is a correction (the client pulled onto the server position: measured up to
+                            // 4 s after the hold) or a push - showing the run cycle for that was the "idle starts
+                            // late after Hold" of 21.11.2026.
+                            const bool bHoldKeepsIdlePose = UnitBase->bHoldPosition
+                                && CVarRTS_AnimStopResetsGlide.GetValueOnGameThread() != 0;
+                            if (bAnimStandFix && bStillstandsZustand && Watch.bSichtbarUnterwegs && !bHoldKeepsIdlePose)
                             {
                                 bGleitet = true;
                                 bStehtStill = false;
@@ -504,6 +630,28 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                 const TEnumAsByte<UnitData::EState> CurrentState =
                     bGleitet ? TEnumAsByte<UnitData::EState>(UnitData::Run)
                     : (bAnimStandFix && bStandingStill) ? TEnumAsByte<UnitData::EState>(UnitData::Idle) : RealState;
+
+                // [HoldAnimDiag] One line per change of the real state, the shown state or the
+                // hold flag, for the selected unit only: when does the idle pose follow a stop?
+                if (DiagWatch && CVarRTS_HoldAnimDiag.GetValueOnGameThread() != 0 && RTSDiagIstAusgewaehlt(UnitBase))
+                {
+                    const uint8 Real = static_cast<uint8>(RealState.GetValue());
+                    const uint8 Shown = static_cast<uint8>(CurrentState.GetValue());
+                    const bool bHold = UnitBase->bHoldPosition;
+                    if (Real != DiagWatch->DiagLastReal || Shown != DiagWatch->DiagLastShown || bHold != DiagWatch->bDiagLastHold)
+                    {
+                        const UWorld* DiagWorld = UnitBase->GetWorld();
+                        UE_LOG(LogTemp, Warning,
+                            TEXT("[HoldAnimDiag] %s %s t=%.3f hold=%d real=%d shown=%d glide=%d still=%d speed=%.0f netWin=%.0f visMoving=%d"),
+                            (DiagWorld && DiagWorld->GetNetMode() == NM_Client) ? TEXT("CLIENT") : TEXT("SERVER"),
+                            *GetNameSafe(UnitBase), CurrentWorldTime, bHold ? 1 : 0, (int32)Real, (int32)Shown,
+                            bGleitet ? 1 : 0, bStandingStill ? 1 : 0, MeasuredSpeed, DiagWatch->FensterNettoTempo,
+                            DiagWatch->bSichtbarUnterwegs ? 1 : 0);
+                        DiagWatch->DiagLastReal = Real;
+                        DiagWatch->DiagLastShown = Shown;
+                        DiagWatch->bDiagLastHold = bHold;
+                    }
+                }
 
                 // ---- end standing-still handling --------------------------------------------
 
@@ -620,7 +768,9 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                             // Nur fuer ISM/Vertex und nur fuer den Angriff: Leerlauf und Laufen loopen ohne
                             // feste Dauer, und der Todesclip soll seine letzte Frame ausdruecklich behalten.
                             // Der Skelettpfad macht dasselbe fuer ContinuousAttack schon weiter unten.
-                            float EffektivePlayRate = RowData ? RowData->PlayRate : 1.0f;
+                            float EffektivePlayRate = RowData
+                                ? RTSCoupledPlayRate(*RowData, CoupledGroundSpeed, RTSVisualMeshScale(VisualFrag, UnitBase))
+                                : 1.0f;
                             if (RowData
                                 && Stats.bPlayRateRunTimeCalculation
                                 && CurrentState == UnitData::Attack
@@ -639,7 +789,8 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                                 && FMath::IsNearlyEqual(RowData->StateCustomDataValue, AnimFrag.TargetStateCustomDataValue)
                                 && FMath::IsNearlyEqual(RowData->StartFrame, AnimFrag.CurrentStartFrame)
                                 && FMath::IsNearlyEqual(RowData->EndFrame, AnimFrag.CurrentEndFrame)
-                                && FMath::IsNearlyEqual(EffektivePlayRate, AnimFrag.CurrentPlayRate);
+                                && (RowData->NoSlideSpeed > KINDA_SMALL_NUMBER   // coupled: the rate follows below
+                                    || FMath::IsNearlyEqual(EffektivePlayRate, AnimFrag.CurrentPlayRate));
 
                             if (bGleicherClip)
                             {
@@ -750,6 +901,47 @@ void UUnitAnimationProcessor::Execute(FMassEntityManager& EntityManager, FMassEx
                     if (bCommitted)
                     {
                         AnimFrag.LastProcessedState = CurrentState;
+                    }
+                }
+
+                // 1b. Speed-coupled locomotion clip: the play rate follows the ground speed.
+                //
+                // The material plays frame = (Time - StartTime) * PlayRate * fps. Changing only the rate
+                // would jump the pose, so StartTime is moved such that the current frame stays where
+                // it is: (T - S_new) * R_new == (T - S_old) * R_old. Rewritten only when the rate changed
+                // by more than RTS.AnimSpeedCouplingStep - instance data updates are not free.
+                else if (!VisualFrag.bUseSkeletalMovement && AnimFrag.ISMAnimationDataTable
+                    && CoupledGroundSpeed >= 0.f && CVarRTS_AnimSpeedCoupling.GetValueOnGameThread() != 0
+                    && VisualFrag.VisualInstances.Num() > 0)
+                {
+                    const FISMAnimationData* Row = FindISMRowForStateOrIdle(AnimFrag.ISMAnimationDataTable, CurrentState);
+                    UInstancedStaticMeshComponent* TargetISM = VisualFrag.VisualInstances[0].TargetISM.Get();
+                    const int32 InstanceIndex = VisualFrag.VisualInstances[0].InstanceIndex;
+                    if (Row && Row->NoSlideSpeed > KINDA_SMALL_NUMBER
+                        && FMath::IsNearlyEqual(Row->StartFrame, AnimFrag.CurrentStartFrame)
+                        && FMath::IsNearlyEqual(Row->EndFrame, AnimFrag.CurrentEndFrame)
+                        && TargetISM && InstanceIndex != INDEX_NONE
+                        && TargetISM->NumCustomDataFloats >= RequiredCustomDataFloats
+                        && AnimFrag.CurrentPlayRate > KINDA_SMALL_NUMBER)
+                    {
+                        const float MeshScale = RTSVisualMeshScale(VisualFrag, UnitBase);
+                        const float NewRate = RTSCoupledPlayRate(*Row, CoupledGroundSpeed, MeshScale);
+                        const float OldRate = AnimFrag.CurrentPlayRate;
+                        if (FMath::Abs(NewRate - OldRate) > OldRate * CVarRTS_AnimSpeedCouplingStep.GetValueOnGameThread())
+                        {
+                            const float Elapsed = CurrentWorldTime - AnimFrag.CurrentStartTime;
+                            AnimFrag.CurrentStartTime = CurrentWorldTime - Elapsed * OldRate / NewRate;
+                            AnimFrag.CurrentPlayRate = NewRate;
+                            TargetISM->SetCustomDataValue(InstanceIndex, StartTimeCustomDataIndex, AnimFrag.CurrentStartTime, true);
+                            TargetISM->SetCustomDataValue(InstanceIndex, PlayRateCustomDataIndex, AnimFrag.CurrentPlayRate, true);
+
+                            if (CVarRTS_AnimSpeedDiag.GetValueOnGameThread() != 0 && RTSDiagIstAusgewaehlt(UnitBase))
+                            {
+                                UE_LOG(LogTemp, Warning, TEXT("[AnimSpeed] %s state=%d speed=%.0f scale=%.3f noSlide=%.1f rate %.2f -> %.2f (table %.2f)"),
+                                    *GetNameSafe(UnitBase), (int32)CurrentState.GetValue(), CoupledGroundSpeed, MeshScale,
+                                    Row->NoSlideSpeed, OldRate, NewRate, Row->PlayRate);
+                            }
+                        }
                     }
                 }
 

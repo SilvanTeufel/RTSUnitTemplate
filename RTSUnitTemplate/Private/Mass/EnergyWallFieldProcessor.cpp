@@ -205,6 +205,14 @@ void UEnergyWallFieldProcessor::Execute(FMassEntityManager& EntityManager, FMass
 
 		for (int32 i = 0; i < Num; ++i)
 		{
+			// Flieger ueberqueren die Wand (10.11.2026). Ihre Flughoehe liegt innerhalb der
+			// Box-Hoehe (Wandhoehe + NavigationZPadding), also hat die Hoehenprobe unten sie wie
+			// Bodeneinheiten abgestossen - sie kamen nicht ueber die Wand.
+			if (Traits[i].bIsFlying)
+			{
+				continue;
+			}
+
 			FVector       UnitWorld = Transforms[i].GetTransform().GetLocation();
 			const float   Radius    = FMath::Max(1.f, Traits[i].CapsuleRadius);
 			bool          bMoved    = false;

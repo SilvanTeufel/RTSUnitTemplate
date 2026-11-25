@@ -470,7 +470,10 @@ void UMassProjectileMovementProcessor::Execute(FMassEntityManager& EntityManager
 
 				// ROBUSTHEIT: Falls das Projektil mit Speed 0 existiert, nutze eine Notfall-Geschwindigkeit (mind. 100 Einheiten/s)
 				const float EffectiveSpeed = FMath::Max(Projectile.Speed, 10.f); 
-				float MoveDist = (EffectiveSpeed * 10.f) * DeltaTime;
+				// The last step only covers what is left of MaxLifeTime - at a low frame rate a full step would
+				// carry the projectile up to Speed * 10 * DeltaTime past its intended range.
+				const float StepTime = FMath::Clamp(Projectile.MaxLifeTime - (Projectile.LifeTime - DeltaTime), 0.f, DeltaTime);
+				float MoveDist = (EffectiveSpeed * 10.f) * StepTime;
 				float DistToTarget = FVector::Dist(CurrentLocation, TargetLocation);
 
 				if (MoveDist >= DistToTarget && !Projectile.bFollowTarget && !Projectile.bContinueAfterTarget)

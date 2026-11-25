@@ -238,7 +238,14 @@ namespace RTSUnitGeometry
 		{
 			// Same rule the binding component uses to place a building: ground + capsule half height.
 			// Flying buildings keep the transform - their ground value is not tracked while they travel.
-			Anchor.Z = CharFrag.LastGroundLocation + CharFrag.CapsuleHeight;
+			// Plus the lift of a building that hovers (the raised reactor) - otherwise it was only clickable on the ground.
+			Anchor.Z = CharFrag.LastGroundLocation + CharFrag.CapsuleHeight + CharFrag.HoverLiftZ;
+		}
+		else if (CharFrag.bIsFlying && CharFrag.FlyHeight > 0.f
+			&& Anchor.Z < CharFrag.LastGroundLocation + 0.5f * CharFrag.FlyHeight)
+		{
+			// A flyer whose transform still sits near the ground (it is drawn at fly height): hover where it is seen.
+			Anchor.Z = CharFrag.LastGroundLocation + CharFrag.FlyHeight;
 		}
 		return Anchor;
 	}
@@ -293,6 +300,17 @@ namespace RTSUnitGeometry
 		// Out.MeshCenter = Location + Rotation.RotateVector(FVector(CharFrag.HoverMeshCenter) * Ratio);
 		// Out.MeshRotation = Rotation;
 		// Out.MeshExtent = FVector(CharFrag.HoverMeshExtent) * Ratio;
+		//
+		// Flying units are the exception (09.11.2026): their model floats around and beyond the small capsule
+		// (MonsterFly: 300 uu capsule, ~500 uu wingspan, mesh offset to the back) and was hard to hit. The mesh
+		// box of a flyer is just its model - no masts or antennas.
+		if (CharFrag.bIsFlying && CharFrag.bHoverHasMesh)
+		{
+			Out.bMesh = true;
+			Out.MeshCenter = Location + Rotation.RotateVector(FVector(CharFrag.HoverMeshCenter) * Ratio);
+			Out.MeshRotation = Rotation;
+			Out.MeshExtent = FVector(CharFrag.HoverMeshExtent) * Ratio;
+		}
 
 		FinishBroad(Out);
 	}
